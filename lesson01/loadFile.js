@@ -1,7 +1,8 @@
 function loadFile(url, data, callback, errorCallback) {
     // Set up an asynchronous request
     var request = new XMLHttpRequest();
-    request.open('GET', url, true);
+    //synchronous
+    request.open('GET', url, false);
 
     // Hook the event that gets called as the request progresses
     request.onreadystatechange = function () {
@@ -19,23 +20,19 @@ function loadFile(url, data, callback, errorCallback) {
     request.send(null);    
 }
 
-function loadFiles(urls, callback, errorCallback) {
+function loadFiles(urls, errorCallback) {
     var numUrls = urls.length;
     var numComplete = 0;
-    var result = [];
+    var result = new Object();
 
     // Callback for a single file
     function partialCallback(text, urlIndex) {
         result[urlIndex] = text;
         numComplete++;
-
-        // When all files have downloaded
-        if (numComplete == numUrls) {
-            callback(result);
-        }
     }
 
     for (var i = 0; i < numUrls; i++) {
-        loadFile(urls[i], i, partialCallback, errorCallback);
+      loadFile(urls[i], i, partialCallback, errorCallback);
     }
+    return result;
 }

@@ -16,12 +16,7 @@
     }
     
     var shaderProgram;
-    
-    var text = [];
-    function saveText(result){
-      text = result;
-    }
-    
+        
     function compileShader(shader){
       gl.compileShader(shader);
       if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
@@ -30,14 +25,16 @@
     }
     
     function initShaders() {
-      loadFiles(['vs.cpp', 'fs.cpp'] , saveText,errorMsg);
+      var textBuf = loadFiles(['vs.cpp', 'fs.cpp'] , errorMsg);
       var vertexShader = gl.createShader(gl.VERTEX_SHADER);
-      gl.shaderSource(vertexShader, text[0]);
+      gl.shaderSource(vertexShader, textBuf[0]);
       compileShader(vertexShader);
         
       var fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
-      gl.shaderSource(fragmentShader, text[1]);
+      gl.shaderSource(fragmentShader, textBuf[1]);
       compileShader(fragmentShader);
+      
+      delete textBuf;
       
       shaderProgram = gl.createProgram();
         gl.attachShader(shaderProgram, vertexShader);
