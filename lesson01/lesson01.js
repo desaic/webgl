@@ -22,12 +22,22 @@
       text = result;
     }
     
+    function compileShader(shader){
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        alert(gl.getShaderInfoLog(shader));
+      }
+    }
+    
     function initShaders() {
       loadFiles(['vs.cpp', 'fs.cpp'] , saveText,errorMsg);
       var vertexShader = gl.createShader(gl.VERTEX_SHADER);
       gl.shaderSource(vertexShader, text[0]);
+      compileShader(vertexShader);
+        
       var fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
       gl.shaderSource(fragmentShader, text[1]);
+      compileShader(fragmentShader);
       
       shaderProgram = gl.createProgram();
         gl.attachShader(shaderProgram, vertexShader);
