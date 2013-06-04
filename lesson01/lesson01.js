@@ -23,7 +23,7 @@
     }
     
     function initShaders() {
-      loadFiles(['vs.js', 'fs.js'] , saveText,errorMsg);
+      loadFiles(['vs.cpp', 'fs.cpp'] , saveText,errorMsg);
       var vertexShader = gl.createShader(gl.VERTEX_SHADER);
       gl.shaderSource(vertexShader, text[0]);
       var fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
