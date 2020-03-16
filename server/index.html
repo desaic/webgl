@@ -15,10 +15,12 @@
 	<link rel="stylesheet" type="text/css" href="src/ttt.css">
 </head>
 <body>
+    <p id="Geeks"></p> 
     <div>
         Scan
     </div>
     <div id="contentDiv" class="openseadragon1"></div>
+	<div><p id="Geeks"></p> </div>
     <script type="text/javascript">
 
         var viewer = OpenSeadragon({
@@ -36,5 +38,15 @@
 	<script src="lib/react.development.js"></script>
 	<script src="lib/react-dom.development.js"></script>
 	<script src="ttt.js"></script>
+	<script> 
+		setInterval(myfunction, 1000); 
+
+		function myfunction() { 
+			var petName = Math.random(); // local variabl 
+			document.getElementById("Geeks").innerHTML = 
+				typeof petName + " " + petName; 
+		  setTimeout(yourFunction, 1000);
+		} 
+	</script> 
 </body>
 </html>
