@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Scan Img</title>
+    <script type="text/javascript" src='/build/openseadragon.js'></script>
+    <script type="text/javascript" src='/lib/jquery-1.9.1.min.js'></script>
+    <style type="text/css">
+
+        .openseadragon1 {
+            width: 800px;
+            height: 600px;
+        }
+
+    </style>
+</head>
+<body>
+    <div>
+        Scan
+    </div>
+    <div id="contentDiv" class="openseadragon1"></div>
+    <script type="text/javascript">
+
+        var viewer = OpenSeadragon({
+            // debugMode: true,
+            id: "contentDiv",
+            prefixUrl: "build/openseadragon/images/",
+                            tileSources:   {
+                    type: 'image',
+                    url:   "test_img.png",
+                }
+        });
+
+    </script>
+	<div id="test_label"></div>
+	<script src="lib/react.development.js"></script>
+	<script src="lib/react-dom.development.js"></script>
+	<script src="ttt.js"></script>
+</body>
+</html>
