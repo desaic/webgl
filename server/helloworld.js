@@ -23,6 +23,9 @@ const mimeType = {
   '.ttf': 'aplication/font-sfnt'
 };
 
+// special in memory directory containing machine state
+const stateDir = 'state';
+var layerCount = 0;
 http.createServer(function (req, res) {
   console.log(`${req.method} ${req.url}`);
 
@@ -35,7 +38,19 @@ http.createServer(function (req, res) {
   // by limiting the path to current directory only
   const sanitizePath = path.normalize(parsedUrl.pathname).replace(/^(\.\.[\/\\])+/, '');
   let pathname = path.join(__dirname, sanitizePath);
-
+  
+  //get root dir of the url and check if it's in memory on on disk.
+  var firstDir = sanitizePath;
+  firstDir.toLowerCase();
+  var tokens = firstDir.split("\\");
+  console.log(tokens[1])
+  if(tokens[1] === stateDir){
+	  res.setHeader('Content-type', 'text/plain' );
+      res.end(layerCount.toString());
+	  layerCount = layerCount + 1;
+	  return;
+  }
+  
   fs.exists(pathname, function (exist) {
     if(!exist) {
       // if the file is not found, return 404
