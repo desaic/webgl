@@ -40,13 +40,24 @@
 	<script src="ttt.js"></script>
 	<script> 
 		setInterval(myfunction, 1000); 
+			var petName = 'null';
 
 		function myfunction() { 
-			var petName = Math.random(); // local variabl 
+			httpGetAsync('state', function (response){petName = response;}); // local variabl 
 			document.getElementById("Geeks").innerHTML = 
 				typeof petName + " " + petName; 
-		  setTimeout(yourFunction, 1000);
 		} 
+		
+		function httpGetAsync(theUrl, callback)
+		{
+			var xmlHttp = new XMLHttpRequest();
+			xmlHttp.onreadystatechange = function() { 
+				if (xmlHttp.readyState == 4 && xmlHttp.status == 200)
+					callback(xmlHttp.responseText);
+			}
+			xmlHttp.open("GET", theUrl, true); // true for asynchronous 
+			xmlHttp.send(null);
+		}
 	</script> 
 </body>
 </html>
