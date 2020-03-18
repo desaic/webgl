@@ -26,6 +26,9 @@ const mimeType = {
 // special in memory directory containing machine state
 const stateDir = 'state';
 var layerCount = 0;
+
+
+
 http.createServer(function (req, res) {
   console.log(`${req.method} ${req.url}`);
 

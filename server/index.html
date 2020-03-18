@@ -2,46 +2,26 @@
 <html>
 <head>
     <title>Scan Img</title>
-    <script type="text/javascript" src='/build/openseadragon.js'></script>
-    <script type="text/javascript" src='/lib/jquery-1.9.1.min.js'></script>
-    <style type="text/css">
-
-        .openseadragon1 {
-            width: 800px;
-            height: 600px;
-        }
-
-    </style>
-	<link rel="stylesheet" type="text/css" href="src/ttt.css">
+	<link  href="/viewerjs/dist/viewer.css" rel="stylesheet">
+    <script src="/viewerjs/dist/viewer.js"></script>
 </head>
 <body>
     <p id="Geeks"></p> 
     <div>
         Scan
-    </div>
-    <div id="contentDiv" class="openseadragon1"></div>
+		<div>
+			<img id="image" src="test_img.png" alt="Picture">
+		</div>
+	</div>
 	<div><p id="Geeks"></p> </div>
     <script type="text/javascript">
-
-        var viewer = OpenSeadragon({
-            // debugMode: true,
-            id: "contentDiv",
-            prefixUrl: "build/openseadragon/images/",
-                            tileSources:   {
-                    type: 'image',
-                    url:   "test_img.png",
-                }
-        });
-
-    </script>
-	<script> 
-		setInterval(myfunction, 1000); 
-			var petName = 'null';
+		setInterval(myfunction, 10000); 
+			var layerIndex = 'null';
 
 		function myfunction() { 
-			httpGetAsync('state', function (response){petName = response;}); // local variabl 
+			httpGetAsync('state', function (response){layerIndex = response;}); // local variabl 
 			document.getElementById("Geeks").innerHTML = 
-				typeof petName + " " + petName; 
+				typeof layerIndex + " " + layerIndex; 
 		} 
 		
 		function httpGetAsync(theUrl, callback)
@@ -54,6 +34,64 @@
 			xmlHttp.open("GET", theUrl, true); // true for asynchronous 
 			xmlHttp.send(null);
 		}
+		// View an image
+		const viewer = new Viewer(document.getElementById('image'), {
+		  inline: false,
+		  viewed() {
+			viewer.zoomTo(1);
+		  },
+		});
+		
+		function imgLoad(url) {
+			'use strict';
+			// Create new promise with the Promise() constructor;
+			// This has as its argument a function with two parameters, resolve and reject
+			return new Promise(function (resolve, reject) {
+				// Standard XHR to load an image
+				var request = new XMLHttpRequest();
+				request.open('GET', url);
+				request.responseType = 'blob';
+				
+				// When the request loads, check whether it was successful
+				request.onload = function () {
+					if (request.status === 200) {
+						resolve(request.response);
+					} else {
+						reject(new Error('Image didn\'t load successfully; error code:' + request.statusText));
+					}
+				};
+			  
+				request.onerror = function () {
+					// Also deal with the case when the entire request fails to begin with
+					// This is probably a network error, so reject the promise with an appropriate message
+					reject(new Error('There was a network error.'));
+				};
+			  
+				// Send the request
+				request.send();
+			});
+			}
+
+		function loadImage() {
+			'use strict';
+			// Get a reference to the body element, and create a new image object
+			var body = document.querySelector('body'),
+			myImage = new Image();
+		  
+			myImage.crossOrigin = ""; // or "anonymous"
+			
+			// Call the function with the URL we want to load, but then chain the
+			// promise then() method on to the end of it. This contains two callbacks
+			imgLoad('test_img.png').then(function (response) {
+			//create a temporary url for the loaded full image
+				var imageURL = window.URL.createObjectURL(response);
+				myImage.src = imageURL;
+				body.appendChild(myImage);
+			}, function (Error) {
+				console.log(Error);
+			});
+		}
+		loadImage();
 	</script> 
 </body>
 </html>
