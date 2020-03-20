@@ -14,14 +14,18 @@
 		</div>
 	</div>
 	<div><p id="Geeks"></p> </div>
+	<img id="scanImage" src="test_img.png">
     <script type="text/javascript">
 		setInterval(myfunction, 10000); 
 			var layerIndex = 'null';
 
+		var idx = 0;
 		function myfunction() { 
 			httpGetAsync('state', function (response){layerIndex = response;}); // local variabl 
 			document.getElementById("Geeks").innerHTML = 
-				typeof layerIndex + " " + layerIndex; 
+				typeof layerIndex + " " + layerIndex;
+			loadImage(idx);
+			idx = idx + 1;
 		} 
 		
 		function httpGetAsync(theUrl, callback)
@@ -72,26 +76,26 @@
 			});
 			}
 
-		function loadImage() {
+		function loadImage(idx) {
 			'use strict';
 			// Get a reference to the body element, and create a new image object
-			var body = document.querySelector('body'),
-			myImage = new Image();
-		  
-			myImage.crossOrigin = ""; // or "anonymous"
-			
+			var body = document.getElementById('image');
+			//myImage.crossOrigin = ""; // or "anonymous"
+			const filename2 = 'test_img2.png';
+			const filename1 = 'test_img.png';
+			var filename = idx % 2 ? filename1:filename2;
 			// Call the function with the URL we want to load, but then chain the
 			// promise then() method on to the end of it. This contains two callbacks
-			imgLoad('test_img.png').then(function (response) {
+			imgLoad(filename).then(function (response) {
 			//create a temporary url for the loaded full image
 				var imageURL = window.URL.createObjectURL(response);
-				myImage.src = imageURL;
-				body.appendChild(myImage);
+				body.src = imageURL;
+				//body.appendChild(myImage);
 			}, function (Error) {
 				console.log(Error);
 			});
 		}
-		loadImage();
+		
 	</script> 
 </body>
 </html>
