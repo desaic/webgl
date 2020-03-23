@@ -21,7 +21,7 @@
 
 		var idx = 0;
 		function myfunction() { 
-			httpGetAsync('state', function (response){layerIndex = response;}); // local variabl 
+			httpGetAsync('state/layer', function (response){layerIndex = response;}); // local variabl 
 			document.getElementById("Geeks").innerHTML = 
 				typeof layerIndex + " " + layerIndex;
 			loadImage(idx);
@@ -81,9 +81,7 @@
 			// Get a reference to the body element, and create a new image object
 			var body = document.getElementById('image');
 			//myImage.crossOrigin = ""; // or "anonymous"
-			const filename2 = 'test_img2.png';
-			const filename1 = 'test_img.png';
-			var filename = idx % 2 ? filename1:filename2;
+			const filename = 'state/scan.png';
 			// Call the function with the URL we want to load, but then chain the
 			// promise then() method on to the end of it. This contains two callbacks
 			imgLoad(filename).then(function (response) {
