@@ -14,7 +14,7 @@
 		</div>
 	</div>
 	<div><p id="Geeks"></p> </div>
-	<img id="scanImage" src="test_img.png">
+	<img style='height: 100%; width: 100%; object-fit: contain' id="scanImage" src="test_img.png">
     <script type="text/javascript">
 		setInterval(myfunction, 10000); 
 			var layerIndex = 'null';
@@ -39,7 +39,7 @@
 			xmlHttp.send(null);
 		}
 		// View an image
-		const viewer = new Viewer(document.getElementById('image'), {
+		const viewer = new Viewer(document.getElementById('scanImage'), {
 		  inline: false,
 		  viewed() {
 			viewer.zoomTo(1);
@@ -79,7 +79,7 @@
 		function loadImage(idx) {
 			'use strict';
 			// Get a reference to the body element, and create a new image object
-			var body = document.getElementById('image');
+			var body = document.getElementById('scanImage');
 			//myImage.crossOrigin = ""; // or "anonymous"
 			const filename = 'state/scan.png';
 			// Call the function with the URL we want to load, but then chain the

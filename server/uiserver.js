@@ -84,12 +84,10 @@ server.on('connection',function(socket){
 			imgSize = parseInt(tokens[1]);
 			console.log("expect image size " + imgSize);
 			hasHeader = true;
-			recvBuf = Buffer.from(recvBuf.slice(endIdx + 2), 'latin1');
-			bufferIndex = recvBuf.length;
+			data = Buffer.from(recvBuf.slice(endIdx + 2), 'latin1');
+			bufferIndex = 0;
 			imgBuffer = Buffer.allocUnsafe(imgSize);
-			recvBuf.copy(imgBuffer);
 			recvBuf = "";
-			return;
 		}		
 		
 		if(hasHeader){
@@ -107,8 +105,9 @@ server.on('connection',function(socket){
 			if(endOfImg){
 				completeImage = imgBuffer;
 				recvBuf = data.slice(endIdx).toString("latin1");
-				bufferIndex = 0;
 				console.log("img complete " + bufferIndex);
+				console.log("extra bytes " + (bufferIndex - imgSize));
+				bufferIndex = 0;
 			}
 		}
 	});
