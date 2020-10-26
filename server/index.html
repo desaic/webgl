@@ -1,99 +1,220 @@
 <!DOCTYPE html>
-<html>
-<head>
-    <title>Scan Img</title>
-	<link  href="/viewerjs/dist/viewer.css" rel="stylesheet">
-    <script src="/viewerjs/dist/viewer.js"></script>
-</head>
-<body>
-    <p id="Geeks"></p> 
-    <div>
-        Scan
+<html lang="en">
+	<head>
+		<title>three.js webgl - geometry - terrain</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<link type="text/css" rel="stylesheet" href="main.css">
+		<style>
+			body {
+				background-color: #bfd1e5;
+				color: #61443e;
+			}
+			a {
+				color: #a06851;
+			}
+		</style>
+	</head>
+	<body>
 		<div>
-			<img id="image" src="test_img.png" alt="Picture">
+			Scan
+			<div>
+				<img id="scanimage" src="/state/scan.png">
+			</div>
 		</div>
-	</div>
-	<div><p id="Geeks"></p> </div>
-	<img style='height: 100%; width: 100%; object-fit: contain' id="scanImage" src="test_img.png">
-    <script type="text/javascript">
-		setInterval(myfunction, 10000); 
-			var layerIndex = 'null';
+		<div id="container"></div>
+		<div id="info"><a href="https://threejs.org" target="_blank" rel="noopener">three.js</a> - webgl terrain demo<br />(left click: forward, right click: backward)</div>
 
-		var idx = 0;
-		function myfunction() { 
-			httpGetAsync('state/layer', function (response){layerIndex = response;}); // local variabl 
-			document.getElementById("Geeks").innerHTML = 
-				typeof layerIndex + " " + layerIndex;
-			loadImage(idx);
-			idx = idx + 1;
-		} 
-		
-		function httpGetAsync(theUrl, callback)
-		{
-			var xmlHttp = new XMLHttpRequest();
-			xmlHttp.onreadystatechange = function() { 
-				if (xmlHttp.readyState == 4 && xmlHttp.status == 200)
-					callback(xmlHttp.responseText);
+		<script type="module">
+
+			import * as THREE from '/threejs/three.module.js';
+
+			import Stats from './jsm/libs/stats.module.js';
+
+			import { FirstPersonControls } from './jsm/controls/FirstPersonControls.js';
+			import { ImprovedNoise } from './jsm/math/ImprovedNoise.js';
+
+			var container, stats;
+
+			var camera, controls, scene, renderer;
+
+			var mesh, texture;
+
+			var worldWidth = 256, worldDepth = 256,
+				worldHalfWidth = worldWidth / 2, worldHalfDepth = worldDepth / 2;
+
+			var clock = new THREE.Clock();
+
+			init();
+			animate();
+
+			function init() {
+
+				container = document.getElementById( 'container' );
+
+				camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 1, 20000 );
+
+				scene = new THREE.Scene();
+				scene.background = new THREE.Color( 0xbfd1e5 );
+
+				var data = generateHeight( worldWidth, worldDepth );
+
+				camera.position.y = data[ worldHalfWidth + worldHalfDepth * worldWidth ] * 10 + 500;
+
+				var geometry = new THREE.PlaneBufferGeometry( 7500, 7500, worldWidth - 1, worldDepth - 1 );
+				geometry.rotateX( - Math.PI / 2 );
+
+				var vertices = geometry.attributes.position.array;
+
+				for ( var i = 0, j = 0, l = vertices.length; i < l; i ++, j += 3 ) {
+
+					vertices[ j + 1 ] = data[ i ] * 10;
+
+				}
+
+				texture = new THREE.CanvasTexture( generateTexture( data, worldWidth, worldDepth ) );
+				texture.wrapS = THREE.ClampToEdgeWrapping;
+				texture.wrapT = THREE.ClampToEdgeWrapping;
+
+				mesh = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { map: texture } ) );
+				scene.add( mesh );
+
+				renderer = new THREE.WebGLRenderer();
+				renderer.setPixelRatio( window.devicePixelRatio );
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				container.appendChild( renderer.domElement );
+
+				controls = new FirstPersonControls( camera, renderer.domElement );
+				controls.movementSpeed = 1000;
+				controls.lookSpeed = 0.1;
+
+				stats = new Stats();
+				container.appendChild( stats.dom );
+
+				//
+
+				window.addEventListener( 'resize', onWindowResize, false );
+
 			}
-			xmlHttp.open("GET", theUrl, true); // true for asynchronous 
-			xmlHttp.send(null);
-		}
-		// View an image
-		const viewer = new Viewer(document.getElementById('scanImage'), {
-		  inline: false,
-		  viewed() {
-			viewer.zoomTo(1);
-		  },
-		});
-		
-		function imgLoad(url) {
-			'use strict';
-			// Create new promise with the Promise() constructor;
-			// This has as its argument a function with two parameters, resolve and reject
-			return new Promise(function (resolve, reject) {
-				// Standard XHR to load an image
-				var request = new XMLHttpRequest();
-				request.open('GET', url);
-				request.responseType = 'blob';
-				
-				// When the request loads, check whether it was successful
-				request.onload = function () {
-					if (request.status === 200) {
-						resolve(request.response);
-					} else {
-						reject(new Error('Image didn\'t load successfully; error code:' + request.statusText));
+
+			function onWindowResize() {
+
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+
+				renderer.setSize( window.innerWidth, window.innerHeight );
+
+				controls.handleResize();
+
+			}
+
+			function generateHeight( width, height ) {
+
+				var size = width * height, data = new Uint8Array( size ),
+					perlin = new ImprovedNoise(), quality = 1, z = Math.random() * 100;
+
+				for ( var j = 0; j < 4; j ++ ) {
+
+					for ( var i = 0; i < size; i ++ ) {
+
+						var x = i % width, y = ~ ~ ( i / width );
+						data[ i ] += Math.abs( perlin.noise( x / quality, y / quality, z ) * quality * 1.75 );
+
 					}
-				};
-			  
-				request.onerror = function () {
-					// Also deal with the case when the entire request fails to begin with
-					// This is probably a network error, so reject the promise with an appropriate message
-					reject(new Error('There was a network error.'));
-				};
-			  
-				// Send the request
-				request.send();
-			});
+
+					quality *= 5;
+
+				}
+
+				return data;
+
 			}
 
-		function loadImage(idx) {
-			'use strict';
-			// Get a reference to the body element, and create a new image object
-			var body = document.getElementById('scanImage');
-			//myImage.crossOrigin = ""; // or "anonymous"
-			const filename = 'state/scan.png';
-			// Call the function with the URL we want to load, but then chain the
-			// promise then() method on to the end of it. This contains two callbacks
-			imgLoad(filename).then(function (response) {
-			//create a temporary url for the loaded full image
-				var imageURL = window.URL.createObjectURL(response);
-				body.src = imageURL;
-				//body.appendChild(myImage);
-			}, function (Error) {
-				console.log(Error);
-			});
-		}
-		
-	</script> 
-</body>
+			function generateTexture( data, width, height ) {
+
+				var canvas, canvasScaled, context, image, imageData, vector3, sun, shade;
+
+				vector3 = new THREE.Vector3( 0, 0, 0 );
+
+				sun = new THREE.Vector3( 1, 1, 1 );
+				sun.normalize();
+
+				canvas = document.createElement( 'canvas' );
+				canvas.width = width;
+				canvas.height = height;
+
+				context = canvas.getContext( '2d' );
+				context.fillStyle = '#000';
+				context.fillRect( 0, 0, width, height );
+
+				image = context.getImageData( 0, 0, canvas.width, canvas.height );
+				imageData = image.data;
+
+				for ( var i = 0, j = 0, l = imageData.length; i < l; i += 4, j ++ ) {
+
+					vector3.x = data[ j - 2 ] - data[ j + 2 ];
+					vector3.y = 2;
+					vector3.z = data[ j - width * 2 ] - data[ j + width * 2 ];
+					vector3.normalize();
+
+					shade = vector3.dot( sun );
+
+					imageData[ i ] = ( 96 + shade * 128 ) * ( 0.5 + data[ j ] * 0.007 );
+					imageData[ i + 1 ] = ( 32 + shade * 96 ) * ( 0.5 + data[ j ] * 0.007 );
+					imageData[ i + 2 ] = ( shade * 96 ) * ( 0.5 + data[ j ] * 0.007 );
+
+				}
+
+				context.putImageData( image, 0, 0 );
+
+				// Scaled 4x
+
+				canvasScaled = document.createElement( 'canvas' );
+				canvasScaled.width = width * 4;
+				canvasScaled.height = height * 4;
+
+				context = canvasScaled.getContext( '2d' );
+				context.scale( 4, 4 );
+				context.drawImage( canvas, 0, 0 );
+
+				image = context.getImageData( 0, 0, canvasScaled.width, canvasScaled.height );
+				imageData = image.data;
+
+				for ( var i = 0, l = imageData.length; i < l; i += 4 ) {
+
+					var v = ~ ~ ( Math.random() * 5 );
+
+					imageData[ i ] += v;
+					imageData[ i + 1 ] += v;
+					imageData[ i + 2 ] += v;
+
+				}
+
+				context.putImageData( image, 0, 0 );
+
+				return canvasScaled;
+
+			}
+
+			//
+
+			function animate() {
+
+				requestAnimationFrame( animate );
+
+				render();
+				stats.update();
+
+			}
+
+			function render() {
+
+				controls.update( clock.getDelta() );
+				renderer.render( scene, camera );
+
+			}
+
+		</script>
+
+	</body>
 </html>
