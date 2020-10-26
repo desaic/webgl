@@ -1,0 +1,14 @@
+{
+  "name": "threejs-demo",
+  "version": "0.0.1",
+  "description": "To run \r >node uiserver.js",
+  "main": "uiserver.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Desai",
+  "license": "ISC",
+  "dependencies": {
+    "three": "^0.121.1"
+  }
+}
