@@ -1,5 +1,6 @@
-1. To run 
->node ui.js
+To run 
+>npm install
+>node uiserver.js
 
 In a webbrowser go to localhost:9000
 

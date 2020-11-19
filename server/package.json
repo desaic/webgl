@@ -9,6 +9,7 @@
   "author": "Desai",
   "license": "ISC",
   "dependencies": {
+    "file-saver": "^2.0.2",
     "three": "^0.121.1"
   }
 }
