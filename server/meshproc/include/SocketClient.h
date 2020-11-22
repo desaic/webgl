@@ -16,7 +16,7 @@
 #include <string>
 #include <thread>
 
-#include "Dolphin/Sockets/LoggingCallback.h"
+#include "LoggingCallback.h"
 
 /// @todo(mike) provide automatic reconnect capabilities
 /// @todo(mike) add some hierarchy; add UDP sockets and listener TCP sockets
@@ -49,7 +49,12 @@ class SocketClient {
   /// @todo(mike) what happens if you give this a different hostname/port than
   /// we're currently connect to?
   /// @return socket api error code error. 0 on success or already connected
-  virtual int Connect(const std::string hostname, uint16_t port);
+  virtual int Connect();
+
+  void SetHost(const std::string hostname, int port) {
+    _hostname = hostname;
+    _port = port;
+  }
 
   /// Close the socket. Called by destructor.
   /// @return <0 on error, 0 on success.
@@ -68,9 +73,7 @@ class SocketClient {
 
   std::string _hostname;
   int _port;
-
-  bool ShouldLog(LogLevel level);
-
+  
   // warning: windows nonsense
   std::string GetErrorString(int err, const char *prefix = "");
 

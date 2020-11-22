@@ -10,6 +10,7 @@
   "license": "ISC",
   "dependencies": {
     "file-saver": "^2.0.2",
-    "three": "^0.121.1"
+    "three": "^0.121.1",
+    "websocket": "^1.0.31"
   }
 }

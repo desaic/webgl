@@ -451,6 +451,16 @@
 			renderer.render(scene, currentCamera);
 		}
 
+
+		const ws = new WebSocket('ws://localhost:9000/')
+		ws.onopen = function(){
+			console.log('websocket Client connect');
+			ws.send('websocket client\r\n');
+		};
+		ws.onmessage = function(e){
+			console.log("Received '" + e.data + "'");
+			//make a debug mesh.
+		};
 	</script>
 </body>
 

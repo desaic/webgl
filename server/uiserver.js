@@ -3,7 +3,7 @@ const url = require('url');
 const fs = require('fs');
 const path = require('path');
 var net = require('net');
-
+var WebSocketServer = require('websocket').server;
 const port = process.argv[2] || 9000;
 //port for print client to connect to 
 const printPort = process.argv[3] || 9001
@@ -15,13 +15,11 @@ server.on('close',function(){
   console.log('Server closed !');
 });
 
-var imgBuffer;
-var completeImage = null;
+var msgBuffer;
+var completeMsg = null;
+
 // emitted when new client connects
 server.on('connection',function(socket){
-//this property shows the number of characters currently buffered to be written. (Number of characters is approximately equal to the number of bytes to be written, but the buffer may contain strings, and the strings are lazily encoded, so the exact number of bytes is not known.)
-
-	console.log('Buffer size : ' + socket.bufferSize);
 	console.log('---------server details -----------------');
 	var address = server.address();
 	var port = address.port;
@@ -49,10 +47,6 @@ server.on('connection',function(socket){
 	});
 
 	socket.setTimeout(800000,function(){
-	// called after timeout -> same as socket.on('timeout')
-	// it just tells that soket timed out => its ur job to end or destroy the socket.
-	// socket.end() vs socket.destroy() => end allows us to send final data and allows some i/o activity to finish before destroying the socket
-	// whereas destroy kills the socket immediately irrespective of whether any i/o operation is goin on or not...force destry takes place
 	console.log('Socket timed out');
 	});
 
@@ -67,7 +61,7 @@ server.on('connection',function(socket){
 		if(!hasHeader){
 			recvBuf += data.toString('latin1');
 			console.log(recvBuf.length + " " + data.length);
-			var startIdx = recvBuf.indexOf("image_buffer_size");
+			var startIdx = recvBuf.indexOf("message_size");
 			//if no proper header found discard other data.
 			if(startIdx<0){
 				recvBuf = "";
@@ -86,13 +80,13 @@ server.on('connection',function(socket){
 			hasHeader = true;
 			data = Buffer.from(recvBuf.slice(endIdx + 2), 'latin1');
 			bufferIndex = 0;
-			imgBuffer = Buffer.allocUnsafe(imgSize);
+			msgBuffer = Buffer.allocUnsafe(imgSize);
 			recvBuf = "";
 		}		
 		
 		if(hasHeader){
 			endIdx = data.length;
-			//we are reading into the next image 
+			//we are reading into the next message
 			//or just got extra incorrect data.
 			var endOfImg = false;
 			if(bufferIndex + endIdx>=imgSize){
@@ -100,14 +94,15 @@ server.on('connection',function(socket){
 				endOfImg = true;
 				hasHeader = false;
 			}
-			data.copy(imgBuffer, bufferIndex, 0, endIdx);
+			data.copy(msgBuffer, bufferIndex, 0, endIdx);
 			bufferIndex += endIdx;
 			if(endOfImg){
-				completeImage = imgBuffer;
+				completeMsg = msgBuffer;
 				recvBuf = data.slice(endIdx).toString("latin1");
 				console.log("img complete " + bufferIndex);
 				console.log("extra bytes " + (bufferIndex - imgSize));
 				bufferIndex = 0;
+				processMsg(completeMsg);
 			}
 		}
 	});
@@ -196,7 +191,7 @@ const mimeType = {
 const stateDir = 'state';
 var layerCount = 0;
 
-http.createServer(function (req, res) {
+var hServer = http.createServer(function (req, res) {
   console.log(`${req.method} ${req.url}`);
 
   // parse URL
@@ -212,30 +207,6 @@ http.createServer(function (req, res) {
   //get root dir of the url and check if it's in memory on on disk.
   var firstDir = sanitizePath;
   firstDir.toLowerCase();
-  var tokens = firstDir.split("\\");
-  console.log(tokens[1]);
-  if(tokens[1] === stateDir){
-	  if(tokens.length<3){
-        res.statusCode = 404;
-		res.end('need a variable name under /state/');
-	  }
-	  var varName = tokens[2];
-	  if(varName === "layer"){
-		res.setHeader('Content-type', 'text/plain' );
-		res.end(layerCount.toString());
-		layerCount = layerCount + 1;
-		return;
-	  }else if(varName === "scan.png"){
-		if(completeImage == null){
-			res.setHeader('Content-type', 'text/plain' );
-			res.end("scan not available");
-			return;
-		}
-		res.setHeader('Content-type', 'image/png' );
-		res.end(completeImage);
-		return;
-	  }
-  }
   
   fs.exists(pathname, function (exist) {
     if(!exist) {
@@ -267,3 +238,31 @@ http.createServer(function (req, res) {
 }).listen(parseInt(port));
 
 console.log(`Server listening on port ${port}`);
+
+//--- web socket server
+wsServer = new WebSocketServer({
+	httpServer: hServer
+});
+
+let wsconnection;
+wsServer.on('request', function (request) {
+	wsconnection = request.accept(null, request.origin);
+
+	wsconnection.on('message', function (message) {
+		console.log('Received Message: ', message.utf8Data);
+        wsconnection.send("image complete\r\n");
+	});
+
+	wsconnection.on('close', function (reasonCode, description) {
+		console.log('client disconnect');
+		wsconnection = null;
+	});
+});
+
+function processMsg(msg)
+{
+  console.log("buffer size " + msg.length);
+  if(wsconnection != undefined){
+	  wsconnection.send(msg);
+  }
+}
