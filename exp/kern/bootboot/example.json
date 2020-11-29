@@ -1,0 +1,11 @@
+{
+    "diskguid": "00000000-0000-0000-0000-000000000000",
+    "disksize": 128,
+    "config": "config",
+    "initrd": { "type": "tar", "gzip": true, "directory": [ "boot", "boot" ] },
+    "iso9660": 1,
+    "partitions": [
+        { "type": "boot", "size": 16 },
+        { "type": "ext4", "size": 128, "name": "Linux Exchange" }
+    ]
+}
