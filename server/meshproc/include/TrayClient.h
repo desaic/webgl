@@ -9,7 +9,7 @@ public:
   void Run();
   void Stop();
   void SetHost(const std::string& hostname, int port);
-  
+  void SendMesh(TrigMesh* m);
   void SendMessage(const char* buf, size_t size);
 
   void SimFun();

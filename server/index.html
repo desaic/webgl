@@ -19,12 +19,9 @@
 </head>
 
 <body>
-	<div id="info"><a href="https://threejs.org" target="_blank" rel="noopener">three.js</a>
-		threejs mesh demo | David Antaki Inkbit Code Challenge<br /></div>
+	<div id="info"><a href="https://threejs.org" target="_blank" rel="noopener">three.js</a></div>
 	<div id="info1">
-		"W" translate | "E" rotate | "R" scale | "+/-" adjust size<br />
-		"Q" toggle world/local space | "Shift" snap to grid<br />
-		"X" toggle X | "Y" toggle Y | "Z" toggle Z | "Spacebar" toggle enabled<br />
+		"T" translate | "R" rotate | "S" scale | "Shift" snap to grid <br />		
 		"DEL" delete selected object | "ESC" deselect | "D" duplicate
 		<div>
 			Upload STL: <input type="file" id="stl-file" accept=".stl" name="stl-file-upload" />
@@ -38,16 +35,15 @@
 		import { OrbitControls } from './node_modules/three/examples/jsm/controls/OrbitControls.js';
 		import { TransformControls } from './node_modules/three/examples/jsm/controls/TransformControls.js';
 		import { STLLoader } from './node_modules/three/examples/jsm/loaders/STLLoader.js';
-		// import FileSaver from './node_modules/file-saver/src/FileSaver.js';
 		import './node_modules/file-saver/src/FileSaver.js';
-
 
 		let currentCamera;
 		let scene, renderer, control, orbit;
-		let userMeshes;	// Array of the Mesh objects added by the user
-		let selectedObject;	// Currently selected object
+		let meshes;
+		let selectedMesh;
 
 		// PICKER
+		//https://threejsfundamentals.org/threejs/lessons/threejs-picking.html
 		class PickHelper {
 			constructor() {
 				this.raycaster = new THREE.Raycaster();
@@ -63,9 +59,7 @@
 
 				// cast a ray through the frustum
 				this.raycaster.setFromCamera(normalizedPosition, camera);
-				// get list of all the meshes only
-				let meshesOnly = userMeshes.map(pair => pair[1]);
-				const intersectedObjects = this.raycaster.intersectObjects(meshesOnly);
+				const intersectedObjects = this.raycaster.intersectObjects(meshes);
 
 				if (intersectedObjects.length) {
 					// pick the first object. It's the closest one
@@ -73,7 +67,7 @@
 					// save its color
 					this.pickedObjectSavedColor = this.pickedObject.material.emissive.getHex();
 					// set its emissive color to flashing red/yellow
-					this.pickedObject.material.emissive.setHex(0xFFFF00);
+					this.pickedObject.material.emissive.setHex(0x113333);
 					return intersectedObjects[0].object;
 				}
 			}
@@ -86,9 +80,7 @@
 		init();
 		function init() {
 			// [filename, meshObject]
-			userMeshes = [];
-
-
+			meshes = [];
 			renderer = new THREE.WebGLRenderer();
 			renderer.setPixelRatio(window.devicePixelRatio);
 			renderer.setSize(window.innerWidth, window.innerHeight);
@@ -104,11 +96,10 @@
 
 			scene = new THREE.Scene();
 			scene.background = new THREE.Color(0xcccccc);
-			scene.add(new THREE.GridHelper(400, 20, 0x888888, 0x444444));
-
 			// Ground
 			const plane = new THREE.Mesh(
-				new THREE.PlaneBufferGeometry(400, 400),
+				//unit is mm
+				new THREE.PlaneBufferGeometry(400, 250),
 				new THREE.MeshPhongMaterial({ color: 0x999999, specular: 0x101010 })
 			);
 			plane.rotation.x = - Math.PI / 2;
@@ -141,10 +132,8 @@
 			mesh.castShadow = true;
 			mesh.receiveShadow = true;
 
-			addMesh("Default Box", mesh);
-
+			addMesh("DefaultBox", mesh);
 			scene.add(control);
-
 			// Event listeners
 			document.getElementById("stl-file").addEventListener("change", openFile);
 			document.getElementById("save-meshes").addEventListener("click", saveMeshList);
@@ -155,7 +144,6 @@
 			window.addEventListener('resize', onWindowResize, false);
 			window.addEventListener('keydown', handleKeyDownEvent);
 			window.addEventListener('keyup', handleKeyUpEvent);
-
 			render();
 		}
 
@@ -163,11 +151,12 @@
 		function openStl(file) {
 			const loader = new STLLoader();
 			var geometry = loader.parse(file);
-
 			const material = new THREE.MeshPhongMaterial({ color: 0xff5533, specular: 0x111111, shininess: 200 });
 			const mesh = new THREE.Mesh(geometry, material);
-
-			return snapMesh(rotateMesh((shadowMesh(mesh))));
+			mesh.castShadow = true;
+			mesh.receiveShadow = true;
+			snapMesh(mesh);
+			return mesh;
 		}
 
 		function openFile() {
@@ -189,64 +178,28 @@
 
 		function handleKeyDownEvent(event) {
 			switch (event.keyCode) {
-				case 81: // Q
-					control.setSpace(control.space === "local" ? "world" : "local");
-					break;
-
 				case 16: // Shift
-					control.setTranslationSnap(100);
+					control.setTranslationSnap(10);
 					control.setRotationSnap(THREE.MathUtils.degToRad(15));
 					control.setScaleSnap(0.25);
 					break;
-
-				case 87: // W
+				case 84: // T
 					control.setMode("translate");
 					break;
-
-				case 69: // E
+				case 82: // R
 					control.setMode("rotate");
 					break;
-
-				case 82: // R
+				case 83: // R
 					control.setMode("scale");
 					break;
-
-				case 187:
-				case 107: // +, =, num+
-					control.setSize(control.size + 0.1);
-					break;
-
-				case 189:
-				case 109: // -, _, num-
-					control.setSize(Math.max(control.size - 0.1, 0.1));
-					break;
-
-				case 88: // X
-					control.showX = !control.showX;
-					break;
-
-				case 89: // Y
-					control.showY = !control.showY;
-					break;
-
-				case 90: // Z
-					control.showZ = !control.showZ;
-					break;
-
-				case 32: // Spacebar
-					control.enabled = !control.enabled;
-					break;
-
 				case 46: // Delete
 					deleteSelected();
 					break;
-
 				case 27: // Escape
 					deselectMesh();
 					break;
-
 				case 68: // D
-					duplicateMesh(selectedObject);
+					duplicateMesh(selectedMesh);
 					break;
 			}
 		}
@@ -314,8 +267,8 @@
 			// Check that an object was selected.
 			// If didn't have this check, the control would be attached to undefined and no longer work
 			if (pickHelper.pick(pickPosition, scene, currentCamera)) {
-				selectedObject = pickHelper.pick(pickPosition, scene, currentCamera)
-				control.attach(selectedObject);
+				selectedMesh = pickHelper.pick(pickPosition, scene, currentCamera)
+				control.attach(selectedMesh);
 				scene.add(control);
 			}
 			render();
@@ -327,9 +280,10 @@
 			if (mesh !== undefined) {
 				///TODO maybe more code here
 				scene.add(mesh);
-				userMeshes.push([name, mesh]);
+				mesh.name = name;
+				meshes.push(mesh);
 				control.attach(mesh);
-				selectedObject = mesh;
+				selectedMesh = mesh;
 			} else {
 				alert("The STL you uploaded is not valid");
 				return;
@@ -338,48 +292,28 @@
 			render();
 		}
 
-		// add shadows to given mesh
-		function shadowMesh(mesh) {
-			mesh.castShadow = true;
-			mesh.receiveShadow = true;
-
-			return mesh
-		}
-
-		// Returns the given mesh snapped to the floor plane and rotated upright
-		// Rotates in object space.
-		function rotateMesh(mesh) {
-			mesh.rotation.set(-90 * Math.PI / 180, 0, 0);
-			return mesh;
-		}
-
 		// Snaps mesh to floor plane
 		function snapMesh(mesh) {
 			// Snap mesh to floor
 			// Moves the mesh up or down based on its bounding box
 			mesh.geometry.center();	// Center the geometry (and origin) about the center of the bounding box
 			var boundBox = new THREE.Box3().setFromObject(mesh);
-			mesh.position.set(-200 + boundBox.max.x, boundBox.getSize().y / 2, 200 - boundBox.max.z);
+			mesh.position.set(0, boundBox.getSize().y / 2, 0);
 			return mesh;
 		}
 
 		// Deletes the currently selected object
 		function deleteSelected() {
-			if (selectedObject) {
+			if (selectedMesh) {
 				// Remove the object from scene
-				selectedObject.geometry.dispose();
-				selectedObject.material.dispose();
-				scene.remove(selectedObject);
-				// Get meshes only from userMeshes
-				let meshesOnly = userMeshes.map(pair => pair[1]);
-				// Remove object from userMeshes
-				const i = meshesOnly.indexOf(selectedObject);
+				selectedMesh.geometry.dispose();
+				selectedMesh.material.dispose();
+				scene.remove(selectedMesh);
+				const i = meshes.indexOf(selectedMesh);
 				if (i > -1) {
-					userMeshes.splice(i, 1);
+					meshes.splice(i, 1);
 				}
-
-				selectedObject = null;
-
+				selectedMesh = null;
 				// Remove controls from scene
 				control.detach();
 			}
@@ -389,7 +323,7 @@
 		// Deselect the currently selected mesh
 		function deselectMesh() {
 			control.detach();
-			selectedObject = null;
+			selectedMesh = null;
 
 			render();
 		}
@@ -397,9 +331,11 @@
 		// Duplicates the given mesh and adds it to the scene
 		function duplicateMesh(mesh) {
 			// Clone geometry and material so that they have separate uuid's
-			// If you do selectedObject.clone(), then orig. and new mesh geometry's
+			// If you do selectedMesh.clone(), then orig. and new mesh geometry's
 			// have same uuid and raycaster will group them together.
 			let duplicate = new THREE.Mesh(mesh.geometry.clone(), mesh.material.clone());
+			//remember to disable emission 
+			duplicate.material.emissive.setHex(0x0);
 			duplicate.rotation.copy(mesh.rotation);	// Copy rotation
 			duplicate.position.copy(mesh.position);	// Copy position
 			duplicate.scale.copy(mesh.scale);	// Copy position
@@ -409,39 +345,34 @@
 
 			// Get the duplicate's name
 			let name = "";
-			// Get meshes only from userMeshes
-			let meshesOnly = userMeshes.map(pair => pair[1]);
-			// Remove object from userMeshes
-			const i = meshesOnly.indexOf(selectedObject);
+			const i = meshes.indexOf(selectedMesh);
 			if (i > -1) {
-				name = userMeshes[i][0];
+				name = meshes[i].name;
 			}
 
 			addMesh(name, duplicate);
-
 		}
 
-		// Saves the list of userMeshes, their positions and rotations to a file
+		// Saves the list of meshes, their positions and rotations to a file
 		function saveMeshList() {
 			var blobArray = [];
-			for (let i = 0; i < userMeshes.length; i++) {
-				blobArray.push("Filename: ");
-				blobArray.push(userMeshes[i][0]);
-				blobArray.push("\tPosition(x,y,z): (");
-				blobArray.push(userMeshes[i][1].position.x);
-				blobArray.push(",");
-				blobArray.push(userMeshes[i][1].position.y);
-				blobArray.push(",");
-				blobArray.push(userMeshes[i][1].position.z);
-				blobArray.push(")\tRotation(x,y,z): (");
-				blobArray.push(userMeshes[i][1].rotation.x);
-				blobArray.push(",");
-				blobArray.push(userMeshes[i][1].rotation.y);
-				blobArray.push(",");
-				blobArray.push(userMeshes[i][1].rotation.z);
-				blobArray.push(")\n");
+			for (let i = 0; i < meshes.length; i++) {
+				blobArray.push("Filename ");
+				blobArray.push(meshes[i].name);
+				blobArray.push("\nPosition ");
+				blobArray.push(meshes[i].position.x);
+				blobArray.push(" ");
+				blobArray.push(meshes[i].position.y);
+				blobArray.push(" ");
+				blobArray.push(meshes[i].position.z);
+				blobArray.push("\nRotation ");
+				blobArray.push(meshes[i].rotation.x);
+				blobArray.push(" ");
+				blobArray.push(meshes[i].rotation.y);
+				blobArray.push(" ");
+				blobArray.push(meshes[i].rotation.z);
+				blobArray.push("\n");
 			}
-
 			var blob = new Blob(blobArray, { type: "text/plain;charset=utf-8" });
 			saveAs(blob, "mesh_list.txt");
 		}
@@ -451,15 +382,41 @@
 			renderer.render(scene, currentCamera);
 		}
 
-
 		const ws = new WebSocket('ws://localhost:9000/')
+
 		ws.onopen = function(){
 			console.log('websocket Client connect');
 			ws.send('websocket client\r\n');
 		};
+
+		function createMesh(){
+					//make a debug mesh.
+			const geometry = new THREE.BufferGeometry();
+			
+			// create a simple square shape. We duplicate the top left and bottom right
+			// vertices because each vertex needs to appear once per triangle.
+			const vertices = new Float32Array( [
+				10.0, 10.0,  10.0,
+				 10.0, 10.0,  -10.0,
+				 -10.0,  10.0,  -10.0,
+
+				 -10.0,  10.0,  -10.0,
+				-10.0,  10.0,  10.0,
+				10.0, 10.0,  10.0
+			] );
+			
+			geometry.setAttribute( 'position', new THREE.BufferAttribute( vertices, 3 ) );
+			//geometry.computeFaceNormals();
+			geometry.computeVertexNormals();
+			const material = new THREE.MeshPhongMaterial( { color: 0x999999, specular: 0x101010 } );
+			const mesh = new THREE.Mesh( geometry, material );
+			return mesh;
+		}
+
 		ws.onmessage = function(e){
 			console.log("Received '" + e.data + "'");
-			//make a debug mesh.
+			//var mesh = createMesh();
+			//addMesh('0', mesh);
 		};
 	</script>
 </body>
