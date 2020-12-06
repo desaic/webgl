@@ -4,20 +4,27 @@
 #include <iostream>
 #include <thread>
 
+enum class MessageType {
+  MESH = 1, STATE = 2
+};
+
 TrayClient::TrayClient():running(false)
 {}
 
 void TrayClient::Load()
 {
-  //std::string meshFile = "F:/homework/meshes/Eiffel.stl";
-  //std::vector<unsigned > solids;
-  //TrigMesh * mesh = new TrigMesh();
-  //bool success = stl_reader::ReadStlFile(meshFile.c_str(), mesh->verts, mesh->normals, mesh->trigs, solids);
-  //if (!success) {
-  //  std::cout << "error reading stl file.\n";
-  //  return;
-  //}
-  //sim.meshes.push_back(mesh);
+  std::string meshFile = "F:/homework/meshes/Eiffel.stl";
+  std::vector<unsigned > solids;
+  TrigMesh * mesh = new TrigMesh();
+  bool success = stl_reader::ReadStlFile(meshFile.c_str(), mesh->verts, mesh->normals, mesh->trigs, solids);
+  if (!success) {
+    std::cout << "error reading stl file.\n";
+    return;
+  }
+  sim.meshes.push_back(mesh);
+  
+  //test non trivial message
+  SendMesh(mesh);
 
   sim.Load();
 }
@@ -41,12 +48,22 @@ void TrayClient::SendMessage(const char * buf, size_t size)
   client.Send(buf, size);
 }
 
+void TrayClient::SendMesh(TrigMesh * m) {
+  //message type
+  int type = int(MessageType::MESH);
+  size_t nTrig = m->trigs.size();
+  size_t vertBytes = sizeof(float) * nTrig * 3 * 3;
+  size_t msgSize = sizeof(type) + sizeof(nTrig) + vertBytes;
+  //type 4bytes | nTrig 8 bytes| vertices
+  std::vector<unsigned char> buf(msgSize);
+  *(int*)(&buf[0]) = type;
+  *(size_t*)(&buf[4]) = nTrig;
+  SendMessage((char*)buf.data(), buf.size());
+}
+
 void TrayClient::TCPFun()
 {
   int pollInterval = 10; //ms
-  std::string msg = "hello";
-  SendMessage(msg.c_str(), msg.size());
-
   while (running) {
     std::this_thread::sleep_for(std::chrono::milliseconds(pollInterval));
   }
