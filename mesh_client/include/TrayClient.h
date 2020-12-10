@@ -1,7 +1,6 @@
 #pragma once
 #include "SocketClient.h"
-#include "RigidBodySim.h"
-
+#include "TrigMesh.h"
 class TrayClient {
 public:
   TrayClient();
@@ -20,5 +19,4 @@ public:
 
   bool running;
   SocketClient client;
-  RigidBodySim sim;
 };

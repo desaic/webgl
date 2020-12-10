@@ -13,31 +13,26 @@ TrayClient::TrayClient():running(false)
 
 void TrayClient::Load()
 {
-  std::string meshFile = "F:/homework/meshes/Eiffel.stl";
+  std::string meshFile = "F:/homework/threejs/meshes/Eiffel.stl";
   std::vector<unsigned > solids;
-  TrigMesh * mesh = new TrigMesh();
-  bool success = stl_reader::ReadStlFile(meshFile.c_str(), mesh->verts, mesh->normals, mesh->trigs, solids);
+  TrigMesh* mesh = new TrigMesh();
+  bool success = false;
+  try{
+    success = stl_reader::ReadStlFile(meshFile.c_str(), mesh->verts, mesh->normals, mesh->trigs, solids);
+  }
+  catch(...){
+  }
   if (!success) {
-    std::cout << "error reading stl file.\n";
+    std::cout << "error reading stl file " <<meshFile<<"\n";
     return;
   }
-  sim.meshes.push_back(mesh);
-  
+ 
   //test non trivial message
   SendMesh(mesh);
-
-  sim.Load();
 }
 
 void TrayClient::SimFun()
 {
-  int NUM_STEPS = 200;
-  for (size_t i = 0; i < NUM_STEPS; i++) {
-    sim.Step();
-    if (!running) {
-      break;
-    }
-  }
 }
 
 void TrayClient::SendMessage(const char * buf, size_t size)
