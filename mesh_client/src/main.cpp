@@ -14,15 +14,7 @@ int initWSA() {
   return 0;
 }
 
-int main(){
-  initWSA();
-  int port = 9001;
-  TrayClient client;
-  client.Load();
-  client.SetHost("localhost", port);
-  client.Run();
-
-
+void CommandLoop() {
   while (1) {
     std::cout << "> ";
     std::string line;
@@ -34,6 +26,16 @@ int main(){
       continue;
     }
   }
+}
+
+int main(){
+  initWSA();
+  int port = 9001;
+  TrayClient client;
+  client.Load();
+  client.SetHost("localhost", port);
+  client.Run();
+  CommandLoop();
   client.Stop();
 
   return 0;	
