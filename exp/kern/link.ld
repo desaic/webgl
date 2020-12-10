@@ -34,6 +34,7 @@ PHDRS
 {
   boot PT_LOAD;                                /* one single loadable segment */
 }
+ENTRY(main)
 SECTIONS
 {
     . = 0xffffffffffe00000;
