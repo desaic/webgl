@@ -1,5 +1,5 @@
 import React from 'react'
-import MainContextCanvas from './MainContextCanvas/MainContextCanvas'
+import MainCanvas from './MainCanvas/MainCanvas'
 import Info from './Info/Info'
 import MenuBar from './MenuBar/MenuBar'
 import MeshInfo from './MeshInfo/MeshInfo'
@@ -9,7 +9,7 @@ import { useState } from 'react'
 
 import './App.scss'
 
-const mainContextCanvasRef = React.createRef();
+const mainRef = React.createRef();
 
 const handleFileOpen = (event) => {
 	const { files, value } = event.target
@@ -18,12 +18,12 @@ const handleFileOpen = (event) => {
 	let reader = new FileReader()
 	reader.readAsArrayBuffer(stlFile)
 	reader.onload = function () {
-		mainContextCanvasRef.current.addMesh(filename, openStl(reader.result));
+		mainRef.current.addMesh(filename, openStl(reader.result));
 	}
 }
 
 const handleSaveMeshList = () => {
-	saveMeshList(mainContextCanvasRef.current.getMeshList())
+	saveMeshList(mainRef.current.getMeshList())
 }
 
 function App() {
@@ -57,15 +57,15 @@ function App() {
 	}
 
 	const handleUndoAction = () => {
-		if(mainContextCanvasRef.current) {
-			mainContextCanvasRef.current.handleUndoAction()
+		if(mainRef.current) {
+			mainRef.current.handleUndoAction()
 		}
 	}
 
 	return (
 		<div className="App">
-			<MainContextCanvas 
-				ref={mainContextCanvasRef}
+			<MainCanvas 
+				ref={mainRef}
 				onSelectedMeshDataChange={handleSelectedMeshDataChange}
 				onBoundriesExceded={setBoundaryExceded}
 			/>
@@ -77,7 +77,7 @@ function App() {
 				onSaveMeshList={handleSaveMeshList}
 				onUndo={handleUndoAction}
 			/>
-			{showMeshInfo && mainContextCanvasRef.current && (
+			{showMeshInfo && mainRef.current && (
 				<MeshInfo
 					meshName={meshName}
 					meshPositionX={meshPositionX}
@@ -86,12 +86,12 @@ function App() {
 					meshRotationX={meshRotationX}
 					meshRotationY={meshRotationY}
 					meshRotationZ={meshRotationZ}
-					onPositionXChange={mainContextCanvasRef.current.handlePositionXChange}
-					onPositionYChange={mainContextCanvasRef.current.handlePositionYChange}
-					onPositionZChange={mainContextCanvasRef.current.handlePositionZChange}
-					onRoatationXChange={mainContextCanvasRef.current.handleRoatationXChange}
-					onRoatationYChange={mainContextCanvasRef.current.handleRoatationYChange}
-					onRoatationZChange={mainContextCanvasRef.current.handleRoatationZChange}
+					onPositionXChange={mainRef.current.handlePositionXChange}
+					onPositionYChange={mainRef.current.handlePositionYChange}
+					onPositionZChange={mainRef.current.handlePositionZChange}
+					onRoatationXChange={mainRef.current.handleRoatationXChange}
+					onRoatationYChange={mainRef.current.handleRoatationYChange}
+					onRoatationZChange={mainRef.current.handleRoatationZChange}
 				/>
 			)}
 		</div>

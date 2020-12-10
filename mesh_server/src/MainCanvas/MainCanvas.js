@@ -3,7 +3,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
 import PickHelper from './PickHelper'
-import './MainContextCanvas.scss'
+import './MainCanvas.scss'
 import { addShadowedLight } from '../utils/addShadowedLight'
 import { MeshStateHistory } from '../utils/MeshStateHistory'
 
@@ -25,7 +25,7 @@ let pickPosition = { x: 0, y: 0 };
 let meshes = []
 let selectedMesh = null
 
-export default class MainContextCanvas extends React.Component {
+export default class MainCanvas extends React.Component {
 	canvasRef = React.createRef()
 
 	componentDidMount() {
@@ -326,7 +326,7 @@ export default class MainContextCanvas extends React.Component {
 
 	render() {
 		return (
-			<canvas id="mainContextCanvas" ref={this.canvasRef}></canvas>
+			<canvas id="mainCanvas" ref={this.canvasRef}></canvas>
 		)
 	}
 
