@@ -28,13 +28,20 @@ void CommandLoop() {
   }
 }
 
+void LoadTestScene(TrayClient & client)
+{
+  Scene& scene = client.GetScene();
+
+}
+
 int main(){
   initWSA();
   int port = 9001;
   TrayClient client;
-  client.Load();
+  LoadTestScene(client);
   client.SetHost("localhost", port);
-  client.Run();
+  client.RunTCPThread();
+  client.SendScene();
   CommandLoop();
   client.Stop();
 

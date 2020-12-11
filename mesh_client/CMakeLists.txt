@@ -1,3 +1,4 @@
+cmake_minimum_required(VERSION 3.16)
 PROJECT (MeshClient)
 include_directories(include)
 FILE(GLOB EXE_SRC "src/*.cpp" "src/*.c")

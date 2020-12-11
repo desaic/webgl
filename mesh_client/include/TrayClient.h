@@ -6,20 +6,25 @@
 
 class TrayClient {
 public:
-  TrayClient();
   
-  void Run();
+  TrayClient();
+  ~TrayClient();
+
+  void RunTCPThread();
   void Stop();
   void SetHost(const std::string& hostname, int port);
   void SendMesh(TrigMesh* m);
+  ///sends most recent scene to render server
+  void SendScene();
   void SendMessage(const char* buf, size_t size);
 
   void SimFun();
   void TCPFun();
-  std::thread simThread, tcpThread;
+  std::thread simThread, tcpThread;  
 
-  ~TrayClient();
+  Scene & GetScene() { return scene; }
 
+private:
   bool running;
   SocketClient client;
   Scene scene;

@@ -11,26 +11,6 @@ enum class MessageType {
 TrayClient::TrayClient():running(false)
 {}
 
-void TrayClient::Load()
-{
-  std::string meshFile = "F:/homework/threejs/meshes/Eiffel.stl";
-  std::vector<unsigned > solids;
-  TrigMesh* mesh = new TrigMesh();
-  bool success = false;
-  try{
-    success = stl_reader::ReadStlFile(meshFile.c_str(), mesh->verts, mesh->normals, mesh->trigs, solids);
-  }
-  catch(...){
-  }
-  if (!success) {
-    std::cout << "error reading stl file " <<meshFile<<"\n";
-    return;
-  }
- 
-  //test non trivial message
-  SendMesh(mesh);
-}
-
 void TrayClient::SimFun()
 {
 }
@@ -39,8 +19,8 @@ void TrayClient::SendMessage(const char * buf, size_t size)
 {
   std::string header = "message_size ";
   header = header + std::to_string(size) + "\r\n";
-  client.Send(header.c_str(), header.size());
-  client.Send(buf, size);
+  client.Send(header.c_str(), uint32_t(header.size()) );
+  client.Send(buf, uint32_t(size) );
 }
 
 void TrayClient::SendMesh(TrigMesh * m) {
@@ -56,6 +36,11 @@ void TrayClient::SendMesh(TrigMesh * m) {
   SendMessage((char*)buf.data(), buf.size());
 }
 
+void TrayClient::SendScene()
+{
+
+}
+
 void TrayClient::TCPFun()
 {
   int pollInterval = 10; //ms
@@ -64,16 +49,13 @@ void TrayClient::TCPFun()
   }
 }
 
-void TrayClient::Run()
+void TrayClient::RunTCPThread()
 {
   int ret = client.Connect();
   if (ret < 0) {
     std::cout << "failed to connect error " << ret << "\n";
   }
   running = true;
-  if (!simThread.joinable()) {
-    simThread = std::thread(&TrayClient::SimFun, this);
-  }
   if (!tcpThread.joinable()) {
     tcpThread = std::thread(&TrayClient::TCPFun, this);
   }
