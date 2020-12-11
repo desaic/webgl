@@ -12,5 +12,5 @@ public:
   std::vector<TValue> verts, normals;
   std::vector<TIndex> trigs;
 
-  void loadStl(const std::string& filename);
+  int LoadStl(const std::string& filename);
 };

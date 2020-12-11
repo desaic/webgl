@@ -31,7 +31,15 @@ void CommandLoop() {
 void LoadTestScene(TrayClient & client)
 {
   Scene& scene = client.GetScene();
+  
+  TrigMesh mesh;
+  std::string meshFile = "F:/homework/threejs/meshes/Eiffel.stl";
+  int status = mesh.LoadStl(meshFile);
 
+  int meshId = scene.AddMesh(mesh);
+  Vec3 rot(0, 0, 0);
+  Vec3 initPos(0, 0, 10);
+  int instanceId = scene.AddInstance(meshId, initPos, rot);
 }
 
 int main(){
