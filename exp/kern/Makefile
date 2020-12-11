@@ -28,24 +28,35 @@
 #
 #
 
-CFLAGS = -Wall -fpic -ffreestanding -fno-stack-protector -nostdinc -nostdlib -I./bootboot/dist/
+CFLAGS = -g -Wall -fpic -ffreestanding -fno-stack-protector -nostdinc -nostdlib -I./bootboot/dist/
 
 all: kern.elf
 
 SRCS=$(wildcard *.c)
 OBJS := $(patsubst %.c,%.o,$(SRCS))
-CC=gcc
+
+#ASMS=$(wildcard *.S)
+#AOBJS := $(patsubst %.S,%.o,$(ASMS))
+
+CC=x86_64-elf-gcc
+LD=x86_64-elf-ld
+STRIP=x86_64-elf-strip
+OBJDUMP=x86_64-elf-objdump
+OBJCOPY=x86_64-elf-objcopy
 
 kern.elf: $(OBJS) font.o
 	$(CC) -nostdlib -nostartfiles -T link.ld $^ -o kern.elf -lgcc
-	strip -s -K mmio -K fb -K bootboot -K environment kern.elf
+	$(OBJCOPY) --only-keep-debug kern.elf kern.sym
+	$(STRIP) -s -K mmio -K fb -K bootboot -K environment kern.elf
 
 font.o: font.psf
-	ld -r -b binary -o font.o font.psf
+	$(LD) -r -b binary -o font.o font.psf
 
 %.o: %.c
 	$(CC) $(CFLAGS) -mno-red-zone -c $< -o $@
 
+#%.o: %.S
+#	$(CC) $(CFLAGS) -mno-red-zone -c $< -o $@
 clean:
-	rm *.o *.elf *.txt bootboot/*.img
+	rm -f *.o *.elf *.txt bootboot/*.img
 	rm bootboot/boot/*.elf
