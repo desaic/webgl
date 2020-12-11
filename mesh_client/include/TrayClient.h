@@ -1,10 +1,13 @@
 #pragma once
+
 #include "SocketClient.h"
 #include "TrigMesh.h"
+#include "Scene.h"
+
 class TrayClient {
 public:
   TrayClient();
-  void Load();
+  
   void Run();
   void Stop();
   void SetHost(const std::string& hostname, int port);
@@ -19,4 +22,5 @@ public:
 
   bool running;
   SocketClient client;
+  Scene scene;
 };
