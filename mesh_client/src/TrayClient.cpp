@@ -23,22 +23,38 @@ void TrayClient::SendMessage(const char * buf, size_t size)
   client.Send(buf, uint32_t(size) );
 }
 
-void TrayClient::SendMesh(TrigMesh * m) {
+void TrayClient::SendMesh(const TrigMesh * m) {
   //message type
   int type = int(MessageType::MESH);
-  size_t nTrig = m->trigs.size();
+  size_t nTrig = m->GetNumTrigs();
   size_t vertBytes = sizeof(float) * nTrig * 3 * 3;
-  size_t msgSize = sizeof(type) + sizeof(nTrig) + vertBytes;
+  size_t headerSize = sizeof(type) + sizeof(nTrig);
+  size_t msgSize = headerSize + vertBytes;
+  //mesh message structure:
   //type 4bytes | nTrig 8 bytes| vertices
   std::vector<unsigned char> buf(msgSize);
   *(int*)(&buf[0]) = type;
   *(size_t*)(&buf[4]) = nTrig;
+
+  size_t bufIdx = headerSize;
+  size_t vertexSize = sizeof(float) * 3;
+  for (size_t ti = 0; ti < nTrig; ti++) {
+    for (size_t vi = 0; vi < 3; vi++) {
+      size_t vidx = size_t(m->trigs[3 * ti + vi]);
+      std::memcpy(&buf[bufIdx], &m->verts[3 * vidx], vertexSize);
+      bufIdx += vertexSize;
+    }
+  }
+
   SendMessage((char*)buf.data(), buf.size());
 }
 
-void TrayClient::SendScene()
+void TrayClient::SendMeshes()
 {
-
+  const std::vector<TrigMesh>& meshes = scene.GetMeshes();
+  for (size_t i = 0; i < meshes.size(); i++) {
+    SendMesh(&meshes[i]);
+  }
 }
 
 void TrayClient::TCPFun()

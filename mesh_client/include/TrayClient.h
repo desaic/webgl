@@ -13,9 +13,10 @@ public:
   void RunTCPThread();
   void Stop();
   void SetHost(const std::string& hostname, int port);
-  void SendMesh(TrigMesh* m);
-  ///sends most recent scene to render server
-  void SendScene();
+  void SendMesh(const TrigMesh* m);
+  ///sends all meshes render server
+  ///blocks until sending finished
+  void SendMeshes();
   void SendMessage(const char* buf, size_t size);
 
   void SimFun();

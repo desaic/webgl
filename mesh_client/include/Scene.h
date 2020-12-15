@@ -25,6 +25,10 @@ public:
 	///\return instance index. -1 on error.
 	int AddInstance(int meshId, Vec3& position, Vec3& rotation);
 
+	const std::vector<TrigMesh>& GetMeshes()const {
+		return meshes;
+	}
+
 private:
 
 	std::vector<TrigMesh> meshes;

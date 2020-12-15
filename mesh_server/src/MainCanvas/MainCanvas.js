@@ -29,6 +29,7 @@ export default class MainCanvas extends React.Component {
 	canvasRef = React.createRef()
 
 	componentDidMount() {
+	
 		RENDERER = new THREE.WebGLRenderer({
 			canvas: this.canvasRef.current,
 		});
@@ -88,6 +89,10 @@ export default class MainCanvas extends React.Component {
 		this.bindEventListeners()
 		this.clearPickPosition()
 		this.updateCanvasRender()
+		
+		WEB_SOCKET.onmessage = (message) => {
+			this.parseMesh(message.data);
+		};
 	}
 
 	shouldComponentUpdate() {
@@ -151,6 +156,13 @@ export default class MainCanvas extends React.Component {
 	clearPickPosition = () => {
 		pickPosition.x = -100000
 		pickPosition.y = -100000
+	}
+
+	//parse mesh received from web socket
+	//and add to mesh list.
+	parseMesh = (buf) =>{
+		const fvals = new Float32Array(buf);
+		
 	}
 
 	selectObj = () => {

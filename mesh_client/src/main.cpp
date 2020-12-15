@@ -33,7 +33,7 @@ void LoadTestScene(TrayClient & client)
   Scene& scene = client.GetScene();
   
   TrigMesh mesh;
-  std::string meshFile = "F:/homework/threejs/meshes/Eiffel.stl";
+  std::string meshFile = "F:/homework/threejs/meshes/pyramid.stl";
   int status = mesh.LoadStl(meshFile);
 
   int meshId = scene.AddMesh(mesh);
@@ -49,7 +49,7 @@ int main(){
   LoadTestScene(client);
   client.SetHost("localhost", port);
   client.RunTCPThread();
-  client.SendScene();
+  client.SendMeshes();
   CommandLoop();
   client.Stop();
 
