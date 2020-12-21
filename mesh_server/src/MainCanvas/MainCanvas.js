@@ -248,40 +248,14 @@ export default class MainCanvas extends React.Component {
 		this.updateCanvasRender()
 	}
 
-	checkMeshBoundries = () => {
-		const { onBoundriesExceded } = this.props
-		const maxX = 400 / 2
-		const minX = 0 - 400 / 2
-		const maxZ = 250 / 2
-		const minZ = 0 - 250 / 2
-		const minY = 0
-
-		let boundaryExceded = false
-		meshes.forEach(meshItem => {
-			if(meshItem) {
-				let boundBox = new THREE.Box3().setFromObject(meshItem)
-				if (boundBox.min.x < minX || 
-					boundBox.min.y < minY || 
-					boundBox.min.z < minZ || 
-					boundBox.max.x > maxX || 
-					boundBox.max.z > maxZ ) {
-						boundaryExceded = true
-					
-				}
-			}
-		})
-		onBoundriesExceded(boundaryExceded)
-	}
-
 	updateCanvasRender = () => {
 		const aspect = window.innerWidth / window.innerHeight
 		CURRENT_CAMERA.aspect = aspect
 		CURRENT_CAMERA.updateProjectionMatrix()
 		RENDERER.setSize(window.innerWidth, window.innerHeight)
-		PICK_HELPER.pick(pickPosition, SCENE, CURRENT_CAMERA,meshes)
+		//PICK_HELPER.pick(pickPosition, SCENE, CURRENT_CAMERA,meshes)
 		RENDERER.render(SCENE, CURRENT_CAMERA)
-		this.props.onSelectedMeshDataChange(selectedMesh)
-		this.checkMeshBoundries()
+		//this.props.onSelectedMeshDataChange(selectedMesh)
 	}
 
 	handlePositionXChange = (event) => {
