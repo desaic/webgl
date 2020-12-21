@@ -278,7 +278,7 @@ export default class MainCanvas extends React.Component {
 		CURRENT_CAMERA.aspect = aspect
 		CURRENT_CAMERA.updateProjectionMatrix()
 		RENDERER.setSize(window.innerWidth, window.innerHeight)
-		PICK_HELPER.pick(pickPosition, SCENE, CURRENT_CAMERA)
+		PICK_HELPER.pick(pickPosition, SCENE, CURRENT_CAMERA,meshes)
 		RENDERER.render(SCENE, CURRENT_CAMERA)
 		this.props.onSelectedMeshDataChange(selectedMesh)
 		this.checkMeshBoundries()

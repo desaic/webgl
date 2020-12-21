@@ -14,7 +14,7 @@ const mainRef = React.createRef();
 const handleFileOpen = (event) => {
 	const { files, value } = event.target
 	const stlFile = files[0]
-	const filename = value.replace(/.*[\/\\]/, '')
+	const filename = value.replace(/.*[/\\]/, '')
 	let reader = new FileReader()
 	reader.readAsArrayBuffer(stlFile)
 	reader.onload = function () {
