@@ -31,9 +31,10 @@ void TrayClient::SendMesh(const TrigMesh * m) {
   size_t headerSize = sizeof(type) + sizeof(nTrig);
   size_t msgSize = headerSize + vertBytes;
   //mesh message structure:
-  //type 4bytes | nTrig 8 bytes| vertices
+  //|message type 2 bytes| mesh id 2 bytes | nTrig 8 bytes | vertices
   std::vector<unsigned char> buf(msgSize);
-  *(int*)(&buf[0]) = type;
+  *(short*)(&buf[0]) = type;
+  *(short*)(&buf[2]) = 1;
   *(size_t*)(&buf[4]) = nTrig;
 
   size_t bufIdx = headerSize;

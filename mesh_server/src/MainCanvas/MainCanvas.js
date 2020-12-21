@@ -91,7 +91,7 @@ export default class MainCanvas extends React.Component {
 		this.updateCanvasRender()
 		
 		WEB_SOCKET.onmessage = (message) => {
-			this.parseMesh(message.data);
+			this.parseSocketMsg(message.data);
 		};
 	}
 
@@ -158,11 +158,22 @@ export default class MainCanvas extends React.Component {
 		pickPosition.y = -100000
 	}
 
+	parseBlob = (blob) => {
+		new Response(blob).arrayBuffer()
+		.then(buf => {
+			const fvals = new Float32Array(buf);
+			
+		});
+	}
+
 	//parse mesh received from web socket
 	//and add to mesh list.
-	parseMesh = (buf) =>{
-		const fvals = new Float32Array(buf);
-		
+	parseSocketMsg = (msg) =>{
+		if(msg instanceof Blob){
+			this.parseBlob(msg);
+		}else if(typeof msg === 'string'){
+			console.log(msg);
+		}
 	}
 
 	selectObj = () => {
