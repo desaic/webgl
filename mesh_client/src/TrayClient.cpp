@@ -8,8 +8,14 @@ enum class MessageType {
   MESH = 1, STATE = 2
 };
 
+void LogStdOut(const std::string& msg, LogLevel level) {
+  std::cout << "Sock client: " << msg << "\n";
+}
+
 TrayClient::TrayClient():running(false)
-{}
+{
+  client.SetLogCallback(LogStdOut);
+}
 
 void TrayClient::SimFun()
 {
@@ -25,17 +31,19 @@ void TrayClient::SendMessage(const char * buf, size_t size)
 
 void TrayClient::SendMesh(const TrigMesh * m) {
   //message type
-  int type = int(MessageType::MESH);
-  size_t nTrig = m->GetNumTrigs();
+  unsigned short type = unsigned short(MessageType::MESH);
+  unsigned short meshId = 1;
+  /// don't make mesh with more than 4 billion trigs.
+  unsigned nTrig = unsigned(m->GetNumTrigs());
   size_t vertBytes = sizeof(float) * nTrig * 3 * 3;
-  size_t headerSize = sizeof(type) + sizeof(nTrig);
+  size_t headerSize = sizeof(type) + sizeof(meshId) + sizeof(nTrig);
   size_t msgSize = headerSize + vertBytes;
   //mesh message structure:
   //|message type 2 bytes| mesh id 2 bytes | nTrig 8 bytes | vertices
   std::vector<unsigned char> buf(msgSize);
   *(short*)(&buf[0]) = type;
-  *(short*)(&buf[2]) = 1;
-  *(size_t*)(&buf[4]) = nTrig;
+  *(short*)(&buf[2]) = meshId;
+  *(unsigned*)(&buf[4]) = nTrig;
 
   size_t bufIdx = headerSize;
   size_t vertexSize = sizeof(float) * 3;
