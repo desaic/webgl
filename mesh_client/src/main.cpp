@@ -1,6 +1,7 @@
 #include <iostream>
 #include <WinSock2.h>
 #include "TrayClient.h"
+#include "ConfigFile.hpp"
 
 int initWSA() {
   WSADATA wsaData;
@@ -33,6 +34,7 @@ void LoadTestScene(TrayClient & client)
   Scene& scene = client.GetScene();
   
   TrigMesh mesh;
+  ///\todo change to config instead of hardcoded.
   std::string meshFile = "F:/homework/threejs/meshes/pyramid.stl";
   int status = mesh.LoadStl(meshFile);
 
@@ -44,6 +46,9 @@ void LoadTestScene(TrayClient & client)
 
 int main(){
   initWSA();
+  ///\todo add a config file.
+  ConfigFile conf;
+  
   int port = 9001;
   TrayClient client;
   LoadTestScene(client);
