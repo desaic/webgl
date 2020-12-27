@@ -26,8 +26,7 @@ int SocketClient::Connect() {
   // create new socket
 
   if (_socket != INVALID_SOCKET) {
-    // can't create a new one
-    Log("Connect: already connected", LOG_DEBUG);  // @todo(mike) verbose?
+    //already connected.
     return 0;
   }
 

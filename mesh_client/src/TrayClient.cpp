@@ -70,17 +70,19 @@ void TrayClient::SendMeshes()
 void TrayClient::TCPFun()
 {
   int pollInterval = 10; //ms
+  //interval for looking for mesh server when disconnected.
+  int connectInterval = 2000;
   while (running) {
+    if (client.Connect() != 0) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(connectInterval));
+      continue;
+    }
     std::this_thread::sleep_for(std::chrono::milliseconds(pollInterval));
   }
 }
 
 void TrayClient::RunTCPThread()
 {
-  int ret = client.Connect();
-  if (ret < 0) {
-    std::cout << "failed to connect error " << ret << "\n";
-  }
   running = true;
   if (!tcpThread.joinable()) {
     tcpThread = std::thread(&TrayClient::TCPFun, this);
