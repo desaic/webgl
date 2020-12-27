@@ -54,7 +54,6 @@ int main(){
   LoadTestScene(client);
   client.SetHost("localhost", port);
   client.RunTCPThread();
-  client.SendMeshes();
   CommandLoop();
   client.Stop();
 

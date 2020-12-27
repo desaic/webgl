@@ -49,7 +49,9 @@ class SocketClient {
   /// @todo(mike) what happens if you give this a different hostname/port than
   /// we're currently connect to?
   /// @return socket api error code error. 0 on success or already connected
-  virtual int Connect();
+  int Connect();
+
+  bool Connected();
 
   void SetHost(const std::string hostname, int port) {
     _hostname = hostname;
@@ -58,7 +60,7 @@ class SocketClient {
 
   /// Close the socket. Called by destructor.
   /// @return <0 on error, 0 on success.
-  virtual int Close();
+  int Close();
 
   /// Logging callback is invoked with important event strings (disconnected,
   /// tx/rx errors, etc.)
@@ -81,7 +83,7 @@ class SocketClient {
   int LogLastError(const char *prefix = "", LogLevel level = LOG_ERROR);
 
   // calls _loggingCallback
-  virtual void Log(std::string str, LogLevel level = LOG_INFO);
+  void Log(std::string str, LogLevel level = LOG_INFO);
 
   LoggingCallback _loggingCallback;
 };

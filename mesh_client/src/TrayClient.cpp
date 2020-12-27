@@ -73,9 +73,15 @@ void TrayClient::TCPFun()
   //interval for looking for mesh server when disconnected.
   int connectInterval = 2000;
   while (running) {
-    if (client.Connect() != 0) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(connectInterval));
-      continue;
+    if (!client.Connected()) {
+      int ret = client.Connect();
+      if (ret < 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(connectInterval));
+        continue;
+      }
+      else {
+        SendMeshes();
+      }
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(pollInterval));
   }

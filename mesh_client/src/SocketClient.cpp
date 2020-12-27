@@ -22,13 +22,10 @@ int SocketClient::Connect() {
   std::lock_guard<std::mutex> lock(_mutex);
 
   int ret;
-
-  // create new socket
-
-  if (_socket != INVALID_SOCKET) {
-    //already connected.
+  if (Connected()) {
     return 0;
   }
+  // create new socket
 
   _socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
@@ -78,6 +75,11 @@ int SocketClient::Connect() {
   Log("Connected", LOG_INFO);
 
   return ret;
+}
+
+bool SocketClient::Connected()
+{
+  return _socket != INVALID_SOCKET;
 }
 
 int SocketClient::Close() {
