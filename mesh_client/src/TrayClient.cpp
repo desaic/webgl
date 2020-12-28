@@ -5,8 +5,8 @@
 #include <thread>
 
 enum class CommandName {
-  MESH = 1, TRANS = 2,
-  UPDATE_TRIGS = 3
+  MESH = 1, UPDATE_TRIGS = 2,
+  TRANS = 3
 };
 
 void LogStdOut(const std::string& msg, LogLevel level) {

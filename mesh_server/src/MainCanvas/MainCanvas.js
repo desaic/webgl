@@ -169,7 +169,6 @@ export default class MainCanvas extends React.Component {
 		this.addMesh(meshId.toString(), mesh);
 	}
 
-
 	parseBlob = (blob) => {
 		new Response(blob).arrayBuffer()
 		.then(buf => {
@@ -181,7 +180,7 @@ export default class MainCanvas extends React.Component {
 				return;
 			}
 			const header = new Uint16Array(buf,0,4);
-			const msgType = header[0];
+			const cmd = header[0];
 			const meshId = header[1];
 			///\TODO bad hack. not sure best way to do this.
 			const numTrigs = header[2] + 65536*header[3];

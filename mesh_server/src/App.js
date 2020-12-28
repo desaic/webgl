@@ -16,9 +16,13 @@ const handleFileOpen = (event) => {
 	const stlFile = files[0]
 	const filename = value.replace(/.*[/\\]/, '')
 	let reader = new FileReader()
-	reader.readAsArrayBuffer(stlFile)
-	reader.onload = function () {
-		mainRef.current.addMesh(filename, openStl(reader.result));
+	try{
+		reader.onload = function () {
+			mainRef.current.addMesh(filename, openStl(reader.result));
+		}
+		reader.readAsArrayBuffer(stlFile)
+	}catch(err){
+		console.log(err.message);
 	}
 }
 
