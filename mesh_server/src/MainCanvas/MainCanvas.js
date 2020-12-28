@@ -265,11 +265,8 @@ export default class MainCanvas extends React.Component {
 		this.addMesh(name, duplicate)
 	}
 
-
 	addMesh = (name, mesh) => {
-		///TODO is this check necessary
 		if (mesh !== undefined) {
-			///TODO maybe more code here
 			SCENE.add(mesh)
 			mesh.name = name
 			meshes.push(mesh)
@@ -289,7 +286,7 @@ export default class MainCanvas extends React.Component {
 		RENDERER.setSize(window.innerWidth, window.innerHeight)
 		//PICK_HELPER.pick(pickPosition, SCENE, CURRENT_CAMERA,meshes)
 		RENDERER.render(SCENE, CURRENT_CAMERA)
-		//this.props.onSelectedMeshDataChange(selectedMesh)
+		this.props.onSelectedMeshDataChange(selectedMesh)
 	}
 
 	handlePositionXChange = (event) => {
