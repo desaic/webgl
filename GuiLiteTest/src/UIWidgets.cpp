@@ -3,6 +3,9 @@
 #include "UIWidgets.h"
 #define GUILITE_ON
 #include "GuiLite.h"
+
+#define ID_ROOT 1u
+
 #define PRIMARY_COLOR 0xb3e5fc
 #define PRIMARY_LIGHT_COLOR 0xe6ffff
 
@@ -10,17 +13,9 @@
 #define SECONDARY_DARK 0x9c1900
 #define TEXT_COLOR 0x000000
 
-enum WND_ID
-{
-	ID_ROOT = 1,
-	ID_LABEL_1,
-	ID_LABEL_2,
-	ID_LABEL_3,
-	ID_BUTTON
-};
-
 extern const FONT_INFO Consolas_24B;
 
+///extends GuiLite base class.
 class ui_widgets : public c_wnd
 {
 public:
@@ -30,9 +25,7 @@ public:
 	virtual void on_init_children();
 	virtual void on_paint(void);
 	void on_button_clicked(int ctrl_id, int param);
-	void on_spinbox_change(int ctrl_id, int value);
-	void on_listbox_confirm(int ctrl_id, int value);
-	void create_ui(int screen_width, int screen_height, int color_bytes);
+	void create_ui(int screen_width, int screen_height, int color_bytes, CUIBlock * ui_block);
 	void sendTouch(int x, int y, bool is_down);
 	void sendKey(unsigned int key);
 	void* getUi(int* width, int* height, bool force_update);
@@ -44,6 +37,7 @@ public:
 	std::vector<WND_TREE> tree;
 	std::vector <c_label> labels;
 	std::vector <c_button> buttons;
+	CUIBlock* ui_block;
 };
 
 ui_widgets::~ui_widgets()
@@ -68,19 +62,30 @@ void load_resource()
 	c_theme::add_color(COLOR_WND_BORDER, GL_RGB(50, 50, 50));
 }
 
-void ui_widgets::create_ui(int screen_width, int screen_height, int color_bytes) {
+void ui_widgets::create_ui(int screen_width, int screen_height, int color_bytes, CUIBlock* ui) {
 	load_resource();
 	width = screen_width;
 	height = screen_height;
-	tree.resize(5);
-	labels.resize(3);
-	buttons.resize(1);
-
-	tree[0] = { &labels[0],	ID_LABEL_1,	"label 1",	50, 30, 150, 50 };
-	tree[1] = { &labels[1],	ID_LABEL_2,	"label 2",	50, 100, 150, 50 };
-	tree[2] = { &labels[2],	ID_LABEL_3,	"label 3",	50, 170, 150, 50 };
-	tree[3] =	{ &buttons[0], ID_BUTTON, "Button", 300, 30, 150, 50},
-	tree[4] = { NULL, 0 , 0, 0, 0, 0, 0 };
+	std::vector<CUIBlock::ButtonSpec> & buttonSpecs = ui->buttonSpecs;
+	buttons.resize(buttonSpecs.size());
+	short gridSizeX = 170;
+	short gridSizeY = 70;
+	short margin = 10;
+	unsigned numRows = 7;
+	unsigned numCols = 3;
+	unsigned int ID_BUTTON = ID_ROOT + 1;
+	for (size_t i = 0; i < buttonSpecs.size(); i++) {
+		unsigned xIdx = unsigned (i) / numRows;
+		unsigned yIdx = unsigned (i) % numRows;
+		short x = short (xIdx * gridSizeX) + margin;
+		short y = short (yIdx * gridSizeY) + margin;
+		short buttonSizeX = gridSizeX - 2 * margin;
+		short buttonSizeY = gridSizeY - 2 * margin;
+		tree.push_back({ &buttons[i], ID_BUTTON , buttonSpecs[i].label.c_str(), x, y, buttonSizeX, buttonSizeY });
+		ID_BUTTON++;
+	}
+  //terminate with a null widget.
+	tree.push_back({ NULL, 0 , 0, 0, 0, 0, 0 });
 
   frame_buf = calloc(width * height, color_bytes);
 	c_surface* s_surface = new c_surface(width, height, color_bytes, Z_ORDER_LEVEL_1);
@@ -89,40 +94,35 @@ void ui_widgets::create_ui(int screen_width, int screen_height, int color_bytes)
 	set_bg_color(PRIMARY_COLOR);
 	connect(NULL, ID_ROOT, 0, 0, 0, width, height, tree.data());
 	show_window();
+	ui_block = ui;
+}
+
+void CUIBlock::AddButton(const std::string& label, ButtonCallback& cb)
+{
+	ButtonSpec spec;
+	spec.label = label;
+	spec.cb = cb;
+	buttonSpecs.push_back(spec);
 }
 
 void ui_widgets::on_init_children()
 {
-  c_button* button = (c_button*)get_wnd_ptr(ID_BUTTON);
-  button->set_on_click((WND_CALLBACK)&ui_widgets::on_button_clicked);
+	for (size_t i = 0; i < buttons.size(); i++) {
+		buttons[i].set_on_click((WND_CALLBACK)&ui_widgets::on_button_clicked);
+	}
 }
 
 void ui_widgets::on_paint(void)
 {
   m_surface->fill_rect(0, 0, width - 1, height - 1, PRIMARY_COLOR, Z_ORDER_LEVEL_0);
 }
+
 void ui_widgets::on_button_clicked(int ctrl_id, int param)
 {
-  static int s_cnt;
-  char str[16];
-  sprintf(str, "%d click", ++s_cnt);
-  c_label* label = (c_label*)get_wnd_ptr(ID_LABEL_1);
-  label->set_str(str);
-  label->show_window();
-}
-void ui_widgets::on_spinbox_change(int ctrl_id, int value)
-{
-  c_label* label = (c_label*)get_wnd_ptr(ID_LABEL_2);
-  label->set_str("change");
-  label->show_window();
-}
-void ui_widgets::on_listbox_confirm(int ctrl_id, int value)
-{
-  char str[16];
-  sprintf(str, "choose %d", value);
-  c_label* label = (c_label*)get_wnd_ptr(ID_LABEL_3);
-  label->set_str(str);
-  label->show_window();
+	unsigned buttonId = unsigned(ctrl_id) - ID_ROOT - 1;
+	if (buttonId < ui_block->buttonSpecs.size()) {
+		ui_block->buttonSpecs[buttonId].cb();
+	}
 }
 
 void ui_widgets::sendTouch(int x, int y, bool is_down)
@@ -153,7 +153,7 @@ CUIBlock::~CUIBlock() {
 
 void CUIBlock::CreateUI(int screen_width, int screen_height, int color_bytes)
 {
-	ui->create_ui(screen_width, screen_height, color_bytes);
+	ui->create_ui(screen_width, screen_height, color_bytes, this);
 }
 
 void CUIBlock::renderUI(RECT& rect, HDC hDC)

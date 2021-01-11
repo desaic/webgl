@@ -1,12 +1,15 @@
 #pragma once
 
+#include <functional>
+#include <string>
 #include <vector>
 #include <thread>
 #include <windows.h>
 
 class CUIBlock;
 class ui_widgets;
-
+using ButtonCallback = std::function<void()>;
+///windows wrapper for CUIBlock
 class WinUI {
 public:
 
@@ -22,9 +25,8 @@ public:
   void Stop();
   bool IsRunning();
   void MsgLoop();
-  void RenderLoop();
   BOOL InitInstance(HINSTANCE hInstance, int nCmdShow);
-
+  void AddButton(const std::string& label, ButtonCallback cb);
   CUIBlock* GetUIBlock() { return ui_block; }
 private:
 
@@ -36,6 +38,5 @@ private:
   unsigned UI_WIDTH;
   unsigned UI_HEIGHT;
 
-  std::thread renderThread;
   std::thread msgThread;
 };

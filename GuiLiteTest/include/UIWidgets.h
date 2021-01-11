@@ -3,6 +3,8 @@
 #include <vector>
 #include <windows.h>
 
+#include "WinUI.h"
+
 typedef struct tagMYBITMAPINFO {
 	BITMAPINFOHEADER    bmiHeader;
 	unsigned				biRedMask;
@@ -12,11 +14,27 @@ typedef struct tagMYBITMAPINFO {
 
 class ui_widgets;
 
+///wrapper of ui_widgets so that
+///CUIBlock can be used without including
+///GuiLite.h
 class CUIBlock
 {
 public:
 	CUIBlock();
 	~CUIBlock();
+
+	struct ButtonSpec {
+		std::string label;
+		ButtonCallback cb;
+		int uiIndex;
+		int width;
+		int height;
+		ButtonSpec() :uiIndex(0), width(150), height(50) {}
+	};
+
+	///ui has to be created before rendering.
+	void AddButton(const std::string & label, ButtonCallback& cb);
+
 	void renderUI(RECT& rect, HDC hDC);
 	void OnLButtonDown(int x, int y);
 	void OnLButtonUp(int x, int y);
@@ -24,7 +42,8 @@ public:
 	void OnKeyUp(unsigned int key);
 	void CreateUI(int screen_width, int screen_height, int color_bytes);
 	ui_widgets* ui;
-
+	///not actual buttons.
+	std::vector< ButtonSpec> buttonSpecs;
 private:
 	
 	void pointMFC2GuiLite(int& x, int& y);

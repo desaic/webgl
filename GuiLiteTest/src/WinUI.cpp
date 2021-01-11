@@ -24,7 +24,7 @@ int WinUI::InitGlobal()
 
 WinUI::WinUI():running(false),
   ui_block(new CUIBlock()),
-  UI_WIDTH(500),
+  UI_WIDTH(510),
   UI_HEIGHT(500)
 {
   if (!globalUIInitialized) {
@@ -56,9 +56,6 @@ void WinUI::Stop()
   if (msgThread.joinable()) {
     msgThread.join();
   }
-  if (renderThread.joinable()) {
-    renderThread.join();
-  }
 }
 
 void WinUI::MsgLoop()
@@ -68,10 +65,7 @@ void WinUI::MsgLoop()
   InitInstance(hInstance, nCmdShow);
   const unsigned COLOR_BYTES = 4;
   ui_block->CreateUI(UI_WIDTH, UI_HEIGHT, COLOR_BYTES);
-  if (!renderThread.joinable()) {
-    renderThread = std::thread(&WinUI::RenderLoop, this);
-  }
-
+  
   MSG msg;
   while (running) {
 
@@ -85,13 +79,7 @@ void WinUI::MsgLoop()
       running = false;
       break;
     }
-  }
-}
 
-void WinUI::RenderLoop()
-{
-  while (running) {
-    //draw
     HDC hdc = GetDC(hWnd);
     RECT rect;
     GetClientRect(hWnd, &rect);
@@ -171,4 +159,9 @@ BOOL WinUI::InitInstance(HINSTANCE hInstance, int nCmdShow)
   UpdateWindow(hWnd);
   
   return TRUE;
+}
+
+void WinUI::AddButton(const std::string& label, ButtonCallback cb)
+{
+  ui_block->AddButton(label, cb);
 }
