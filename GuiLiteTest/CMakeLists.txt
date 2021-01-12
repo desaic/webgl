@@ -1,8 +1,10 @@
 cmake_minimum_required(VERSION 2.8)
 
 PROJECT(GuiLiteTest)
-include_directories(include)
-
-FILE(GLOB EXE_SRC "src/*.cpp" "src/*.c" "resource/*.rc")
+include_directories("include")
+include_directories("resource")
+FILE(GLOB RC_FILES "resource/*.rc")
+message("Resource files " ${RC_FILES})
+FILE(GLOB EXE_SRC "src/*.cpp" "src/*.c" ${RC_FILES})
 set(CMAKE_CXX_STANDARD 17)
 add_executable(GuiLiteTest ${EXE_SRC} )

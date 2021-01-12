@@ -8,14 +8,10 @@ void DoStuff() {
   std::cout << "button clicked\n";
 }
 
-void DoStuff1() {
-  std::cout << "button1 clicked\n";
-}
-
 int main(int argc, char * argv[])
 {
   WinUI ui;
-  ui.AddButton("button", DoStuff);
+  ui.AddButton("Test", DoStuff);
   ui.Run();
   while (ui.IsRunning()) {
     std::this_thread::yield();

@@ -90,7 +90,7 @@ void WinUI::MsgLoop()
 
 ATOM RegisterWindowClass(HINSTANCE hInstance)
 {
-  WNDCLASSEX wc;
+  WNDCLASSEX wc = {};
 
   wc.cbSize = sizeof(WNDCLASSEX);
 
@@ -99,13 +99,21 @@ ATOM RegisterWindowClass(HINSTANCE hInstance)
   wc.cbClsExtra = 0;
   wc.cbWndExtra = 0;
   wc.hInstance = hInstance;
-  wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_HelloWidgets));
+
+  int x = GetSystemMetrics(SM_CXICON);
+  int resourceId = IDI_DOLPHIN;
+  int error = GetLastError();
+  LPSTR ptr = MAKEINTRESOURCE(IDI_DOLPHIN);
+  HICON hIcon = HICON (LoadImage(hInstance, ptr, IMAGE_ICON, 256, 256, LR_DEFAULTCOLOR | LR_SHARED));
+  wc.hIcon = hIcon;
+  error = GetLastError();
   wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
   wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-  wc.lpszMenuName = MAKEINTRESOURCE(IDC_HelloWidgets);
+  wc.lpszMenuName = "Dolphin";
   wc.lpszClassName = WindowClass;
-  wc.hIconSm = LoadIcon(wc.hInstance, MAKEINTRESOURCE(IDI_SMALL));
-
+  HICON hicon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_SMALL));
+  error = GetLastError();
+  wc.hIconSm = hicon;
   return RegisterClassEx(&wc);
 }
 
