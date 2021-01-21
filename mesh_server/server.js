@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 var net = require('net');
 var WebSocketServer = require('websocket').server;
+const TcpClient = require('./src/utils/TcpClient.js').TcpClient;
 const port = process.argv[2] || 9000;
 //port for print client to connect to
 const printPort = process.argv[3] || 9001
@@ -15,11 +16,17 @@ server.on('close',function(){
   console.log('Server closed !');
 });
 
-var msgBuffer;
-var completeMsg = null;
-
+var tcpClient = new TcpClient();
+tcpClient.msgCallback = processMsg;
 // emitted when new client connects ----------------------------------------------------
 server.on('connection', function(socket) {
+	if(tcpClient.sock != null){
+		console.log('refuse connection, a tcp client is already connected');
+		socket.close();
+		return;
+	}else{
+		tcpClient.sock = socket;
+	}
 	console.log('---------server details -----------------');
 	var address = server.address();
 	var port = address.port;
@@ -52,61 +59,8 @@ server.on('connection', function(socket) {
 		console.log('Socket timed out');
 	});
 
-	//if no header, expect the first thing received to be a header.
-	var hasHeader = false;
-	var bufferIndex = 0;
-	//total number of bytes for image data
-	var imgSize = 0;
-	//any left over bytes from previous image.
-	var recvBuf="";
-	socket.on('data', function(data) {
-		if(!hasHeader) {
-			recvBuf += data.toString('latin1');
-			console.log(recvBuf.length + " " + data.length);
-			var startIdx = recvBuf.indexOf("message_size");
-			//if no proper header found discard other data.
-			if(startIdx<0) {
-				recvBuf = "";
-				return;
-			}
-			var endIdx = recvBuf.indexOf("\r\n");
-			if(endIdx<0 || endIdx>startIdx + 40) {
-				recvBuf = "";
-				console.log("invalid header. expect \\r\\n.");
-				return;
-			}
-			header = recvBuf.slice(startIdx, endIdx);
-			tokens = header.split(" ");
-			imgSize = parseInt(tokens[1]);
-			console.log("expect image size " + imgSize);
-			hasHeader = true;
-			data = Buffer.from(recvBuf.slice(endIdx + 2), 'latin1');
-			bufferIndex = 0;
-			msgBuffer = Buffer.allocUnsafe(imgSize);
-			recvBuf = "";
-		}
-
-		if(hasHeader) {
-			endIdx = data.length;
-			//we are reading into the next message
-			//or just got extra incorrect data.
-			var endOfImg = false;
-			if(bufferIndex + endIdx>=imgSize) {
-				endIdx = imgSize - bufferIndex;
-				endOfImg = true;
-				hasHeader = false;
-			}
-			data.copy(msgBuffer, bufferIndex, 0, endIdx);
-			bufferIndex += endIdx;
-			if(endOfImg) {
-				completeMsg = msgBuffer;
-				recvBuf = data.slice(endIdx).toString("latin1");
-				console.log("img complete " + bufferIndex);
-				console.log("extra bytes " + (bufferIndex - imgSize));
-				bufferIndex = 0;
-				processMsg(completeMsg);
-			}
-		}
+	socket.on('data', function(data){
+		tcpClient.recv(data);
 	});
 
 	socket.on('error',function(error){
@@ -117,11 +71,15 @@ server.on('connection', function(socket) {
 	  console.log('Socket timed out !');
 	  socket.end('Timed out!');
 	  // can call socket.destroy() here too.
+	  socket.destroy();
+	  tcpClient.sock = null;
 	});
 
 	socket.on('end', function(data){
 	  var bread = socket.bytesRead;
 	  console.log('socket end Bytes read : ' + bread);
+	  socket.destroy();
+	  tcpClient.sock = null;
 	});
 
 	socket.on('close', function(error){
@@ -133,12 +91,15 @@ server.on('connection', function(socket) {
 	  if(error){
 		console.log('Socket was closed coz of transmission error');
 	  }
+	  socket.destroy();
+	  tcpClient.sock = null;
 	});
 
 	setTimeout(function(){
 	  var isdestroyed = socket.destroyed;
 	  console.log('Socket destroyed:' + isdestroyed);
 	  socket.destroy();
+	  tcpClient.sock = null;
 	},1200000);
 
 });
