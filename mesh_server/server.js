@@ -71,15 +71,13 @@ server.on('connection', function(socket) {
 	  console.log('Socket timed out !');
 	  socket.end('Timed out!');
 	  // can call socket.destroy() here too.
-	  socket.destroy();
-	  tcpClient.sock = null;
+	  tcpClient.reset();
 	});
 
 	socket.on('end', function(data){
 	  var bread = socket.bytesRead;
 	  console.log('socket end Bytes read : ' + bread);
-	  socket.destroy();
-	  tcpClient.sock = null;
+	  tcpClient.reset();
 	});
 
 	socket.on('close', function(error){
@@ -91,15 +89,13 @@ server.on('connection', function(socket) {
 	  if(error){
 		console.log('Socket was closed coz of transmission error');
 	  }
-	  socket.destroy();
-	  tcpClient.sock = null;
+	  tcpClient.reset();
 	});
 
 	setTimeout(function(){
 	  var isdestroyed = socket.destroyed;
 	  console.log('Socket destroyed:' + isdestroyed);
-	  socket.destroy();
-	  tcpClient.sock = null;
+	  tcpClient.reset();
 	},1200000);
 
 });

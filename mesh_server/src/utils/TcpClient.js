@@ -64,4 +64,12 @@ exports.TcpClient = class TcpClient {
             }
         }
     }
+    reset(){
+        if(this.sock != null){
+            this.sock.destroy();
+        }
+        this.sock = null;
+        this.recvBuf = "";
+        this.hasHeader = false;
+    }
 }
