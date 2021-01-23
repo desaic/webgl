@@ -11,10 +11,22 @@ Command structure
   MESH
     Create a new mesh. If a mesh with the same ID exists, the old mesh is overwritten.
 	Args: |mesh ID 2 bytes unsigned | number of triangles 4 bytes unsigned | list of trianges, each represented by 9 floats with 36 bytes
-  UPDATE_TRIGS
+	
+  TRIGS
     Args same as MESH's
 	Args: |mesh ID 2 bytes unsigned | number of triangles 4 bytes unsigned | list of trianges, each represented by 9 floats with 36 bytes
     updates the vertex positions of mesh. The number of vertices must remain the same as the original mesh. Three.js does not like resizing.
+	
+  ATTR
+    Set additional mesh attributes.
+    Args: | mesh ID 2 bytes unsigned | ATTR_NAME 2 bytes | corresponding payload
+	  ATTR_NAME:
+	    UV_COORD | number of triangles 4 bytes | list of 2d floats for tex coord for each triangle.
+		TEX_IMAGE_ID | image id
+
+  TEXTURE
+    Args: |image id 2 bytes | width and height 2 bytes each. huge images not supported. | 3 x width x height bytes for pixels |
+  
   TRANS
     Set the affine transformation of a mesh 
 	Args: |mesh ID 2 bytes | 4x4 float matrix numbers listed in row major.

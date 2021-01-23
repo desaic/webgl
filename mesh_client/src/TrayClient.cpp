@@ -5,8 +5,14 @@
 #include <thread>
 
 enum class CommandName {
-  MESH = 1, UPDATE_TRIGS = 2,
-  TRANS = 3
+  MESH = 1, TRIGS = 2,
+  ATTR, TEXTURE,
+  TRANS
+};
+
+enum class MeshAttr {
+  UV_COORD =1,
+  TEX_IMAGE_ID=2
 };
 
 void LogStdOut(const std::string& msg, LogLevel level) {
@@ -32,17 +38,17 @@ void TrayClient::SendMessage(const char * buf, size_t size)
 
 void TrayClient::SendMesh(const TrigMesh * m) {
   //message type
-  unsigned short type = unsigned short(CommandName::MESH);
+  unsigned short cmd = unsigned short(CommandName::MESH);
   unsigned short meshId = 1;
   /// don't make mesh with more than 4 billion trigs.
   unsigned nTrig = unsigned(m->GetNumTrigs());
   size_t vertBytes = sizeof(float) * nTrig * 3 * 3;
-  size_t headerSize = sizeof(type) + sizeof(meshId) + sizeof(nTrig);
+  size_t headerSize = sizeof(cmd) + sizeof(meshId) + sizeof(nTrig);
   size_t msgSize = headerSize + vertBytes;
   //mesh message structure:
   //|command name 2 bytes| mesh id 2 bytes | nTrig 8 bytes | vertices
   std::vector<unsigned char> buf(msgSize);
-  *(short*)(&buf[0]) = type;
+  *(short*)(&buf[0]) = cmd;
   *(short*)(&buf[2]) = meshId;
   *(unsigned*)(&buf[4]) = nTrig;
 
