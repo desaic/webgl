@@ -1,5 +1,6 @@
 import React from 'react'
 import MainCanvas from './MainCanvas/MainCanvas'
+import VarTab from './MainCanvas/VarTab'
 import Info from './Info/Info'
 import MenuBar from './MenuBar/MenuBar'
 import MeshInfo from './MeshInfo/MeshInfo'
@@ -44,6 +45,8 @@ function App() {
 
 	const [boundaryExceded, setBoundaryExceded] = useState(false)
 
+	const [varList, setVarList] = useState([])
+
 	const handleSelectedMeshDataChange = (selectedMesh) => {
 		if(selectedMesh !== null) {
 			const {name, position, rotation} = selectedMesh
@@ -60,6 +63,10 @@ function App() {
 		}
 	}
 
+	const handleVarListChange = (l) => {
+		setVarList(l);
+	}
+
 	const handleUndoAction = () => {
 		if(mainRef.current) {
 			mainRef.current.handleUndoAction()
@@ -72,6 +79,7 @@ function App() {
 				ref={mainRef}
 				onSelectedMeshDataChange={handleSelectedMeshDataChange}
 				onBoundriesExceded={setBoundaryExceded}
+				onVarListChange = {handleVarListChange}
 			/>
 			<Info
 				boundaryExceded={boundaryExceded}
@@ -80,6 +88,8 @@ function App() {
 				onFileOpen={handleFileOpen}
 				onSaveMeshList={handleSaveMeshList}
 				onUndo={handleUndoAction}
+			/>
+			<VarTab varList = {varList}
 			/>
 			{showMeshInfo && mainRef.current && (
 				<MeshInfo

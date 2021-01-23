@@ -59,6 +59,7 @@ export default class MainCanvas extends React.Component {
 		webSocket.onmessage = (message) => {
 			this.parseSocketMsg(message.data);
 		};
+		this.animate();
 	}
 
 	shouldComponentUpdate() {
@@ -243,11 +244,28 @@ export default class MainCanvas extends React.Component {
 		this.updateCanvasRender();
 	}
 
+	animate = ()  => {
+		setTimeout( this.animate 
+		, 1000 / 60 );
+		this.updateCanvasRender();
+	}
+
 	updateCanvasRender = () => {
 		const aspect = window.innerWidth / window.innerHeight;
 		world.camera.aspect = aspect;
 		world.camera.updateProjectionMatrix();
+		var time = Date.now()*0.01;
+		var sinTime = Math.sin ( time * 0.05 ) * 100;
+		var cosTime = Math.cos ( time * 0.05 ) * 100;
+		var canvas = world.canvas;
+		var context = canvas.getContext('2d');
+		context.fillStyle='green';
+		context.fillRect(0,0, canvas.width,canvas.height);
+		context.fillStyle='white';
+		context.fillRect ( (canvas.width/2) + sinTime, (canvas.height/2) + cosTime, 20, 20 )
+		world.screen.material.map.needsUpdate = true;
 		renderer.setSize(window.innerWidth, window.innerHeight);
+		this.props.onVarListChange([time, sinTime, cosTime]);
 		//PICK_HELPER.pick(pickPosition, SCENE, CURRENT_CAMERA,meshes)
 		renderer.render(world.scene, world.camera);
 		this.props.onSelectedMeshDataChange(selectedMesh);

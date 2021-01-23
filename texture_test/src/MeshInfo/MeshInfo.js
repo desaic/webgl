@@ -1,6 +1,5 @@
 import React from 'react'
 
-
 import { Card, Elevation} from "@blueprintjs/core"
 
 import './MeshInfo.scss'

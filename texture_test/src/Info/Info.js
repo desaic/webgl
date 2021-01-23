@@ -9,7 +9,7 @@ export default class Info extends React.Component {
 		return (
 			<>
 				<div className="info">
-					<Callout title="Shortcuts">
+					<Callout >
 						"T" translate | "R" rotate | "S" scale | "Shift" snap to grid
 						<br />
 						"DEL" delete selected object | "ESC" deselect | "D" duplicate
