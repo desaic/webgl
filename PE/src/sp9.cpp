@@ -3,6 +3,7 @@
 #include <array>
 #include <sstream>
 #include <queue>
+#include <fstream>
 
 template <typename T>
 class Matrix {
@@ -46,6 +47,7 @@ public:
 typedef Matrix<unsigned short> Matrixu16;
 typedef Matrix<unsigned char> Matrixu8;
 typedef Matrix<unsigned int> Matrixu32;
+typedef Matrix<int> Matrixi32;
 typedef std::array<int, 2> Vec2i;
 
 class Node
@@ -65,25 +67,9 @@ public:
 
   //row then col
   std::array<int,2> idx;
-  bool operator<(const Node& b)const {
-    if (idx[0] == b.idx[0]) {
-      return idx[1] < b.idx[1];
-    }
-    return idx[0] < b.idx[0];
-  }
 
   bool operator==(const Node& b)const {
     return (idx[0] == b.idx[0])&&(idx[1] == b.idx[1]);
-  }
-};
-
-class Edge
-{
-public:
-  int len;
-  Node src, dst;
-  bool operator<(const Edge& b)const {
-    return len < b.len;
   }
 };
 
@@ -122,10 +108,6 @@ public:
     int hb = h(dst.idx[0], dst.idx[1]);
     return (ha+1>=hb) && (ha-3<=hb);
   }
-
-  virtual int GetEdgeLen(const Node& a, const Node& b) const{
-    return 1;
-  }
     
   Matrixu16 h;
 };
@@ -137,68 +119,153 @@ std::array<int,2> gridIdx(int linIdx, int cols) {
   return { linIdx / cols, linIdx % cols };
 }
 
-
-void swapAxis(std::array<int, 3>& pt, int axis0, int axis1)
-{
-  int tmp = pt[axis0];
-  pt[axis0] = pt[axis1];
-  pt[axis1] = tmp;
+int64_t GCD(int64_t a, int64_t b) {
+  int64_t r = a % b;
+  while (r > 0) {
+    a = b;
+    b = r;
+    r = a % b;
+  }
+  return b;
 }
 
-std::vector<std::array<int, 3> > BresenhamLine3D(const std::array<int, 3>& src, const std::array<int, 3>& dst)
+class Fraction {
+public:
+  long long d, n;
+  int sign;
+  Fraction() :d(1), n(0),
+    sign(1) {}
+  Fraction(long numerator, long denominator) :
+    d(denominator), n(numerator), sign(1) {
+    reduce();
+  }
+  void reduce() {
+    if (n == 0) {
+      d = 1;
+      return;
+    }
+    long long g = GCD(d, n);
+    d /= g;
+    n /= g;
+  }
+
+  bool operator<(const Fraction& rhs) const {
+    if (sign != rhs.sign) {
+      return sign < rhs.sign;
+    }
+    return n * rhs.d < d * rhs.n;
+  }
+
+  bool operator>(const Fraction& rhs) const {
+    return rhs<(*this);
+  }
+
+  bool operator==(const Fraction& rhs) const {
+    if (sign != rhs.sign) {
+      return false;
+    }
+    return (n == rhs.n) && (d == rhs.d);
+  }
+};
+
+Fraction operator+(const Fraction& a, const Fraction& b) {
+  Fraction c;
+  c.d = a.d * b.d;
+  c.n = a.sign * a.n * b.d + b.sign * a.d * b.n;
+  if (c.n < 0) {
+    c.n = -c.n;
+    c.sign = -1;
+  }
+  c.reduce();
+  return c;
+}
+
+std::vector<std::array<int, 3> > RayVoxel(const std::array<int, 3>& src, const std::array<int, 3>& dst)
 {
   std::vector<std::array<int, 3> > line;
-  int longestAxis = 0;
-  int dx[3];
-  int maxDx = 0;
-  for (int axis = 0; axis < 3; axis++) {
-    dx[axis] = dst[axis] - src[axis];
-    if (dx[axis] < 0) {
-      dx[axis] = -dx[axis];
-    }
-    if (dx[axis] > maxDx) {
-      maxDx = dx[axis];
-      longestAxis = axis;
-    }
-  }
-
   std::array<int, 3> ptA = src;
   std::array<int, 3> ptB = dst;
-  if (longestAxis != 0) {
-    swapAxis(ptA, longestAxis, 0);
-    swapAxis(ptB, longestAxis, 0);
+  if (src == dst) {
+    line.push_back(src);
+    return line;
   }
   int step[3] = { 1,1,1 };
+  int dx[3];
+  
   for (int axis = 0; axis < 3; axis++) {
-    dx[axis] = ptB[axis] - ptA[axis];
+    dx[axis] = 2*(dst[axis] - src[axis]);
     if (dx[axis] < 0) {
-      dx[axis] = -dx[axis];
       step[axis] = -1;
+      dx[axis] = -dx[axis];
     }
   }
-
-  int p1 = 2 * dx[1] - dx[0];
-  int p2 = 2 * dx[2] - dx[0];
-  line.push_back(ptA);
-  while (ptA[0] != ptB[0]) {
-    ptA[0] += step[0];
-    if (p1 >= 0) {
-      ptA[1] += step[1];
-      p1 -= 2 * dx[0];
+  
+  Fraction tMax[3] = { Fraction(1,dx[0]), Fraction(1,dx[1]), Fraction(1,dx[2]) };
+  Fraction tDelta[3] = { Fraction(2,dx[0]), Fraction(2,dx[1]), Fraction(2,dx[2]) };
+  Fraction MAX_DELTA_T(5000, 1);
+  for (int a = 0; a < 3; a++) {
+    if (dx[a] == 0) {
+      tMax[a] = MAX_DELTA_T;
+      tDelta[a] = MAX_DELTA_T;
     }
-    if (p2 >= 0) {
-      ptA[2] += step[2];
-      p2 -= 2 * dx[0];
+  }
+  line.push_back(src);
+  while (ptA != ptB) {
+    if (tMax[0] < tMax[1]) {
+      if (tMax[0] < tMax[2]) {
+        ptA[0] += step[0];
+        tMax[0] = tMax[0] + tDelta[0];
+      }
+      else if (tMax[0] > tMax[2]) {
+        ptA[2] += step[2];
+        tMax[2] = tMax[2] + tDelta[2];
+      }
+      //==
+      else {
+        ptA[0] += step[0];
+        tMax[0] = tMax[0] + tDelta[0];
+        ptA[2] += step[2];
+        tMax[2] = tMax[2] + tDelta[2];
+      }
     }
-    p1 += 2 * dx[1];
-    p2 += 2 * dx[2];
+    else if (tMax[1] < tMax[0]) {
+      if (tMax[1] < tMax[2]) {
+        ptA[1] += step[1];
+        tMax[1] = tMax[1] + tDelta[1];
+      }
+      else if (tMax[1] > tMax[2]) {
+        ptA[2] += step[2];
+        tMax[2] = tMax[2] + tDelta[2];
+      }
+      //==
+      else {
+        ptA[1] += step[1];
+        tMax[1] = tMax[1] + tDelta[1];
+        ptA[2] += step[2];
+        tMax[2] = tMax[2] + tDelta[2];
+      }
+    }
+    //==
+    else {
+      if (tMax[0] < tMax[2]) {
+        ptA[0] += step[0];
+        tMax[0] = tMax[0] + tDelta[0];
+        ptA[1] += step[1];
+        tMax[1] = tMax[1] + tDelta[1];
+      }
+      else if (tMax[0] > tMax[2]) {
+        ptA[2] += step[2];
+        tMax[2] = tMax[2] + tDelta[2];
+      }
+      //==
+      else {
+        for (unsigned int a = 0; a < 3; a++) {
+          ptA[a] += step[a];
+          tMax[a] = tMax[a] + tDelta[a];
+        }
+      }
+    }
     line.push_back(ptA);
-  }
-
-  if (longestAxis != 0) {
-    for (size_t i = 0; i < line.size(); i++) {
-      swapAxis(line[i], longestAxis, 0);
-    }
   }
   return line;
 }
@@ -208,7 +275,7 @@ bool visible(const Matrixu16& h, const Node& src, const Node& dst)
   std::array<int, 3>pointA, pointB;
   pointA = { src.idx[0], src.idx[1], h(src.idx[0], src.idx[1]) + 1 };
   pointB = { dst.idx[0], dst.idx[1], h(dst.idx[0], dst.idx[1]) + 1 };
-  std::vector<std::array<int, 3> > line = BresenhamLine3D(pointA, pointB);
+  std::vector<std::array<int, 3> > line = RayVoxel(pointA, pointB);
   for (size_t i = 0; i < line.size(); i++) {
     std::array<int, 3> pt = line[i];
     if (h(pt[0], pt[1]) >= pt[2]) {
@@ -230,23 +297,23 @@ bool IsNodeVisible(const Matrixu16& h, const Node& n, const std::vector<Node>& l
   return valid;
 }
 
-
-std::vector<Node> dijkstra(const Graph& G, const Node& src, const Node& dst)
+int
+dijkstra(const Graph& G, const Node& src, const Node& dst)
 {
   std::vector<Node> path;
   std::vector<Node> lights(2);
   lights[0] = src;
   lights[1] = dst;
-  path.push_back(src);
   //shortest distances
   //-1 for uninitialized.
-  Matrixu32 sd;
+  Matrixi32 sd;
   Matrixu8 visited;
-  Matrixu32 prev;
+  Matrixi32 prev;
   sd.Allocate(G.h.s[0], G.h.s[1]);
   sd.Fill(-1);
   visited.Allocate(sd.s[0], sd.s[1]);
   prev.Allocate(sd.s[0], sd.s[1]);
+  prev.Fill(-1);
   visited.Fill(0);
 
   sd(src.idx[0], src.idx[1]) = 0;
@@ -276,10 +343,8 @@ std::vector<Node> dijkstra(const Graph& G, const Node& src, const Node& dst)
       }
     }
   }
-  int len = sd(dst.idx[0], dst.idx[1]);
-  if (len < 0) {
-    return path;
-  }
+  int len = sd(dst.idx[0], dst.idx[1]); 
+  //construct path for debuging.
   path.resize(size_t(len+1));
   Node node=dst;
   for (int i = 0; i < len; i++) {
@@ -287,55 +352,13 @@ std::vector<Node> dijkstra(const Graph& G, const Node& src, const Node& dst)
     int prevIdx = prev(node.idx[0], node.idx[1]);
     std::array<int, 2>nodeIdx = gridIdx(prevIdx, prev.s[1]);
     node = Node(nodeIdx);
+    path.push_back(node);
   }
-  return path;
+  return len;
 }
 
-void TestLine()
-{
-  std::array<int, 3> ptA, ptB;
-  ptA = { 0, -7, -3 };
-  ptB = { -5, 2, -1 };
-  auto line = BresenhamLine3D(ptA, ptB);
-
-  for (size_t i = 0; i < line.size(); i++) {
-    std::cout << "(" << line[i][0] << ", " << line[i][1] << ", " << line[i][2] << ") ";
-  }
-  std::cout << "\n";
-  ptA = { 1, 1, -1 };
-  ptB = { -1, 3, 5 };
-  line = BresenhamLine3D(ptA, ptB);
-  for (size_t i = 0; i < line.size(); i++) {
-    std::cout << "(" << line[i][0] << ", " << line[i][1] << ", " << line[i][2] << ") ";
-  }
-  std::cout << "\n";
-}
-
-void TestVisible(const Graph & G, const Node& light) {
-  std::vector<Node>lights;
-  lights.push_back(light);
-  for (unsigned row = 0; row < G.h.s[0]; row++) {
-    for (unsigned col = 0; col < G.h.s[1]; col++) {
-      Node node(row, col);
-      bool visible = IsNodeVisible(G.h, node, lights);
-      if (node == light) {
-        std::cout << "L ";
-        continue;
-      }
-      if (visible) {
-        std::cout << "1 ";
-      }
-      else {
-        std::cout << "0 ";
-      }
-    }
-    std::cout << "\n";
-  }
-  std::cout << "----------\n";
-}
-
-int sp9() {
-//int main() {
+//int sp9() {
+int main() {
   int numCases;
   std::cin >> numCases;
   for (int c = 0; c < numCases; c++) {
@@ -356,19 +379,12 @@ int sp9() {
     std::vector<Node>lights(2);
     lights[0] = Node(p0[0]-1, p0[1] - 1);
     lights[1] = Node(p1[0] - 1, p1[1] - 1);
-    std::vector<Node> path = dijkstra(G, lights[0], lights[1]);
-    TestVisible(G, lights[0]);
-    TestVisible(G, lights[1]);
-    if (path.size() == 1) {
+    int len = dijkstra(G, lights[0], lights[1]);
+    if (len < 0) {
       std::cout << "Mission impossible!\n";
     }
     else {
-      int len = path.size() - 1;
       std::cout << "The shortest path is " << len << " steps long.\n";
-      for (size_t i = 0; i < path.size(); i++) {
-        std::cout << "(" << path[i].idx[0] << "," << path[i].idx[1] << ") ";
-      }
-      std::cout << "\n";
     }
   }
   return 0;
