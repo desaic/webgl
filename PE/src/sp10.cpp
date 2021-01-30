@@ -265,8 +265,8 @@ ExprNode ParseExpr(const std::string& line)
   return root;
 }
 
-//int sp10() {
-int main() {
+int sp10() {
+//int main() {
   int numCases;
   std::cin >> numCases;
   for (int c = 0; c < numCases; c++) {
