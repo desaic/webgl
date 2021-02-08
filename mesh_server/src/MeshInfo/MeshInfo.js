@@ -5,15 +5,6 @@ import { Card, Elevation} from "@blueprintjs/core"
 
 import './MeshInfo.scss'
 
-const Input = () => {
-	const handleKeyDown = (event) => {
-	  if (event.key === 'Enter') {
-		
-	  }
-	}  
-	return <input type="text" onKeyDown={handleKeyDown} />
-  }
-
 export default class MeshInfo extends React.Component {
 	render() {
 		///\param onMeshTrans callback for when mesh transformation changes
@@ -69,9 +60,6 @@ export default class MeshInfo extends React.Component {
 					</div>
 				</Card>
 			</div>
-
-
-
 		)
 	}
 }
