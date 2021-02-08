@@ -8,9 +8,9 @@ import { MeshStateHistory } from '../utils/MeshStateHistory'
 import World from './World'
 
 const world = new World();
-const meshHistory = new MeshStateHistory();
 const pickHelper = new PickHelper();
 const webSocket = new WebSocket('ws://localhost:9000/')
+const hist = new MeshStateHistory();
 
 let renderer;
 let control;
@@ -22,11 +22,19 @@ webSocket.onopen = function() {
 	webSocket.send('websocket client\r\n');
 };
 
+function testVec3(){
+	var a=new THREE.Vector3(1,2,3);
+	var b=new THREE.Vector3();
+	b.copy(a);
+	a.x=3;
+	console.log(b);
+}
+
 export default class MainCanvas extends React.Component {
 	canvasRef = React.createRef()
 
 	componentDidMount() {
-	
+		testVec3();
 		renderer = new THREE.WebGLRenderer({
 			canvas: this.canvasRef.current,
 		});
@@ -37,24 +45,22 @@ export default class MainCanvas extends React.Component {
 		// Orbit controls
 		orbit = new OrbitControls(world.camera, renderer.domElement)
 		orbit.update()
-		orbit.addEventListener('change', this.updateCanvasRender)
+		orbit.addEventListener('change', this.render3D)
 		control = new TransformControls(world.camera, renderer.domElement)
-		control.addEventListener('change', this.updateCanvasRender)
+		control.addEventListener('change', this.render3D)
 		control.addEventListener('dragging-changed', function (event) {
+			//event.value true when starting drag. false when existing a drag.
 			orbit.enabled = !event.value
-			if(event.value && selectedMesh) {
-				meshHistory.setTransientMeshState(selectedMesh)
-			}
+			//only record position at end of drag.
 			if(!event.value && selectedMesh) {
-				meshHistory.recordMeshStateChange(selectedMesh)
+				hist.addMeshState(selectedMesh)
 			}
 		});
 
 		world.scene.add(control)
 		
 		this.bindEventListeners()
-		this.clearPickPosition()
-		this.updateCanvasRender()
+		this.render3D()
 		
 		webSocket.onmessage = (message) => {
 			this.parseSocketMsg(message.data);
@@ -67,11 +73,9 @@ export default class MainCanvas extends React.Component {
 
 	bindEventListeners = () => {
 		const canvasElement = this.canvasRef.current
-		window.addEventListener('resize', this.updateCanvasRender, false)
+		window.addEventListener('resize', this.render3D, false)
 		canvasElement.addEventListener('click', this.selectObj)
 		canvasElement.addEventListener('mousemove', this.setPickPosition)
-		canvasElement.addEventListener('mouseout', this.clearPickPosition)
-		canvasElement.addEventListener('mouseleave', this.clearPickPosition)
 
 		canvasElement.addEventListener('keydown', (event) => {
 			switch (event.key) {
@@ -116,12 +120,6 @@ export default class MainCanvas extends React.Component {
 	setPickPosition = (event) => {
 		pickPosition.x = (event.clientX / window.innerWidth) * 2 - 1
 		pickPosition.y = - (event.clientY / window.innerHeight) * 2 + 1
-		this.updateCanvasRender()
-	}
-
-	clearPickPosition = () => {
-		pickPosition.x = -100000
-		pickPosition.y = -100000
 	}
 
 	createMesh = (meshId, trigs)=>{
@@ -171,7 +169,7 @@ export default class MainCanvas extends React.Component {
 			selectedMesh = sM
 			control.attach(selectedMesh)
 		}
-		this.updateCanvasRender()
+		this.render3D()
 	}
 
 	setMode = (mode) => {
@@ -181,7 +179,7 @@ export default class MainCanvas extends React.Component {
 	deleteSelected = () => {
 		if (selectedMesh) {
 			// Remove the object from scene
-			meshHistory.clearHistory(selectedMesh.uuid)
+			hist.removeMesh(selectedMesh)
 			selectedMesh.geometry.dispose()
 			selectedMesh.material.dispose()
 			world.scene.remove(selectedMesh)
@@ -193,14 +191,14 @@ export default class MainCanvas extends React.Component {
 			// Remove controls from scene
 			control.detach()
 		}
-		this.updateCanvasRender()
+		this.render3D()
 	}
 	
 	deselectMesh = () => {
 		if(selectedMesh) {
 			control.detach()
 			selectedMesh = null
-			this.updateCanvasRender()
+			this.render3D()
 		}
 	}
 
@@ -236,73 +234,44 @@ export default class MainCanvas extends React.Component {
 			world.meshes.push(mesh);
 			control.attach(mesh);
 			selectedMesh = mesh;
+			hist.addMeshState(mesh);
 		} else {
 			alert("invalid mesh data.");
 			return;
 		}
-		this.updateCanvasRender();
+		this.render3D();
 	}
 
-	updateCanvasRender = () => {
+	render3D = () => {
 		const aspect = window.innerWidth / window.innerHeight;
 		world.camera.aspect = aspect;
 		world.camera.updateProjectionMatrix();
 		renderer.setSize(window.innerWidth, window.innerHeight);
-		//PICK_HELPER.pick(pickPosition, SCENE, CURRENT_CAMERA,meshes)
 		renderer.render(world.scene, world.camera);
-		this.props.onSelectedMeshDataChange(selectedMesh);
+		this.props.onMeshTransChange(selectedMesh);
 	}
 
-	handlePositionXChange = (event) => {
-		meshHistory.setTransientMeshState(selectedMesh)
-		selectedMesh.position.x = event.target.value
-		meshHistory.recordMeshStateChange(selectedMesh)
-		this.updateCanvasRender()
-	}
-
-	handlePositionYChange = (event) => {
-		meshHistory.setTransientMeshState(selectedMesh)
-		selectedMesh.position.y = event.target.value
-		meshHistory.recordMeshStateChange(selectedMesh)
-		this.updateCanvasRender()
-	}
-	handlePositionZChange = (event) => {
-		meshHistory.setTransientMeshState(selectedMesh)
-		selectedMesh.position.z = event.target.value
-		meshHistory.recordMeshStateChange(selectedMesh)
-		this.updateCanvasRender()
-	}
-
-	handleRoatationXChange = (event) => {
-		meshHistory.setTransientMeshState(selectedMesh)
-		selectedMesh.rotation.x = event.target.value
-		meshHistory.recordMeshStateChange(selectedMesh)
-		this.updateCanvasRender()
-	}
-	handleRoatationYChange = (event) => {
-		meshHistory.setTransientMeshState(selectedMesh)
-		selectedMesh.rotation.y = event.target.value
-		meshHistory.recordMeshStateChange(selectedMesh)
-		this.updateCanvasRender()
-	}
-	handleRoatationZChange = (event) => {
-		meshHistory.setTransientMeshState(selectedMesh)
-		selectedMesh.rotation.z = event.target.value
-		meshHistory.recordMeshStateChange(selectedMesh)
-		this.updateCanvasRender()
+	onTransChange = (event, axis) => {
+		if(axis<3){
+			var newPos = selectedMesh.pos
+			selectedMesh.position.x = event.target.value
+		}else{
+			var newRot = selectedMesh.pos
+		}
+		hist.addMeshState(selectedMesh)
 	}
 
 	handleUndoAction = () => {
-		const meshStateChange = meshHistory.popHistory()
-		if(!meshStateChange) {
+		if(selectedMesh == null){
+			return;
+		}
+		hist.pop(selectedMesh)
+		var h = hist.top(selectedMesh);
+		if(!h) {
 			return
 		}
-		world.meshes.forEach(mesh => {
-			if(meshStateChange.id === mesh.uuid) {
-				meshHistory.applyStateToMesh(mesh, meshStateChange.previousState)
-			}
-		})
-		this.updateCanvasRender()
+		hist.applyMeshState(selectedMesh, h.state)
+		this.render3D();
 	}
 
 	render() {

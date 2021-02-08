@@ -33,27 +33,16 @@ const handleSaveMeshList = () => {
 function App() {
 	const [meshName, setMeshName] = useState('')
 
-	const [meshPositionX, setMeshPositionX] = useState(null)
-	const [meshPositionY, setMeshPositionY] = useState(null)
-	const [meshPositionZ, setMeshPositionZ] = useState(null)
-
-	const [meshRotationX, setMeshRotationX] = useState(null)
-	const [meshRotationY, setMeshRotationY] = useState(null)
-	const [meshRotationZ, setMeshRotationZ] = useState(null)
+	const [meshTrans, setMeshTrans] = useState({pos:[0,0,0], rot:[0,0,0]})
 	const [showMeshInfo, setShowMeshInfo] = useState(false)
-
 	const [boundaryExceded, setBoundaryExceded] = useState(false)
 
-	const handleSelectedMeshDataChange = (selectedMesh) => {
+	const showMeshTrans = (selectedMesh) => {
 		if(selectedMesh !== null) {
 			const {name, position, rotation} = selectedMesh
 			setMeshName(name)
-			setMeshPositionX(position.x)
-			setMeshPositionY(position.y)
-			setMeshPositionZ(position.z)
-			setMeshRotationX(rotation.x)
-			setMeshRotationY(rotation.y)
-			setMeshRotationZ(rotation.z)
+			const meshT = {pos:position, rot: rotation}
+			setMeshTrans(meshT)
 			setShowMeshInfo(true)
 		} else if (showMeshInfo){
 			setShowMeshInfo(false)
@@ -70,7 +59,7 @@ function App() {
 		<div className="App">
 			<MainCanvas 
 				ref={mainRef}
-				onSelectedMeshDataChange={handleSelectedMeshDataChange}
+				onMeshTransChange={showMeshTrans}
 				onBoundriesExceded={setBoundaryExceded}
 			/>
 			<Info
@@ -84,18 +73,8 @@ function App() {
 			{showMeshInfo && mainRef.current && (
 				<MeshInfo
 					meshName={meshName}
-					meshPositionX={meshPositionX}
-					meshPositionY={meshPositionY}
-					meshPositionZ={meshPositionZ}
-					meshRotationX={meshRotationX}
-					meshRotationY={meshRotationY}
-					meshRotationZ={meshRotationZ}
-					onPositionXChange={mainRef.current.handlePositionXChange}
-					onPositionYChange={mainRef.current.handlePositionYChange}
-					onPositionZChange={mainRef.current.handlePositionZChange}
-					onRoatationXChange={mainRef.current.handleRoatationXChange}
-					onRoatationYChange={mainRef.current.handleRoatationYChange}
-					onRoatationZChange={mainRef.current.handleRoatationZChange}
+					meshTrans={meshTrans}
+					onTransChange={mainRef.current.onTransChange}
 				/>
 			)}
 		</div>

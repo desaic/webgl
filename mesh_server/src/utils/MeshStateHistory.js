@@ -1,63 +1,56 @@
-let transientMeshState = null
-let meshHistoryList = []
-
 export class MeshStateHistory {
-	clearHistory = (meshId) => {
-		let newMeshHistoryList = []
-		meshHistoryList.forEach(item => {
-			if(item.id !== meshId) {
-				newMeshHistoryList.push(item)
-			}
-		})
-		meshHistoryList = newMeshHistoryList
+	constructor(){
+		///maps from mesh id to list of states.
+		this.hist = new Map();
+	}
+	///\param meshId string of uuid of mesh
+	///can also be changed to use a simple int id.
+	removeMesh = (mesh) => {
+		this.hist.delete(mesh.uuid);
 	}
 
-	popHistory = () => {
-		return meshHistoryList.pop()
+	pop = (mesh) => {
+		var list = this.hist.get(mesh.uuid);
+		if(list.length>1){
+			list.pop()
+		}		
 	}
 
-	setTransientMeshState = (mesh) => {
-		transientMeshState = this.extractMeshState(mesh)
+	top = (mesh)=>{
+		var list = this.hist.get(mesh.uuid);
+		if(list.length>0){
+			return list[list.length-1];
+		}else{
+			return {pos:[0,0,0],rot:[0,0,0]};
+		}
 	}
 
-	recordMeshStateChange = (mesh) => {
-		const meshStateChange = {
+	addMeshState = (mesh) => {
+		const meshState = {
 			id: mesh.uuid,
-			previousState: transientMeshState,
-			nextState: this.extractMeshState(mesh),
+			state: this.extractMeshState(mesh),
 		}
-		meshHistoryList.push(meshStateChange)
-		transientMeshState = null
+		var list = this.hist.get(mesh.uuid);
+		if(list){
+			list.push(meshState);
+		}else{
+			this.hist.set(mesh.uuid, [meshState]);
+		}		
 	}
 
-	applyStateToMesh = (mesh, meshState) => {
-		if(mesh.position && meshState.position) {
-			mesh.position.x = meshState.position.x
-			mesh.position.y = meshState.position.y
-			mesh.position.z = meshState.position.z
-		}
-		if(mesh.rotation && meshState.rotation) {
-			mesh.rotation.x = meshState.rotation.x
-			mesh.rotation.y = meshState.rotation.y
-			mesh.rotation.z = meshState.rotation.z
+	applyMeshState = (mesh, st) => {
+		if(mesh){
+			mesh.position.set(st.pos[0], st.pos[1], st.pos[2]);
+			mesh.rotation.set(st.rot[0], st.rot[1], st.rot[2]);
 		}
 	}
 
 	extractMeshState = (mesh) => {
 		if(mesh) {
 			return ({
-				name: mesh.name,
-				position: {
-					x: mesh.position.x,
-					y: mesh.position.y,
-					z: mesh.position.z,
-				},
-				rotation: {
-					x: mesh.rotation.x,
-					y: mesh.rotation.y,
-					z: mesh.rotation.z,
-				}
-			})
+				pos: [mesh.position.x, mesh.position.y,mesh.position.z],
+				rot: [mesh.rotation.x, mesh.rotation.y,mesh.rotation.z]
+				})
 		}
 		return {}
 	}

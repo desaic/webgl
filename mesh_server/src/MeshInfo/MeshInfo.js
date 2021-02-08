@@ -7,10 +7,9 @@ import './MeshInfo.scss'
 
 export default class MeshInfo extends React.Component {
 	render() {
-		const { meshName, meshPositionX, meshPositionY, meshPositionZ, 
-			meshRotationX, meshRotationY, meshRotationZ, onPositionXChange,
-			onPositionYChange, onPositionZChange, onRoatationXChange,
-			onRoatationYChange, onRoatationZChange} = this.props
+		///\param onMeshTrans callback for when mesh transformation changes
+		///from the mesh info ui.
+		const { meshName, meshTrans, onMeshTrans} = this.props
 
 		return (
 			<div id="meshInfo" className="">
@@ -25,43 +24,43 @@ export default class MeshInfo extends React.Component {
 						<div className="meshInfoXPositionInput">
 							<input
 								id="xPositionInput"
-								value={meshPositionX}
-								onChange={onPositionXChange}
+								value={meshTrans.pos[0]}
+								onChange={ (e)=>onMeshTrans(e, 0) }
 							/>
 						</div>
 						<div className="meshInfoYPositionInput">
 							<input
 								id="yPositionInput"
-								value={meshPositionY}
-								onChange={onPositionYChange}
+								value={meshTrans.pos[1]}
+								onChange={ (e)=>onMeshTrans(e, 1) }
 							/>
 						</div>
 						<div className="meshInfoZPositionInput">
 							<input
 								id="zPositionInput"
-								value={meshPositionZ}
-								onChange={onPositionZChange}
+								value={meshTrans.pos[2]}
+								onChange={ (e)=>onMeshTrans(e, 2) }
 							/>
 						</div>
 						<div className="meshInfoXRotationInput">
 							<input
 								id="xRotationInput"
-								value={meshRotationX}
-								onChange={onRoatationXChange}
+								value={meshTrans.rot[0]}
+								onChange={ (e)=>onMeshTrans(e, 3) }
 							/>
 						</div>
 						<div className="meshInfoYRotationInput">
 							<input
 								id="yRotationInput"
-								value={meshRotationY}
-								onChange={onRoatationYChange}
+								value={meshTrans.rot[1]}
+								onChange={ (e)=>onMeshTrans(e, 4) }
 							/>
 						</div>
 						<div className="meshInfoZRotationInput">
 							<input
 								id="zRotationInput"
-								value={meshRotationZ}
-								onChange={onRoatationZChange}
+								value={meshTrans.rot[2]}
+								onChange={ (e)=>onMeshTrans(e, 5) }
 							/>
 						</div>
 					</div>
@@ -73,11 +72,3 @@ export default class MeshInfo extends React.Component {
 		)
 	}
 }
-
-
-
-// <div id="meshInfo" className="">
-// <div className="meshInfoName" id="meshName">
-// 	{meshName}
-// </div>
-
