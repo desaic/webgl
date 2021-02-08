@@ -34,19 +34,17 @@ function App() {
 	const [meshName, setMeshName] = useState('')
 
 	const [meshTrans, setMeshTrans] = useState({pos:[0,0,0], rot:[0,0,0]})
-	const [showMeshInfo, setShowMeshInfo] = useState(false)
 	const [boundaryExceded, setBoundaryExceded] = useState(false)
 
 	const showMeshTrans = (selectedMesh) => {
-		if(selectedMesh !== null) {
-			const {name, position, rotation} = selectedMesh
-			setMeshName(name)
-			const meshT = {pos:position, rot: rotation}
-			setMeshTrans(meshT)
-			setShowMeshInfo(true)
-		} else if (showMeshInfo){
-			setShowMeshInfo(false)
+		if(selectedMesh == null) {
+			return;
 		}
+		const {name, position, rotation} = selectedMesh
+		setMeshName(name)
+		const meshT = {pos:[position.x,position.y, position.z],
+			rot: [rotation.x,rotation.y,rotation.z]}
+		setMeshTrans(meshT)
 	}
 
 	const handleUndoAction = () => {
@@ -59,7 +57,7 @@ function App() {
 		<div className="App">
 			<MainCanvas 
 				ref={mainRef}
-				onMeshTransChange={showMeshTrans}
+				showMeshTrans={showMeshTrans}
 				onBoundriesExceded={setBoundaryExceded}
 			/>
 			<Info
@@ -70,11 +68,11 @@ function App() {
 				onSaveMeshList={handleSaveMeshList}
 				onUndo={handleUndoAction}
 			/>
-			{showMeshInfo && mainRef.current && (
+			{mainRef.current && (
 				<MeshInfo
 					meshName={meshName}
 					meshTrans={meshTrans}
-					onTransChange={mainRef.current.onTransChange}
+					onMeshTrans={mainRef.current.onTransChange}
 				/>
 			)}
 		</div>

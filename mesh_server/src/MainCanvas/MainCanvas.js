@@ -22,19 +22,10 @@ webSocket.onopen = function() {
 	webSocket.send('websocket client\r\n');
 };
 
-function testVec3(){
-	var a=new THREE.Vector3(1,2,3);
-	var b=new THREE.Vector3();
-	b.copy(a);
-	a.x=3;
-	console.log(b);
-}
-
 export default class MainCanvas extends React.Component {
 	canvasRef = React.createRef()
 
 	componentDidMount() {
-		testVec3();
 		renderer = new THREE.WebGLRenderer({
 			canvas: this.canvasRef.current,
 		});
@@ -47,7 +38,7 @@ export default class MainCanvas extends React.Component {
 		orbit.update()
 		orbit.addEventListener('change', this.render3D)
 		control = new TransformControls(world.camera, renderer.domElement)
-		control.addEventListener('change', this.render3D)
+		control.addEventListener('change', this.meshControlChanged)
 		control.addEventListener('dragging-changed', function (event) {
 			//event.value true when starting drag. false when existing a drag.
 			orbit.enabled = !event.value
@@ -69,6 +60,11 @@ export default class MainCanvas extends React.Component {
 
 	shouldComponentUpdate() {
 		return false
+	}
+
+	meshControlChanged=(event)=>{
+		this.props.showMeshTrans(selectedMesh);
+		this.render3D();
 	}
 
 	bindEventListeners = () => {
@@ -235,6 +231,7 @@ export default class MainCanvas extends React.Component {
 			control.attach(mesh);
 			selectedMesh = mesh;
 			hist.addMeshState(mesh);
+			this.props.showMeshTrans(selectedMesh);
 		} else {
 			alert("invalid mesh data.");
 			return;
@@ -248,17 +245,36 @@ export default class MainCanvas extends React.Component {
 		world.camera.updateProjectionMatrix();
 		renderer.setSize(window.innerWidth, window.innerHeight);
 		renderer.render(world.scene, world.camera);
-		this.props.onMeshTransChange(selectedMesh);
 	}
 
-	onTransChange = (event, axis) => {
-		if(axis<3){
-			var newPos = selectedMesh.pos
-			selectedMesh.position.x = event.target.value
-		}else{
-			var newRot = selectedMesh.pos
+	onTransChange = (val, axis) => {
+		if(selectedMesh == null){
+			return;
+		}
+		var m = selectedMesh;
+		switch(axis){
+		case 0:
+			m.position.x = val;
+			break;
+		case 1:
+			m.position.y = val;
+			break;
+		case 2:
+			m.position.z = val;
+			break;
+		case 4:
+			m.rotation.x = val;
+			break;
+		case 5:
+			m.rotation.y = val;
+			break;
+		case 6:
+			m.rotation.z = val;
+			break;
 		}
 		hist.addMeshState(selectedMesh)
+		this.render3D();
+		//this.props.showMeshTrans(selectedMesh);
 	}
 
 	handleUndoAction = () => {
