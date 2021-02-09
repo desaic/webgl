@@ -15,7 +15,7 @@ export default class VolRender
             viridis: new THREE.TextureLoader().load( 'textures/cm_viridis.png', this.render ),
             gray: new THREE.TextureLoader().load( 'textures/cm_gray.png', this.render )
         };
-        this.volconfig = { clim1: 0, clim2: 1, renderstyle: 'mip', isothreshold: 0.15, colormap: 'viridis' };
+        this.volconfig = { clim1: 0, clim2: 1, renderstyle: 'iso', isothreshold: 0.15, colormap: 'gray' };
         this.geometry = new THREE.BoxGeometry( 500,500,500 );
 	}
 
