@@ -11,7 +11,9 @@ export default class PickHelper {
 	pick(normalizedPosition, scene, camera, meshes) {
 		// restore the color if there is a picked object
 		if (this.pickedObject) {
-			this.pickedObject.material.emissive.setHex(this.pickedObjectSavedColor);
+			if(this.pickedObject.material.emissive){
+				this.pickedObject.material.emissive.setHex(this.pickedObjectSavedColor);
+			}
 			this.pickedObject = undefined;
 		}
 
@@ -22,10 +24,10 @@ export default class PickHelper {
 		if (intersectedObjects.length) {
 			// pick the first object. It's the closest one
 			this.pickedObject = intersectedObjects[0].object;
-			// save its color
-			this.pickedObjectSavedColor = this.pickedObject.material.emissive.getHex();
-			// set its emissive color to flashing red/yellow
-			this.pickedObject.material.emissive.setHex(0x113333);
+			if(this.pickedObject.material.emissive){
+				this.pickedObjectSavedColor = this.pickedObject.material.emissive.getHex();
+				this.pickedObject.material.emissive.setHex(0x113333);
+			}
 			return intersectedObjects[0].object;
 		}
 	}

@@ -14,7 +14,7 @@ export default class MenuBar extends React.Component {
 						<Navbar.Divider />
 						<FileInput 
 							text="Upload STL:"
-							accept=".stl"
+							accept=".stl, .raw"
 							onInputChange={onFileOpen}
 						/>
 						<Navbar.Divider />

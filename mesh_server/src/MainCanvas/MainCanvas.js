@@ -6,12 +6,13 @@ import PickHelper from './PickHelper'
 import './MainCanvas.scss'
 import { MeshStateHistory } from '../utils/MeshStateHistory'
 import World from './World'
+import VolRender from './VolRender'
 
 const world = new World();
 const pickHelper = new PickHelper();
 const webSocket = new WebSocket('ws://localhost:9000/')
 const hist = new MeshStateHistory();
-
+let vol = null;
 let renderer;
 let control;
 let orbit;
@@ -32,7 +33,7 @@ export default class MainCanvas extends React.Component {
 		renderer.setPixelRatio(window.devicePixelRatio)
 		renderer.setSize(window.innerWidth, window.innerHeight)
 		renderer.shadowMap.enabled = true
-
+		vol = new VolRender(renderer);
 		// Orbit controls
 		orbit = new OrbitControls(world.camera, renderer.domElement)
 		orbit.update()
@@ -69,7 +70,7 @@ export default class MainCanvas extends React.Component {
 
 	bindEventListeners = () => {
 		const canvasElement = this.canvasRef.current
-		window.addEventListener('resize', this.render3D, false)
+		window.addEventListener('resize', this.onWindowResize)
 		canvasElement.addEventListener('click', this.selectObj)
 		canvasElement.addEventListener('mousemove', this.setPickPosition)
 
@@ -111,6 +112,20 @@ export default class MainCanvas extends React.Component {
 				default:
 			}
 		});
+	}
+
+	onWindowResize = ()=>{
+		renderer.setSize( window.innerWidth, window.innerHeight );
+
+		const aspect = window.innerWidth / window.innerHeight;
+
+		const frustumHeight = world.camera.top - world.camera.bottom;
+
+		world.camera.left = - frustumHeight * aspect / 2;
+		world.camera.right = frustumHeight * aspect / 2;
+
+		world.camera.updateProjectionMatrix();
+		this.render3D();
 	}
 
 	setPickPosition = (event) => {
@@ -236,6 +251,12 @@ export default class MainCanvas extends React.Component {
 			alert("invalid mesh data.");
 			return;
 		}
+		this.render3D();
+	}
+
+	loadVol = (arrBuf) => {
+		const mesh = vol.parseRaw(arrBuf);
+		this.addMesh("vol", mesh);
 		this.render3D();
 	}
 

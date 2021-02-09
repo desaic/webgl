@@ -11,6 +11,14 @@ import './App.scss'
 
 const mainRef = React.createRef();
 
+const GetFileExtension = (name) => {
+	var a = name.split(".");
+	if( a.length === 1 || ( a[0] === "" && a.length === 2 ) ) {
+		return "";
+	}
+	return a.pop().toLowerCase(); 
+}
+
 const handleFileOpen = (event) => {
 	const { files, value } = event.target
 	const stlFile = files[0]
@@ -18,7 +26,12 @@ const handleFileOpen = (event) => {
 	let reader = new FileReader()
 	try{
 		reader.onload = function () {
-			mainRef.current.addMesh(filename, openStl(reader.result));
+			var ext = GetFileExtension(filename);
+			if(ext == 'stl'){
+				mainRef.current.addMesh(filename, openStl(reader.result));
+			}else if(ext == 'vol'){
+				mainRef.current.loadVol(reader.result);
+			}
 		}
 		reader.readAsArrayBuffer(stlFile)
 	}catch(err){
@@ -68,7 +81,7 @@ function App() {
 				onSaveMeshList={handleSaveMeshList}
 				onUndo={handleUndoAction}
 			/>
-			{mainRef.current && (
+			{false && mainRef.current && (
 				<MeshInfo
 					meshName={meshName}
 					meshTrans={meshTrans}
