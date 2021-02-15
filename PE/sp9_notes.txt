@@ -1,0 +1,280 @@
+
+
+void swapAxis(std::array<int, 3>& pt, int axis0, int axis1)
+{
+  int tmp = pt[axis0];
+  pt[axis0] = pt[axis1];
+  pt[axis1] = tmp;
+}
+
+std::vector<std::array<int, 3> > BresenhamLine3D(const std::array<int, 3>& src, const std::array<int, 3>& dst)
+{
+  std::vector<std::array<int, 3> > line;
+  int longestAxis = 0;
+  int dx[3];
+  int maxDx = 0;
+  for (int axis = 0; axis < 3; axis++) {
+    dx[axis] = dst[axis] - src[axis];
+    if (dx[axis] < 0) {
+      dx[axis] = -dx[axis];
+    }
+    if (dx[axis] > maxDx) {
+      maxDx = dx[axis];
+      longestAxis = axis;
+    }
+  }
+
+  std::array<int, 3> ptA = src;
+  std::array<int, 3> ptB = dst;
+  if (longestAxis != 0) {
+    swapAxis(ptA, longestAxis, 0);
+    swapAxis(ptB, longestAxis, 0);
+  }
+  int step[3] = { 1,1,1 };
+  for (int axis = 0; axis < 3; axis++) {
+    dx[axis] = ptB[axis] - ptA[axis];
+    if (dx[axis] < 0) {
+      dx[axis] = -dx[axis];
+      step[axis] = -1;
+    }
+  }
+
+  int p1 = 2 * dx[1] - dx[0];
+  int p2 = 2 * dx[2] - dx[0];
+  line.push_back(ptA);
+  while (ptA[0] != ptB[0]) {
+    ptA[0] += step[0];
+    if (p1 >= 0) {
+      ptA[1] += step[1];
+      p1 -= 2 * dx[0];
+    }
+    if (p2 >= 0) {
+      ptA[2] += step[2];
+      p2 -= 2 * dx[0];
+    }
+    p1 += 2 * dx[1];
+    p2 += 2 * dx[2];
+    line.push_back(ptA);
+  }
+
+  if (longestAxis != 0) {
+    for (size_t i = 0; i < line.size(); i++) {
+      swapAxis(line[i], longestAxis, 0);
+    }
+  }
+  return line;
+}
+
+int GCD(int a, int b) {
+  int r = a % b;
+  while (r > 0) {
+    a = b;
+    b = r;
+    r = a % b;
+  }
+  return b;
+}
+
+class Fraction {
+public:
+  long long d, n;
+  int sign;
+  Fraction() :d(1), n(0),
+    sign(1) {}
+  Fraction(long numerator, long denominator) :
+    d(denominator), n(numerator), sign(1) {
+    reduce();
+  }
+  void reduce() {
+    if (n == 0) {
+      d = 1;
+      return;
+    }
+    long long g = GCD(d, n);
+    d /= g;
+    n /= g;
+  }
+
+  bool operator<(const Fraction& rhs) const {
+    if (sign != rhs.sign) {
+      return sign < rhs.sign;
+    }
+    return n * rhs.d < d * rhs.n;  //assume that you compare the record based on a
+  }
+
+  bool operator==(const Fraction& rhs) const {
+    if (sign != rhs.sign) {
+      return false;
+    }
+    return (n == rhs.n) && (d == rhs.d);
+  }
+};
+
+Fraction operator+(const Fraction& a, const Fraction& b) {
+  Fraction c;
+  c.d = a.d * b.d;
+  c.n = a.sign * a.n * b.d + b.sign * a.d * b.n;
+  if (c.n < 0) {
+    c.n = -c.n;
+    c.sign = -1;
+  }
+  c.reduce();
+  return c;
+}
+void TestLine()
+{
+  std::array<int, 3> ptA, ptB;
+  ptA = { 0, 15, 5 };
+  ptB = { 1, 29, 5 };
+  auto line = RayVoxel(ptA, ptB);
+  Matrixu8 mat;
+  mat.Allocate(40, 40);
+  mat.Fill(0);
+  for (size_t i = 0; i < line.size(); i++) {
+    std::cout << "(" << line[i][0] << ", " << line[i][1] << ", " << line[i][2] << ") ";
+    mat(line[i][0], line[i][1]) = 1;
+  }
+  std::cout << "\n";
+  std::cout << mat.ToString() << "\n";
+  ptA = { 1,0,1 };
+  ptB = { 4,21,16};
+  line = RayVoxel(ptA, ptB);
+  for (size_t i = 0; i < line.size(); i++) {
+    mat(line[i][0], line[i][1]) = 1;
+    std::cout << "(" << line[i][0] << ", " << line[i][1] << ", " << line[i][2] << ") ";
+  }
+  std::cout << "\n";
+  std::cout << mat.ToString() << "\n";
+  
+  std::vector<std::array<int, 3> >
+RayVoxelDouble(const std::array<int, 3>& src, const std::array<int, 3>& dst)
+{
+  std::vector<std::array<int, 3> > line;
+  std::array<int, 3> ptA = src;
+  std::array<int, 3> ptB = dst;
+  if (src == dst) {
+    line.push_back(src);
+    return line;
+  }
+  int step[3] = { 1,1,1 };
+  float dx[3];
+
+  for (int axis = 0; axis < 3; axis++) {
+    dx[axis] = (dst[axis] - src[axis]);
+    if (dx[axis] < 0) {
+      step[axis] = -1;
+      dx[axis] = -dx[axis];
+    }
+  }
+  //v = dx/l, dy/l, dz/l
+  //grid size = 1
+  //dt = 1/v =  l/dx , l/dy, l/dz
+  //tMax = 1/v = l / dx , l/dy, l/dz
+  //tMax = tMax+dt = l/dx + 2*l / dx, 
+  //cancel l.
+  //double l = std::sqrt(dx[0] * dx[0] + dx[1] * dx[1] + dx[2] * dx[2]);
+  double tMax[3];
+  double tDelta[3];
+  double MAX_DELTA_T = 5000.0f;
+  double v[3];
+  for (int a = 0; a < 3; a++) {
+    v[a] = dx[a];// / l;
+    if (dx[a] == 0) {
+      tMax[a] = MAX_DELTA_T;
+      tDelta[a] = MAX_DELTA_T;
+    }
+    else {
+      tMax[a] = 0.5;
+      tDelta[a] = 1;
+    }
+  }
+  for (int a = 0; a < 3; a++) {
+    if (dx[a] == 0) {
+      tMax[a] = MAX_DELTA_T;
+      tDelta[a] = MAX_DELTA_T;
+    }
+  }
+  line.push_back(src);
+  while (ptA != ptB) {
+    if (tMax[0] * dx[1] < tMax[1] * dx[0]) {
+      if (tMax[0] * dx[2] < tMax[2] * dx[0]) {
+        ptA[0] += step[0];
+        tMax[0] = tMax[0] + tDelta[0];
+      }
+      else if (tMax[0] * dx[2] > tMax[2] * dx[0]) {
+        ptA[2] += step[2];
+        tMax[2] = tMax[2] + tDelta[2];
+      }
+      //==
+      else {
+        ptA[0] += step[0];
+        tMax[0] = tMax[0] + tDelta[0];
+        ptA[2] += step[2];
+        tMax[2] = tMax[2] + tDelta[2];
+      }
+    }
+    else if (tMax[1] * dx[0] < tMax[0] * dx[1]) {
+      if (tMax[1] * dx[2] < tMax[2] * dx[1]) {
+        ptA[1] += step[1];
+        tMax[1] = tMax[1] + tDelta[1];
+      }
+      else if (tMax[1] * dx[2] > tMax[2] * dx[1]) {
+        ptA[2] += step[2];
+        tMax[2] = tMax[2] + tDelta[2];
+      }
+      //==
+      else {
+        ptA[1] += step[1];
+        tMax[1] = tMax[1] + tDelta[1];
+        ptA[2] += step[2];
+        tMax[2] = tMax[2] + tDelta[2];
+      }
+    }
+    //==
+    else {
+      if (tMax[0] * dx[2] < tMax[2] * dx[0]) {
+        ptA[0] += step[0];
+        tMax[0] = tMax[0] + tDelta[0];
+        ptA[1] += step[1];
+        tMax[1] = tMax[1] + tDelta[1];
+      }
+      else if (tMax[0] * dx[2] > tMax[2] * dx[0]) {
+        ptA[2] += step[2];
+        tMax[2] = tMax[2] + tDelta[2];
+      }
+      //==
+      else {
+        for (unsigned int a = 0; a < 3; a++) {
+          ptA[a] += step[a];
+          tMax[a] = tMax[a] + tDelta[a];
+        }
+      }
+    }
+    line.push_back(ptA);
+  }
+  return line;
+}
+
+void TestLine()
+{
+  for (int row = 8; row < 200; row++) {
+    std::cout << row << "\n";
+    for (int col = 8; col < 200; col++) {
+      for (int z = 0; z < 200; z++) {
+        std::array<int, 3> ptA, ptB;
+        ptA = { 0, 1, 5 };
+        ptB = { row, col + 1, 5 + z };
+        auto lineA = RayVoxel(ptA, ptB);
+        auto lineB = RayVoxelDouble(ptA, ptB);
+        if (lineA.size() != lineB.size()) {
+          std::cout << "debug\n";
+        }
+        for (size_t i = 0; i < lineA.size(); i++) {
+          if (lineA[i] != lineB[i]) {
+            std::cout << "debug\n";
+          }
+        }
+      }
+    }
+  }
+}
