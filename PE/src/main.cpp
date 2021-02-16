@@ -7,7 +7,7 @@
 #include "mpir.h"
 
 extern void p171();
-extern int sp12();
+extern int sp13();
 
 void TestBigInt()
 {
@@ -26,6 +26,6 @@ void TestBigInt()
 
 int main(int argc, char * argv[]) {
   //TestBigInt();
-  sp12();
+  sp13();
   return 0;
 }
