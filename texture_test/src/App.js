@@ -89,7 +89,7 @@ function App() {
 				onSaveMeshList={handleSaveMeshList}
 				onUndo={handleUndoAction}
 			/>
-			<VarTab varList = {varList}
+			<VarTab varList={varList}
 			/>
 			{showMeshInfo && mainRef.current && (
 				<MeshInfo

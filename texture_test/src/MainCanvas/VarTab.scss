@@ -9,8 +9,13 @@
         .VarLabel {
             grid-column: 1;
         }
+        
+		input {
+			width: 50px;
+		}
         .VarInput {
             grid-column: 2;
+            width:50px;
         }
     }
 }

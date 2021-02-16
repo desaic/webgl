@@ -18,6 +18,7 @@ return (<div className="VarTable">
             <input 
                 id="InputA"
                 value={GetVar(0)}
+                readOnly
             />
         </div>
 
@@ -26,6 +27,7 @@ return (<div className="VarTable">
             <input 
                 id="InputX"
                 value={GetVar(1)}
+                readOnly
             />
         </div>
 
@@ -34,39 +36,51 @@ return (<div className="VarTable">
             <input 
                 id="InputY"
                 value={GetVar(2)}
+                readOnly
             />
         </div>
 
-        <div className="VarLabel">3:</div>
+        <div className="VarLabel">PC</div>
         <div className ="VarInput">
             <input 
-                id="InputY"
+                id="InputIP"
                 value={GetVar(3)}
+                readOnly
             />
         </div>
 
-        <div className="VarLabel">4:</div>
+        <div className="VarLabel">SP:</div>
         <div className ="VarInput">
             <input 
-                id="InputY"
+                id="InputSP"
                 value={GetVar(4)}
+                readOnly
             />
         </div>
-        <div className="VarLabel">5:</div>
+        <div className="VarLabel">BP:</div>
         <div className ="VarInput">
             <input 
-                id="InputY"
+                id="InputBP"
                 value={GetVar(5)}
+                readOnly
             />
         </div>
-        <div className="VarLabel">6:</div>
+        <div className="VarLabel">INS:</div>
         <div className ="VarInput">
             <input 
-                id="InputY"
+                id="InputINS"
                 value={GetVar(6)}
+                readOnly
             />
         </div>
-
+        <div className="VarLabel">INS1:</div>
+        <div className ="VarInput">
+            <input 
+                id="InputINS1"
+                value={GetVar(7)}
+                readOnly
+            />
+        </div>
     </div>
 </div>)
 }
