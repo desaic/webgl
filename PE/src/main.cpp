@@ -4,10 +4,14 @@
 #include <numeric>
 #include <chrono>
 #include <string>
+#include <thread>
+#include <iomanip>
 #include "mpir.h"
 
+#include "threadsafe_queue.h"
+
 extern void p171();
-extern int sp13();
+extern int sp14();
 
 void TestBigInt()
 {
@@ -24,8 +28,47 @@ void TestBigInt()
   std::cout << buf << "\n";
 }
 
+bool running;
+struct Task {
+  std::chrono::steady_clock::time_point t0, t1;
+};
+threadsafe_queue<Task> q;
+
+void WorkerFun()
+{  
+  while (running) {
+    Task task;
+    bool success = q.wait_and_pop(task, 50);
+    if (success) {
+      task.t1 = std::chrono::steady_clock::now();
+      std::cout << "got task ";
+      std::cout << (task.t1 - task.t0).count() / 1000000.0 << " ms\n";
+    }
+  }
+}
+
+void TestThreadSafeQueue()
+{
+  running = true;
+  std::thread workerThread(&WorkerFun);
+  for (int i = 0; i < 100; i++) {
+    if (!q.empty()) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    else {
+      Task t;
+      t.t0 = std::chrono::steady_clock::now();
+      q.push(t);
+    }
+  }
+
+  running = false;
+  workerThread.join();
+}
+
 int main(int argc, char * argv[]) {
   //TestBigInt();
-  sp13();
+  //TestThreadSafeQueue();
+  sp14();
   return 0;
 }

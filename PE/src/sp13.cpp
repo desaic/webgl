@@ -419,8 +419,8 @@ std::string Answer(const std::string& line, const Dialogue& d)
   return ans;
 }
 
-//int sp13() {
-int main() {
+int sp13() {
+//int main() {
   int T;
   std::cin >> T;
   for (int t = 0; t < T; t++) {
