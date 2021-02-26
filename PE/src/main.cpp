@@ -11,7 +11,7 @@
 #include "threadsafe_queue.h"
 
 extern void p171();
-extern int sp15();
+extern int sp17();
 
 void TestBigInt()
 {
@@ -69,6 +69,6 @@ void TestThreadSafeQueue()
 int main(int argc, char * argv[]) {
   //TestBigInt();
   //TestThreadSafeQueue();
-  sp15();
+  sp17();
   return 0;
 }
