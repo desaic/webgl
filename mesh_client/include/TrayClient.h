@@ -21,6 +21,9 @@ public:
 
   void SimFun();
   void TCPFun();
+  
+  void GetNumMeshes();
+
   std::thread simThread, tcpThread;  
 
   Scene & GetScene() { return scene; }

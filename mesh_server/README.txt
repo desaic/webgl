@@ -31,8 +31,10 @@ Command structure
     Set the affine transformation of a mesh 
 	Args: |mesh ID 2 bytes | 4x4 float matrix numbers listed in row major.
 
-  
-Received Events (Unimplemented) :
+  GEt
+    Get some member from the scene
+	Args: | member name
+Received Events (Unimplemented. subject to change) :
   |Event name: 2 bytes unsigned | Args 
   |MOUSE_MOVE | camera origin and x y coordinates in world units. 5 floats. 20 bytes.
     x y coordinates are calculated at 1 unit in front of the camera.

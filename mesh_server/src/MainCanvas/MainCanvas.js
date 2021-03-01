@@ -110,9 +110,7 @@ export default class MainCanvas extends React.Component {
 		renderer.setSize( window.innerWidth, window.innerHeight );
 
 		const aspect = window.innerWidth / window.innerHeight;
-
 		const frustumHeight = world.camera.top - world.camera.bottom;
-
 		world.camera.left = - frustumHeight * aspect / 2;
 		world.camera.right = frustumHeight * aspect / 2;
 

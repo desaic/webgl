@@ -7,12 +7,18 @@
 enum class CommandName {
   MESH = 1, TRIGS = 2,
   ATTR, TEXTURE,
-  TRANS
+  TRANS, GET
 };
 
 enum class MeshAttr {
   UV_COORD =1,
   TEX_IMAGE_ID=2
+};
+
+struct MeshCommand
+{
+  unsigned short cmd;
+
 };
 
 void LogStdOut(const std::string& msg, LogLevel level) {
@@ -73,16 +79,20 @@ void TrayClient::SendMeshes()
   }
 }
 
+void TrayClient::GetNumMeshes()
+{
+
+}
+
 void TrayClient::TCPFun()
 {
   int pollInterval = 10; //ms
   //interval for looking for mesh server when disconnected.
   int connectInterval = 2000;
   while (running) {
-    if (!client.Connected()) {
-      int ret = client.Connect();
+    if (!client.SocketValid()) {
+      int ret = client.Connect(connectInterval);
       if (ret < 0) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(connectInterval));
         continue;
       }
       else {
