@@ -29,8 +29,6 @@ const handleFileOpen = (event) => {
 			var ext = GetFileExtension(filename);
 			if(ext == 'stl'){
 				mainRef.current.addMesh(filename, openStl(reader.result));
-			}else if(ext == 'vol'){
-				mainRef.current.loadVol(reader.result);
 			}
 		}
 		reader.readAsArrayBuffer(stlFile)
@@ -81,7 +79,7 @@ function App() {
 				onSaveMeshList={handleSaveMeshList}
 				onUndo={handleUndoAction}
 			/>
-			{false && mainRef.current && (
+			{mainRef.current && (
 				<MeshInfo
 					meshName={meshName}
 					meshTrans={meshTrans}

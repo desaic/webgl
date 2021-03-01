@@ -143,7 +143,7 @@ var VolumeRenderShader1 = {
 		'		void cast_mip(vec3 start_loc, vec3 step, int nsteps, vec3 view_ray) {',
 		'				vec3 loc = start_loc;',
 		'				float delta = 1.0/float(MAX_STEPS);',
-		'				float alphaScaleFactor = 25.6 * delta;',
+		'				float alphaScaleFactor = 100.0 * delta;',
 		'				vec4 colorSample;',
 		'				float alphaSample=0.5;',
 		'				vec4 accumulatedColor = vec4(0.0);',

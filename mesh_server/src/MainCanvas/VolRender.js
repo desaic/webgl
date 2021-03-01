@@ -15,7 +15,7 @@ export default class VolRender
             viridis: new THREE.TextureLoader().load( 'textures/cm_viridis.png', this.render ),
             gray: new THREE.TextureLoader().load( 'textures/cm_gray.png', this.render )
         };
-        this.volconfig = { clim1: 0, clim2: 1, renderstyle: 'iso', isothreshold: 0.15, colormap: 'gray' };
+        this.volconfig = { clim1: 0, clim2: 1, renderstyle: 'mip', isothreshold: 0.15, colormap: 'viridis' };
         this.geometry = new THREE.BoxGeometry( 500,500,500 );
 	}
 
@@ -27,7 +27,7 @@ export default class VolRender
 
         var uint8Arr = new Uint8Array(arr, 12);
         //scale from material IDs 1 2 3 to grayscale values.
-        var scaledData = uint8Arr.map(function(x) { return x * 100; });
+        var scaledData = uint8Arr.map(function(x) { return x * 60; });
         const texture = new THREE.DataTexture3D( scaledData, sizes[0],  sizes[1],  sizes[2] );
         texture.format = THREE.RedFormat;
         texture.minFilter = texture.magFilter = THREE.NearestFilter;
