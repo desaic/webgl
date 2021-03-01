@@ -2,14 +2,15 @@ import React from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
+import MeshServer from './MeshServer'
 import PickHelper from './PickHelper'
 import './MainCanvas.scss'
 import { MeshStateHistory } from '../utils/MeshStateHistory'
 import World from './World'
 
 const world = new World();
+const meshServer = new MeshServer();
 const pickHelper = new PickHelper();
-const webSocket = new WebSocket('ws://localhost:9000/')
 const hist = new MeshStateHistory();
 
 let renderer;
@@ -18,14 +19,11 @@ let orbit;
 let selectedMesh = null;
 let pickPosition = { x: 0, y: 0 };
 
-webSocket.onopen = function() {
-	webSocket.send('websocket client\r\n');
-};
-
 export default class MainCanvas extends React.Component {
 	canvasRef = React.createRef()
 
 	componentDidMount() {
+		meshServer.ui = this;
 		renderer = new THREE.WebGLRenderer({
 			canvas: this.canvasRef.current,
 		});
@@ -51,10 +49,6 @@ export default class MainCanvas extends React.Component {
 		
 		this.bindEventListeners()
 		this.render3D()
-		
-		webSocket.onmessage = (message) => {
-			this.parseSocketMsg(message.data);
-		};
 	}
 
 	shouldComponentUpdate() {
@@ -129,47 +123,6 @@ export default class MainCanvas extends React.Component {
 	setPickPosition = (event) => {
 		pickPosition.x = (event.clientX / window.innerWidth) * 2 - 1
 		pickPosition.y = - (event.clientY / window.innerHeight) * 2 + 1
-	}
-
-	createMesh = (meshId, trigs)=>{
-		//make a debug mesh.
-		const geometry = new THREE.BufferGeometry();
-		geometry.setAttribute( 'position', new THREE.BufferAttribute( trigs, 3 ) );
-		//geometry.computeFaceNormals();
-		geometry.computeVertexNormals();
-		const material = new THREE.MeshPhongMaterial( { color: 0x999999, specular: 0x101010 } );
-		const mesh = new THREE.Mesh( geometry, material );
-		this.addMesh(meshId.toString(), mesh);
-	}
-
-	parseBlob = (blob) => {
-		new Response(blob).arrayBuffer()
-		.then(buf => {
-			//|msg type 2 bytes| meshid 2 bytes | numTrigs 4 bytes
-			//does not support more than 4 billion trigs.
-			const HEADER_BYTES = 8;
-			if(buf.length<HEADER_BYTES){
-				console.log("message too small");
-				return;
-			}
-			const header = new Uint16Array(buf,0,4);
-			const cmd = header[0];
-			const meshId = header[1];
-			///\TODO bad hack. not sure best way to do this.
-			const numTrigs = header[2] + 65536*header[3];
-			const fvals = new Float32Array(buf,HEADER_BYTES);
-			this.createMesh(meshId, fvals);
-		});
-	}
-
-	//parse mesh received from web socket
-	//and add to mesh list.
-	parseSocketMsg = (msg) =>{
-		if(msg instanceof Blob){
-			this.parseBlob(msg);
-		}else if(typeof msg === 'string'){
-			console.log(msg);
-		}
 	}
 
 	selectObj = () => {
