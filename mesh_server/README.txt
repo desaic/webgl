@@ -37,7 +37,7 @@ Command structure
 	Member names: NUM_MESHES=1, 
 Received Info or Events (Unimplemented. subject to change) :
   |Event name: 2 bytes unsigned | Args 
-  |NUM_MESHES | 4 bytes of number of meshes
+  |NUM_MESHES =1 | 4 bytes of number of meshes
   |MOUSE_MOVE | camera origin and x y coordinates in world units. 5 floats. 20 bytes.
     x y coordinates are calculated at 1 unit in front of the camera.
   |LEFT_DOWN|

@@ -13,7 +13,7 @@ enum class CommandName {
 
 enum class ResponseName
 {
-  NUM_MESHES
+  NUM_MESHES=1
 };
 
 struct MeshCommand

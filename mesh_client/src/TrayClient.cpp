@@ -94,9 +94,12 @@ int TrayClient::ParseNumMeshes(MeshResponse& resp, int timeoutMs) {
   //NUM_MESHES reponse fixed 6 bytes: 2 bytes for header
   //and 4 bytes unsigned int for num meshes.
   size_t respSize = 4;
-  recvBuf.Erase(20, timeoutMs);
+  recvBuf.Erase(2, timeoutMs);
   resp.buf.resize(respSize);
   int ret=recvBuf.Peek((uint8_t*)(resp.buf.data()), resp.buf.size(), timeoutMs);
+  if (ret == 0) {
+    recvBuf.Erase(respSize, timeoutMs);
+  }
   return ret;
 }
 
@@ -129,8 +132,6 @@ void TrayClient::TCPFun()
       }
       else {
         SendMeshes();
-        int numMeshes = GetNumMeshes();
-        std::cout << "num meshes " << numMeshes << "\n";
       }
     }
     const size_t BUF_LEN = 4096;

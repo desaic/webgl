@@ -205,9 +205,9 @@ wsServer.on('request', function (request) {
 	wsconnection = request.accept(null, request.origin);
 
 	wsconnection.on('message', function (event) {
-		console.log('Received Message: ', event.data);
+		console.log('Received Message: ', event.binaryData);
         if(tcpClient.sock != null){
-			tcpClient.send(event.data);
+			tcpClient.send(event.binaryData);
 		}
 	});
 

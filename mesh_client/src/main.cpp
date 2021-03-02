@@ -15,13 +15,22 @@ int initWSA() {
   return 0;
 }
 
-void CommandLoop() {
+void Test(TrayClient* client)
+{
+  int numMeshes = client -> GetNumMeshes();
+  std::cout << "num meshes " << numMeshes << "\n";
+}
+
+void CommandLoop(TrayClient * client) {
   while (1) {
     std::cout << "> ";
     std::string line;
     std::getline(std::cin, line);
     if (line == "q" || line == "exit") {
       break;
+    }
+    else if (line == "test") {
+      Test(client);
     }
     if (line.size() < 2) {
       continue;
@@ -54,7 +63,7 @@ int main(){
   LoadTestScene(client);
   client.SetHost("localhost", port);
   client.RunTCPThread();
-  CommandLoop();
+  CommandLoop(&client);
   client.Stop();
 
   return 0;	
