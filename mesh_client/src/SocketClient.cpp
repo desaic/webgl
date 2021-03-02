@@ -226,17 +226,13 @@ int64_t SocketClient::Send(const char *buf, uint32_t nBytes, long timeout_ms) {
 int64_t SocketClient::SendAll(const char *buf, uint32_t nBytes,
                               long timeout_ms) {
   uint32_t sent = 0;
-
   while (sent < nBytes) {
     int64_t ret = Send(buf + sent, nBytes - sent, timeout_ms);
-
     if (ret <= 0) {  // @todo(mike) can this return 0?
       return ret;
     }
-
     sent += uint32_t(ret);
   }
-
   return sent;
 }
 

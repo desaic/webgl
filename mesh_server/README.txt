@@ -8,7 +8,7 @@ Command structure
 | Command name: 2 bytes unsigned | Args and data command specific.
 
   Commands:
-  MESH
+  MESH = 1
     Create a new mesh. If a mesh with the same ID exists, the old mesh is overwritten.
 	Args: |mesh ID 2 bytes unsigned | number of triangles 4 bytes unsigned | list of trianges, each represented by 9 floats with 36 bytes
 	
@@ -27,15 +27,17 @@ Command structure
   TEXTURE
     Args: |image id 2 bytes | width and height 2 bytes each. huge images not supported. | 3 x width x height bytes for pixels |
   
-  TRANS
+  TRANS = 5
     Set the affine transformation of a mesh 
 	Args: |mesh ID 2 bytes | 4x4 float matrix numbers listed in row major.
 
-  GEt
+  GEt = 6
     Get some member from the scene
-	Args: | member name
-Received Events (Unimplemented. subject to change) :
+	Args: | member name 2 bytes unsigned | additional optional args
+	Member names: NUM_MESHES=1, 
+Received Info or Events (Unimplemented. subject to change) :
   |Event name: 2 bytes unsigned | Args 
+  |NUM_MESHES | 4 bytes of number of meshes
   |MOUSE_MOVE | camera origin and x y coordinates in world units. 5 floats. 20 bytes.
     x y coordinates are calculated at 1 unit in front of the camera.
   |LEFT_DOWN|

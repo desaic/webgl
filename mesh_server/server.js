@@ -65,19 +65,19 @@ server.on('connection', function(socket) {
 
 	socket.on('error',function(error){
 	  console.log('TCP server Error : ' + error);
+	  tcpClient.sock = null;
 	});
 
 	socket.on('timeout',function(){
 	  console.log('Socket timed out !');
 	  socket.end('Timed out!');
-	  // can call socket.destroy() here too.
-	  tcpClient.reset();
+	  tcpClient.sock = null;
 	});
 
 	socket.on('end', function(data){
 	  var bread = socket.bytesRead;
 	  console.log('socket end Bytes read : ' + bread);
-	  tcpClient.reset();
+	  tcpClient.sock = null;
 	});
 
 	socket.on('close', function(error){
@@ -89,14 +89,8 @@ server.on('connection', function(socket) {
 	  if(error){
 		console.log('Socket was closed coz of transmission error');
 	  }
-	  tcpClient.reset();
+	  tcpClient.sock = null;
 	});
-
-	setTimeout(function(){
-	  var isdestroyed = socket.destroyed;
-	  console.log('Socket destroyed:' + isdestroyed);
-	  tcpClient.reset();
-	},1200000);
 
 });
 
@@ -210,9 +204,11 @@ let wsconnection;
 wsServer.on('request', function (request) {
 	wsconnection = request.accept(null, request.origin);
 
-	wsconnection.on('message', function (message) {
-		console.log('Received Message: ', message.utf8Data);
-        wsconnection.send("image complete\r\n");
+	wsconnection.on('message', function (event) {
+		console.log('Received Message: ', event.data);
+        if(tcpClient.sock != null){
+			tcpClient.send(event.data);
+		}
 	});
 
 	wsconnection.on('close', function (reasonCode, description) {

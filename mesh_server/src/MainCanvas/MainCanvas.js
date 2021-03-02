@@ -8,7 +8,6 @@ import './MainCanvas.scss'
 import { MeshStateHistory } from '../utils/MeshStateHistory'
 import World from './World'
 
-const world = new World();
 const meshServer = new MeshServer();
 const pickHelper = new PickHelper();
 const hist = new MeshStateHistory();
@@ -24,6 +23,7 @@ export default class MainCanvas extends React.Component {
 
 	componentDidMount() {
 		meshServer.ui = this;
+		this.world = new World();
 		renderer = new THREE.WebGLRenderer({
 			canvas: this.canvasRef.current,
 		});
@@ -31,10 +31,10 @@ export default class MainCanvas extends React.Component {
 		renderer.setSize(window.innerWidth, window.innerHeight)
 		renderer.shadowMap.enabled = true
 		// Orbit controls
-		orbit = new OrbitControls(world.camera, renderer.domElement)
+		orbit = new OrbitControls(this.world.camera, renderer.domElement)
 		orbit.update()
 		orbit.addEventListener('change', this.render3D)
-		control = new TransformControls(world.camera, renderer.domElement)
+		control = new TransformControls(this.world.camera, renderer.domElement)
 		control.addEventListener('change', this.meshControlChanged)
 		control.addEventListener('dragging-changed', function (event) {
 			//event.value true when starting drag. false when existing a drag.
@@ -45,7 +45,7 @@ export default class MainCanvas extends React.Component {
 			}
 		});
 
-		world.scene.add(control)
+		this.world.scene.add(control)
 		
 		this.bindEventListeners()
 		this.render3D()
@@ -110,11 +110,11 @@ export default class MainCanvas extends React.Component {
 		renderer.setSize( window.innerWidth, window.innerHeight );
 
 		const aspect = window.innerWidth / window.innerHeight;
-		const frustumHeight = world.camera.top - world.camera.bottom;
-		world.camera.left = - frustumHeight * aspect / 2;
-		world.camera.right = frustumHeight * aspect / 2;
+		const frustumHeight = this.world.camera.top - this.world.camera.bottom;
+		this.world.camera.left = - frustumHeight * aspect / 2;
+		this.world.camera.right = frustumHeight * aspect / 2;
 
-		world.camera.updateProjectionMatrix();
+		this.world.camera.updateProjectionMatrix();
 		this.render3D();
 	}
 
@@ -124,7 +124,8 @@ export default class MainCanvas extends React.Component {
 	}
 
 	selectObj = () => {
-		const sM = pickHelper.pick(pickPosition, world.scene, world.camera, world.meshes);
+		const sM = pickHelper.pick(pickPosition, this.world.scene, 
+			this.world.camera, this.world.meshes);
 		if (sM) {
 			selectedMesh = sM
 			control.attach(selectedMesh)
@@ -142,10 +143,10 @@ export default class MainCanvas extends React.Component {
 			hist.removeMesh(selectedMesh)
 			selectedMesh.geometry.dispose()
 			selectedMesh.material.dispose()
-			world.scene.remove(selectedMesh)
-			const i = world.meshes.indexOf(selectedMesh)
+			this.world.scene.remove(selectedMesh)
+			const i = this.world.meshes.indexOf(selectedMesh)
 			if (i > -1) {
-				world.meshes.splice(i, 1)
+				this.world.meshes.splice(i, 1)
 			}
 			selectedMesh = null
 			// Remove controls from scene
@@ -179,9 +180,9 @@ export default class MainCanvas extends React.Component {
 	
 		// Get the duplicate's name
 		let name = ""
-		const i = world.meshes.indexOf(selectedMesh)
+		const i = this.world.meshes.indexOf(selectedMesh)
 		if (i > -1) {
-			name = world.meshes[i].name
+			name = this.world.meshes[i].name
 		}
 	
 		this.addMesh(name, duplicate)
@@ -189,9 +190,9 @@ export default class MainCanvas extends React.Component {
 
 	addMesh = (name, mesh) => {
 		if (mesh !== undefined) {
-			world.scene.add(mesh);
+			this.world.scene.add(mesh);
 			mesh.name = name;
-			world.meshes.push(mesh);
+			this.world.meshes.push(mesh);
 			control.attach(mesh);
 			selectedMesh = mesh;
 			hist.addMeshState(mesh);
@@ -205,10 +206,10 @@ export default class MainCanvas extends React.Component {
 
 	render3D = () => {
 		const aspect = window.innerWidth / window.innerHeight;
-		world.camera.aspect = aspect;
-		world.camera.updateProjectionMatrix();
+		this.world.camera.aspect = aspect;
+		this.world.camera.updateProjectionMatrix();
 		renderer.setSize(window.innerWidth, window.innerHeight);
-		renderer.render(world.scene, world.camera);
+		renderer.render(this.world.scene, this.world.camera);
 	}
 
 	onTransChange = (val, axis) => {

@@ -72,4 +72,13 @@ exports.TcpClient = class TcpClient {
         this.recvBuf = "";
         this.hasHeader = false;
     }
+    send(data){
+        if(this.sock != null){
+            this.sock.write(data);
+        }else{
+            this.sock = null;
+            this.recvBuf = "";
+            this.hasHeader = false;   
+        }
+    }
 }
