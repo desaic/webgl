@@ -184,7 +184,6 @@ export default class MainCanvas extends React.Component {
 
 	addMesh = (mesh, idx = -1) => {
 		if (mesh !== undefined) {
-			this.world.scene.add(mesh);
 			if(idx<0 || idx>this.world.meshes.length){
 				mesh.idx = this.world.meshes.length;
 			}else{
@@ -199,7 +198,12 @@ export default class MainCanvas extends React.Component {
 				oldMesh.geometry.dispose()
 				oldMesh.material.dispose()
 				this.world.scene.remove(oldMesh)
+				mesh.position.copy(oldMesh.position);
+				mesh.rotation.copy(oldMesh.rotation);
+				this.world.meshes[idx] = mesh;
+
 			}
+			this.world.scene.add(mesh);
 			control.attach(mesh);
 			selectedMesh = mesh;
 			this.props.showMeshTrans(selectedMesh);
