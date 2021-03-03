@@ -41,7 +41,7 @@ export default class MainCanvas extends React.Component {
 			orbit.enabled = !event.value
 			//only record position at end of drag.
 			if(!event.value && selectedMesh) {
-				hist.addMeshState(selectedMesh)
+				hist.addMesh(selectedMesh)
 			}
 		});
 
@@ -144,9 +144,11 @@ export default class MainCanvas extends React.Component {
 			selectedMesh.geometry.dispose()
 			selectedMesh.material.dispose()
 			this.world.scene.remove(selectedMesh)
-			const i = this.world.meshes.indexOf(selectedMesh)
-			if (i > -1) {
-				this.world.meshes.splice(i, 1)
+			const i = selectedMesh.idx
+			this.world.meshes.splice(i, 1)
+			var j = i;
+			for(; j<this.world.meshes.length; j++){
+				this.world.meshes[j].idx --;
 			}
 			selectedMesh = null
 			// Remove controls from scene
@@ -165,9 +167,6 @@ export default class MainCanvas extends React.Component {
 
 	duplicateMesh = () => {
 		const mesh = selectedMesh
-		// Clone geometry and material so that they have separate uuid's
-		// If you do selectedMesh.clone(), then orig. and new mesh geometry's
-		// have same uuid and raycaster will group them together.
 		let duplicate = new THREE.Mesh(mesh.geometry.clone(), mesh.material.clone())
 		//remember to disable emission
 		duplicate.material.emissive.setHex(0x0)
@@ -178,24 +177,19 @@ export default class MainCanvas extends React.Component {
 		duplicate.translateX(10)
 		duplicate.translateZ(10)
 	
-		// Get the duplicate's name
-		let name = ""
-		const i = this.world.meshes.indexOf(selectedMesh)
-		if (i > -1) {
-			name = this.world.meshes[i].name
-		}
-	
-		this.addMesh(name, duplicate)
+		const i = selectedMesh.idx
+		duplicate.name = this.world.meshes[i].name;		
+		this.addMesh(duplicate)
 	}
 
-	addMesh = (name, mesh) => {
+	addMesh = (mesh) => {
 		if (mesh !== undefined) {
 			this.world.scene.add(mesh);
-			mesh.name = name;
+			mesh.idx = this.world.meshes.length;
 			this.world.meshes.push(mesh);
 			control.attach(mesh);
 			selectedMesh = mesh;
-			hist.addMeshState(mesh);
+			hist.addMesh(mesh);
 			this.props.showMeshTrans(selectedMesh);
 		} else {
 			alert("invalid mesh data.");
@@ -237,7 +231,7 @@ export default class MainCanvas extends React.Component {
 			m.rotation.z = val;
 			break;
 		}
-		hist.addMeshState(selectedMesh)
+		hist.addMesh(selectedMesh)
 		this.render3D();
 		//this.props.showMeshTrans(selectedMesh);
 	}
@@ -251,7 +245,7 @@ export default class MainCanvas extends React.Component {
 		if(!h) {
 			return
 		}
-		hist.applyMeshState(selectedMesh, h.state)
+		hist.apply(selectedMesh, h)
 		this.render3D();
 	}
 

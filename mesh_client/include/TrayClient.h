@@ -58,7 +58,7 @@ public:
   void RunTCPThread();
   void Stop();
   void SetHost(const std::string& hostname, int port);
-  void SendMesh(const TrigMesh* m);
+  void SendMesh(unsigned short meshId, const TrigMesh* m);
   ///sends all meshes render server
   ///blocks until sending finished
   void SendMeshes();

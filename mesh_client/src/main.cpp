@@ -44,7 +44,7 @@ void LoadTestScene(TrayClient & client)
   
   TrigMesh mesh;
   ///\todo change to config instead of hardcoded.
-  std::string meshFile = "F:/homework/threejs/meshes/pyramid.stl";
+  std::string meshFile = "F:/homework/threejs/meshes/3DBenchy.stl";
   int status = mesh.LoadStl(meshFile);
 
   int meshId = scene.AddMesh(mesh);

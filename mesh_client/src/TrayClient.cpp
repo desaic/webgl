@@ -40,8 +40,7 @@ void TrayClient::SendCommand(const MeshCommand& cmd)
   SendMessage((const char *)cmd.buf.data(), cmd.buf.size());
 }
 
-void TrayClient::SendMesh(const TrigMesh * m) {
-  unsigned short meshId = 1;
+void TrayClient::SendMesh(unsigned short meshId, const TrigMesh * m) {
   /// don't make mesh with more than 4 billion trigs.
   unsigned nTrig = unsigned(m->GetNumTrigs());
   size_t vertBytes = sizeof(float) * nTrig * 3 * 3;
@@ -71,7 +70,7 @@ void TrayClient::SendMeshes()
 {
   const std::vector<TrigMesh>& meshes = scene.GetMeshes();
   for (size_t i = 0; i < meshes.size(); i++) {
-    SendMesh(&meshes[i]);
+    SendMesh((unsigned short)i, &meshes[i]);
   }
 }
 

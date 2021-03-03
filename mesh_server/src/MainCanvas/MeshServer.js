@@ -83,7 +83,8 @@ export default class MeshServer
 		geometry.computeVertexNormals();
 		const material = new THREE.MeshPhongMaterial( { color: 0x999999, specular: 0x101010 } );
 		const mesh = new THREE.Mesh( geometry, material );
-		this.ui.addMesh(meshId.toString(), mesh);
+        mesh.name  =meshId.toString();
+		this.ui.addMesh(mesh);
 	}
 
 }

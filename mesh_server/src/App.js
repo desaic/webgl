@@ -28,7 +28,9 @@ const handleFileOpen = (event) => {
 		reader.onload = function () {
 			var ext = GetFileExtension(filename);
 			if(ext == 'stl'){
-				mainRef.current.addMesh(filename, openStl(reader.result));
+				var mesh =openStl(reader.result);
+				mesh.name = filename;
+				mainRef.current.addMesh(mesh);
 			}
 		}
 		reader.readAsArrayBuffer(stlFile)
