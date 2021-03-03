@@ -182,14 +182,26 @@ export default class MainCanvas extends React.Component {
 		this.addMesh(duplicate)
 	}
 
-	addMesh = (mesh) => {
+	addMesh = (mesh, idx = -1) => {
 		if (mesh !== undefined) {
 			this.world.scene.add(mesh);
-			mesh.idx = this.world.meshes.length;
-			this.world.meshes.push(mesh);
+			if(idx<0 || idx>this.world.meshes.length){
+				mesh.idx = this.world.meshes.length;
+			}else{
+				mesh.idx = idx;
+			}
+
+			if(mesh.idx >= this.world.meshes.length){
+				this.world.meshes.push(mesh);
+				hist.addMesh(mesh);
+			}else{
+				var oldMesh = this.world.meshes[idx];
+				oldMesh.geometry.dispose()
+				oldMesh.material.dispose()
+				this.world.scene.remove(oldMesh)
+			}
 			control.attach(mesh);
 			selectedMesh = mesh;
-			hist.addMesh(mesh);
 			this.props.showMeshTrans(selectedMesh);
 		} else {
 			alert("invalid mesh data.");

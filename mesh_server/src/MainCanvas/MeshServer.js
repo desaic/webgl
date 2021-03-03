@@ -84,7 +84,7 @@ export default class MeshServer
 		const material = new THREE.MeshPhongMaterial( { color: 0x999999, specular: 0x101010 } );
 		const mesh = new THREE.Mesh( geometry, material );
         mesh.name  =meshId.toString();
-		this.ui.addMesh(mesh);
+		this.ui.addMesh(mesh, meshId);
 	}
 
 }
