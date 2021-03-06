@@ -29,6 +29,10 @@ public:
 		return meshes;
 	}
 
+	std::vector<TrigMesh>& GetMeshes(){
+		return meshes;
+	}
+
 private:
 
 	std::vector<TrigMesh> meshes;

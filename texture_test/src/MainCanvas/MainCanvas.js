@@ -6,6 +6,7 @@ import PickHelper from './PickHelper'
 import './MainCanvas.scss'
 import { MeshStateHistory } from '../utils/MeshStateHistory'
 import World from './World'
+import Emu from './Emu'
 
 const world = new World();
 const meshHistory = new MeshStateHistory();
@@ -17,6 +18,11 @@ let control;
 let orbit;
 let selectedMesh = null;
 let pickPosition = { x: 0, y: 0 };
+let exeData = null;
+const emu = new Emu();
+
+var simIntervalId =0;
+var animateIntervalId;
 
 webSocket.onopen = function() {
 	webSocket.send('websocket client\r\n');
@@ -59,7 +65,8 @@ export default class MainCanvas extends React.Component {
 		webSocket.onmessage = (message) => {
 			this.parseSocketMsg(message.data);
 		};
-		this.animate();
+		animateIntervalId = setInterval(this.animate, 16);
+		simIntervalId = setInterval(this.OneStep, 16);
 	}
 
 	shouldComponentUpdate() {
@@ -70,9 +77,9 @@ export default class MainCanvas extends React.Component {
 		const canvasElement = this.canvasRef.current
 		window.addEventListener('resize', this.updateCanvasRender, false)
 		canvasElement.addEventListener('click', this.selectObj)
-		canvasElement.addEventListener('mousemove', this.setPickPosition)
-		canvasElement.addEventListener('mouseout', this.clearPickPosition)
-		canvasElement.addEventListener('mouseleave', this.clearPickPosition)
+		//canvasElement.addEventListener('mousemove', this.setPickPosition)
+		//canvasElement.addEventListener('mouseout', this.clearPickPosition)
+		//canvasElement.addEventListener('mouseleave', this.clearPickPosition)
 
 		canvasElement.addEventListener('keydown', (event) => {
 			switch (event.key) {
@@ -172,7 +179,7 @@ export default class MainCanvas extends React.Component {
 			selectedMesh = sM
 			control.attach(selectedMesh)
 		}
-		this.updateCanvasRender()
+		//this.updateCanvasRender()
 	}
 
 	setMode = (mode) => {
@@ -245,8 +252,6 @@ export default class MainCanvas extends React.Component {
 	}
 
 	animate = ()  => {
-		setTimeout( this.animate 
-		, 1000 / 60 );
 		this.updateCanvasRender();
 	}
 
@@ -254,18 +259,8 @@ export default class MainCanvas extends React.Component {
 		const aspect = window.innerWidth / window.innerHeight;
 		world.camera.aspect = aspect;
 		world.camera.updateProjectionMatrix();
-		var time = Date.now()*0.01;
-		var sinTime = Math.sin ( time * 0.05 ) * 100;
-		var cosTime = Math.cos ( time * 0.05 ) * 100;
-		var canvas = world.canvas;
-		var context = canvas.getContext('2d');
-		context.fillStyle='green';
-		context.fillRect(0,0, canvas.width,canvas.height);
-		context.fillStyle='white';
-		context.fillRect ( (canvas.width/2) + sinTime, (canvas.height/2) + cosTime, 20, 20 )
-		world.screen.material.map.needsUpdate = true;
+
 		renderer.setSize(window.innerWidth, window.innerHeight);
-		this.props.onVarListChange([time, sinTime, cosTime]);
 		//PICK_HELPER.pick(pickPosition, SCENE, CURRENT_CAMERA,meshes)
 		renderer.render(world.scene, world.camera);
 		this.props.onSelectedMeshDataChange(selectedMesh);
@@ -323,11 +318,110 @@ export default class MainCanvas extends React.Component {
 		this.updateCanvasRender()
 	}
 
-	render() {
-		return (
-			<canvas id="mainCanvas" ref={this.canvasRef}></canvas>
-		)
+	OneStep = () =>{
+		emu.regs[3] ++;
+		this.props.onVarListChange([...emu.regs]);
 	}
 
-}
+	rgbToHex = (rgb) =>{
+		var hex = Number(rgb).toString(16);
+		if (hex.length < 2) {
+			 hex = "0" + hex;
+		}
+		return "#"+hex;
+	}
 
+	DrawPPU = (chrrom) =>{
+		var canvas = world.canvas;
+		var context = canvas.getContext('2d');
+		context.fillStyle='black';
+		context.fillRect(0,0, canvas.width,canvas.height);
+		//const rows = 480;
+		//const cols = 256;
+		const cols = 16;
+		const numTiles = 256;
+		var t;
+		var tileoffset = 0;
+		var byteOffset = 0;
+
+		var id = context.createImageData(4,4); // only do this once per page
+		var d  = id.data;
+
+		for(let p = 0; p<d.length; p+=4){
+			d[p+3]   = 255;
+		}
+		
+		for(t = tileoffset; t<numTiles; t++){
+			var tileRow = Math.floor( (t-tileoffset) /cols);
+			var tileCol = (t-tileoffset) % cols;
+			var pRow, pCol;
+			var byteStart = t * 16 + byteOffset;
+			for(pRow = 0; pRow<8; pRow++){
+				var b = byteStart + pRow ;
+				var byte1 = chrrom[b];
+				var byte2 = chrrom[b+8];
+				for(pCol = 0; pCol<8; pCol++){
+					var bit1 = (byte1>>(7-pCol)) & 1;
+					var bit2 = (byte2>>(7-pCol)) & 1;
+					var sum = bit1 + 2*bit2;
+					sum = 80*sum;
+					
+					for(let p = 0; p<d.length; p+=4){
+						d[p]   = sum;
+						d[p+1]   = sum;
+						d[p+2]   = sum/1.5;	
+					}
+					//context.fillStyle=hex;
+					//context.fillRect (40*tileCol + pCol*5, 40*tileRow+pRow*5, 5, 5 );
+					context.putImageData( id, 4*(9*tileCol + pCol), 4*(9*tileRow+pRow) );
+				}
+			}
+		}
+
+		world.screen.material.map.needsUpdate = true;
+	}
+
+	ReadBinFile = (data) =>{
+		exeData = data;
+		var s= emu.disas(exeData);
+		this.DrawPPU(data);
+		console.log(s);
+	}
+
+	OpenFile = (event) =>{
+		var files = event.target.files;
+		if(files.length==0){
+			return;
+		}
+		var fileData = new Blob([files[0]]);
+		var promise = new Promise(this.getBuffer(fileData));
+		promise.then(this.ReadBinFile).catch(function(err) {
+			console.log('Error: ',err);
+		  });
+	}
+
+	getBuffer = (fileData) =>{
+		return function(resolve) {
+		  var reader = new FileReader();
+		  reader.readAsArrayBuffer(fileData);
+		  reader.onload = function() {
+			var arrayBuffer = reader.result
+			var bytes = new Uint8Array(arrayBuffer);
+			resolve(bytes);
+		  }
+	  }
+	}
+
+	render() {
+		return (
+			<div id="fileDiv" className="">
+			<div id="fileDiv" className="FileInput">
+				<input type="file" id="Upload" name="fileUpload"
+				onChange={this.OpenFile}/>
+				</div>
+				<canvas id="mainCanvas" ref={this.canvasRef}></canvas>
+			</div>
+			
+		)
+	}
+}

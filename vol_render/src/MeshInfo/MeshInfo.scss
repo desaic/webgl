@@ -1,0 +1,73 @@
+#meshInfo {
+	position: absolute;
+	top: 10px;
+	left: 10px;
+	.meshInfoGrid{
+		display: grid;
+		grid-template-columns: 30px 100px 100px;
+		grid-template-rows: 30px 30px 30px 30px;
+		// background-color: #f00;
+
+		input {
+			width: 50px;
+		}
+		
+		.meshInfoPositionHeader {
+			grid-column: 2;
+			grid-row: 1;
+		}
+		
+		.meshInfoRotationHeader {
+			grid-column: 3;
+			grid-row: 1;
+		}
+		
+		.meshInfoXLabel {
+			grid-column: 1;
+			grid-row: 2;
+		}
+		
+		.meshInfoYLabel {
+			grid-column: 1;
+			grid-row: 3;
+		}
+		
+		.meshInfoZLabel {
+			grid-column: 1;
+			grid-row: 4;
+		}
+		
+		.meshInfoXPositionInput {
+			grid-column: 2;
+			grid-row: 2;
+		}
+		
+		.meshInfoYPositionInput {
+			grid-column: 2;
+			grid-row: 3;
+		}
+		
+		.meshInfoZPositionInput {
+			grid-column: 2;
+			grid-row: 4;
+		}
+		
+		.meshInfoXRotationInput {
+			grid-column: 3;
+			grid-row: 2;
+		}
+		
+		.meshInfoYRotationInput {
+			grid-column: 3;
+			grid-row: 3;
+		}
+		
+		.meshInfoZRotationInput {
+			grid-column: 3;
+			grid-row: 4;
+		}
+	}
+
+
+
+}

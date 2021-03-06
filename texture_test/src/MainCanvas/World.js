@@ -30,7 +30,7 @@ export default class World
 		this.canvas = document.createElement('canvas');
 		var context = this.canvas.getContext('2d');
 		this.canvas.width = 800;
-		this.canvas.height = 600;
+		this.canvas.height = 800;
 		context = this.canvas.getContext('2d');
 		context.fillStyle='green';
 		context.fillRect(0,0,this.canvas.width,this.canvas.height);

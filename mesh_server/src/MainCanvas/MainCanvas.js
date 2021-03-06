@@ -2,61 +2,53 @@ import React from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
+import MeshServer from './MeshServer'
 import PickHelper from './PickHelper'
 import './MainCanvas.scss'
 import { MeshStateHistory } from '../utils/MeshStateHistory'
 import World from './World'
-import VolRender from './VolRender'
 
-const world = new World();
+const meshServer = new MeshServer();
 const pickHelper = new PickHelper();
-const webSocket = new WebSocket('ws://localhost:9000/')
 const hist = new MeshStateHistory();
-let vol = null;
+
 let renderer;
 let control;
 let orbit;
 let selectedMesh = null;
 let pickPosition = { x: 0, y: 0 };
 
-webSocket.onopen = function() {
-	webSocket.send('websocket client\r\n');
-};
-
 export default class MainCanvas extends React.Component {
 	canvasRef = React.createRef()
 
 	componentDidMount() {
+		meshServer.ui = this;
+		this.world = new World();
 		renderer = new THREE.WebGLRenderer({
 			canvas: this.canvasRef.current,
 		});
 		renderer.setPixelRatio(window.devicePixelRatio)
 		renderer.setSize(window.innerWidth, window.innerHeight)
 		renderer.shadowMap.enabled = true
-		vol = new VolRender(renderer);
 		// Orbit controls
-		orbit = new OrbitControls(world.camera, renderer.domElement)
+		orbit = new OrbitControls(this.world.camera, renderer.domElement)
 		orbit.update()
 		orbit.addEventListener('change', this.render3D)
-		control = new TransformControls(world.camera, renderer.domElement)
+		control = new TransformControls(this.world.camera, renderer.domElement)
 		control.addEventListener('change', this.meshControlChanged)
 		control.addEventListener('dragging-changed', function (event) {
 			//event.value true when starting drag. false when existing a drag.
 			orbit.enabled = !event.value
 			//only record position at end of drag.
 			if(!event.value && selectedMesh) {
-				hist.addMeshState(selectedMesh)
+				hist.addMesh(selectedMesh)
 			}
 		});
 
-		world.scene.add(control)
+		this.world.scene.add(control)
 		
 		this.bindEventListeners()
 		this.render3D()
-		
-		webSocket.onmessage = (message) => {
-			this.parseSocketMsg(message.data);
-		};
 	}
 
 	shouldComponentUpdate() {
@@ -118,13 +110,11 @@ export default class MainCanvas extends React.Component {
 		renderer.setSize( window.innerWidth, window.innerHeight );
 
 		const aspect = window.innerWidth / window.innerHeight;
+		const frustumHeight = this.world.camera.top - this.world.camera.bottom;
+		this.world.camera.left = - frustumHeight * aspect / 2;
+		this.world.camera.right = frustumHeight * aspect / 2;
 
-		const frustumHeight = world.camera.top - world.camera.bottom;
-
-		world.camera.left = - frustumHeight * aspect / 2;
-		world.camera.right = frustumHeight * aspect / 2;
-
-		world.camera.updateProjectionMatrix();
+		this.world.camera.updateProjectionMatrix();
 		this.render3D();
 	}
 
@@ -133,49 +123,9 @@ export default class MainCanvas extends React.Component {
 		pickPosition.y = - (event.clientY / window.innerHeight) * 2 + 1
 	}
 
-	createMesh = (meshId, trigs)=>{
-		//make a debug mesh.
-		const geometry = new THREE.BufferGeometry();
-		geometry.setAttribute( 'position', new THREE.BufferAttribute( trigs, 3 ) );
-		//geometry.computeFaceNormals();
-		geometry.computeVertexNormals();
-		const material = new THREE.MeshPhongMaterial( { color: 0x999999, specular: 0x101010 } );
-		const mesh = new THREE.Mesh( geometry, material );
-		this.addMesh(meshId.toString(), mesh);
-	}
-
-	parseBlob = (blob) => {
-		new Response(blob).arrayBuffer()
-		.then(buf => {
-			//|msg type 2 bytes| meshid 2 bytes | numTrigs 4 bytes
-			//does not support more than 4 billion trigs.
-			const HEADER_BYTES = 8;
-			if(buf.length<HEADER_BYTES){
-				console.log("message too small");
-				return;
-			}
-			const header = new Uint16Array(buf,0,4);
-			const cmd = header[0];
-			const meshId = header[1];
-			///\TODO bad hack. not sure best way to do this.
-			const numTrigs = header[2] + 65536*header[3];
-			const fvals = new Float32Array(buf,HEADER_BYTES);
-			this.createMesh(meshId, fvals);
-		});
-	}
-
-	//parse mesh received from web socket
-	//and add to mesh list.
-	parseSocketMsg = (msg) =>{
-		if(msg instanceof Blob){
-			this.parseBlob(msg);
-		}else if(typeof msg === 'string'){
-			console.log(msg);
-		}
-	}
-
 	selectObj = () => {
-		const sM = pickHelper.pick(pickPosition, world.scene, world.camera, world.meshes);
+		const sM = pickHelper.pick(pickPosition, this.world.scene, 
+			this.world.camera, this.world.meshes);
 		if (sM) {
 			selectedMesh = sM
 			control.attach(selectedMesh)
@@ -193,10 +143,12 @@ export default class MainCanvas extends React.Component {
 			hist.removeMesh(selectedMesh)
 			selectedMesh.geometry.dispose()
 			selectedMesh.material.dispose()
-			world.scene.remove(selectedMesh)
-			const i = world.meshes.indexOf(selectedMesh)
-			if (i > -1) {
-				world.meshes.splice(i, 1)
+			this.world.scene.remove(selectedMesh)
+			const i = selectedMesh.idx
+			this.world.meshes.splice(i, 1)
+			var j = i;
+			for(; j<this.world.meshes.length; j++){
+				this.world.meshes[j].idx --;
 			}
 			selectedMesh = null
 			// Remove controls from scene
@@ -215,9 +167,6 @@ export default class MainCanvas extends React.Component {
 
 	duplicateMesh = () => {
 		const mesh = selectedMesh
-		// Clone geometry and material so that they have separate uuid's
-		// If you do selectedMesh.clone(), then orig. and new mesh geometry's
-		// have same uuid and raycaster will group them together.
 		let duplicate = new THREE.Mesh(mesh.geometry.clone(), mesh.material.clone())
 		//remember to disable emission
 		duplicate.material.emissive.setHex(0x0)
@@ -228,24 +177,35 @@ export default class MainCanvas extends React.Component {
 		duplicate.translateX(10)
 		duplicate.translateZ(10)
 	
-		// Get the duplicate's name
-		let name = ""
-		const i = world.meshes.indexOf(selectedMesh)
-		if (i > -1) {
-			name = world.meshes[i].name
-		}
-	
-		this.addMesh(name, duplicate)
+		const i = selectedMesh.idx
+		duplicate.name = this.world.meshes[i].name;		
+		this.addMesh(duplicate)
 	}
 
-	addMesh = (name, mesh) => {
+	addMesh = (mesh, idx = -1) => {
 		if (mesh !== undefined) {
-			world.scene.add(mesh);
-			mesh.name = name;
-			world.meshes.push(mesh);
+			if(idx<0 || idx>this.world.meshes.length){
+				mesh.idx = this.world.meshes.length;
+			}else{
+				mesh.idx = idx;
+			}
+
+			if(mesh.idx >= this.world.meshes.length){
+				this.world.meshes.push(mesh);
+				hist.addMesh(mesh);
+			}else{
+				var oldMesh = this.world.meshes[idx];
+				oldMesh.geometry.dispose()
+				oldMesh.material.dispose()
+				this.world.scene.remove(oldMesh)
+				mesh.position.copy(oldMesh.position);
+				mesh.rotation.copy(oldMesh.rotation);
+				this.world.meshes[idx] = mesh;
+
+			}
+			this.world.scene.add(mesh);
 			control.attach(mesh);
 			selectedMesh = mesh;
-			hist.addMeshState(mesh);
 			this.props.showMeshTrans(selectedMesh);
 		} else {
 			alert("invalid mesh data.");
@@ -254,18 +214,12 @@ export default class MainCanvas extends React.Component {
 		this.render3D();
 	}
 
-	loadVol = (arrBuf) => {
-		const mesh = vol.parseRaw(arrBuf);
-		this.addMesh("vol", mesh);
-		this.render3D();
-	}
-
 	render3D = () => {
 		const aspect = window.innerWidth / window.innerHeight;
-		world.camera.aspect = aspect;
-		world.camera.updateProjectionMatrix();
+		this.world.camera.aspect = aspect;
+		this.world.camera.updateProjectionMatrix();
 		renderer.setSize(window.innerWidth, window.innerHeight);
-		renderer.render(world.scene, world.camera);
+		renderer.render(this.world.scene, this.world.camera);
 	}
 
 	onTransChange = (val, axis) => {
@@ -293,7 +247,7 @@ export default class MainCanvas extends React.Component {
 			m.rotation.z = val;
 			break;
 		}
-		hist.addMeshState(selectedMesh)
+		hist.addMesh(selectedMesh)
 		this.render3D();
 		//this.props.showMeshTrans(selectedMesh);
 	}
@@ -307,7 +261,7 @@ export default class MainCanvas extends React.Component {
 		if(!h) {
 			return
 		}
-		hist.applyMeshState(selectedMesh, h.state)
+		hist.apply(selectedMesh, h)
 		this.render3D();
 	}
 

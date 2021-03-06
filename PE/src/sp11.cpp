@@ -13,8 +13,8 @@ size_t countFactor(size_t n, unsigned f) {
   return count;
 }
 
-//int sp11() {
-int main() {
+int sp11() {
+//int main() {
   int numCases;
   std::cin >> numCases;
   for (int c = 0; c < numCases; c++) {

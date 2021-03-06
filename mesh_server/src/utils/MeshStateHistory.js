@@ -1,23 +1,22 @@
 export class MeshStateHistory {
 	constructor(){
-		///maps from mesh id to list of states.
-		this.hist = new Map();
+		///a list of mesh history states for each mesh 
+		this.hist = [];
 	}
-	///\param meshId string of uuid of mesh
-	///can also be changed to use a simple int id.
+
 	removeMesh = (mesh) => {
-		this.hist.delete(mesh.uuid);
+		this.hist.splice(mesh.idx, 1)
 	}
 
 	pop = (mesh) => {
-		var list = this.hist.get(mesh.uuid);
+		var list = this.hist[mesh.idx];
 		if(list.length>1){
 			list.pop()
 		}		
 	}
 
 	top = (mesh)=>{
-		var list = this.hist.get(mesh.uuid);
+		var list = this.hist[mesh.idx];
 		if(list.length>0){
 			return list[list.length-1];
 		}else{
@@ -25,27 +24,24 @@ export class MeshStateHistory {
 		}
 	}
 
-	addMeshState = (mesh) => {
-		const meshState = {
-			id: mesh.uuid,
-			state: this.extractMeshState(mesh),
-		}
-		var list = this.hist.get(mesh.uuid);
-		if(list){
-			list.push(meshState);
+	addMesh = (mesh) => {
+		const meshState = this.extractState(mesh)
+		const idx = mesh.idx;
+		if(this.hist.length>idx){
+			this.hist[idx].push(meshState);
 		}else{
-			this.hist.set(mesh.uuid, [meshState]);
-		}		
+			this.hist.push([meshState]);
+		}
 	}
 
-	applyMeshState = (mesh, st) => {
+	apply = (mesh, st) => {
 		if(mesh){
 			mesh.position.set(st.pos[0], st.pos[1], st.pos[2]);
 			mesh.rotation.set(st.rot[0], st.rot[1], st.rot[2]);
 		}
 	}
 
-	extractMeshState = (mesh) => {
+	extractState = (mesh) => {
 		if(mesh) {
 			return ({
 				pos: [mesh.position.x, mesh.position.y,mesh.position.z],
