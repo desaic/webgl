@@ -1,17 +1,15 @@
 #pragma once
 #include "TrigMesh.h"
-#include "Eigen/Dense"
-
-typedef Eigen::Vector3f Vec3;
+#include "Vec3.h"
 
 struct Instance {
 	int meshId;
 	///position
-	Vec3 x;
+	Vec3f x;
 	///rotation in zyx euler angles
-	Vec3 r;
+	Vec3f r;
 	Instance();
-	Instance(int id, const Vec3 & pos, const Vec3 & rot);
+	Instance(int id, const Vec3f & pos, const Vec3f & rot);
 };
 
 class Scene{
@@ -23,7 +21,7 @@ public:
 	int AddMesh(const TrigMesh & m);
 
 	///\return instance index. -1 on error.
-	int AddInstance(int meshId, Vec3& position, Vec3& rotation);
+	int AddInstance(int meshId, Vec3f& position, Vec3f& rotation);
 
 	const std::vector<TrigMesh>& GetMeshes()const {
 		return meshes;

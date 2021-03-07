@@ -1,6 +1,6 @@
 #include "TrayClient.h"
 #include "ConfigFile.hpp"
-
+#include "GridTree.h"
 #include <iostream>
 #include <thread>
 #include <WinSock2.h>
@@ -36,15 +36,15 @@ void TestMesh(TrayClient* client)
   if (meshes.size() == 0) {
     return;
   }
-  std::vector<float> verts = meshes[0].verts;
+  std::vector<float> verts = meshes[0].v;
   for (int i = 0; i < iter; i++) {
-    for (size_t j = 0; j < meshes[0].verts.size(); j++) {
-      meshes[0].verts[j] = verts[j] * (1 + i / float(iter));
+    for (size_t j = 0; j < meshes[0].v.size(); j++) {
+      meshes[0].v[j] = verts[j] * (1 + i / float(iter));
     }
     client->SendMeshes();
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
-  meshes[0].verts = verts;
+  meshes[0].v = verts;
 }
 
 void CommandLoop(TrayClient * client) {
@@ -74,8 +74,8 @@ void LoadTestScene(TrayClient & client)
   int status = mesh.LoadStl(meshFile);
 
   int meshId = scene.AddMesh(mesh);
-  Vec3 rot(0, 0, 0);
-  Vec3 initPos(0, 0, 10);
+  Vec3f rot(0, 0, 0);
+  Vec3f initPos(0, 0, 10);
   int instanceId = scene.AddInstance(meshId, initPos, rot);
 }
 

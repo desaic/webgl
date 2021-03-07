@@ -9,10 +9,14 @@ public:
   TrigMesh() = default;
   using TValue = float;
   using TIndex = unsigned;
-  std::vector<TValue> verts, normals;
-  std::vector<TIndex> trigs;
+  std::vector<TValue> v, n;
+  std::vector<TIndex> t;
 
-  size_t GetNumTrigs() const { return trigs.size() / 3; }
-  size_t GetNumVerts() const { return verts.size() / 3; }
+  size_t GetNumTrigs() const { return t.size() / 3; }
+  size_t GetNumVerts() const { return v.size() / 3; }
   int LoadStl(const std::string& filename);
+
+  void scale(float s);
+  void translate(float dx, float dy, float dz);
+  void append(const TrigMesh& m);
 };
