@@ -153,7 +153,6 @@ void TrayClient::RunTCPThread()
 
 void TrayClient::Stop()
 {
-  client.Close();
   running = false;
   if (simThread.joinable()) {
     simThread.join();
@@ -161,6 +160,7 @@ void TrayClient::Stop()
   if (tcpThread.joinable()) {
     tcpThread.join();
   }
+  client.Close();
 }
 
 void TrayClient::SetHost(const std::string& hostname, int port)

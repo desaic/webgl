@@ -10,6 +10,7 @@ void TreePointer::Init(GridTreeAbs* t)
   indices.clear();
   nodes.clear();
   nodes.push_back(t->GetRoot());
+  indices.push_back(Vec3u(0,0,0));
   tree = t;
 }
 
@@ -42,6 +43,22 @@ bool TreePointer::PointTo(unsigned l, unsigned x, unsigned y, unsigned z)
   }
 
   return true;
+}
+
+bool TreePointer::PointToLeaf(unsigned x, unsigned y, unsigned z)
+{
+  unsigned level = tree->GetNumLevels() - 1;
+  bool exists = PointTo(level, x, y, z);
+  return exists;
+}
+
+void TreePointer::CreateLeaf(unsigned x, unsigned y, unsigned z)
+{
+  unsigned level = tree->GetNumLevels() - 1;
+  bool exists = PointTo(level, x, y, z);
+  if (!exists) {
+    CreatePath();
+  }
 }
 
 bool TreePointer::HasValue()const

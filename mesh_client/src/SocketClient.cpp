@@ -124,7 +124,7 @@ int SocketClient::Connect(long timeout_ms) {
   }
 
   if (! (ret == 0 || err == WSAEWOULDBLOCK)) {
-    LogLastError("unable to connect: ", LOG_DEBUG);
+    //LogLastError("unable to connect: ", LOG_DEBUG);
     closesocket(_socket);
     _socket = INVALID_SOCKET;
     return SOCKET_ERROR;
@@ -133,7 +133,7 @@ int SocketClient::Connect(long timeout_ms) {
   bool connected = WaitWriteable(timeout_ms);
 
   if (!connected) {
-    Log("unable to connect: timeout", LOG_ERROR);
+    //Log("unable to connect: timeout", LOG_ERROR);
     closesocket(_socket);
     _socket = INVALID_SOCKET;
     return SOCKET_ERROR;

@@ -1,6 +1,7 @@
 #include "TrayClient.h"
 #include "ConfigFile.hpp"
-#include "GridTree.h"
+#include "tests.h"
+
 #include <iostream>
 #include <thread>
 #include <WinSock2.h>
@@ -13,38 +14,8 @@ int initWSA() {
     std::cout << "WSAStartup failed: " << iResult << "\n";
     return 1;
   }
-  std::cout << "WSAStartup done " << iResult << "\n";;
+  std::cout << "WSAStartup done " << iResult << "\n";
   return 0;
-}
-
-void TestNumMeshes(TrayClient* client)
-{
-  int numMeshes = client -> GetNumMeshes();
-  std::cout << "num meshes " << numMeshes << "\n";
-}
-
-void TestMesh(TrayClient* client)
-{
-  int numMeshes = client->GetNumMeshes();
-  std::cout << "num meshes " << numMeshes << "\n";
-  if (numMeshes == 0) {
-    return;
-  }
-  const int iter = 100;
-  Scene& scene = client->GetScene();
-  std::vector<TrigMesh>& meshes = scene.GetMeshes();
-  if (meshes.size() == 0) {
-    return;
-  }
-  std::vector<float> verts = meshes[0].v;
-  for (int i = 0; i < iter; i++) {
-    for (size_t j = 0; j < meshes[0].v.size(); j++) {
-      meshes[0].v[j] = verts[j] * (1 + i / float(iter));
-    }
-    client->SendMeshes();
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  }
-  meshes[0].v = verts;
 }
 
 void CommandLoop(TrayClient * client) {
@@ -56,7 +27,10 @@ void CommandLoop(TrayClient * client) {
       break;
     }
     else if (line == "test") {
-      TestMesh(client);
+      TestCPT(client);
+    }
+    else if (line == "testpng") {
+      TestPng();
     }
     if (line.size() < 2) {
       continue;
@@ -70,7 +44,7 @@ void LoadTestScene(TrayClient & client)
   
   TrigMesh mesh;
   ///\todo change to config instead of hardcoded.
-  std::string meshFile = "F:/homework/threejs/meshes/Eiffel.stl";
+  std::string meshFile = "F:/dolphin/meshes/1Trig.stl";
   int status = mesh.LoadStl(meshFile);
 
   int meshId = scene.AddMesh(mesh);

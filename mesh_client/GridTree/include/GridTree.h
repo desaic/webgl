@@ -117,11 +117,22 @@ public:
   std::vector<GridNode *> nodes;
   GridTreeAbs* tree;
 
+  TreePointer(GridTreeAbs* t) {
+    Init(t);
+  }
+
   void Init(GridTreeAbs* t);
   ///point pointer to node at level containing voxel (x,y,z).
   ///root is level 0
   ///\return false if the value or node does not exist 
   bool PointTo(unsigned level, unsigned x, unsigned y, unsigned z);
+
+  /// PointTo(numLevels - 1)
+  bool PointToLeaf(unsigned x, unsigned y, unsigned z);
+
+  /// creates path if non existent
+  void CreateLeaf(unsigned x, unsigned y, unsigned z);
+
   bool HasValue()const;
   ///move to a voxel within the same node.
   ///assuming pointer is pointing at a valid path.
@@ -133,6 +144,7 @@ public:
   bool Decrement(unsigned axis);
   ///Creates nodes from root to pointer if the node doesn't exist
   void CreatePath();
+
 };
 
 template<typename ValueT>
