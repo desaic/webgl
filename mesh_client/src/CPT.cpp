@@ -6,26 +6,48 @@
 #include <algorithm>
 #include <functional>
 #include <numeric>
-void Voxelize(int tidx, SDFMesh* sdf);
-bool trigCubeIntersect(const std::vector<float>& verts, Vec3i& cube,
+
+#define MAX_GRID_SIZE 1000000
+
+///voxelize 1 triangle.
+void Voxelize(size_t tidx, SDFMesh* sdf);
+
+bool trigCubeIntersect(float * verts, Vec3i& cube,
   const Vec3f& voxSize);
+
 void bbox(const std::vector<float>& verts, BBoxInt& box,
   const Vec3f& voxelSize);
 
-void cpt(SDFMesh& sdf)
+int cpt(SDFMesh& sdf)
 {
-  Vec3u gridSize = sdf.sdf.GetSize();
-  sdf.idxGrid.Allocate(gridSize[0], gridSize[1], gridSize[2]);
-  sdf.gridOrigin = -0.5f * sdf.voxelSize;
+  BBox box;
+  ComputeBBox(sdf.mesh->v, box);
+  sdf.box = box;
+
+  Vec3u gridSize;
+  float h = sdf.voxelSize;
+  float margin = h * (0.5+sdf.band);
+
+  for (unsigned i = 0; i < 3; i++) {
+    gridSize[i] = (box.mx[i] - box.mn[i] + 2*margin) / h;
+    sdf.gridOrigin[i] = box.mn[i] - margin;
+    if (gridSize[i] > MAX_GRID_SIZE) {
+      std::cout << "grid size is too large. check config." << gridSize[i] << "\n";
+      return -1;
+    }
+  }
+  sdf.sdf.Allocate(gridSize[0], gridSize[1], gridSize[2]);
+  sdf.idxGrid.Allocate(gridSize[0], gridSize[1], gridSize[2]); 
 
   size_t numTrigs = sdf.mesh->t.size()/3;
   std::vector<size_t> tidx(numTrigs);
   std::iota(tidx.begin(), tidx.end(), 0);
-  std::function<void(int)> voxFun = std::bind(&Voxelize, std::placeholders::_1, &sdf);
+  std::function<void(size_t)> voxFun = std::bind(&Voxelize, std::placeholders::_1, &sdf);
   std::for_each(tidx.begin(), tidx.end(), voxFun);
+  return 0;
 }
 
-void Voxelize(int tidx, SDFMesh * sdf)
+void Voxelize(size_t tidx, SDFMesh * sdf)
 {
   BBoxInt box;
   std::vector<float> trig(9);
@@ -33,7 +55,7 @@ void Voxelize(int tidx, SDFMesh * sdf)
   for (unsigned vi = 0; vi < 3; vi++) {
     unsigned vIdx = sdf->mesh->t[3 * tidx + vi];
     for (unsigned d = 0; d < dim; d++) {
-      trig[3 * vi + d] = sdf->mesh->v[3 * vIdx + d];
+      trig[3 * vi + d] = sdf->mesh->v[3 * vIdx + d] - sdf->gridOrigin[d];
     }
   }
   
@@ -44,7 +66,7 @@ void Voxelize(int tidx, SDFMesh * sdf)
     for (int iy = box.mn[1]; iy <= (box.mx[1]); iy++) {
       for (int iz = box.mn[2]; iz <= (box.mx[2]); iz++) {
         Vec3i gi(ix, iy, iz);
-        if (trigCubeIntersect(trig, gi, sdf->voxelSize)) {
+        if (trigCubeIntersect(trig.data(), gi, sdf->voxelSize)) {
           bool exists = ptr.PointToLeaf(ix, iy, iz);
           if (!exists) {
             ptr.CreateLeaf(ix, iy, iz);
@@ -64,7 +86,7 @@ void Voxelize(int tidx, SDFMesh * sdf)
   }
 }
 
-bool trigCubeIntersect(const std::vector<float> & verts, Vec3i& cube,
+bool trigCubeIntersect(float * verts, Vec3i& cube,
   const Vec3f & voxSize)
 {
   float boxcenter[3] = { (float)((0.5 + cube[0]) * voxSize[0]),
@@ -73,13 +95,7 @@ bool trigCubeIntersect(const std::vector<float> & verts, Vec3i& cube,
   float boxhalfsize[3] = { (float)voxSize[0] / (1.99f),
                       (float)voxSize[1] / (1.99f),
                       (float)voxSize[2] / (1.99f) };
-  float triverts[3][3];
-  for (int ii = 0; ii < 3; ii++) {
-    for (int jj = 0; jj < 3; jj++) {
-      triverts[ii][jj] = verts[3*ii+jj];
-    }
-  }
-  return triBoxOverlap(boxcenter, boxhalfsize, triverts);
+  return triBoxOverlap(boxcenter, boxhalfsize, verts);
 }
 
 void vec2grid(const float* v, Vec3i & gridIdx,

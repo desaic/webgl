@@ -99,19 +99,11 @@ void TestCPT(TrayClient* client)
   }
   sdf.mesh = &meshes[0];
   //mm
-  const float voxelSize = 0.05;
-  BBox box;
-  ComputeBBox(sdf.mesh->v, box);
-  Vec3u gridSize;
-  for (unsigned i = 0; i < 3; i++) {
-    gridSize[i] = box.mx[i] / voxelSize + 2;
-  }
-  sdf.sdf.Allocate(gridSize[0], gridSize[1], gridSize[2]);
-  sdf.box = box;
-  sdf.voxelSize = Vec3f(voxelSize);
+  const float voxelSize = 0.1;
+  sdf.voxelSize = voxelSize;
   cpt(sdf);
 
-  gridSize = sdf.idxGrid.GetSize();
+  Vec3u gridSize = sdf.idxGrid.GetSize();
   for (int z = 0; z < 20; z++) {
 
     Array2D8u img(gridSize[0], gridSize[1]);

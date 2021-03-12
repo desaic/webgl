@@ -23,7 +23,7 @@
 /* Thanks to David Hunt for finding a ">="-bug!         */
 
 /********************************************************/
-
+#include "trigAABBIntersect.hpp"
 #include <math.h>
 
 #include <stdio.h>
@@ -50,9 +50,9 @@
 
 
 #define SUB(dest,v1,v2) \
-          dest[0]=v1[0]-v2[0]; \
-          dest[1]=v1[1]-v2[1]; \
-          dest[2]=v1[2]-v2[2];
+          dest[0]=(v1)[0]-(v2)[0]; \
+          dest[1]=(v1)[1]-(v2)[1]; \
+          dest[2]=(v1)[2]-(v2)[2];
 
 
 
@@ -177,8 +177,7 @@ int planeBoxOverlap(float normal[3], float vert[3], float maxbox[3])	// -NJMP-
 
 
 
-int triBoxOverlap(float boxcenter[3],float boxhalfsize[3],float triverts[3][3])
-
+int triBoxOverlap(float boxcenter[3],float boxhalfsize[3],float triverts[9])
 {
   /*    use separating axis theorem to test overlap between triangle and box */
   /*    need to test for overlap in these directions: */
@@ -201,9 +200,9 @@ int triBoxOverlap(float boxcenter[3],float boxhalfsize[3],float triverts[3][3])
    /* This is the fastest branch on Sun */
    /* move everything so that the boxcenter is in (0,0,0) */
 
-   SUB(v0,triverts[0],boxcenter);
-   SUB(v1,triverts[1],boxcenter);
-   SUB(v2,triverts[2],boxcenter);
+   SUB(v0, triverts,boxcenter);
+   SUB(v1, triverts+3,boxcenter);
+   SUB(v2, triverts+6,boxcenter);
 
 
 

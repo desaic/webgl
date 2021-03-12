@@ -11,6 +11,7 @@ class TrigMesh;
 //signed distance function computed from a trig mesh.
 struct SDFMesh
 {
+  SDFMesh() :band(3) {}
   BBox box;
   TrigMesh* mesh;
 
@@ -21,10 +22,17 @@ struct SDFMesh
 
   //index into trig list
   GridTree<size_t> idxGrid;
+  
   //list of triangles within each non-empty voxel.
   std::vector < std::vector<size_t> >trigList;
-  //origin at -half voxel size.
-  Vec3f gridOrigin;
 
-  Vec3f voxelSize;
+  //voxel size h
+  //origin at box.min - 0.5h - band.
+  Vec3f gridOrigin;
+  
+  ///h. only supports uniform voxel size.
+  float voxelSize;
+  
+  ///multiples of h
+  float band;
 };
