@@ -33,4 +33,16 @@ typedef Vec2<double> Vec2d;
 typedef Vec2<unsigned> Vec2u;
 typedef Vec2<unsigned long long> Vec2ul;
 
+///scalar multiplication
+template <typename T>
+inline Vec2<T> operator* (T s, const Vec2<T>& v) {
+  return Vec2<T>(v[0] * s, v[1] * s);
+}
+
+template <typename T>
+Vec2<T> operator+ (const Vec2<T>& v0, const Vec2<T>& v1)
+{
+  return Vec2<T>(v0[0] + v1[0], v0[1] + v1[1]);
+}
+
 #endif

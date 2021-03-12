@@ -24,7 +24,7 @@ struct SDFMesh
   GridTree<size_t> idxGrid;
   
   //list of triangles within each non-empty voxel.
-  std::vector < std::vector<size_t> >trigList;
+  std::vector < std::vector<size_t> > trigList;
 
   //voxel size h
   //origin at box.min - 0.5h - band.

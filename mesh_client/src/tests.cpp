@@ -107,7 +107,7 @@ void TestCPT(TrayClient* client)
   for (int z = 0; z < 20; z++) {
 
     Array2D8u img(gridSize[0], gridSize[1]);
-    TreePointer ptr(&sdf.idxGrid);
+    TreePointer ptr(&sdf.sdf);
     for (size_t x = 0; x < gridSize[0]; x++) {
       for (size_t y = 0; y < gridSize[1]; y++) {
         ptr.PointToLeaf(x, y, z);
@@ -115,7 +115,9 @@ void TestCPT(TrayClient* client)
         if (!exists) {
           continue;
         }
-        img(x, y) = 255;
+        float val;
+        GetVoxelValue(ptr, val);
+        img(x, y) = val * 100;
       }
     }
     std::string outFile = "test" + std::to_string(z) + ".png";

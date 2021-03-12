@@ -33,7 +33,14 @@ public:
 	v[ 2 ] += v1[ 2 ];
 	return *this;
   }
-  
+
+  Vec3<T>& operator-= (const Vec3<T>& v1) {
+    v[0] -= v1[0];
+    v[1] -= v1[1];
+    v[2] -= v1[2];
+    return *this;
+  }
+
   Vec3<T> cross(const Vec3<T> & b){
 	  Vec3<T> c(v[1] * b[2] - v[2] * b[1],
 	           -v[0] * b[2] + v[2] * b[0],
@@ -87,6 +94,12 @@ Vec3<T> operator- (const Vec3<T>& v0, const Vec3<T>& v1)
 template <typename T>
 inline Vec3<T> operator* (T s, const Vec3<T>& v) {
 	return Vec3<T>(v[0] * s, v[1] * s, v[2] * s);
+}
+
+template <typename T>
+T Dot(const Vec3<T>& v0, const Vec3<T>& v1)
+{
+	return v0[0] * v1[0] + v0[1] * v1[1] + v0[2] * v1[2];
 }
 
 typedef Vec3<float> Vec3f;

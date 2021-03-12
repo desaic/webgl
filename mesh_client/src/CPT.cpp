@@ -2,6 +2,7 @@
 #include "TrigMesh.h"
 #include "CPT.h"
 #include "trigAABBIntersect.hpp"
+#include "PointTrigDist.h"
 
 #include <algorithm>
 #include <functional>
@@ -12,8 +13,10 @@
 ///voxelize 1 triangle.
 void Voxelize(size_t tidx, SDFMesh* sdf);
 
-bool trigCubeIntersect(float * verts, Vec3i& cube,
-  const Vec3f& voxSize);
+///voxel center and triangle distance
+void ExactDistance(SDFMesh* sdf);
+
+bool trigCubeIntersect(float * verts, Vec3i& cube, float voxSize);
 
 void bbox(const std::vector<float>& verts, BBoxInt& box,
   const Vec3f& voxelSize);
@@ -44,24 +47,86 @@ int cpt(SDFMesh& sdf)
   std::iota(tidx.begin(), tidx.end(), 0);
   std::function<void(size_t)> voxFun = std::bind(&Voxelize, std::placeholders::_1, &sdf);
   std::for_each(tidx.begin(), tidx.end(), voxFun);
+
+  ExactDistance(&sdf);
+
   return 0;
 }
 
-void Voxelize(size_t tidx, SDFMesh * sdf)
+void GetTrig(std::vector<float> & trig, size_t tidx, const TrigMesh * mesh,
+  const Vec3f & origin)
 {
-  BBoxInt box;
-  std::vector<float> trig(9);
   const unsigned dim = 3;
+  trig.resize(9);
   for (unsigned vi = 0; vi < 3; vi++) {
-    unsigned vIdx = sdf->mesh->t[3 * tidx + vi];
+    unsigned vIdx = mesh->t[3 * tidx + vi];
     for (unsigned d = 0; d < dim; d++) {
-      trig[3 * vi + d] = sdf->mesh->v[3 * vIdx + d] - sdf->gridOrigin[d];
+      trig[3 * vi + d] = mesh->v[3 * vIdx + d] - origin[d];
     }
   }
-  
-  bbox(trig, box, sdf->voxelSize);
-  TreePointer ptr(&sdf->idxGrid);
+}
+void ExactDistance(SDFMesh* sdf) 
+{
+  ///\TODO use iterator instead of going through all voxels.
+  Vec3u gridSize = sdf->idxGrid.GetSize();
+  TreePointer ptr(& (sdf->idxGrid));
+  TreePointer distPtr(&(sdf->sdf));
+  const int ZAxis = 2;
+  float h = sdf->voxelSize;
+  for (size_t x = 0; x < gridSize[0]; x++) {
+    std::cout << x << " " << gridSize[0] << "\n";
+    for (size_t y = 0; y < gridSize[1]; y++) {
+      ptr.PointToLeaf(x, y, 0);
+      for (size_t z = 0; z < gridSize[2]; z++) {
+        bool exists = ptr.HasValue();
+        if (!exists) {
+          ptr.Increment(ZAxis);
+          continue;
+        }
+        size_t listIdx = 0;
+        GetVoxelValue(ptr, listIdx);
+        const std::vector<size_t> &trigs = sdf->trigList[listIdx];
+        Vec3f center = sdf->gridOrigin + h * Vec3f(x+0.5f, y+0.5f, z+0.5f);
+        std::vector<float> trig;
+        float minD = 0;
+        for (size_t t = 0; t < trigs.size(); t++) {
+          size_t tidx = trigs[t];
+          GetTrig(trig, tidx, sdf->mesh, Vec3f(0, 0, 0));
+          float dist = PointTrigDist(center, trig.data());
+          if (t == 0 || dist < minD) {
+            minD = dist;
+          }
+        }
+        //convert distance to grid with unit length
+        minD /= h;
+        distPtr.PointToLeaf(x, y, z);
+        distPtr.CreatePath();
+        AddVoxelValue(distPtr, minD);
+        ptr.Increment(ZAxis);
+      }
+    }
+  }
+}
 
+void Voxelize(size_t tidx, SDFMesh* sdf)
+{
+  BBoxInt box;
+  std::vector<float> trig;
+  GetTrig(trig, tidx, sdf->mesh, sdf->gridOrigin);
+  const unsigned dim = 3;
+  bbox(trig, box, sdf->voxelSize);
+  const Vec3u& gridSize = sdf->idxGrid.GetSize();
+  for (unsigned d = 0; d < dim; d++) {
+    if (box.mn[d] > 0) {
+      box.mn[d] -= 1;
+    }
+    if (box.mx[d] < int(gridSize[d]) - 1) {
+      box.mx[d] += 1;
+    }
+  } 
+
+  TreePointer ptr(&sdf->idxGrid);
+  TreePointer sdfPtr(&(sdf->sdf));
   for (int ix = box.mn[0]; ix <= (box.mx[0]); ix++) {
     for (int iy = box.mn[1]; iy <= (box.mx[1]); iy++) {
       for (int iz = box.mn[2]; iz <= (box.mx[2]); iz++) {
@@ -75,8 +140,8 @@ void Voxelize(size_t tidx, SDFMesh * sdf)
           if (ptr.HasValue()) {
             GetVoxelValue(ptr, listIdx);
           } else {
-            AddVoxelValue(ptr, listIdx);
             listIdx = sdf->trigList.size();
+            AddVoxelValue(ptr, listIdx);
             sdf->trigList.push_back(std::vector<size_t>());
           }
           sdf->trigList[listIdx].push_back(tidx);
@@ -86,15 +151,15 @@ void Voxelize(size_t tidx, SDFMesh * sdf)
   }
 }
 
-bool trigCubeIntersect(float * verts, Vec3i& cube,
-  const Vec3f & voxSize)
+bool trigCubeIntersect(float * verts, Vec3i& cube, float voxSize)
 {
-  float boxcenter[3] = { (float)((0.5 + cube[0]) * voxSize[0]),
-                      (float)((0.5 + cube[1]) * voxSize[1]),
-                      (float)((0.5 + cube[2]) * voxSize[2]) };
-  float boxhalfsize[3] = { (float)voxSize[0] / (1.99f),
-                      (float)voxSize[1] / (1.99f),
-                      (float)voxSize[2] / (1.99f) };
+  float boxcenter[3] = { (float)((0.5f + cube[0]) * voxSize),
+                      (float)((0.5f + cube[1]) * voxSize),
+                      (float)((0.5f + cube[2]) * voxSize) };
+  ///make cube half size 1.5 to catch triangles within 1 neighbor.
+  ///TODO not very efficient.
+  float halfSize = voxSize * 1.5f;
+  float boxhalfsize[3] = { halfSize, halfSize, halfSize };
   return triBoxOverlap(boxcenter, boxhalfsize, verts);
 }
 
