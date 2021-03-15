@@ -99,14 +99,15 @@ void TestCPT(TrayClient* client)
   }
   sdf.mesh = &meshes[0];
   //mm
-  const float voxelSize = 0.1;
+  const float voxelSize = 1;
   sdf.voxelSize = voxelSize;
   cpt(sdf);
-
+  FastMarch(sdf);
   Vec3u gridSize = sdf.idxGrid.GetSize();
   for (int z = 0; z < 20; z++) {
 
     Array2D8u img(gridSize[0], gridSize[1]);
+    img.Fill(255);
     TreePointer ptr(&sdf.sdf);
     for (size_t x = 0; x < gridSize[0]; x++) {
       for (size_t y = 0; y < gridSize[1]; y++) {
@@ -117,7 +118,7 @@ void TestCPT(TrayClient* client)
         }
         float val;
         GetVoxelValue(ptr, val);
-        img(x, y) = val * 100;
+        img(x, y) = val * 50;
       }
     }
     std::string outFile = "test" + std::to_string(z) + ".png";

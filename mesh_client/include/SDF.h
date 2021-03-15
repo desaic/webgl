@@ -36,3 +36,6 @@ struct SDFMesh
   ///multiples of h
   float band;
 };
+
+///computes unsigned distance field using fast marching algo.
+void FastMarch(SDFMesh& sdf);
