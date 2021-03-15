@@ -102,7 +102,7 @@ float SolveQuadratic(int x, int y, int z,
   FMStructs *fm)
 {
   //read min distance in x y z directions if they exist
-  float dist[3];
+  float dist[3] = { 0,0,0 };
   //which direction is the min distance cell
   int h[3] = { 0,0,0 };
   SolveQuadAxis(x, y, z, 0, fm, dist, h);
@@ -121,7 +121,7 @@ float SolveQuadratic(int x, int y, int z,
   float psi = INF_DIST;
   float Delta = b * b - 4 * a * c;
   if (Delta >= 0) {
-    float psi_t = (Delta - b) / (2 * a);
+    float psi_t = (std::sqrt(Delta) - b) / (2 * a);
     if (dist[0] < psi_t && dist[1] < psi_t && dist[2] < psi_t) {
       psi = psi_t;
     }
@@ -138,7 +138,7 @@ void UpdateNeighbor(int x, int y, int z, FMStructs* fm)
   }
   TreePointer ptr(&fm->label);
   ptr.PointToLeaf(x, y, z);
-  uint8_t lab = uint8_t(SDFLabel::KNOWN);
+  uint8_t lab = uint8_t(SDFLabel::FAR);
   if (ptr.HasValue()) {
     GetVoxelValue(ptr, lab);
   }
@@ -158,7 +158,7 @@ void UpdateNeighbor(int x, int y, int z, FMStructs* fm)
     return;
   }
   lab = uint8_t(SDFLabel::BAND);
-  SetVoxelValue(ptr, lab);
+  AddVoxelValue(ptr, lab);
   AddVoxelValue(distPtr, distTemp);
   VoxDist voxDist({ { uint32_t(x),uint32_t(y), uint32_t(z) } }, distTemp);
   //pq can contain duplicates because don't
@@ -193,9 +193,26 @@ void InitMarch(FMStructs * fm)
           labPtr.CreateLeaf(x, y, z);
           uint8_t lab = (uint8_t)SDFLabel::KNOWN;
           AddVoxelValue(labPtr, lab);
-          UpdateNeighbors(x, y, z, fm);
         }
         sdfPtr.Increment(zAxis);
+      }
+    }
+  }
+}
+
+void InitPQ(FMStructs* fm) 
+{
+  TreePointer labPtr(&fm->label);
+  Vec3u s = fm->sdf->sdf.GetSize();
+  const unsigned zAxis = 2;
+  for (unsigned x = 0; x < s[0]; x++) {
+    for (unsigned y = 0; y < s[1]; y++) {
+      labPtr.PointToLeaf(x, y, 0);
+      for (unsigned z = 0; z < s[2]; z++) {
+        if (labPtr.HasValue()) {
+          UpdateNeighbors(x, y, z, fm);
+        }
+        labPtr.Increment(zAxis);
       }
     }
   }
@@ -236,5 +253,6 @@ void FastMarch(SDFMesh& sdf)
   fm.label.Allocate(gridSize[0], gridSize[1], gridSize[2]);
   fm.sdf = &sdf;
   InitMarch(&fm);
+  InitPQ(&fm);
   MarchNarrowBand(&fm);
 }
