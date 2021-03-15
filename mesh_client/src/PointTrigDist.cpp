@@ -151,6 +151,12 @@ float PointTrigDist(Vec3f& pt, float * trig)
 	diff = pt - closest;
 	float sqrDistance = Dot(diff, diff);
 	float distance = std::sqrt(sqrDistance);
+
+	Vec3f n = edge0.cross(edge1);
+	float sign = Dot(n, diff);
+	if (sign < 0) {
+		distance = -distance;
+	}
 	return distance;
 }
 

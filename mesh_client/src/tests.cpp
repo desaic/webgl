@@ -118,7 +118,7 @@ void TestCPT(TrayClient* client)
         }
         float val;
         GetVoxelValue(ptr, val);
-        img(x, y) = val * 50;
+        img(x, y) = (val+sdf.band+1) * 20;
       }
     }
     std::string outFile = "test" + std::to_string(z) + ".png";

@@ -13,14 +13,14 @@
 struct VoxDist {
   std::array<unsigned, 3> vox;
   float dist;
-  VoxDist() :vox({ 0,0,0 }), dist(100.0f) {}
+  VoxDist() :vox({ 0,0,0 }), dist(10000.0f) {}
   VoxDist(std::array<unsigned, 3> v, float d) :vox(v), dist(d) {}
 };
 
 struct CompareVox {
   bool operator()(const VoxDist& n1, const VoxDist& n2)
   {
-    return n1.dist > n2.dist;
+    return std::abs(n1.dist) > std::abs(n2.dist);
   }
 };
 
@@ -84,7 +84,7 @@ void SolveQuadAxis(int x, int y, int z, unsigned axis, FMStructs* fm,
       GetVoxelValue(distPtr, distPlus);
     }
     if (lab == uint8_t(SDFLabel::KNOWN)) {
-      if (d == 0 || distPlus < distMinus) {
+      if (d == 0 || std::abs(distPlus) < std::abs(distMinus)) {
         minDist = distPlus;
         d = 1;
       }
@@ -109,11 +109,15 @@ float SolveQuadratic(int x, int y, int z,
   SolveQuadAxis(x, y, z, 1, fm, dist, h);
   SolveQuadAxis(x, y, z, 2, fm, dist, h);
   float a = 0, b=0, c=0;
+  float sign = 1.0f;
   for (unsigned axis = 0; axis < 3; axis++) {
     int h2 = h[axis] * h[axis];
     a += h2;
-    b += h2 * dist[axis];
+    b += h2 * std::abs(dist[axis]);
     c += h2 * dist[axis] * dist[axis];
+    if (dist[axis] < 0) {
+      sign = -1.0f;
+    }
   }
   b *= -2;
   //F{^-2}_{l,m,n} = 1
@@ -123,7 +127,7 @@ float SolveQuadratic(int x, int y, int z,
   if (Delta >= 0) {
     float psi_t = (std::sqrt(Delta) - b) / (2 * a);
     if (dist[0] < psi_t && dist[1] < psi_t && dist[2] < psi_t) {
-      psi = psi_t;
+      psi = sign*psi_t;
     }
   }
   return psi;
@@ -149,16 +153,16 @@ void UpdateNeighbor(int x, int y, int z, FMStructs* fm)
   float distTemp = SolveQuadratic(x, y, z, fm);
 
   TreePointer distPtr(&fm->sdf->sdf);
-  distPtr.PointToLeaf(x, y, z);
   float oldDist = INF_DIST;
   if (distPtr.HasValue()) {
     GetVoxelValue(distPtr, oldDist);
   }
-  if (distTemp >= oldDist) {
+  if (std::abs(distTemp) >= std::abs(oldDist)) {
     return;
   }
   lab = uint8_t(SDFLabel::BAND);
   AddVoxelValue(ptr, lab);
+  distPtr.CreatePath();
   AddVoxelValue(distPtr, distTemp);
   VoxDist voxDist({ { uint32_t(x),uint32_t(y), uint32_t(z) } }, distTemp);
   //pq can contain duplicates because don't
@@ -226,7 +230,7 @@ void MarchNarrowBand(FMStructs* fm) {
     fm->pq.pop();
 
     float dist = v.dist;
-    if (dist > fm->sdf->band) {
+    if (std::abs(dist) > fm->sdf->band) {
       continue;
     }
 

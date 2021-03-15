@@ -18,4 +18,6 @@ void GetMinEdge12(float a01, float a11, float b1,
 void GetMinInterior(const Vec2f& p0, float h0,
 	const Vec2f& p1, float h1, Vec2f& p);
 
+//computes signed point triangle distance.
+//sign is determined by the trig normal.
 float PointTrigDist(Vec3f& pt, float* trig);

@@ -44,7 +44,7 @@ void LoadTestScene(TrayClient & client)
   
   TrigMesh mesh;
   ///\todo change to config instead of hardcoded.
-  std::string meshFile = "F:/dolphin/meshes/1Trig.stl";
+  std::string meshFile = "F:/dolphin/meshes/Eiffel.stl";
   int status = mesh.LoadStl(meshFile);
 
   int meshId = scene.AddMesh(mesh);

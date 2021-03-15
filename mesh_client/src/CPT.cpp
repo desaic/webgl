@@ -92,8 +92,9 @@ void ExactDistance(SDFMesh* sdf)
         for (size_t t = 0; t < trigs.size(); t++) {
           size_t tidx = trigs[t];
           GetTrig(trig, tidx, sdf->mesh, Vec3f(0, 0, 0));
+          //signed dist
           float dist = PointTrigDist(center, trig.data());
-          if (t == 0 || dist < minD) {
+          if (t == 0 || std::abs(dist) < std::abs(minD)) {
             minD = dist;
           }
         }
