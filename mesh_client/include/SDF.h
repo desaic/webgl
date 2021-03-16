@@ -39,3 +39,5 @@ struct SDFMesh
 
 ///computes unsigned distance field using fast marching algo.
 void FastMarch(SDFMesh& sdf);
+
+void MarchingCubes(SDFMesh & sdf, float level, TrigMesh* surf);

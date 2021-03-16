@@ -1,4 +1,6 @@
 #include "SDF.h"
+#include "MarchingCubes.h"
+
 #include <array>
 #include <queue>
 // A highly scalable massively parallel fast marching method
@@ -161,6 +163,7 @@ void UpdateNeighbor(int x, int y, int z, FMStructs* fm)
     return;
   }
   lab = uint8_t(SDFLabel::BAND);
+  ptr.CreatePath();
   AddVoxelValue(ptr, lab);
   distPtr.CreatePath();
   AddVoxelValue(distPtr, distTemp);
@@ -259,4 +262,94 @@ void FastMarch(SDFMesh& sdf)
   InitMarch(&fm);
   InitPQ(&fm);
   MarchNarrowBand(&fm);
+}
+
+void MarchingCubes(unsigned x, unsigned y, unsigned z, 
+  TreePointer & ptr, SDFMesh& sdf, float level, TrigMesh* surf)
+{
+  GridCell cell;
+  cell.p[0] = sdf.gridOrigin;
+  float h = sdf.voxelSize;
+  cell.p[0][0] += x * h;
+  cell.p[0][1] += y * h;
+  cell.p[0][2] += z * h;
+
+  for (unsigned i = 1; i < GridCell::NUM_PT; i++) {
+    cell.p[i] = cell.p[0];
+  }
+  cell.p[1][1] += h;
+
+  cell.p[2][0] += h;
+  cell.p[2][1] += h;
+
+  cell.p[3][0] += h;
+
+  cell.p[4][2] += h;
+
+  cell.p[5][1] += h;
+  cell.p[5][2] += h;
+
+  cell.p[6][0] += h;
+  cell.p[6][1] += h;
+  cell.p[6][2] += h;
+
+  cell.p[7][0] += h;
+  cell.p[7][2] += h;
+
+  GetVoxelValue(ptr, cell.val[0]);
+  ptr.PointToLeaf(x,y + 1,z);
+  if (ptr.HasValue()) {
+    GetVoxelValue(ptr, cell.val[1]);
+  }
+
+  ptr.PointToLeaf(x+1, y + 1, z);
+  if (ptr.HasValue()) {
+    GetVoxelValue(ptr, cell.val[2]);
+  }
+
+  ptr.PointToLeaf(x + 1, y , z);
+  if (ptr.HasValue()) {
+    GetVoxelValue(ptr, cell.val[3]);
+  }
+
+  ptr.PointToLeaf(x, y, z+1);
+  if (ptr.HasValue()) {
+    GetVoxelValue(ptr, cell.val[4]);
+  }
+
+  ptr.PointToLeaf(x, y + 1, z + 1);
+  if (ptr.HasValue()) {
+    GetVoxelValue(ptr, cell.val[5]);
+  }
+
+  ptr.PointToLeaf(x + 1, y+1, z + 1);
+  if (ptr.HasValue()) {
+    GetVoxelValue(ptr, cell.val[6]);
+  }
+
+  ptr.PointToLeaf(x + 1, y, z + 1);
+  if (ptr.HasValue()) {
+    GetVoxelValue(ptr, cell.val[7]);
+  }
+
+  MarchCube(cell, level, surf);
+}
+
+void MarchingCubes(SDFMesh& sdf, float level, TrigMesh* surf)
+{
+  TreePointer ptr(&sdf.sdf);
+  Vec3u s = sdf.sdf.GetSize();
+  const unsigned zAxis = 2;
+  for (unsigned x = 0; x < s[0] - 1; x++) {
+    for (unsigned y = 0; y < s[1] - 1; y++) {
+      
+      for (unsigned z = 0; z < s[2] - 1; z++) {
+        ptr.PointToLeaf(x, y, z);
+        if (ptr.HasValue()) {
+          MarchingCubes(x,y,z,ptr, sdf, level, surf);
+        }
+      
+      }
+    }
+  }
 }

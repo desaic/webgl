@@ -99,13 +99,15 @@ void TestCPT(TrayClient* client)
   }
   sdf.mesh = &meshes[0];
   //mm
-  const float voxelSize = 1;
+  const float voxelSize = 0.25;
   sdf.voxelSize = voxelSize;
   cpt(sdf);
   FastMarch(sdf);
   Vec3u gridSize = sdf.idxGrid.GetSize();
-  for (int z = 0; z < 20; z++) {
-
+  for (int z = 0; z < 50; z++) {
+    if (z >= gridSize[2]) {
+      break;
+    }
     Array2D8u img(gridSize[0], gridSize[1]);
     img.Fill(255);
     TreePointer ptr(&sdf.sdf);
@@ -118,10 +120,16 @@ void TestCPT(TrayClient* client)
         }
         float val;
         GetVoxelValue(ptr, val);
-        img(x, y) = (val+sdf.band+1) * 20;
+        img(x, y) = (val+sdf.band+1)*20;
       }
     }
-    std::string outFile = "test" + std::to_string(z) + ".png";
+    std::string outFile = std::to_string(z) + ".png";
     SavePng(outFile, img);
   }
+
+  TrigMesh mesh;
+  MarchingCubes(sdf, 0, &mesh);
+  meshes.push_back(mesh);
+  client->SendMeshes();
+  
 }
