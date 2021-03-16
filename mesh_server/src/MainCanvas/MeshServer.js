@@ -81,8 +81,10 @@ export default class MeshServer
 		geometry.setAttribute( 'position', new THREE.BufferAttribute( trigs, 3 ) );
 		//geometry.computeFaceNormals();
 		geometry.computeVertexNormals();
-		const material = new THREE.MeshPhongMaterial( { color: 0x999999, specular: 0x101010 } );
+		const material = new THREE.MeshPhongMaterial( { color: 0x5577ee, specular: 0x101010 } );
 		const mesh = new THREE.Mesh( geometry, material );
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
         mesh.name  =meshId.toString();
 		this.ui.addMesh(mesh, meshId);
 	}

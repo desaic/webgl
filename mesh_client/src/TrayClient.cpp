@@ -57,8 +57,8 @@ void TrayClient::SendMesh(unsigned short meshId, const TrigMesh * m) {
   size_t vertexSize = sizeof(float) * 3;
   for (size_t ti = 0; ti < nTrig; ti++) {
     for (size_t vi = 0; vi < 3; vi++) {
-      size_t vidx = size_t(m->trigs[3 * ti + vi]);
-      cmd.AddArgArray((const char*)(&(m->verts[3 * vidx])), vertexSize);
+      size_t vidx = size_t(m->t[3 * ti + vi]);
+      cmd.AddArgArray((const char*)(&(m->v[3 * vidx])), vertexSize);
       bufIdx += vertexSize;
     }
   }
@@ -153,7 +153,6 @@ void TrayClient::RunTCPThread()
 
 void TrayClient::Stop()
 {
-  client.Close();
   running = false;
   if (simThread.joinable()) {
     simThread.join();
@@ -161,6 +160,7 @@ void TrayClient::Stop()
   if (tcpThread.joinable()) {
     tcpThread.join();
   }
+  client.Close();
 }
 
 void TrayClient::SetHost(const std::string& hostname, int port)
