@@ -26,6 +26,38 @@ int TrigMesh::LoadStl(const std::string& meshFile) {
 Vec3f TrigMesh::GetNormal(unsigned tIdx, const Vec3f& bary)
 {
   Vec3f n;
+  float eps = 1e-5;
+  unsigned zeroCount = 0;
+  unsigned zeroIdx=0, nonZeroIdx=0;
+  for (unsigned i = 0; i < 3; i++) {
+    if (bary[i] < eps) {
+      zeroCount++;
+      zeroIdx = i;
+    }
+    else {
+      nonZeroIdx = i;
+    }
+  }
+  
+  if (zeroCount == 1) {
+    //edge
+    size_t ei = (zeroIdx + 1) % 3;
+    size_t i = 3*tIdx + ei;
+    size_t eIdx = te[i + ei];
+    n = ne[eIdx];
+  }
+  else if(zeroCount == 2){
+    //vertex
+    size_t vIdx = t[3 * size_t(tIdx) + nonZeroIdx];
+    n = nv[vIdx];
+  }
+  else {
+    //face
+    size_t i0 = 3 * size_t(tIdx);
+    n[0] = nt[i0];
+    n[1] = nt[i0+1];
+    n[2] = nt[i0+2];
+  }
   return n;
 }
 
@@ -109,7 +141,7 @@ void TrigMesh::ComputeVertNormals()
     Vec3f n(nt[tIdx], nt[tIdx + 1], nt[tIdx + 2]);
     for (unsigned v0 = 0; v0 < 3; v0++) {
       unsigned v1 = (v0 + 1) % 3;
-      unsigned v2 = (v0 + 1) % 3;
+      unsigned v2 = (v0 + 2) % 3;
       Vec3f e1 = vert[v1] - vert[v0];
       Vec3f e2 = vert[v2] - vert[v0];
       float sqrLen1 = e1.norm2();
@@ -123,13 +155,13 @@ void TrigMesh::ComputeVertNormals()
       size_t vIdx = t[tIdx + v0];
       weight[vIdx] += angle;
       nv[vIdx] += angle * n;
-      nv[vIdx].normalize();
     }
   }
 
   for (size_t vIdx = 0; vIdx < nv.size(); vIdx ++) {
     if (weight[vIdx] > eps) {
       nv[vIdx] /= weight[vIdx];
+      nv[vIdx].normalize();
     }
   }
 }
@@ -148,6 +180,7 @@ void TrigMesh::ComputeTrigNormals()
     vert[1] -= vert[0];
     vert[2] -= vert[0];
     Vec3f n = vert[1].cross(vert[2]);
+    n.normalize();
     nt[i] = n[0];
     nt[i+1] = n[1];
     nt[i+2] = n[2];
@@ -189,7 +222,7 @@ void TrigMesh::SaveObj(const std::string& filename)
 {
   std::ofstream out(filename);
   size_t numVerts = v.size() / 3;
-  bool hasVertNormal = (nv.size() == v.size());
+  bool hasVertNormal = (nv.size() == v.size()/3);
   for (size_t vIdx = 0; vIdx < numVerts; vIdx++) {
     out << "v " << v[3 * vIdx] << " " << v[3 * vIdx + 1] 
       << " " << v[3 * vIdx + 2] << "\n";

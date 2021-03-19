@@ -74,7 +74,7 @@ public:
   void normalize(){
 	T n = norm2();
 	if(n>0){
-		n = 1.0f/n;
+		n = 1.0f/std::sqrt(n);
 		v[0] *= n;
 		v[1] *= n;
 		v[2] *= n;
