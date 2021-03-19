@@ -10,6 +10,14 @@
 #include "Vec2.h"
 #include "Vec3.h"
 
+struct TrigDistInfo
+{
+	///squared distance
+	float sqrDist;
+	Vec3f bary;
+	Vec3f closest;
+};
+
 void GetMinEdge02(float & a11, float & b1, Vec2f& p);
 
 void GetMinEdge12(float a01, float a11, float b1,
@@ -18,6 +26,5 @@ void GetMinEdge12(float a01, float a11, float b1,
 void GetMinInterior(const Vec2f& p0, float h0,
 	const Vec2f& p1, float h1, Vec2f& p);
 
-//computes signed point triangle distance.
-//sign is determined by the trig normal.
-float PointTrigDist(Vec3f& pt, float* trig);
+//computes squared point triangle distance.
+TrigDistInfo PointTrigDist(const Vec3f& pt, float* trig);

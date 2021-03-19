@@ -65,6 +65,7 @@ void GetTrig(std::vector<float> & trig, size_t tidx, const TrigMesh * mesh,
     }
   }
 }
+
 void ExactDistance(SDFMesh* sdf) 
 {
   ///\TODO use iterator instead of going through all voxels.
@@ -74,7 +75,6 @@ void ExactDistance(SDFMesh* sdf)
   const int ZAxis = 2;
   float h = sdf->voxelSize;
   for (size_t x = 0; x < gridSize[0]; x++) {
-    std::cout << x << " " << gridSize[0] << "\n";
     for (size_t y = 0; y < gridSize[1]; y++) {
       ptr.PointToLeaf(x, y, 0);
       for (size_t z = 0; z < gridSize[2]; z++) {
@@ -83,26 +83,36 @@ void ExactDistance(SDFMesh* sdf)
           ptr.Increment(ZAxis);
           continue;
         }
+        if (x == 43 && y == 2 && z == 3) {
+          std::cout << "debug\n";
+        }
         size_t listIdx = 0;
         GetVoxelValue(ptr, listIdx);
         const std::vector<size_t> &trigs = sdf->trigList[listIdx];
         Vec3f center = sdf->gridOrigin + h * Vec3f(x+0.5f, y+0.5f, z+0.5f);
         std::vector<float> trig;
-        float minD = 0;
+        TrigDistInfo minInfo;
+        unsigned minT=0;
         for (size_t t = 0; t < trigs.size(); t++) {
           size_t tidx = trigs[t];
           GetTrig(trig, tidx, sdf->mesh, Vec3f(0, 0, 0));
-          //signed dist
-          float dist = PointTrigDist(center, trig.data());
-          if (t == 0 || std::abs(dist) < std::abs(minD)) {
-            minD = dist;
+          Vec3f bary;
+          TrigDistInfo info = PointTrigDist(center, trig.data());
+          if (t == 0 || info.sqrDist < minInfo.sqrDist) {
+            minT = t;
+            minInfo = info;
           }
         }
-        //convert distance to grid with unit length
-        minD /= h;
+        Vec3f n = sdf->mesh->GetNormal(minT, minInfo.bary);
+        float sign = 1.0f;
+        if (Dot(n, center - minInfo.closest)) {
+          sign = -1.0f;
+        }
         distPtr.PointToLeaf(x, y, z);
         distPtr.CreatePath();
-        AddVoxelValue(distPtr, minD);
+        float dist = sign * std::sqrt(minInfo.sqrDist);
+        dist /= h;
+        AddVoxelValue(distPtr, dist);
         ptr.Increment(ZAxis);
       }
     }

@@ -41,6 +41,21 @@ public:
     return *this;
   }
 
+  Vec3<T>& operator*= (T v1) {
+    v[0] *= v1;
+    v[1] *= v1;
+    v[2] *= v1;
+    return *this;
+  }
+
+  Vec3<T>& operator/= (T v1) {
+    T inv = (T)(1.0 / v1);
+    v[0] *= inv;
+    v[1] *= inv;
+    v[2] *= inv;
+    return *this;
+  }
+
   Vec3<T> cross(const Vec3<T> & b){
 	  Vec3<T> c(v[1] * b[2] - v[2] * b[1],
 	           -v[0] * b[2] + v[2] * b[0],
