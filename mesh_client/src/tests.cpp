@@ -99,7 +99,7 @@ void TestCPT(TrayClient* client)
   }
   sdf.mesh = &meshes[0];
   //mm
-  const float voxelSize = 0.25;
+  const float voxelSize = 0.05;
   sdf.voxelSize = voxelSize;
   cpt(sdf);
   FastMarch(sdf);
@@ -120,7 +120,7 @@ void TestCPT(TrayClient* client)
         }
         float val;
         GetVoxelValue(ptr, val);
-        img(x, y) = (val+sdf.band+1)*20;
+        img(x, y) = 100+val*20;
       }
     }
     std::string outFile = std::to_string(z) + ".png";

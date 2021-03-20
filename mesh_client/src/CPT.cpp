@@ -83,7 +83,7 @@ void ExactDistance(SDFMesh* sdf)
           ptr.Increment(ZAxis);
           continue;
         }
-        if (x == 43 && y == 2 && z == 3) {
+        if (x == 144 && y == 62 && z == 2) {
           std::cout << "debug\n";
         }
         size_t listIdx = 0;
@@ -103,9 +103,9 @@ void ExactDistance(SDFMesh* sdf)
             minInfo = info;
           }
         }
-        Vec3f n = sdf->mesh->GetNormal(minT, minInfo.bary);
+        Vec3f n = sdf->mesh->GetNormal(trigs[minT], minInfo.bary);
         float sign = 1.0f;
-        if (Dot(n, center - minInfo.closest)) {
+        if (Dot(n, center - minInfo.closest)<0) {
           sign = -1.0f;
         }
         distPtr.PointToLeaf(x, y, z);

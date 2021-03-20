@@ -44,7 +44,7 @@ void LoadTestScene(TrayClient & client)
   
   TrigMesh mesh;
   ///\todo change to config instead of hardcoded.
-  std::string meshFile = "F:/dolphin/meshes/debug1.stl";
+  std::string meshFile = "F:/dolphin/meshes/sphereVoxel.stl";
   int status = mesh.LoadStl(meshFile);
   mesh.SaveObj("test.obj");
   int meshId = scene.AddMesh(mesh);

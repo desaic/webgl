@@ -146,7 +146,7 @@ TrigDistInfo PointTrigDist(const Vec3f& pt, float * trig)
 		}
 	}
 	TrigDistInfo info;
-	info.closest = Vec3f(trig[0], trig[1], trig[2]) + p[0] * edge0 + p[1] * edge1;;
+	info.closest = Vec3f(trig[0], trig[1], trig[2]) + p[0] * edge0 + p[1] * edge1;
 	info.bary[0] = 1 - p[0] - p[1];
 	info.bary[1] = p[0];
 	info.bary[2] = p[1];

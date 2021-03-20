@@ -42,7 +42,7 @@ Vec3f TrigMesh::GetNormal(unsigned tIdx, const Vec3f& bary)
   if (zeroCount == 1) {
     //edge
     size_t ei = (zeroIdx + 1) % 3;
-    size_t i = 3*tIdx + ei;
+    size_t i = 3* size_t(tIdx) + ei;
     size_t eIdx = te[i + ei];
     n = ne[eIdx];
   }
