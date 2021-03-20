@@ -83,9 +83,6 @@ void ExactDistance(SDFMesh* sdf)
           ptr.Increment(ZAxis);
           continue;
         }
-        if (x == 62 && y == 63 && z == 4) {
-          std::cout << "debug\n";
-        }
         size_t listIdx = 0;
         GetVoxelValue(ptr, listIdx);
         const std::vector<size_t> &trigs = sdf->trigList[listIdx];

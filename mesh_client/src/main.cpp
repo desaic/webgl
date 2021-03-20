@@ -44,9 +44,8 @@ void LoadTestScene(TrayClient & client)
   
   TrigMesh mesh;
   ///\todo change to config instead of hardcoded.
-  std::string meshFile = "F:/dolphin/meshes/sphereVoxel.stl";
+  std::string meshFile = "F:/dolphin/meshes/Eiffel.stl";
   int status = mesh.LoadStl(meshFile);
-  mesh.SaveObj("test.obj");
   int meshId = scene.AddMesh(mesh);
   Vec3f rot(0, 0, 0);
   Vec3f initPos(0, 0, 10);
