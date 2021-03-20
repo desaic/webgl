@@ -43,7 +43,7 @@ Vec3f TrigMesh::GetNormal(unsigned tIdx, const Vec3f& bary)
     //edge
     size_t ei = (zeroIdx + 1) % 3;
     size_t i = 3* size_t(tIdx) + ei;
-    size_t eIdx = te[i + ei];
+    size_t eIdx = te[i];
     n = ne[eIdx];
   }
   else if(zeroCount == 2){
@@ -110,17 +110,17 @@ void TrigMesh::ComputeTrigEdges()
 void TrigMesh::ComputePseudoNormals()
 {
   ComputeTrigEdges();
-  std::vector<uint8_t> edgeCount(ne.size());
+  //std::vector<uint8_t> edgeCount(ne.size());
   for (size_t tIdx = 0; tIdx < t.size(); tIdx += 3) {
     for (unsigned i = 0; i < 3; i++) {
       unsigned edgeIdx = te[tIdx + i];
-      edgeCount[edgeIdx] ++;
+      //edgeCount[edgeIdx] ++;
       ne[edgeIdx] += Vec3f(nt[tIdx], nt[tIdx + 1], nt[tIdx + 2]);
     }
   }
 
   for (size_t eIdx = 0; eIdx < ne.size(); eIdx++) {
-    ne[eIdx] /= edgeCount[eIdx];
+    //ne[eIdx] /= edgeCount[eIdx];
     ne[eIdx].normalize();
   }
   ComputeVertNormals();
@@ -129,7 +129,7 @@ void TrigMesh::ComputePseudoNormals()
 void TrigMesh::ComputeVertNormals()
 {
   size_t numVerts = v.size() / 3;
-  std::vector<float> weight(numVerts, 0.0f);
+  //std::vector<float> weight(numVerts, 0.0f);
   nv.resize(numVerts, Vec3f(0.0f));
   const float eps = 1e-10;
   for (size_t tIdx = 0; tIdx < t.size(); tIdx += 3) {
@@ -153,16 +153,16 @@ void TrigMesh::ComputeVertNormals()
         angle = std::acos(dot / std::sqrt(denom));
       }
       size_t vIdx = t[tIdx + v0];
-      weight[vIdx] += angle;
+    //  weight[vIdx] += angle;
       nv[vIdx] += angle * n;
     }
   }
 
   for (size_t vIdx = 0; vIdx < nv.size(); vIdx ++) {
-    if (weight[vIdx] > eps) {
-      nv[vIdx] /= weight[vIdx];
+    //if (weight[vIdx] > eps) {
+    //  nv[vIdx] /= weight[vIdx];
       nv[vIdx].normalize();
-    }
+    //}
   }
 }
 

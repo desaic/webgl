@@ -83,7 +83,7 @@ void ExactDistance(SDFMesh* sdf)
           ptr.Increment(ZAxis);
           continue;
         }
-        if (x == 144 && y == 62 && z == 2) {
+        if (x == 62 && y == 63 && z == 4) {
           std::cout << "debug\n";
         }
         size_t listIdx = 0;
