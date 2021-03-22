@@ -155,6 +155,7 @@ void UpdateNeighbor(int x, int y, int z, FMStructs* fm)
   float distTemp = SolveQuadratic(x, y, z, fm);
 
   TreePointer distPtr(&fm->sdf->sdf);
+  distPtr.PointToLeaf(x, y, z);
   float oldDist = INF_DIST;
   if (distPtr.HasValue()) {
     GetVoxelValue(distPtr, oldDist);

@@ -173,6 +173,8 @@ export default class MainCanvas extends React.Component {
 		duplicate.rotation.copy(mesh.rotation) // Copy rotation
 		duplicate.position.copy(mesh.position) // Copy position
 		duplicate.scale.copy(mesh.scale) // Copy position
+		duplicate.castShadow = true;
+		duplicate.receiveShadow = true;
 		// Translate the mesh (in object space)
 		duplicate.translateX(10)
 		duplicate.translateZ(10)

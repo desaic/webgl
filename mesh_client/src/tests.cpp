@@ -98,8 +98,9 @@ void TestCPT(TrayClient* client)
     return;
   }
   sdf.mesh = &meshes[0];
+  sdf.band = 5;
   //mm
-  const float voxelSize = 0.1;
+  const float voxelSize = 1;
   sdf.voxelSize = voxelSize;
   cpt(sdf);
   FastMarch(sdf);
@@ -128,7 +129,7 @@ void TestCPT(TrayClient* client)
   }
 
   TrigMesh mesh;
-  MarchingCubes(sdf, 0, &mesh);
+  MarchingCubes(sdf, 1, &mesh);
   meshes.push_back(mesh);
   client->SendMeshes();
   
