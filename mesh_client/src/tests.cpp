@@ -6,6 +6,7 @@
 #include "TrayClient.h"
 #include "SDF.h"
 #include "cpt.h"
+#include "Timer.hpp"
 
 #include <iostream>
 
@@ -103,7 +104,7 @@ void TestCPT(TrayClient* client)
   const float voxelSize = 1;
   sdf.voxelSize = voxelSize;
   cpt(sdf);
-  FastMarch(sdf);
+  //FastMarch(sdf);
   Vec3u gridSize = sdf.idxGrid.GetSize();
   for (int z = 0; z < 50; z++) {
     if (z >= gridSize[2]) {

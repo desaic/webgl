@@ -1,6 +1,6 @@
 #include "SDF.h"
 #include "MarchingCubes.h"
-
+#include "Timer.hpp"
 #include <array>
 #include <queue>
 // A highly scalable massively parallel fast marching method
@@ -260,9 +260,24 @@ void FastMarch(SDFMesh& sdf)
   FMStructs fm;
   fm.label.Allocate(gridSize[0], gridSize[1], gridSize[2]);
   fm.sdf = &sdf;
+  Timer timer;
+  timer.start();
   InitMarch(&fm);
+  timer.end();
+  float seconds = timer.getSeconds();
+  std::cout << "InitMarch " << seconds << " s.\n";
+  
+  timer.start();
   InitPQ(&fm);
+  timer.end();
+  seconds = timer.getSeconds();
+  std::cout << "InitPQ " << seconds << " s.\n";
+
+  timer.start();
   MarchNarrowBand(&fm);
+  timer.end();
+  seconds = timer.getSeconds();
+  std::cout << "March " << seconds << " s.\n";
 }
 
 void MarchingCubes(unsigned x, unsigned y, unsigned z, 

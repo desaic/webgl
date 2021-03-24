@@ -81,12 +81,12 @@ void TreePointer::MoveToSameNode(unsigned x, unsigned y, unsigned z)
 
 bool TreePointer::Increment(unsigned axis)
 {
+  unsigned log2BF = tree->GetLog2BF();
+  unsigned gridSize = 1 << log2BF;
   unsigned level = unsigned(indices.size()) - 1;
   for (unsigned i = 0; i < indices.size(); i++) {
     level = unsigned(indices.size()) - 1 - i;
     unsigned childIdx = indices[level][axis] + 1;
-    unsigned log2BF = tree->GetLog2BF(level);
-    unsigned gridSize = 1 << log2BF;
     if (childIdx >= gridSize) {
       if (level == 0) {
         //root level. no more block to jump to .
@@ -116,11 +116,11 @@ bool TreePointer::Increment(unsigned axis)
 bool TreePointer::Decrement(unsigned axis)
 {
   unsigned level = unsigned(indices.size()) - 1;
+  unsigned log2BF = tree->GetLog2BF();
+  unsigned gridSize = 1 << log2BF;
   for (unsigned i = 0; i < indices.size(); i++) {
     level = unsigned(indices.size()) - 1 - i;
     int childIdx = int(indices[level][axis]) - 1;
-    unsigned log2BF = tree->GetLog2BF(level);
-    unsigned gridSize = 1 << log2BF;
     if (childIdx < 0) {
       if (level == 0) {
         //root level. no more block to jump to .
@@ -251,7 +251,7 @@ void WriteToTxt(GridTree<unsigned char>* tree, std::ostream& out) {
   out << size[0] << " " << size[1] << " " << size[2] << "\n";
   unsigned numLevels = tree->GetNumLevels();
   out << "numLevels " << numLevels << "\n";
-  unsigned log2BF = tree->GetLog2BF(0);
+  unsigned log2BF = tree->GetLog2BF();
   out << "log2BF " << log2BF << "\n";
   std::vector<GridNode* > parents;
   parents.push_back(tree->GetRoot());

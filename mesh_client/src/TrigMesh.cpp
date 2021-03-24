@@ -246,3 +246,63 @@ void TrigMesh::SaveObj(const std::string& filename)
   }
   out.close();
 }
+
+TrigMesh SubSet(const TrigMesh& m, const std::vector<size_t>& trigs)
+{
+  TrigMesh out;
+  for (size_t i = 0; i < trigs.size(); i++) {
+    unsigned tIdx = trigs[i];
+    for (unsigned j = 0; j < 3; j++) {
+      for (unsigned d = 0; d < 3; d++) {
+        unsigned localv = 3 * tIdx + j;
+        unsigned vIdx = m.t[localv];
+        out.v.push_back(m.v[ 3*vIdx + d]);
+      }
+      out.t.push_back(3 * i + j);
+    }
+  }
+  return out;
+}
+
+TrigMesh MakeCube(const Vec3f & mn, const Vec3f & mx)
+{
+  ///@brief cube [0,1]^3
+  float CUBE_VERT[8][3] = {
+    {0, 0, 0},
+    {1, 0, 0},
+    {1, 1, 0},
+    {0, 1, 0},
+    {0, 0, 1},
+    {1, 0, 1},
+    {1, 1, 1},
+    {0, 1, 1}
+  };
+
+  unsigned CUBE_TRIG[12][3] = {
+    {0, 3, 1},
+    {1, 3, 2},  //z=0face
+    {7, 4, 5 },
+    {7, 5, 6 },  //z=1 face
+    {5, 4, 0},
+    {5, 0, 1},  //y=0 face
+    {3, 6, 2},
+    {3, 7, 6},  //y=1 face
+    {4, 3, 0},
+    {4, 7, 3},  //x=0 face
+    { 6, 5, 1 },
+    { 1, 2, 6 },  //x=1 face
+  };
+  TrigMesh m;
+  for (size_t v = 0; v < 8; v++) {
+    for (size_t d = 0; d < 3; d++) {
+      float f = CUBE_VERT[v][d] * (mx[d] - mn[d]) + mn[d];
+      m.v.push_back(f);
+    }
+  }
+  for (size_t t = 0; t < 12; t++) {
+    for (size_t d = 0; d < 3; d++) {
+      m.t.push_back(CUBE_TRIG[t][d]);
+    }
+  }
+  return m;
+}

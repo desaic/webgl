@@ -41,3 +41,6 @@ public:
 
   void SaveObj(const std::string& filename);
 };
+
+TrigMesh SubSet(const TrigMesh& m, const std::vector<size_t>& trigs);
+TrigMesh MakeCube(const Vec3f& mn, const Vec3f& mx);

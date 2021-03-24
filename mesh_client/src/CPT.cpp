@@ -3,6 +3,7 @@
 #include "CPT.h"
 #include "trigAABBIntersect.hpp"
 #include "PointTrigDist.h"
+#include "Timer.hpp"
 
 #include <algorithm>
 #include <functional>
@@ -46,9 +47,23 @@ int cpt(SDFMesh& sdf)
   std::vector<size_t> tidx(numTrigs);
   std::iota(tidx.begin(), tidx.end(), 0);
   std::function<void(size_t)> voxFun = std::bind(&Voxelize, std::placeholders::_1, &sdf);
+
+  Timer timer;
+  timer.start();
+
   std::for_each(tidx.begin(), tidx.end(), voxFun);
 
+  timer.end();
+  float seconds = timer.getSeconds();
+  std::cout << "Voxelize seconds " << seconds << "\n";
+
+  timer.start();
+
   ExactDistance(&sdf);
+
+  timer.end();
+  seconds = timer.getSeconds();
+  std::cout << "ExactDistance seconds " << seconds << "\n";
 
   return 0;
 }
@@ -105,6 +120,22 @@ void ExactDistance(SDFMesh* sdf)
         if (Dot(n, center - minInfo.closest)<0) {
           sign = -1.0f;
         }
+
+        if (x == 93 && y == 44 && z == 8) {
+          std::cout << "debug\n";
+          TrigMesh localMesh = SubSet(*(sdf->mesh), trigs);
+          localMesh.SaveObj("local.obj");
+
+          Vec3f mn = center - 1.5f * Vec3f(h);
+          Vec3f mx = center + 1.5f * Vec3f(h);
+          TrigMesh Voxel = MakeCube(mn, mx);
+          Voxel.SaveObj("voxel.obj");
+
+          std::vector<size_t> minList(1, trigs[minT]);
+          TrigMesh closestMesh = SubSet(*(sdf->mesh), minList);
+          closestMesh.SaveObj("closest.obj");
+        }
+
         distPtr.PointToLeaf(x, y, z);
         distPtr.CreatePath();
         float dist = sign * std::sqrt(minInfo.sqrDist);
@@ -132,18 +163,17 @@ void Voxelize(size_t tidx, SDFMesh* sdf)
       box.mx[d] += 1;
     }
   } 
-
+  const unsigned zAxis = 2;
   TreePointer ptr(&sdf->idxGrid);
   TreePointer sdfPtr(&(sdf->sdf));
   for (int ix = box.mn[0]; ix <= (box.mx[0]); ix++) {
     for (int iy = box.mn[1]; iy <= (box.mx[1]); iy++) {
+      //ptr.PointToLeaf(ix, iy, box.mn[2]);
       for (int iz = box.mn[2]; iz <= (box.mx[2]); iz++) {
         Vec3i gi(ix, iy, iz);
         if (trigCubeIntersect(trig.data(), gi, sdf->voxelSize)) {
-          bool exists = ptr.PointToLeaf(ix, iy, iz);
-          if (!exists) {
-            ptr.CreateLeaf(ix, iy, iz);
-          }
+          ptr.PointToLeaf(ix, iy, iz);
+          ptr.CreatePath();
           size_t listIdx = 0;
           if (ptr.HasValue()) {
             GetVoxelValue(ptr, listIdx);
@@ -154,6 +184,7 @@ void Voxelize(size_t tidx, SDFMesh* sdf)
           }
           sdf->trigList[listIdx].push_back(tidx);
         }
+        ptr.Increment(zAxis);
       }
     }
   }
