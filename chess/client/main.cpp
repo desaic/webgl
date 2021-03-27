@@ -111,12 +111,19 @@ int initWSA() {
   return 0;
 }
 
+void SendCommand(const std::string & command) {
+  std::string fullCmd = ">" + command + "\r\n";
+  client.SendAll(fullCmd.data(), fullCmd.size());
+}
+
 int main(int argc, char* argv[])
 {
   initWSA();
   int ret = client.Connect(IP, port);
-  client.SetLogCallback(&LogFun);
-  
+  if (ret < 0) {
+    std::cout << "failed connect.\n";
+  }
+  client.SetLogCallback(&LogFun); 
 
   state = STOP;
 
@@ -124,9 +131,16 @@ int main(int argc, char* argv[])
   std::thread clientThread(&ClientLoop);
   
 
-  int pollInterval = 1000;  // ms;
+  int pollInterval = 50;  // ms;
   while (state != STOP) {
     std::this_thread::sleep_for(std::chrono::milliseconds(pollInterval));
+    std::string command;
+    std::getline(std::cin, command);
+    if (command.size() > 3) {
+      SendCommand(command);
+    }else if (command == "q") {
+      break;
+    }
   }
   clientThread.join();
   return 0;
