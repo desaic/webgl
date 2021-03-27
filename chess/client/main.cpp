@@ -50,6 +50,7 @@ void handleCmd(const std::string& cmd) {
 void ClientLoop() {
   
   int interval = 30;
+  int connInterval = 2000;
   while (state != STOP) {
     int ret;
     std::vector<char> buf;
@@ -58,9 +59,9 @@ void ClientLoop() {
 
     switch (state){
     case DISCONNECTED: 
-      ret = client.Connect(IP, port);
+      ret = client.Connect(IP, port, connInterval);
       if (ret < 0) {
-        std::cout << "connect failed " << ret << "\n";
+        //std::cout << "connect failed " << ret << "\n";
       }
       else {
         state = RUNNING;
@@ -139,6 +140,7 @@ int main(int argc, char* argv[])
     if (command.size() > 3) {
       SendCommand(command);
     }else if (command == "q") {
+      state = STOP;
       break;
     }
   }
