@@ -1,0 +1,35 @@
+{
+  "author": "Chris Oakman <chris@oakmac.com> (http://chrisoakman.com/)",
+  "name": "chessboard",
+  "description": "JavaScript chessboard widget",
+  "homepage": "https://chessboardjs.com",
+  "license": "MIT",
+  "version": "1.0.0",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/oakmac/chessboardjs.git"
+  },
+  "files": [
+    "dist/"
+  ],
+  "dependencies": {
+    "jquery": ">=3.4.1",
+    "websocket": "^1.0.31"
+  },
+  "devDependencies": {
+    "csso": "3.5.1",
+    "electron": "^12.0.2",
+    "fs-plus": "3.1.1",
+    "kidif": "1.1.0",
+    "mustache": "2.3.0",
+    "standard": "10.0.2",
+    "uglify-js": "3.6.0"
+  },
+  "scripts": {
+    "start": "electron ."
+  },
+  "bugs": {
+    "url": "https://github.com/oakmac/chessboardjs/issues"
+  },
+  "main": "electronmain.js"
+}

@@ -1,6 +1,6 @@
 #include "PointTrigDist.h"
 
-float PointTrigDist(Vec3f& pt, float * trig)
+TrigDistInfo PointTrigDist(const Vec3f& pt, float * trig)
 {
 	Vec3f diff(pt[0] - trig[0], pt[1] - trig[1], pt[2] - trig[2]);
 	Vec3f edge0(trig[3] - trig[0], trig[4] - trig[1], trig[5] - trig[2]);
@@ -145,19 +145,14 @@ float PointTrigDist(Vec3f& pt, float * trig)
 			}
 		}
 	}
-
-	Vec3f closest(trig[0], trig[1], trig[2]);
-	closest = closest + p[0] * edge0 + p[1] * edge1;
-	diff = pt - closest;
-	float sqrDistance = Dot(diff, diff);
-	float distance = std::sqrt(sqrDistance);
-
-	Vec3f n = edge0.cross(edge1);
-	float sign = Dot(n, diff);
-	if (sign < 0) {
-		distance = -distance;
-	}
-	return distance;
+	TrigDistInfo info;
+	info.closest = Vec3f(trig[0], trig[1], trig[2]) + p[0] * edge0 + p[1] * edge1;
+	info.bary[0] = 1 - p[0] - p[1];
+	info.bary[1] = p[0];
+	info.bary[2] = p[1];
+	diff = pt - info.closest;
+	info.sqrDist = Dot(diff, diff);
+	return info;
 }
 
 void GetMinEdge02(float& a11, float& b1, Vec2f& p)

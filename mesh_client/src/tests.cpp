@@ -6,6 +6,7 @@
 #include "TrayClient.h"
 #include "SDF.h"
 #include "cpt.h"
+#include "Timer.hpp"
 
 #include <iostream>
 
@@ -98,11 +99,12 @@ void TestCPT(TrayClient* client)
     return;
   }
   sdf.mesh = &meshes[0];
+  sdf.band = 5;
   //mm
-  const float voxelSize = 0.25;
+  const float voxelSize = 1;
   sdf.voxelSize = voxelSize;
   cpt(sdf);
-  FastMarch(sdf);
+  //FastMarch(sdf);
   Vec3u gridSize = sdf.idxGrid.GetSize();
   for (int z = 0; z < 50; z++) {
     if (z >= gridSize[2]) {
@@ -120,7 +122,7 @@ void TestCPT(TrayClient* client)
         }
         float val;
         GetVoxelValue(ptr, val);
-        img(x, y) = (val+sdf.band+1)*20;
+        img(x, y) = 100+val*20;
       }
     }
     std::string outFile = std::to_string(z) + ".png";
@@ -128,7 +130,7 @@ void TestCPT(TrayClient* client)
   }
 
   TrigMesh mesh;
-  MarchingCubes(sdf, 0, &mesh);
+  MarchingCubes(sdf, 1, &mesh);
   meshes.push_back(mesh);
   client->SendMeshes();
   

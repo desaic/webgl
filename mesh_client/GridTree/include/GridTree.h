@@ -20,8 +20,8 @@ public:
 
   virtual GridNode* GetRoot() = 0;
   ///get log 2 of branching factor in one axis
-  virtual unsigned GetLog2BF(unsigned level) = 0;
-  virtual void SetLog2BF(unsigned level, unsigned bf) = 0;
+  virtual unsigned GetLog2BF() = 0;
+  virtual void SetLog2BF(unsigned bf) = 0;
   ///get size of a block at level
   ///root has a block size of 1<<(log2Bf * numLevels) for a
   ///tree with constant log2 branching factor at all levels.
@@ -54,7 +54,7 @@ public:
     Free();
   }
 
-  void SetLog2BF(unsigned level, unsigned bf) override {
+  void SetLog2BF(unsigned bf) override {
     if (bf <= MAX_LOG2_BRANCHING_FACTOR) {
       log2BF = bf;
     }
@@ -68,7 +68,7 @@ public:
 
   GridNode * GetRoot() override{ return (GridNode*)(&root); }
   
-  unsigned GetLog2BF(unsigned level) override { return log2BF; }
+  unsigned GetLog2BF() override { return log2BF; }
 
   GridNode* MakeINode() {
     GridNodeInternal<ValueT> * inode = new GridNodeInternal<ValueT>();

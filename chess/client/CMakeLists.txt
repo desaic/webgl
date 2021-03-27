@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.8)
+PROJECT (Chess )
+include_directories(".")
+FILE(GLOB EXE_SRC "*.cpp" "*.c")
+add_executable(chess ${EXE_SRC} )
+target_link_libraries(chess ws2_32.lib)
