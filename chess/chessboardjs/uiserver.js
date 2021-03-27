@@ -66,23 +66,13 @@ server.on('connection',function(socket){
 			return;
 		}
 		cmd = recvBuf.slice(startIdx+1, endIdx+2);
+		//delete what's been parsed already.
 		recvBuf = recvBuf.slice(endIdx+2);
-		tokens = cmd.split(" ");
-		if(tokens.length < 2){
-			return;
+		console.log(cmd);
+		if(wsconnection != null){
+		  wsconnection.sendUTF(cmd);				
 		}
-		console.log("command name: " + tokens[0]);
-		if(tokens[0] == "move"){
-			if(tokens.length<3){
-				console.log("warning: move not enough args ");
-				return;
-			}
-			var src = tokens[1];
-			var dst = tokens[2];
-			if(wsconnection != null){
-			  wsconnection.sendUTF("move " + src + " " + dst + "\r\n");				
-			}
-		}
+		
 	});
 
 	socket.on('error',function(error){

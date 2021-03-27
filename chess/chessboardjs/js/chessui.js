@@ -23,20 +23,31 @@ function onDrop (source, target, piece, newPos, oldPos, orientation) {
 function processBoardCommand(command) {
 	tokens = command.split(/\s+/);
 	console.log(tokens.length);
-	if(tokens.length<2){
-		console.log("not enough command args");
+	if(tokens.length<1){
+		console.log("no command given");
 		return;
 	}
 	cmdName = tokens[0];
-	if(tokens[0] == "move"){
+	if(cmdName == "move"){
 		if(tokens.length < 3){
-			console.log("not enough command args");
+			console.log("not enough move args");
 			return;
 		}
 		src = tokens[1];
 		dst = tokens[2];
 		console.log("move " + src + " " + dst);
 		board.move(src+'-'+dst);
+	}else if(cmdName == "clear"){
+		board.clear();
+	}else if(cmdName == "start"){
+		board.start();
+	}else if (cmdName == "fen"){
+		if(tokens.length < 3){
+			console.log("not enough fen args");
+			return;
+		}
+		var fen = tokens[1];
+		board.position(fen);
 	}
 }
 
