@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><style class="vjs-styles-defaults">
+      .video-js {
+        width: 300px;
+        height: 150px;
+      }
+
+      .vjs-fluid {
+        padding-top: 56.25%
+      }
+    </style>
+  <meta name="description" content="Webpage description goes here" />
+  <meta charset="utf-8">
+  <title>chessboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="author" content="">
+  <link rel="stylesheet" href="./css/chessboard-1.0.0.min.css">
+</head>
+
+<body>
+  <p>Test chess ui</p>
+  <div id="myBoard" style="width: 400px"></div>
+  <button id="move1Btn">e2-e4</button>
+  <script>
+	window.nodeRequire = require;
+	delete window.require;
+	delete window.exports;
+	delete window.module;
+	</script>
+  <script src="./js/jquery-3.5.1.min.js"></script>
+  <script src="./js/chessboard-1.0.0.js"></script>
+  <script src="./js/chessui.js"></script>
+  <script>
+  const ws = new WebSocket('ws://localhost:9000/')
+  ws.onopen = function(){
+	console.log('websocket Client connect');
+	ws.send('websocket client');
+  };
+  
+  ws.onmessage = function(e){
+	console.log("Received '" + e.data + "'");
+	processBoardCommand(e.data);
+  };
+  
+  </script>
+</body>
+</html>
