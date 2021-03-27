@@ -1,5 +1,12 @@
 <!DOCTYPE html>
 <html>
+<style type="text/css">
+* {margin: 0; padding: 0;}
+#maincontainer {height: 100%; width:100%; font-size: 0;}
+#left, #right {display: inline-block; *display: inline; zoom: 1; vertical-align: top; font-size: 12px;}
+#left {width: 50%; }
+#right {width: 50%;}
+</style>
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><style class="vjs-styles-defaults">
       .video-js {
@@ -21,8 +28,16 @@
 
 <body>
   <p>Test chess ui</p>
-  <div id="myBoard" style="width: 400px"></div>
-  <button id="move1Btn">e2-e4</button>
+  <div id="maincontainer">
+    <div id="left">
+      <div id="myBoard" style="width: 400px"></div>
+      <button id="Play">Play</button>
+    </div>
+    <div id="right">
+      <div id="editBoard" style="width: 400px"></div>
+      <button id="Use">Use</button>
+    </div>
+  </div>
   <script>
 	window.nodeRequire = require;
 	delete window.require;

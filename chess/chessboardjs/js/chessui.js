@@ -5,7 +5,15 @@ var boardconfig = {
   onChange: onBoardChange,
   onDrop: onDrop
 }
+
 var board = Chessboard('myBoard',boardconfig);
+
+var editBoardConfig = {
+	draggable: true,
+	dropOffBoard: 'trash',
+	sparePieces: true
+  } 
+var editBoard = Chessboard('editBoard',editBoardConfig);
 
 function onBoardChange (oldPos, newPos) {
 //  console.log('Position changed:')
@@ -51,6 +59,11 @@ function processBoardCommand(command) {
 	}
 }
 
-$('#move1Btn').on('click', function () {
+$('#Use').on('click', function () {
   board.move('e2-e4')
 })
+
+$('#Play').on('click', function () {
+	board.move('d2-d4')
+})
+  
