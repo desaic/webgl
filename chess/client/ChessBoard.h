@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <stdint.h>
 #include <string>
 #include <vector>
 #include <list>
@@ -11,7 +12,7 @@
 
 enum class PieceType
 {
-  PAWN=1, ROOK, KNIGHT, BISHOP,
+  EMPTY = 0, PAWN=1, ROOK, KNIGHT, BISHOP,
   QUEEN, KING
 };
 
@@ -22,7 +23,7 @@ enum class PieceColor {
 
 ///machine friendly coordinates in [0,7]
 struct Vec2u8 {
-  unsigned char v[2];
+  uint8_t v[2];
   Vec2u8(){
     v[0] = 0;
     v[1] = 0;
@@ -33,19 +34,23 @@ struct Vec2u8 {
     v[1] = y;
   }
 
-  unsigned char operator[](unsigned i) const {
+  uint8_t operator[](unsigned i) const {
     return v[i];
   }
 
-  unsigned char &operator[](unsigned i) {
+  uint8_t &operator[](unsigned i) {
     return v[i];
+  }
+
+  bool operator == (const Vec2u8& b) {
+    return v[0] == b.v[0] && v[1] == b.v[1];
   }
 };
 
 ///4 bytes in total. same as an int.
 struct Piece {
-  unsigned char type;
-  unsigned char color;
+  uint8_t type;
+  uint8_t color;
   Vec2u8 pos;
   Piece() :type(0), color(0) {}
 };
@@ -93,6 +98,14 @@ public:
   const Piece& operator()(unsigned x, unsigned y) const {
     return board[x + y * BOARD_SIZE];
   }
+
+  Piece* GetPiece(unsigned x, unsigned y){
+    return &(board[x + y * BOARD_SIZE]);
+  }
+
+  bool AddPiece(unsigned x, unsigned y, const Piece& piece);
+
+  bool RemovePiece(unsigned x, unsigned y);
 
   std::vector<Move> GetMoves();
 
