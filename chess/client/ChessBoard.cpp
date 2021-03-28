@@ -1,6 +1,6 @@
 #include "ChessBoard.h"
 
-ChessBoard::ChessBoard():nextColor(CHESS_WHITE),
+ChessBoard::ChessBoard():nextColor(PieceColor::WHITE),
 castleBk(true),
 castleBQ(true),
 castleWK(true),
@@ -8,6 +8,7 @@ castleWQ(true),
 hasEnPassant(false),
 enPassantDst(0,0)
 {
+  board.resize(64);
 }
 
 std::vector<Move> ChessBoard::GetMoves()

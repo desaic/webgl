@@ -6,11 +6,17 @@
 
 #define CHESS_BLACK 0
 #define CHESS_WHITE 1
+#define BOARD_SIZE 8
 
-enum class ChessPiece
+enum class PieceType
 {
   PAWN=1, ROOK, KNIGHT, BISHOP,
   QUEEN, KING
+};
+
+enum class PieceColor {
+  BLACK,
+  WHITE
 };
 
 ///machine friendly coordinates in [0,7]
@@ -35,6 +41,14 @@ struct Vec2u8 {
   }
 };
 
+///4 bytes in total. same as an int.
+struct Piece {
+  unsigned char type;
+  unsigned char color;
+  Vec2u8 pos;
+  Piece() :type(0), color(0) {}
+};
+
 struct Move
 {
   Vec2u8 src;
@@ -45,11 +59,12 @@ class ChessBoard {
 
 public:
   ChessBoard(); 
-
-  std::vector<ChessPiece> black;
-  std::vector<ChessPiece> white;
-
-  int nextColor;
+  
+  std::vector<Piece*> black;
+  std::vector<Piece*> white;
+  //8x8 board with 64 squares
+  std::vector<Piece> board;
+  PieceColor nextColor;
   
   bool castleBk;
   bool castleBQ;
@@ -68,6 +83,14 @@ public:
   ///number of full moves.
   ///starts at 1 and increments after every black move.
   int fullMoves;
+
+  Piece& operator()(unsigned x, unsigned y) {
+    return board[x + y * BOARD_SIZE];
+  }
+
+  const Piece& operator()(unsigned x, unsigned y) const {
+    return board[x + y * BOARD_SIZE];
+  }
 
   std::vector<Move> GetMoves();
 
