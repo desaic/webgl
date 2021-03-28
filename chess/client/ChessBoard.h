@@ -3,6 +3,7 @@
 #include <array>
 #include <string>
 #include <vector>
+#include <list>
 
 #define CHESS_BLACK 0
 #define CHESS_WHITE 1
@@ -60,9 +61,10 @@ class ChessBoard {
 public:
   ChessBoard(); 
   
-  std::vector<Piece*> black;
-  std::vector<Piece*> white;
-  //8x8 board with 64 squares
+  ///list for easy removal and insertion
+  std::list<Piece*> black;
+  std::list<Piece*> white;
+  ///8x8 board with 64 squares
   std::vector<Piece> board;
   PieceColor nextColor;
   
