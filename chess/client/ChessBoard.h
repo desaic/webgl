@@ -73,7 +73,7 @@ public:
   std::vector<Piece> board;
   PieceColor nextColor;
   
-  bool castleBk;
+  bool castleBK;
   bool castleBQ;
   bool castleWK;
   bool castleWQ;
@@ -85,7 +85,7 @@ public:
 
   ///number of half moves since last capture or pawn advance for
   ///drawing rule
-  int halfMove;
+  int halfMoves;
 
   ///number of full moves.
   ///starts at 1 and increments after every black move.

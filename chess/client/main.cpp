@@ -118,8 +118,23 @@ void SendCommand(const std::string & command) {
   client.SendAll(fullCmd.data(), fullCmd.size());
 }
 
+void TestFEN()
+{
+  ChessBoard board;
+  Piece p;
+  p.type = uint8_t(PieceType::PAWN);
+  p.color = uint8_t(PieceColor::WHITE);
+  board.AddPiece(0, 1, p);
+  board.AddPiece(0, 2, p);
+  board.AddPiece(0, 3, p);
+  std::string fen = board.GetFen();
+  std::cout << fen << "\n";
+
+}
+
 int main(int argc, char* argv[])
 {
+  TestFEN();
   initWSA();
   int ret = client.Connect(IP, port);
   if (ret < 0) {
