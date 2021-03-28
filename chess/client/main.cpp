@@ -1,4 +1,5 @@
 #include <WinSock2.h>
+#include "ChessBoard.h"
 #include "SocketClient.h"
 #include <iostream>
 #include <mutex>
