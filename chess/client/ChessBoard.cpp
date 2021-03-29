@@ -66,16 +66,145 @@ char PieceFEN(const Piece& p)
   return c;
 }
 
+void Char2Piece(char c, Piece & p) {
+  const char LOWER_DIFF = 'a' - 'A';
+  if (c > 'a') {
+    p.color = uint8_t(PieceColor::BLACK);
+    c -= LOWER_DIFF;
+  }
+  else {
+    p.color = uint8_t(PieceColor::WHITE);
+  }
+  switch (c) {
+  case 'P':
+    p.type = uint8_t(PieceType::PAWN);
+    break;
+  case 'R':
+    p.type = uint8_t(PieceType::ROOK);
+    break;
+  case  'N':
+    p.type = uint8_t(PieceType::KNIGHT);
+    break;
+  case 'B':
+    p.type = uint8_t(PieceType::BISHOP);
+    break;
+  case 'Q':
+    p.type = uint8_t(PieceType::QUEEN);
+    break;
+  case 'K':
+    p.type = uint8_t(PieceType::KING);
+    break;
+  default:
+    //unknown shouldn't really get here ever.
+    break;
+  }
+}
+
 std::string coordString(const Vec2u8& coord)
 {
   std::string s="  ";
   s[0] = 'a' + coord[0];
-  s[1] = '0' + coord[1];
+  s[1] = '1' + coord[1];
   return s;
+}
+
+int parseInt(const std::string& str, size_t & idx) 
+{
+  char c = str[idx];
+  int num = 0;
+  while (c != ' ' && idx<str.size()) {
+    c -= '0';
+    num *= 10;
+    num += c;
+    idx++;
+    c = str[idx];
+  }
+  return num;
 }
 
 int ChessBoard::FromFen(const std::string& fen)
 {
+  size_t strIdx = 0;
+  Clear();
+  for (int row = BOARD_SIZE - 1; row >= 0; row--) {
+    int emptyCnt = 0;
+    int col = 0;
+    while (col < BOARD_SIZE) {
+      char c = fen[strIdx];
+      if (c >= '1' && c <= '8') {
+        emptyCnt = c - '0';
+        col += emptyCnt;
+        strIdx++;
+      }
+      else {
+        Piece p;
+        Char2Piece(c, p);
+        AddPiece(col, row, p);
+        col++;
+        strIdx++;
+      }
+    }
+
+    if (row > 0) {
+      //go past '/'
+      strIdx++;
+    }
+  }
+
+  //space
+  strIdx++;
+  char c = fen[strIdx];
+  if (c == 'w') {
+    nextColor = PieceColor::WHITE;
+  }
+  else {
+    nextColor = PieceColor::BLACK;
+  }
+  strIdx += 2;
+
+  c = fen[strIdx];
+  castleWK = false;
+  castleWQ = false;
+  castleBK = false;
+  castleBQ = false;
+  while (c != ' ' && strIdx<fen.size()) {
+    if (c == '-') {
+      break;
+    }
+    else if (c == 'K') {
+      castleWK = true;
+      strIdx++;
+    }
+    else if (c == 'Q') {
+      castleWQ = true;
+      strIdx++;
+    }
+    else if (c == 'k') {
+      castleBK = true;
+      strIdx++;
+    }
+    else if (c == 'q') {
+      castleBK = true;
+      strIdx++;
+    }
+    c = fen[strIdx];
+  }
+  strIdx++;
+  c = fen[strIdx];
+  if (c == '-') {
+    hasEnPassant = false;
+  }
+  else {
+    enPassantDst[0] = c - 'a';
+    strIdx++;
+    c = fen[strIdx];
+    enPassantDst[1] = c - '1';
+  }
+ 
+  strIdx+=2;
+  halfMoves = parseInt(fen, strIdx);
+  strIdx++;
+  fullMoves = parseInt(fen, strIdx);
   return 0;
 }
 
@@ -194,4 +323,23 @@ bool ChessBoard::RemovePiece(unsigned x, unsigned y)
 
   p->type = uint8_t(PieceType::EMPTY);
   return true;
+}
+
+void ChessBoard::Clear()
+{
+  black.clear();
+  white.clear();
+  for (size_t i = 0; i < board.size(); i++) {
+    board[i].type = uint8_t(PieceType::EMPTY);
+  }
+
+  hasEnPassant = false;
+  fullMoves = 0;
+  halfMoves = 0;
+
+  castleBK = true;
+  castleBQ = true;
+  castleWK = true;
+  castleWQ = true;
+
 }

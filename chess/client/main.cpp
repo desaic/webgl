@@ -130,6 +130,10 @@ void TestFEN()
   std::string fen = board.GetFen();
   std::cout << fen << "\n";
 
+  std::string inputFen = "5r1k/2r5/p2qp1Q1/1p1n4/3P4/P4P2/1P1B1P1P/6RK w - - 25 367";
+  board.FromFen(inputFen);
+  std::string outFen = board.GetFen();
+  std::cout << "out fen " << outFen << "\n";
 }
 
 int main(int argc, char* argv[])

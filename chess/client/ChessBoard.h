@@ -107,6 +107,8 @@ public:
 
   bool RemovePiece(unsigned x, unsigned y);
 
+  void Clear();
+
   std::vector<Move> GetMoves();
 
   ///\return 0 on success.
