@@ -26,26 +26,45 @@ void LogFun(const std::string& msg, LogLevel level)
   std::cout<<level<<" " << msg << "\n";
 }
 
+///\return 0 on success. -1 on error.
 int parseMsg(std::deque<char>& q, std::string& cmd) {
   cmd.clear();
-  size_t i = 0;
-  bool hasNewLine = false;
-  for (; i < q.size(); i++) {
-    char c = q[i];
-    if (c == '\n') {
-      hasNewLine = true;
+  
+  bool hasStartOfLine = false;
+  //find start of a command. throw away anything before that.
+  while (!q.empty()) {
+    char c = q.front();
+    if (c != '>') {
+      q.pop_front();
+    }
+    else {
+      q.pop_front();
+      hasStartOfLine = true;
       break;
     }
   }
-  if (hasNewLine && i > 0) {
+  if (!hasStartOfLine) {
+    return -1;
+  }
+
+  bool hasEndOfLine = false;
+  size_t i = 0;
+  for (; i < q.size(); i++) {
+    char c = q[i];
+    if (c == '\n') {
+      hasEndOfLine = true;
+      break;
+    }
+  }
+  if (hasEndOfLine && i > 0) {
     cmd.insert(cmd.end(), q.begin(), q.begin() + i);
     q.erase(q.begin(), q.begin() + i);
   }
-  return int(cmd.size());
+  return 0;
 }
 
 void handleCmd(const std::string& cmd) {
-  std::cout << "handle " << cmd << "\n";
+  std::cout << "received: " << cmd << "\n";
 }
 
 void ClientLoop() {
@@ -85,19 +104,15 @@ void ClientLoop() {
     }
 
     std::string cmd;
-    while (1) {
-      int ret = 0;
-      {
-        std::lock_guard<std::mutex> lock(qLock);
-        ret = parseMsg(q, cmd);
-      }
-      if (ret <= 0) {
-        break;
-      }
+    ret = 0;
+    {
+      std::lock_guard<std::mutex> lock(qLock);
+      ret = parseMsg(q, cmd);
+    }
+    if (ret == 0) {
       handleCmd(cmd);
     }
-
-
+    
     std::this_thread::sleep_for(std::chrono::microseconds(interval));
   }
 }

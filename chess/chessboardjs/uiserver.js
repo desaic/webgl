@@ -15,10 +15,12 @@ var server = net.createServer();
 server.on('close',function(){
   console.log('Server closed !');
 });
-
+var client = null;
 // emitted when new client connects
 server.on('connection',function(socket){
 //this property shows the number of characters currently buffered to be written. (Number of characters is approximately equal to the number of bytes to be written, but the buffer may contain strings, and the strings are lazily encoded, so the exact number of bytes is not known.)
+
+	client = socket;
 
 	console.log('Buffer size : ' + socket.bufferSize);
 	console.log('---------server details -----------------');
@@ -77,11 +79,15 @@ server.on('connection',function(socket){
 
 	socket.on('error',function(error){
 	  console.log('TCP server Error : ' + error);
+	  client = null;
+	  socket.destroy();
 	});
 
 	socket.on('end',function(data){
 	  var bread = socket.bytesRead;
 	  console.log('socket end Bytes read : ' + bread);
+	  client = null;
+	  socket.destroy();
 	});
 
 	socket.on('close',function(error){
@@ -93,6 +99,8 @@ server.on('connection',function(socket){
 	  if(error){
 		console.log('Socket was closed coz of transmission error');
 	  }
+	  client = null;
+	  socket.destroy();
 	}); 
 
 });
@@ -201,6 +209,10 @@ wsServer.on('request', function(request){
 	wsconnection.on('message', function(message){
 		console.log('Received Message: ', message.utf8Data);
 		wsconnection.sendUTF('server ack!');
+
+		if(client != null){
+			client.write('>' + message.utf8Data + '\r\n');
+		}
 	});
 	
 	wsconnection.on('close', function(reasonCode, description){

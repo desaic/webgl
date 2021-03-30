@@ -59,6 +59,8 @@ struct Move
 {
   Vec2u8 src;
   Vec2u8 dst;
+  //promote to piece. usually none.
+  uint8_t promo=0;
 };
 
 class ChessBoard {
