@@ -84,11 +84,15 @@ bool TreePointer::Increment(unsigned axis)
   unsigned log2BF = tree->GetLog2BF();
   unsigned gridSize = 1 << log2BF;
   unsigned level = unsigned(indices.size()) - 1;
+  
+  std::vector<Vec3u> oldInd = indices;
+
   for (unsigned i = 0; i < indices.size(); i++) {
     level = unsigned(indices.size()) - 1 - i;
     unsigned childIdx = indices[level][axis] + 1;
     if (childIdx >= gridSize) {
       if (level == 0) {
+        indices = oldInd;
         //root level. no more block to jump to .
         return false;
       }
@@ -118,13 +122,14 @@ bool TreePointer::Decrement(unsigned axis)
   unsigned level = unsigned(indices.size()) - 1;
   unsigned log2BF = tree->GetLog2BF();
   unsigned gridSize = 1 << log2BF;
+  std::vector<Vec3u> oldInd = indices;
   for (unsigned i = 0; i < indices.size(); i++) {
     level = unsigned(indices.size()) - 1 - i;
     int childIdx = int(indices[level][axis]) - 1;
     if (childIdx < 0) {
       if (level == 0) {
         //root level. no more block to jump to .
-        nodes[level] = nullptr;
+        indices = oldInd;
         return false;
       }
       //move on to the next block.

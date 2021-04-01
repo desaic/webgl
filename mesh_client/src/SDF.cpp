@@ -67,10 +67,10 @@ void SolveQuadAxis(int x, int y, int z, unsigned axis, FMStructs* fm,
     if (labPtr.HasValue()) {
       GetVoxelValue(labPtr, lab);
       distPtr.PointToLeaf(idx[0], idx[1], idx[2]);
-      GetVoxelValue(distPtr, distMinus);
-      minDist = distMinus;
     }
     if (lab == uint8_t(SDFLabel::KNOWN)) {
+      GetVoxelValue(distPtr, distMinus);
+      minDist = distMinus;
       d = -1;
     }
     idx[axis]++;
@@ -111,27 +111,31 @@ float SolveQuadratic(int x, int y, int z,
   SolveQuadAxis(x, y, z, 1, fm, dist, h);
   SolveQuadAxis(x, y, z, 2, fm, dist, h);
   float a = 0, b=0, c=0;
-  float sign = 1.0f;
+  float psi = INF_DIST;
+  if (h[0] == 0 && h[1] == 0 && h[2] == 0) {
+    return psi;
+  }
   for (unsigned axis = 0; axis < 3; axis++) {
     int h2 = h[axis] * h[axis];
     a += h2;
     b += h2 * std::abs(dist[axis]);
     c += h2 * dist[axis] * dist[axis];
-    if (dist[axis] < 0) {
-      sign = -1.0f;
-    }
   }
   b *= -2;
   //F{^-2}_{l,m,n} = 1
   c -= 1;
-  float psi = INF_DIST;
+
   float Delta = b * b - 4 * a * c;
-  if (Delta >= 0) {
-    float psi_t = (std::sqrt(Delta) - b) / (2 * a);
-    if (dist[0] < psi_t && dist[1] < psi_t && dist[2] < psi_t) {
-      psi = sign*psi_t;
-    }
+  
+  if (Delta < 0) {
+    //no consistent distance 
+    Delta = 0;
   }
+  float psi_t = (std::sqrt(Delta) - b) / (2 * a);
+  //if (dist[0] < psi_t && dist[1] < psi_t && dist[2] < psi_t) {
+    psi = psi_t;
+  //}
+  
   return psi;
 }
 
@@ -217,6 +221,9 @@ void InitPQ(FMStructs* fm)
     for (unsigned y = 0; y < s[1]; y++) {
       labPtr.PointToLeaf(x, y, 0);
       for (unsigned z = 0; z < s[2]; z++) {
+        if (x == 58 && y == 37 && z == 6) {
+          std::cout << "debug\n";
+        }
         if (labPtr.HasValue()) {
           UpdateNeighbors(x, y, z, fm);
         }

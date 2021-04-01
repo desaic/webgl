@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <functional>
 #include <numeric>
+#include <set>
 
 #define MAX_GRID_SIZE 1000000
 
@@ -81,6 +82,59 @@ void GetTrig(std::vector<float> & trig, size_t tidx, const TrigMesh * mesh,
   }
 }
 
+unsigned closestTrig(const std::vector<size_t>& trigs,
+  SDFMesh* sdf, size_t x, size_t y, size_t z,
+  TrigDistInfo & minInfo)
+{
+  float h = sdf->voxelSize;
+  Vec3f center = sdf->gridOrigin + h * Vec3f(x + 0.5f, y + 0.5f, z + 0.5f);
+  std::vector<float> trig;
+  unsigned minT = 0;
+  for (size_t t = 0; t < trigs.size(); t++) {
+    size_t tidx = trigs[t];
+    GetTrig(trig, tidx, sdf->mesh, Vec3f(0, 0, 0));
+    Vec3f bary;
+    TrigDistInfo info = PointTrigDist(center, trig.data());
+    if (t == 0 || info.sqrDist < minInfo.sqrDist) {
+      minT = t;
+      minInfo = info;
+    }
+  }
+  return minT;
+}
+
+void AddTrigs(SDFMesh* sdf, TreePointer & ptr, std::set<size_t>& s)
+{
+  if (!ptr.HasValue()) {
+    return;
+  }
+  size_t listIdx = 0;
+  GetVoxelValue(ptr, listIdx);
+  const std::vector<size_t>& trigs = sdf->trigList[listIdx];
+  std::copy(trigs.begin(), trigs.end(), std::inserter(s, s.end()));
+}
+
+void GetNeighborTrigs(std::vector<size_t> & trigs, 
+  SDFMesh * sdf, size_t x, size_t y, size_t z,
+  const TreePointer & ptr)
+{
+  const int dim = 3;
+  std::set<size_t> trigSet;
+  for (int axis = 0; axis < dim; axis++) {
+    TreePointer localPtr = ptr;
+    bool exists = localPtr.Increment(axis);
+    if (exists) {
+      AddTrigs(sdf, localPtr, trigSet);
+    }
+    localPtr = ptr;
+    exists = localPtr.Decrement(axis);
+    if (exists) {
+      AddTrigs(sdf, localPtr, trigSet);
+    }
+  }
+  std::vector<size_t> v(trigSet.begin(), trigSet.end());
+}
+
 void ExactDistance(SDFMesh* sdf) 
 {
   ///\TODO use iterator instead of going through all voxels.
@@ -100,46 +154,35 @@ void ExactDistance(SDFMesh* sdf)
         }
         size_t listIdx = 0;
         GetVoxelValue(ptr, listIdx);
+
         const std::vector<size_t> &trigs = sdf->trigList[listIdx];
-        Vec3f center = sdf->gridOrigin + h * Vec3f(x+0.5f, y+0.5f, z+0.5f);
-        std::vector<float> trig;
+        if (trigs.size() == 0) {
+          //should never happen.
+          continue;
+        }
         TrigDistInfo minInfo;
-        unsigned minT=0;
-        for (size_t t = 0; t < trigs.size(); t++) {
-          size_t tidx = trigs[t];
-          GetTrig(trig, tidx, sdf->mesh, Vec3f(0, 0, 0));
-          Vec3f bary;
-          TrigDistInfo info = PointTrigDist(center, trig.data());
-          if (t == 0 || info.sqrDist < minInfo.sqrDist) {
-            minT = t;
-            minInfo = info;
+        unsigned minT = closestTrig(trigs, sdf, x, y, z, minInfo);
+        size_t trigIdx = trigs[minT];
+
+        //need to check neighboring cells
+        if (minInfo.sqrDist >= 0.25) {
+          std::vector<size_t> nbrTrigs;
+          GetNeighborTrigs(nbrTrigs, sdf, x, y, z, ptr);
+          if (nbrTrigs.size() > 0) {
+            TrigDistInfo nbrInfo;
+            unsigned nbrMinT = closestTrig(nbrTrigs, sdf, x, y, z, nbrInfo);
+            if (nbrInfo.sqrDist < minInfo.sqrDist) {
+              trigIdx = nbrTrigs[nbrMinT];
+              minInfo = nbrInfo;
+            }
           }
         }
-        Vec3f n = sdf->mesh->GetNormal(trigs[minT], minInfo.bary);
-        float sign = 1.0f;
-        if (Dot(n, center - minInfo.closest)<0) {
-          sign = -1.0f;
-        }
 
-        if (x == 93 && y == 44 && z == 8) {
-          std::cout << "debug\n";
-          TrigMesh localMesh = SubSet(*(sdf->mesh), trigs);
-          localMesh.SaveObj("local.obj");
-
-          Vec3f mn = center - 1.5f * Vec3f(h);
-          Vec3f mx = center + 1.5f * Vec3f(h);
-          TrigMesh Voxel = MakeCube(mn, mx);
-          Voxel.SaveObj("voxel.obj");
-
-          std::vector<size_t> minList(1, trigs[minT]);
-          TrigMesh closestMesh = SubSet(*(sdf->mesh), minList);
-          closestMesh.SaveObj("closest.obj");
-        }
-
+        float dist = std::sqrt(minInfo.sqrDist);
+        dist /= h;
         distPtr.PointToLeaf(x, y, z);
         distPtr.CreatePath();
-        float dist = sign * std::sqrt(minInfo.sqrDist);
-        dist /= h;
+
         AddVoxelValue(distPtr, dist);
         ptr.Increment(ZAxis);
       }
@@ -197,7 +240,7 @@ bool trigCubeIntersect(float * verts, Vec3i& cube, float voxSize)
                       (float)((0.5f + cube[2]) * voxSize) };
   ///make cube half size 1.5 to catch triangles within 1 neighbor.
   ///TODO not very efficient.
-  float halfSize = voxSize * 1.5f;
+  float halfSize = 0.501*voxSize;
   float boxhalfsize[3] = { halfSize, halfSize, halfSize };
   return triBoxOverlap(boxcenter, boxhalfsize, verts);
 }

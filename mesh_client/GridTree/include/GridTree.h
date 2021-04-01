@@ -137,11 +137,15 @@ public:
   ///move to a voxel within the same node.
   ///assuming pointer is pointing at a valid path.
   void MoveToSameNode(unsigned x, unsigned y, unsigned z);
+
   ///move x y or z axis by +1.
   ///the new voxel may be empty.
-  ///\return false if the move will be out of bound.
+  ///\return false if the move will be out of bound, in which case
+  /// the pointer points to the original coordinate.
   bool Increment(unsigned axis);
+
   bool Decrement(unsigned axis);
+  
   ///Creates nodes from root to pointer if the node doesn't exist
   void CreatePath();
 
