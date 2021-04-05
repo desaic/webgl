@@ -121,4 +121,14 @@ public:
   int FromFen(const std::string& fen);
 
   std::string GetFen();
+
+private:
+	void GetEvasions(std::vector<Move>& moves);
+	void GetKingEvasions(std::vector<Move>& moves);
+
+	void GetNonEvasions(std::vector<Move>& moves);
+	void GetCaptures(std::vector<Move>& moves);
+	void GetQuiets(std::vector<Move>& moves);
+
+	int numChecks();
 };

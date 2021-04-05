@@ -15,11 +15,46 @@ fullMoves(0)
   board.resize(64);
 }
 
+int ChessBoard::numChecks() {
+	return 0;
+}
+
+void ChessBoard::GetKingEvasions(std::vector<Move>& moves) {
+
+}
+
+void ChessBoard::GetCaptures(std::vector<Move>& moves) {
+
+}
+
+void ChessBoard::GetQuiets(std::vector<Move>& moves) {
+
+}
+
+void ChessBoard::GetEvasions(std::vector<Move>& moves) {
+	GetKingEvasions(moves);
+
+	if (numChecks() > 1) return; // If multiple pieces are checking the king, he has to move
+
+	// Generate blocks/captures to get out of check
+}
+
+void ChessBoard::GetNonEvasions(std::vector<Move>& moves) {
+	GetCaptures(moves);
+	GetQuiets(moves);
+}
+
+
 std::vector<Move> ChessBoard::GetMoves()
 {
   std::vector<Move> moves;
 
-
+  if (numChecks() > 0) {
+	  GetEvasions(moves);
+  }
+  else {
+	  GetNonEvasions(moves);
+  }
 
   return moves;
 }
