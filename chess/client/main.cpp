@@ -5,26 +5,63 @@
 #include <mutex>
 #include <deque> 
 #include <vector>
-
-SocketClient client;
-
-enum State {
-  STOP,
-  DISCONNECTED,
-  RUNNING
-};
-
-State state;
-std::string IP = "localhost";
-int port = 9001;
-
-std::mutex qLock;
-std::deque<char> q;
+#include <string>
+#include <sstream>
 
 void LogFun(const std::string& msg, LogLevel level)
 {
-  std::cout<<level<<" " << msg << "\n";
+  std::cout << level << " " << msg << "\n";
 }
+
+class ChessClient {
+public:
+  ChessClient():IP("localhost"),
+    port(9001){
+  }
+
+  ~ChessClient() {
+    Stop();
+    if (loopThread.joinable()) {
+      loopThread.join();
+    }
+  }
+
+  void Init() {
+    int ret = sock.Connect(IP, port);
+    if (ret < 0) {
+      std::cout << "failed connect.\n";
+    }
+    sock.SetLogCallback(&LogFun);
+    state = DISCONNECTED;
+    loopThread = std::thread(&ChessClient::Loop, this);
+  }
+
+  void Stop(){
+    state = STOP;
+  }
+
+  void HandleCmd(const std::string& cmd);
+
+  void SendCmd(const std::string& command);
+
+  void Loop();
+
+  SocketClient sock;
+  enum State {
+    STOP,
+    DISCONNECTED,
+    RUNNING
+  };
+  State state;
+  std::string IP;
+  int port;
+  std::mutex qLock;
+  std::deque<char> q;
+
+  ChessBoard board;
+  std::thread loopThread;
+};
+
 
 ///\return 0 on success. -1 on error.
 int parseMsg(std::deque<char>& q, std::string& cmd) {
@@ -63,11 +100,42 @@ int parseMsg(std::deque<char>& q, std::string& cmd) {
   return 0;
 }
 
-void handleCmd(const std::string& cmd) {
-  std::cout << "received: " << cmd << "\n";
+std::vector<std::string> split(const std::string& str)
+{
+  std::vector<std::string>tokens;
+  std::istringstream iss(str);
+  bool fail = false;
+  while (!fail) {
+    std::string token;
+    iss >> token;
+    fail = iss.fail();
+    if (token.size() > 0) {
+      tokens.push_back(token);
+    }
+  }
+  return tokens;
 }
 
-void ClientLoop() {
+void ChessClient::HandleCmd(const std::string& cmd) {
+  std::cout << "received: " << cmd << "\n";
+  std::vector<std::string> tokens;
+  tokens = split(cmd);
+  if (tokens.size() == 0) {
+    return;
+  }
+  if (tokens[0] == "move") {
+    //check if move is legal.
+  }
+}
+
+void ChessClient::SendCmd(const std::string& command) 
+{
+  std::string fullCmd = ">" + command + "\r\n";
+  sock.SendAll(fullCmd.data(), uint32_t(fullCmd.size()));
+}
+
+void ChessClient::Loop() 
+{
   
   int interval = 30;
   int connInterval = 2000;
@@ -79,7 +147,7 @@ void ClientLoop() {
 
     switch (state){
     case DISCONNECTED: 
-      ret = client.Connect(IP, port, connInterval);
+      ret = sock.Connect(IP, port, connInterval);
       if (ret < 0) {
         //std::cout << "connect failed " << ret << "\n";
       }
@@ -88,7 +156,7 @@ void ClientLoop() {
       }
       break;
     case RUNNING:
-      int64_t len = client.Recv(buf.data(), BUFLEN, 50) ;
+      int64_t len = sock.Recv(buf.data(), BUFLEN, 50) ;
       if (len < 0) {
         if (len != -WSAETIMEDOUT) {
           state = DISCONNECTED;
@@ -110,7 +178,7 @@ void ClientLoop() {
       ret = parseMsg(q, cmd);
     }
     if (ret == 0) {
-      handleCmd(cmd);
+      HandleCmd(cmd);
     }
     
     std::this_thread::sleep_for(std::chrono::microseconds(interval));
@@ -126,11 +194,6 @@ int initWSA() {
   }
   std::cout << "WSAStartup done " << iResult << "\n";
   return 0;
-}
-
-void SendCommand(const std::string & command) {
-  std::string fullCmd = ">" + command + "\r\n";
-  client.SendAll(fullCmd.data(), uint32_t(fullCmd.size()));
 }
 
 void TestFEN()
@@ -155,30 +218,20 @@ int main(int argc, char* argv[])
 {
   TestFEN();
   initWSA();
-  int ret = client.Connect(IP, port);
-  if (ret < 0) {
-    std::cout << "failed connect.\n";
-  }
-  client.SetLogCallback(&LogFun); 
-
-  state = STOP;
-
-  state = DISCONNECTED;
-  std::thread clientThread(&ClientLoop);
-  
+ 
+  ChessClient client;
+  client.Init();
 
   int pollInterval = 50;  // ms;
-  while (state != STOP) {
+  while (1) {
     std::this_thread::sleep_for(std::chrono::milliseconds(pollInterval));
     std::string command;
     std::getline(std::cin, command);
     if (command.size() > 3) {
-      SendCommand(command);
+      client.SendCmd(command);
     }else if (command == "q") {
-      state = STOP;
       break;
     }
   }
-  clientThread.join();
   return 0;
 }

@@ -25,7 +25,7 @@ function onDrop (source, target, piece, newPos, oldPos, orientation) {
   console.log('Source: ' + source)
   console.log('Target: ' + target)
   console.log('Piece: ' + piece)
-  ws.send(source+' '+target);
+  ws.send("move " + source+' '+target);
 }
 
 function processBoardCommand(command) {
