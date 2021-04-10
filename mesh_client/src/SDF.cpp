@@ -128,7 +128,8 @@ float SolveQuadratic(int x, int y, int z,
   float Delta = b * b - 4 * a * c;
   
   if (Delta < 0) {
-    //no consistent distance 
+    //no consistent distance
+    //should never get here with properly initialized field.
     Delta = 0;
   }
   float psi_t = (std::sqrt(Delta) - b) / (2 * a);
@@ -221,9 +222,6 @@ void InitPQ(FMStructs* fm)
     for (unsigned y = 0; y < s[1]; y++) {
       labPtr.PointToLeaf(x, y, 0);
       for (unsigned z = 0; z < s[2]; z++) {
-        if (x == 58 && y == 37 && z == 6) {
-          std::cout << "debug\n";
-        }
         if (labPtr.HasValue()) {
           UpdateNeighbors(x, y, z, fm);
         }
