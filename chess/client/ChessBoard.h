@@ -6,8 +6,6 @@
 #include <vector>
 #include <list>
 
-#define CHESS_BLACK 0
-#define CHESS_WHITE 1
 #define BOARD_SIZE 8
 
 enum class PieceType
@@ -17,11 +15,37 @@ enum class PieceType
 };
 
 enum class PieceColor {
-  BLACK,
-  WHITE
+  BLACK=0,
+  WHITE=1
 };
 
 ///machine friendly coordinates in [0,7]
+///64 cells in total. 1 byte is enough
+struct ChessCoord
+{
+  ChessCoord() :coord(0) {}
+  ChessCoord(uint8_t x, uint8_t y) {
+    Set(x, y);
+  }
+  uint8_t Row() const {
+    return coord >> 3;
+  }
+  
+  uint8_t Col()const {
+    return coord & 7;
+  }
+  
+  void Set(uint8_t x, uint8_t y) {
+    coord = (y<<3) | (x);
+  }
+
+  bool operator==(const ChessCoord& b) {
+    return coord == b.coord;
+  }
+
+  uint8_t coord;
+};
+
 struct Vec2u8 {
   uint8_t v[2];
   Vec2u8(){
@@ -47,18 +71,33 @@ struct Vec2u8 {
   }
 };
 
-///4 bytes in total. same as an int.
+///2 bytes in total.
+///1 byte position and 1 byte type and color
 struct Piece {
-  uint8_t type;
-  uint8_t color;
-  Vec2u8 pos;
-  Piece() :type(0), color(0) {}
+  ///3 bits type 1 bit color
+  uint8_t info;
+  ChessCoord pos;
+  Piece() :info(0) {}
+  uint8_t color()const {
+    return info >> 3;
+  }
+  uint8_t type()const {
+    return info & 7;
+  }
+
+  void SetColor(PieceColor c) {
+    info = (info & (~8)) | ( uint8_t(c) << 3);
+  }
+
+  void SetType(PieceType t) {
+    info = (info & (~7)) | uint8_t(t);
+  }
 };
 
 struct Move
 {
-  Vec2u8 src;
-  Vec2u8 dst;
+  ChessCoord src;
+  ChessCoord dst;
   //promote to piece. usually none.
   uint8_t promo=0;
 };
@@ -68,9 +107,8 @@ class ChessBoard {
 public:
   ChessBoard(); 
   
-  ///list for easy removal and insertion
-  std::list<Piece*> black;
-  std::list<Piece*> white;
+  std::vector<Piece*> black;
+  std::vector<Piece*> white;
   ///8x8 board with 64 squares
   std::vector<Piece> board;
   PieceColor nextColor;

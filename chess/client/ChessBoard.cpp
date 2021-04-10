@@ -67,7 +67,7 @@ int ChessBoard::ApplyMove(const Move& m)
 
 char PieceFEN(const Piece& p)
 {
-  PieceType type = PieceType(p.type);
+  PieceType type = PieceType(p.type());
   char c;
   const char LOWER_DIFF = 'a' - 'A';
   switch (type) {
@@ -95,7 +95,7 @@ char PieceFEN(const Piece& p)
     break;
   }
 
-  if (p.color == uint8_t(PieceColor::BLACK)) {
+  if (p.color() == uint8_t(PieceColor::BLACK)) {
     c += LOWER_DIFF;
   }
   return c;
@@ -104,30 +104,30 @@ char PieceFEN(const Piece& p)
 void Char2Piece(char c, Piece & p) {
   const char LOWER_DIFF = 'a' - 'A';
   if (c > 'a') {
-    p.color = uint8_t(PieceColor::BLACK);
+    p.SetColor(PieceColor::BLACK);
     c -= LOWER_DIFF;
   }
   else {
-    p.color = uint8_t(PieceColor::WHITE);
+    p.SetColor(PieceColor::WHITE);
   }
   switch (c) {
   case 'P':
-    p.type = uint8_t(PieceType::PAWN);
+    p.SetType(PieceType::PAWN);
     break;
   case 'R':
-    p.type = uint8_t(PieceType::ROOK);
+    p.SetType(PieceType::ROOK);
     break;
   case  'N':
-    p.type = uint8_t(PieceType::KNIGHT);
+    p.SetType(PieceType::KNIGHT);
     break;
   case 'B':
-    p.type = uint8_t(PieceType::BISHOP);
+    p.SetType(PieceType::BISHOP);
     break;
   case 'Q':
-    p.type = uint8_t(PieceType::QUEEN);
+    p.SetType(PieceType::QUEEN);
     break;
   case 'K':
-    p.type = uint8_t(PieceType::KING);
+    p.SetType(PieceType::KING);
     break;
   default:
     //unknown shouldn't really get here ever.
@@ -250,7 +250,7 @@ std::string ChessBoard::GetFen()
     int emptyCnt = 0;
     for (int col = 0; col < BOARD_SIZE; col++){
       const Piece& p = (*this)(col, row);
-      if (p.type == uint8_t(PieceType::EMPTY)) {
+      if (p.type() == uint8_t(PieceType::EMPTY)) {
         emptyCnt++;
       }
       else {
@@ -316,38 +316,38 @@ std::string ChessBoard::GetFen()
 
 bool ChessBoard::AddPiece(unsigned x, unsigned y, const Piece& piece)
 {
-  if ((*this)(x, y).type != uint8_t(PieceType::EMPTY)) {
+  if ((*this)(x, y).type() != uint8_t(PieceType::EMPTY)) {
     return false;
   }
   (*this)(x, y) = piece;
-  (*this)(x, y).pos = Vec2u8(x, y);
+  (*this)(x, y).pos = ChessCoord(x, y);
 
-  std::list<Piece*>* list;
-  if (piece.color == uint8_t(PieceColor::WHITE)) {
+  std::vector<Piece*>* list;
+  if (piece.color() == uint8_t(PieceColor::WHITE)) {
     list = &white;
   }
   else {
     list = &black;
   }
-  list->insert(list->end(), GetPiece(x, y));
+  list->push_back(GetPiece(x, y));
   return true;
 }
 
 bool ChessBoard::RemovePiece(unsigned x, unsigned y)
 {
   Piece* p = GetPiece(x, y);
-  if (p->type == uint8_t(PieceType::EMPTY)) {
+  if (p->type() == uint8_t(PieceType::EMPTY)) {
     return false;
   }
-  PieceColor c = PieceColor(p->color);
-  std::list<Piece*>* list;
+  PieceColor c = PieceColor(p->color());
+  std::vector<Piece*>* list;
   if (c == PieceColor::WHITE) {
     list = &white;
   }
   else {
     list = &black;
   }
-  Vec2u8 coord(x, y);
+  ChessCoord coord(x, y);
   for (auto it = list->begin(); it != list->end(); it++) {
     Piece* ptr = (*it);
     if (ptr->pos == coord){
@@ -356,7 +356,7 @@ bool ChessBoard::RemovePiece(unsigned x, unsigned y)
     }
   }
 
-  p->type = uint8_t(PieceType::EMPTY);
+  p->SetType(PieceType::EMPTY);
   return true;
 }
 
@@ -365,7 +365,7 @@ void ChessBoard::Clear()
   black.clear();
   white.clear();
   for (size_t i = 0; i < board.size(); i++) {
-    board[i].type = uint8_t(PieceType::EMPTY);
+    board[i].SetType (PieceType::EMPTY);
   }
 
   hasEnPassant = false;

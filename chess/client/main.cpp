@@ -130,15 +130,15 @@ int initWSA() {
 
 void SendCommand(const std::string & command) {
   std::string fullCmd = ">" + command + "\r\n";
-  client.SendAll(fullCmd.data(), fullCmd.size());
+  client.SendAll(fullCmd.data(), uint32_t(fullCmd.size()));
 }
 
 void TestFEN()
 {
   ChessBoard board;
   Piece p;
-  p.type = uint8_t(PieceType::PAWN);
-  p.color = uint8_t(PieceColor::WHITE);
+  p.SetType(PieceType::PAWN);
+  p.SetColor(PieceColor::WHITE);
   board.AddPiece(0, 1, p);
   board.AddPiece(0, 2, p);
   board.AddPiece(0, 3, p);
