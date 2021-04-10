@@ -51,7 +51,7 @@ int main(int argc, char* argv[])
     std::string command;
     std::getline(std::cin, command);
     if (command.size() > 3) {
-      client.SendCmd(command);
+      client.HandleCli(command);
     }else if (command == "q") {
       break;
     }

@@ -155,6 +155,8 @@ public:
   ///-1 or some negative error code if move is invalid or something.
   int ApplyMove(const Move & m);
 
+  void SetStartPos();
+
   ///\return 0 on success
   int FromFen(const std::string& fen);
 

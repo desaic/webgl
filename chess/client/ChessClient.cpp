@@ -74,14 +74,29 @@ void ChessClient::HandleCmd(const std::string& cmd) {
   if (tokens[0] == "move") {
     //check if move is legal.
     bool legal = false;
-
     if (!legal) {
 
     }
     else {
 
     }
+    SendBoard();
   }
+}
+
+void ChessClient::HandleCli(const std::string& cmd)
+{
+  if (cmd == "start") {
+    board.SetStartPos();
+  }
+  SendCmd(cmd);
+}
+
+void ChessClient::SendBoard()
+{
+  std::string fen = board.GetFen();
+  std::string cmd = "fen " + fen;
+  SendCmd(cmd);
 }
 
 void ChessClient::SendCmd(const std::string& command)

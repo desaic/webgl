@@ -157,6 +157,12 @@ int parseInt(const std::string& str, size_t & idx)
   return num;
 }
 
+void ChessBoard::SetStartPos()
+{
+  const std::string startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+  FromFen(startFen);
+}
+
 int ChessBoard::FromFen(const std::string& fen)
 {
   size_t strIdx = 0;

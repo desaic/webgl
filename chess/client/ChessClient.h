@@ -33,7 +33,13 @@ public:
     state = STOP;
   }
 
+  ///send current board position to ui server.
+  void SendBoard();
+
   void HandleCmd(const std::string& cmd);
+
+  ///handle cli commands on the chess client.
+  void HandleCli(const std::string& cmd);
 
   void SendCmd(const std::string& command);
 
