@@ -19,7 +19,7 @@ int TrigMesh::LoadStl(const std::string& meshFile) {
     return -1;
   }
   ComputeTrigNormals();
-  ComputePseudoNormals();
+  //ComputePseudoNormals();
   return 0;
 }
 

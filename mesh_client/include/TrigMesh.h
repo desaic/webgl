@@ -33,6 +33,7 @@ public:
   Vec3f GetNormal(unsigned tIdx, const Vec3f& bary);
   void ComputeTrigNormals();
   void ComputeVertNormals();
+  ///experimental feature. do not use.
   void ComputePseudoNormals();
   void ComputeTrigEdges();
   void scale(float s);
