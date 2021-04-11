@@ -779,7 +779,7 @@ void ChessBoard::Clear()
   black.clear();
   white.clear();
   for (size_t i = 0; i < board.size(); i++) {
-    board[i].SetType (PieceType::EMPTY);
+    board[i].clear();
   }
 
   hasEnPassant = false;
