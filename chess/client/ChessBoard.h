@@ -24,9 +24,15 @@ enum class PieceColor {
 struct ChessCoord
 {
   ChessCoord() :coord(0) {}
+  
   ChessCoord(uint8_t x, uint8_t y) {
     Set(x, y);
   }
+
+  ChessCoord(const std::string& s) {
+    Set(s);
+  }
+
   uint8_t Row() const {
     return coord >> 3;
   }
@@ -39,36 +45,26 @@ struct ChessCoord
     coord = (y<<3) | (x);
   }
 
+  void Set(const std::string& s) {
+    uint8_t x, y;
+    x = s[0] - 'a';
+    y = s[1] - '1';
+    Set(x, y);
+  }
+
   bool operator==(const ChessCoord& b) {
     return coord == b.coord;
   }
 
+  std::string toString() {
+    std::string s;
+    s.resize(2);
+    s[0] = Col() + 'a';
+    s[1] = Row() + '1';
+    return s;
+  }
+
   uint8_t coord;
-};
-
-struct Vec2u8 {
-  uint8_t v[2];
-  Vec2u8(){
-    v[0] = 0;
-    v[1] = 0;
-  }
-
-  Vec2u8(unsigned x, unsigned y) {
-    v[0] = x;
-    v[1] = y;
-  }
-
-  uint8_t operator[](unsigned i) const {
-    return v[i];
-  }
-
-  uint8_t &operator[](unsigned i) {
-    return v[i];
-  }
-
-  bool operator == (const Vec2u8& b) {
-    return v[0] == b.v[0] && v[1] == b.v[1];
-  }
 };
 
 ///2 bytes in total.
@@ -94,12 +90,47 @@ struct Piece {
   }
 };
 
+void Char2Piece(char c, Piece& p);
+
+char PieceFEN(const Piece& p);
+
 struct Move
 {
   ChessCoord src;
   ChessCoord dst;
   //promote to piece. usually none.
   uint8_t promo=0;
+  Move(){}
+  Move(const std::string& from, const std::string& to):
+    src(from), dst(to){    
+  }
+
+  Move(const std::string& from, const std::string& to,
+    uint8_t prom) :
+    src(from), dst(to) {
+    SetPromo(prom);
+  }
+
+  void SetPromo(char c) {
+    Piece p;
+    Char2Piece(c, p);
+    promo = p.info;
+  }
+
+  bool operator==(const Move& b) {
+    return src == b.src && dst == b.dst && promo == b.promo;
+  }
+
+  std::string toString() {
+    std::string s = src.toString() + " " + dst.toString();
+    if (promo != 0) {
+      Piece p;
+      p.info = promo;
+      char c = PieceFEN(p);
+      s = s + " " + c;
+    }
+    return s;
+  }
 };
 
 class ChessBoard {
@@ -121,7 +152,7 @@ public:
   bool hasEnPassant;
 
   ///En passant target square.
-  Vec2u8 enPassantDst;
+  ChessCoord enPassantDst;
 
   ///number of half moves since last capture or pawn advance for
   ///drawing rule

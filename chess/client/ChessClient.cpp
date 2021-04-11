@@ -73,12 +73,27 @@ void ChessClient::HandleCmd(const std::string& cmd) {
   }
   if (tokens[0] == "move") {
     //check if move is legal.
+    Move attempt;
+    if (tokens.size() >= 3) {
+      attempt.src.Set(tokens[1]);
+      attempt.dst.Set(tokens[2]);
+    }
+    if (tokens.size() >= 4) {
+      attempt.SetPromo(tokens[3][0]);
+    }
     bool legal = false;
+    std::vector<Move> moves = board.GetMoves();
+    for (auto m : moves) {
+      if (m == attempt) {
+        legal = true;
+        break;
+      }
+    }
     if (!legal) {
-
+      std::cout << "illegal move " + attempt.toString() + "\n";
     }
     else {
-
+      board.ApplyMove(attempt);
     }
     SendBoard();
   }

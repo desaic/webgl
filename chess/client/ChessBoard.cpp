@@ -101,7 +101,8 @@ char PieceFEN(const Piece& p)
   return c;
 }
 
-void Char2Piece(char c, Piece & p) {
+void Char2Piece(char c, Piece & p) 
+{
   const char LOWER_DIFF = 'a' - 'A';
   if (c > 'a') {
     p.SetColor(PieceColor::BLACK);
@@ -135,11 +136,11 @@ void Char2Piece(char c, Piece & p) {
   }
 }
 
-std::string coordString(const Vec2u8& coord)
+std::string coordString(const ChessCoord& coord)
 {
   std::string s="  ";
-  s[0] = 'a' + coord[0];
-  s[1] = '1' + coord[1];
+  s[0] = 'a' + coord.Col();
+  s[1] = '1' + coord.Row();
   return s;
 }
 
@@ -236,10 +237,11 @@ int ChessBoard::FromFen(const std::string& fen)
     hasEnPassant = false;
   }
   else {
-    enPassantDst[0] = c - 'a';
+    uint8_t col = c - 'a';
     strIdx++;
     c = fen[strIdx];
-    enPassantDst[1] = c - '1';
+    uint8_t row = c - '1';
+    enPassantDst.Set(col, row);
   }
  
   strIdx+=2;
