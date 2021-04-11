@@ -142,6 +142,7 @@ void ChessClient::Loop()
       }
       else {
         state = RUNNING;
+        SendBoard();
       }
       break;
     case RUNNING:

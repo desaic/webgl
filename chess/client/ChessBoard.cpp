@@ -34,6 +34,9 @@ enum CastleMove {
   CASTLE_WK
 };
 
+void AddWhitePromos(const Move& m_in, std::vector<Move>& moves);
+void AddBlackPromos(const Move& m_in, std::vector<Move>& moves);
+
 ChessBoard::ChessBoard() :nextColor(PieceColor::WHITE),
 castleBK(true),
 castleBQ(true),
@@ -58,8 +61,120 @@ void ChessBoard::GetKingEvasions(std::vector<Move>& moves) {
 
 }
 
-void ChessBoard::GetCaptures(std::vector<Move>& moves) {
+void ChessBoard::GetCaptures(std::vector<Move>& moves)
+{
+  if (nextColor == PieceColor::BLACK) {
+    for (const Piece* p : black) {
+      GetCaptures(moves, *p);
+    }
+  }
+  else if (nextColor == PieceColor::WHITE) {
+    for (const Piece* p : white) {
+      GetCaptures(moves, *p);
+    }
+  }
+}
 
+void ChessBoard::GetCaptures(std::vector<Move>& moves, const Piece& p)
+{
+  PieceType type = PieceType(p.type());
+  switch (type) {
+  case PieceType::PAWN:
+    GetCapturesPawn(moves, p);
+    break;
+  case PieceType::ROOK:
+
+    break;
+  case PieceType::KNIGHT:
+
+    break;
+  case PieceType::BISHOP:
+
+    break;
+  case PieceType::QUEEN:
+
+    break;
+  case PieceType::KING:
+
+    break;
+  }
+}
+
+void ChessBoard::AddBlackPawnCaptures(ChessCoord src, ChessCoord dst, std::vector<Move>& moves)
+{
+  Piece* dstPiece = GetPiece(dst);
+  bool hasWhitePiece = (!dstPiece->isEmpty()) 
+    && (dstPiece->color() == uint8_t(PieceColor::WHITE));
+  if (hasWhitePiece || 
+    (src.Row() == 3 && enPassantDst == dst) ) {
+    Move m(src, dst);
+    if (src.Row() == 1) {
+      AddBlackPromos(m, moves);
+    }
+    else {
+      moves.push_back(m);
+    }
+  }
+}
+
+void ChessBoard::AddWhitePawnCaptures(ChessCoord src, ChessCoord dst, std::vector<Move>& moves)
+{
+  Piece* dstPiece = GetPiece(dst);
+  bool hasBlackPiece = (!dstPiece->isEmpty())
+    && (dstPiece->color() == uint8_t(PieceColor::BLACK));
+
+  if (hasBlackPiece ||
+    (src.Row() == 4 && enPassantDst == dst)) {
+    Move m(src, dst);
+    if (src.Row() == 1) {
+      AddWhitePromos(m, moves);
+    }
+    else {
+      moves.push_back(m);
+    }
+  }
+}
+
+void ChessBoard::GetCapturesPawn(std::vector<Move>& moves, const Piece& p)
+{
+  PieceColor color = PieceColor(p.color());
+  uint8_t row = p.pos.Row();
+  uint8_t col = p.pos.Col();
+  if (color == PieceColor::BLACK) {
+    if (row == 0) {
+      //shouldn't happen because it should have been promoted.
+      return;
+    }
+    ChessCoord dst = p.pos;
+    if (col > 0) {
+      dst.DecRow();
+      dst.DecCol();
+      AddBlackPawnCaptures(p.pos, dst, moves);
+    }
+    if (col < 7) {
+      dst = p.pos;
+      dst.DecRow();
+      dst.IncCol();
+      AddBlackPawnCaptures(p.pos, dst, moves);
+    }
+  }
+  else {
+    if (row == 7) {
+      return;
+    }
+    ChessCoord dst = p.pos;
+    if (col > 0) {
+      dst.IncRow();
+      dst.DecCol();
+      AddWhitePawnCaptures(p.pos, dst, moves);
+    }
+    if (col < 7) {
+      dst = p.pos;
+      dst.IncRow();
+      dst.IncCol();
+      AddWhitePawnCaptures(p.pos, dst, moves);
+    }
+  }
 }
 
 void ChessBoard::GetQuiets(std::vector<Move>& moves)
@@ -78,8 +193,7 @@ void ChessBoard::GetQuiets(std::vector<Move>& moves)
 
 void ChessBoard::GetQuiets(std::vector<Move>& moves, const Piece& p)
 {
-  uint8_t t = p.type();
-  PieceType type = PieceType(t);
+  PieceType type = PieceType(p.type());
   switch (type) {
   case PieceType::PAWN:
     GetQuietsPawn(moves, p);
