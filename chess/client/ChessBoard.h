@@ -10,8 +10,8 @@
 
 enum class PieceType
 {
-  EMPTY = 0, PAWN=1, ROOK = 2, KNIGHT, BISHOP,
-  QUEEN, KING
+  EMPTY = 0, PAWN=1, ROOK = 2, KNIGHT=3, BISHOP=4,
+  QUEEN=5, KING=6
 };
 
 enum class PieceColor {
@@ -25,6 +25,8 @@ struct ChessCoord
 {
   ChessCoord() :coord(0) {}
   
+  ChessCoord(uint8_t c) :coord(c) {}
+
   ChessCoord(uint8_t x, uint8_t y) {
     Set(x, y);
   }
@@ -41,6 +43,22 @@ struct ChessCoord
     return coord & 7;
   }
   
+  void IncRow() {
+    coord += 8;
+  }
+
+  void DecRow() {
+    coord -= 8;
+  }
+
+  void IncCol() {
+    coord ++;
+  }
+
+  void DecCol() {
+    coord --;
+  }
+
   void Set(uint8_t x, uint8_t y) {
     coord = (y<<3) | (x);
   }
@@ -245,7 +263,7 @@ public:
     return &(board[x + y * BOARD_SIZE]);
   }
 
-  Piece* GetPiece(const ChessCoord & c) {
+  Piece* GetPiece(ChessCoord c) {
     return &(board[c.coord]);
   }
 
@@ -253,9 +271,14 @@ public:
     return &(board[c]);
   }
 
-  bool AddPiece(unsigned x, unsigned y, const Piece& piece);
+  bool AddPiece(ChessCoord c, PieceInfo info);
 
-  bool RemovePiece(unsigned x, unsigned y);
+  bool RemovePiece(ChessCoord c);
+
+  ///moves a piece from src to dst and update the piece lists.
+  ///does not care rules. does nothing if src is empty.
+  /// Removes dst piece if there is any.
+  bool MovePiece(ChessCoord src, ChessCoord dst);
 
   void Clear();
 

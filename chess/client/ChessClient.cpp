@@ -81,7 +81,7 @@ void ChessClient::HandleCmd(const std::string& cmd) {
     if (tokens.size() >= 4) {
       attempt.SetPromo(tokens[3][0]);
     }
-    bool legal = true;
+    bool legal = false;
     std::vector<Move> moves = board.GetMoves();
     for (auto m : moves) {
       if (m == attempt) {

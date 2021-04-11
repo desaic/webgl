@@ -18,7 +18,13 @@
 #define h8 63
 
 #define BLACK_ROOK (2)
+#define BLACK_KNIGHT (3)
+#define BLACK_BISHOP (4)
+#define BLACK_QUEEN (5)
 #define WHITE_ROOK (10)
+#define WHITE_KNIGHT (11)
+#define WHITE_BISHOP (12)
+#define WHITE_QUEEN (13)
 
 enum CastleMove {
   CASTLE_NONE=0,
@@ -39,6 +45,9 @@ halfMoves(0),
 fullMoves(0)
 {
   board.resize(64);
+  for (size_t i = 0; i < board.size(); i++) {
+    board[i].pos = uint8_t(i);
+  }
 }
 
 int ChessBoard::numChecks() {
@@ -93,6 +102,30 @@ void ChessBoard::GetQuiets(std::vector<Move>& moves, const Piece& p)
   }
 }
 
+void AddBlackPromos(const Move & m_in, std::vector<Move> & moves) {
+  Move m = m_in;
+  m.promo = BLACK_ROOK;
+  moves.push_back(m);
+  m.promo = BLACK_KNIGHT;
+  moves.push_back(m);
+  m.promo = BLACK_BISHOP;
+  moves.push_back(m);
+  m.promo = BLACK_QUEEN;
+  moves.push_back(m);
+}
+
+void AddWhitePromos(const Move& m_in, std::vector<Move>& moves) {
+  Move m = m_in;
+  m.promo = WHITE_ROOK;
+  moves.push_back(m);
+  m.promo = WHITE_KNIGHT;
+  moves.push_back(m);
+  m.promo = WHITE_BISHOP;
+  moves.push_back(m);
+  m.promo = WHITE_QUEEN;
+  moves.push_back(m);
+}
+
 void ChessBoard::GetQuietsPawn(std::vector<Move>& moves, const Piece& p)
 {
   PieceColor color = PieceColor(p.color());
@@ -103,21 +136,46 @@ void ChessBoard::GetQuietsPawn(std::vector<Move>& moves, const Piece& p)
       //shouldn't happen because it should have been promoted.
       return;
     }
-    if (row == 7) {
-
-    }
-    ChessCoord dst(col - 1, row);
-    Move m(p.pos, dst);
-    if (col == 2) {
-
-    }
-    else {
-      moves.push_back(m);
+    ChessCoord dst = p.pos;
+    dst.DecRow();
+    if (GetPiece(dst)->isEmpty()) {
+      Move m(p.pos, dst);
+      if (row == 1) {
+        AddBlackPromos(m, moves);
+      }
+      else {
+        moves.push_back(m);
+        if (row == 6) {
+          dst.DecRow();
+          if (GetPiece(dst)->isEmpty()) {
+            m.dst = dst;
+            moves.push_back(m);
+          }
+        }
+      }     
     }
   }
   else {
     if (row == 7) {
       return;
+    }
+    ChessCoord dst = p.pos;
+    dst.IncRow();
+    if (GetPiece(dst)->isEmpty()) {
+      Move m(p.pos, dst);
+      if (row == 6) {
+        AddWhitePromos(m, moves);
+      }
+      else {
+        moves.push_back(m);
+        if (row == 1) {
+          dst.IncRow();
+          if (GetPiece(dst)->isEmpty()) {
+            m.dst = dst;
+            moves.push_back(m);
+          }
+        }
+      }
     }
   }
 }
@@ -234,31 +292,25 @@ int ChessBoard::ApplyMove(const Move& m)
     }
   }
 
+  MovePiece(m.src, m.dst);
   Piece* dstp = GetPiece(m.dst);
-  if (m.promo.isEmpty()) {
-    dstp->info = p->info;
-  }
-  else {
+  if (!m.promo.isEmpty()) {
     dstp->info = m.promo;
   }
-  p->clear();
 
   switch (castling) {
+    //move the rook
   case CASTLE_BQ:
-    GetPiece(d8)->info = BLACK_ROOK;
-    GetPiece(a8)->clear();    
+    MovePiece(d8, a8);
     break;
   case CASTLE_BK:
-    GetPiece(f8)->info = BLACK_ROOK;
-    GetPiece(h8)->clear();
+    MovePiece(f8, h8);
     break;
   case CASTLE_WQ:
-    GetPiece(d1)->info = WHITE_ROOK;
-    GetPiece(a1)->clear();
+    MovePiece(d1, a1);
     break;
   case CASTLE_WK:
-    GetPiece(f1)->info = WHITE_ROOK;
-    GetPiece(h1)->clear();
+    MovePiece(f1, h1);
     break;
   }
   return 0;
@@ -380,9 +432,8 @@ int ChessBoard::FromFen(const std::string& fen)
         strIdx++;
       }
       else {
-        Piece p;
-        p.info = Char2PieceInfo(c);
-        AddPiece(col, row, p);
+        PieceInfo info = Char2PieceInfo(c);
+        AddPiece(ChessCoord(col, row), info);
         col++;
         strIdx++;
       }
@@ -519,54 +570,79 @@ std::string ChessBoard::GetFen()
   oss << " ";
   oss << halfMoves << " ";
   oss << fullMoves;
-  return oss.str();
-  
+  return oss.str();  
 }
 
-bool ChessBoard::AddPiece(unsigned x, unsigned y, const Piece& piece)
+bool ChessBoard::AddPiece(ChessCoord c, PieceInfo info)
 {
-  if ((*this)(x, y).type() != uint8_t(PieceType::EMPTY)) {
+  Piece* p = GetPiece(c);
+  if (!p->isEmpty()) {
     return false;
   }
-  (*this)(x, y) = piece;
-  (*this)(x, y).pos = ChessCoord(x, y);
+  p->info = info;
 
   std::vector<Piece*>* list;
-  if (piece.color() == uint8_t(PieceColor::WHITE)) {
+  if (p->color() == uint8_t(PieceColor::WHITE)) {
     list = &white;
   }
   else {
     list = &black;
   }
-  list->push_back(GetPiece(x, y));
+  list->push_back(p);
   return true;
 }
 
-bool ChessBoard::RemovePiece(unsigned x, unsigned y)
+bool ChessBoard::RemovePiece(ChessCoord c)
 {
-  Piece* p = GetPiece(x, y);
-  if (p->type() == uint8_t(PieceType::EMPTY)) {
+  Piece* p = GetPiece(c);
+  if (p->isEmpty()) {
     return false;
   }
-  PieceColor c = PieceColor(p->color());
   std::vector<Piece*>* list;
-  if (c == PieceColor::WHITE) {
+  if (p->color() == uint8_t(PieceColor::WHITE) ){
     list = &white;
   }
   else {
     list = &black;
   }
-  ChessCoord coord(x, y);
   for (auto it = list->begin(); it != list->end(); it++) {
     Piece* ptr = (*it);
-    if (ptr->pos == coord){
+    if (ptr->pos == c){
       list->erase(it);
       break;
     }
   }
-
-  p->SetType(PieceType::EMPTY);
+  p->clear();
   return true;
+}
+
+///moves a piece from src to dst and update the piece lists.
+///does not care rules. does nothing if src is empty.
+bool ChessBoard::MovePiece(ChessCoord src, ChessCoord dst)
+{
+  Piece* p = GetPiece(src);
+  if (p->isEmpty()) {
+    return false;
+  }
+  RemovePiece(dst);
+
+  std::vector<Piece*>* list;
+  if (p->color() == uint8_t(PieceColor::WHITE)) {
+    list = &white;
+  }
+  else {
+    list = &black;
+  }
+  for (size_t i = 0; i < list->size(); i++) {
+    Piece* ptr = (*list)[i];
+    if (ptr->pos == src) {
+      Piece* dstPiece = GetPiece(dst);
+      (*list)[i] = dstPiece;
+      dstPiece->info = p->info;
+      p->clear();
+      break;
+    }
+  }
 }
 
 void ChessBoard::Clear()

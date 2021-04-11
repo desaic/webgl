@@ -10,6 +10,7 @@ class ChessClient {
 public:
   ChessClient():IP("localhost"),
     port(9001){
+    board.SetStartPos();
   }
 
   ~ChessClient() {

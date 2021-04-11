@@ -22,12 +22,12 @@ int initWSA() {
 void TestFEN()
 {
   ChessBoard board;
-  Piece p;
+  PieceInfo p;
   p.SetType(PieceType::PAWN);
   p.SetColor(PieceColor::WHITE);
-  board.AddPiece(0, 1, p);
-  board.AddPiece(0, 2, p);
-  board.AddPiece(0, 3, p);
+  board.AddPiece(ChessCoord(0, 1), p);
+  board.AddPiece(ChessCoord(0, 2), p);
+  board.AddPiece(ChessCoord(0, 3), p);
   std::string fen = board.GetFen();
   std::cout << fen << "\n";
 
