@@ -56,6 +56,14 @@ struct ChessCoord
     return coord == b.coord;
   }
 
+  bool operator == (uint8_t b) {
+    return coord == b;
+  }
+
+  bool operator != (uint8_t b) {
+    return coord != b;
+  }
+
   std::string toString() {
     std::string s;
     s.resize(2);
@@ -102,6 +110,14 @@ struct PieceInfo
   bool operator != (uint8_t b) {
     return info != b;
   }
+
+  bool isEmpty() const {
+    return info == 0;
+  }
+
+  void clear() {
+    info = 0;
+  }
 };
 
 ///2 bytes in total.
@@ -126,6 +142,14 @@ struct Piece {
 
   void SetType(PieceType t) {
     info.SetType(t);
+  }
+
+  void clear() {
+    info = 0;
+  }
+
+  bool isEmpty() const {
+    return info.isEmpty();
   }
 };
 
@@ -166,7 +190,7 @@ struct Move
 
   std::string toString() {
     std::string s = src.toString() + " " + dst.toString();
-    if (promo != 0) {
+    if (!promo.isEmpty()) {
       Piece p;
       p.info = promo;
       char c = PieceFEN(p.info);
@@ -217,6 +241,10 @@ public:
     return &(board[x + y * BOARD_SIZE]);
   }
 
+  Piece* GetPiece(const ChessCoord & c) {
+    return &(board[c.coord]);
+  }
+
   bool AddPiece(unsigned x, unsigned y, const Piece& piece);
 
   bool RemovePiece(unsigned x, unsigned y);
@@ -226,7 +254,9 @@ public:
   std::vector<Move> GetMoves();
 
   ///\return 0 on success.
-  ///-1 or some negative error code if move is invalid or something.
+  ///-1 or some negative error code if move is very invalid or something.
+  /// does not check every kind of illegal move for efficiency and
+  /// simplicity.
   int ApplyMove(const Move & m);
 
   void SetStartPos();

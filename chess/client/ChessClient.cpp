@@ -81,7 +81,7 @@ void ChessClient::HandleCmd(const std::string& cmd) {
     if (tokens.size() >= 4) {
       attempt.SetPromo(tokens[3][0]);
     }
-    bool legal = false;
+    bool legal = true;
     std::vector<Move> moves = board.GetMoves();
     for (auto m : moves) {
       if (m == attempt) {
@@ -103,8 +103,11 @@ void ChessClient::HandleCli(const std::string& cmd)
 {
   if (cmd == "start") {
     board.SetStartPos();
+    SendBoard();
   }
-  SendCmd(cmd);
+  else {
+    SendCmd(cmd);
+  }
 }
 
 void ChessClient::SendBoard()

@@ -2,6 +2,13 @@
 
 #include <sstream>
 
+#define a1 0
+#define e1 4
+#define h1 7
+#define a8 56
+#define e8 60
+#define h8 63
+
 ChessBoard::ChessBoard() :nextColor(PieceColor::WHITE),
 castleBK(true),
 castleBQ(true),
@@ -126,6 +133,76 @@ std::vector<Move> ChessBoard::GetMoves()
 
 int ChessBoard::ApplyMove(const Move& m)
 {
+  Piece* p = GetPiece(m.src);
+  uint8_t color = p->color();
+  if (color == uint8_t(nextColor)) {
+    nextColor = PieceColor(!color);
+  }
+  else {
+    return -1;
+  }
+
+  PieceType type = PieceType(p->type());
+  hasEnPassant = false;
+  enPassantDst = ChessCoord();
+  halfMoves++;
+  if (color == uint8_t(PieceColor::BLACK) ){
+    switch (type) {
+    case PieceType::PAWN:
+      if (m.src.Row() == 6 && m.dst.Row() == 4) {
+        enPassantDst = ChessCoord(m.dst.Col(), 5);
+        hasEnPassant = true;
+      }
+      halfMoves = 0;
+      break;
+    case PieceType::KING:
+      castleBK = false;
+      castleBQ = false;
+      break;
+    case PieceType::ROOK:
+      if (m.src.Col() == 0) {
+        castleBQ = false;
+      }
+      else if (m.src.Col() == 7) {
+        castleBK = false;
+      }
+      break;
+    }
+
+    fullMoves++;
+  }
+  else {
+    switch (type) {
+    case PieceType::PAWN:
+      if (m.src.Row() == 1 && m.dst.Row() == 3) {
+        enPassantDst = ChessCoord(m.dst.Col(), 2);
+        hasEnPassant = true;
+      }
+      halfMoves = 0;
+      break;
+    case PieceType::KING:
+      castleWK = false;
+      castleWQ = false;
+      break;
+    case PieceType::ROOK:
+      if (m.src.Col() == 0) {
+        castleWQ = false;
+      }
+      else if (m.src.Col() == 7) {
+        castleWK = false;
+      }
+      break;
+    }
+  }
+  Piece* dstp = GetPiece(m.dst);
+  dstp->clear();
+  if (m.promo.isEmpty()) {
+    dstp->info = p->info;
+  }
+  else {
+    dstp->info = m.promo;
+  }
+  p->clear();
 
   return 0;
 }
@@ -293,7 +370,7 @@ int ChessBoard::FromFen(const std::string& fen)
       strIdx++;
     }
     else if (c == 'q') {
-      castleBK = true;
+      castleBQ = true;
       strIdx++;
     }
     c = fen[strIdx];
