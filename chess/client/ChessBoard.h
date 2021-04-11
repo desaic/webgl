@@ -10,7 +10,7 @@
 
 enum class PieceType
 {
-  EMPTY = 0, PAWN=1, ROOK, KNIGHT, BISHOP,
+  EMPTY = 0, PAWN=1, ROOK = 2, KNIGHT, BISHOP,
   QUEEN, KING
 };
 
@@ -52,15 +52,15 @@ struct ChessCoord
     Set(x, y);
   }
 
-  bool operator==(const ChessCoord& b) {
+  bool operator==(const ChessCoord& b) const{
     return coord == b.coord;
   }
 
-  bool operator == (uint8_t b) {
+  bool operator == (uint8_t b) const {
     return coord == b;
   }
 
-  bool operator != (uint8_t b) {
+  bool operator != (uint8_t b) const {
     return coord != b;
   }
 
@@ -99,16 +99,20 @@ struct PieceInfo
     info = (info & (~7)) | uint8_t(t);
   }
 
-  bool operator == (const PieceInfo& b) {
+  bool operator == (const PieceInfo& b)const {
     return info == b.info;
   }
   
-  bool operator == (uint8_t b) {
+  bool operator == (uint8_t b) const {
     return info == b;
   }
 
-  bool operator != (uint8_t b) {
+  bool operator != (uint8_t b) const {
     return info != b;
+  }
+
+  void operator = (uint8_t b) {
+    info = b;
   }
 
   bool isEmpty() const {
@@ -243,6 +247,10 @@ public:
 
   Piece* GetPiece(const ChessCoord & c) {
     return &(board[c.coord]);
+  }
+
+  Piece* GetPiece(uint8_t c) {
+    return &(board[c]);
   }
 
   bool AddPiece(unsigned x, unsigned y, const Piece& piece);

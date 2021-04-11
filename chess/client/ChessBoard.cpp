@@ -3,11 +3,30 @@
 #include <sstream>
 
 #define a1 0
+#define c1 2
+#define d1 3
 #define e1 4
+#define f1 5
+#define g1 6
 #define h1 7
 #define a8 56
+#define c8 58
+#define d8 59
 #define e8 60
+#define f8 61
+#define g8 62
 #define h8 63
+
+#define BLACK_ROOK (2)
+#define WHITE_ROOK (10)
+
+enum CastleMove {
+  CASTLE_NONE=0,
+  CASTLE_BQ,
+  CASTLE_BK,
+  CASTLE_WQ,
+  CASTLE_WK
+};
 
 ChessBoard::ChessBoard() :nextColor(PieceColor::WHITE),
 castleBK(true),
@@ -135,17 +154,21 @@ int ChessBoard::ApplyMove(const Move& m)
 {
   Piece* p = GetPiece(m.src);
   uint8_t color = p->color();
+  if (m.src == m.dst) {
+    return -1;
+  }
   if (color == uint8_t(nextColor)) {
     nextColor = PieceColor(!color);
   }
   else {
-    return -1;
+    return -2;
   }
 
   PieceType type = PieceType(p->type());
   hasEnPassant = false;
   enPassantDst = ChessCoord();
   halfMoves++;
+  CastleMove castling = CASTLE_NONE;
   if (color == uint8_t(PieceColor::BLACK) ){
     switch (type) {
     case PieceType::PAWN:
@@ -156,6 +179,14 @@ int ChessBoard::ApplyMove(const Move& m)
       halfMoves = 0;
       break;
     case PieceType::KING:
+      if (m.src == e8) {
+        if (castleBQ && m.dst == c8) {
+          castling = CASTLE_BQ;
+        }
+        else if (castleBK && m.dst == g8) {
+          castling = CASTLE_BK;
+        }
+      }
       castleBK = false;
       castleBQ = false;
       break;
@@ -181,6 +212,14 @@ int ChessBoard::ApplyMove(const Move& m)
       halfMoves = 0;
       break;
     case PieceType::KING:
+      if (m.src == e1) {
+        if (castleWQ && m.dst == c1) {
+          castling = CASTLE_WQ;
+        }
+        else if (castleWK && m.dst == g1) {
+          castling = CASTLE_WK;
+        }
+      }
       castleWK = false;
       castleWQ = false;
       break;
@@ -194,8 +233,8 @@ int ChessBoard::ApplyMove(const Move& m)
       break;
     }
   }
+
   Piece* dstp = GetPiece(m.dst);
-  dstp->clear();
   if (m.promo.isEmpty()) {
     dstp->info = p->info;
   }
@@ -204,6 +243,24 @@ int ChessBoard::ApplyMove(const Move& m)
   }
   p->clear();
 
+  switch (castling) {
+  case CASTLE_BQ:
+    GetPiece(d8)->info = BLACK_ROOK;
+    GetPiece(a8)->clear();    
+    break;
+  case CASTLE_BK:
+    GetPiece(f8)->info = BLACK_ROOK;
+    GetPiece(h8)->clear();
+    break;
+  case CASTLE_WQ:
+    GetPiece(d1)->info = WHITE_ROOK;
+    GetPiece(a1)->clear();
+    break;
+  case CASTLE_WK:
+    GetPiece(f1)->info = WHITE_ROOK;
+    GetPiece(h1)->clear();
+    break;
+  }
   return 0;
 }
 
