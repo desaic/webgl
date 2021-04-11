@@ -126,7 +126,7 @@ void ChessBoard::AddWhitePawnCaptures(ChessCoord src, ChessCoord dst, std::vecto
   if (hasBlackPiece ||
     (src.Row() == 4 && enPassantDst == dst)) {
     Move m(src, dst);
-    if (src.Row() == 1) {
+    if (src.Row() == 6) {
       AddWhitePromos(m, moves);
     }
     else {
