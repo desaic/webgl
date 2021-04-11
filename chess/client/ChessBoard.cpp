@@ -27,8 +27,73 @@ void ChessBoard::GetCaptures(std::vector<Move>& moves) {
 
 }
 
-void ChessBoard::GetQuiets(std::vector<Move>& moves) {
+void ChessBoard::GetQuiets(std::vector<Move>& moves)
+{
+  if (nextColor == PieceColor::BLACK) {
+    for (const Piece* p : black) {
+      GetQuiets(moves, *p);
+    }
+  }
+  else if (nextColor == PieceColor::WHITE) {
+    for (const Piece* p : white) {
+      GetQuiets(moves, *p);
+    }
+  }
+}
 
+void ChessBoard::GetQuiets(std::vector<Move>& moves, const Piece& p)
+{
+  uint8_t t = p.type();
+  PieceType type = PieceType(t);
+  switch (type) {
+  case PieceType::PAWN:
+    GetQuietsPawn(moves, p);
+    break;
+  case PieceType::ROOK:
+
+    break;
+  case PieceType::KNIGHT:
+
+    break;
+  case PieceType::BISHOP:
+
+    break;
+  case PieceType::QUEEN:
+
+    break;
+  case PieceType::KING:
+
+    break;
+  }
+}
+
+void ChessBoard::GetQuietsPawn(std::vector<Move>& moves, const Piece& p)
+{
+  PieceColor color = PieceColor(p.color());
+  uint8_t row = p.pos.Row();
+  uint8_t col = p.pos.Col();
+  if (color == PieceColor::BLACK) {
+    if (row == 0) {
+      //shouldn't happen because it should have been promoted.
+      return;
+    }
+    if (row == 7) {
+
+    }
+    ChessCoord dst(col - 1, row);
+    Move m(p.pos, dst);
+    if (col == 2) {
+
+    }
+    else {
+      moves.push_back(m);
+    }
+  }
+  else {
+    if (row == 7) {
+      return;
+    }
+  }
 }
 
 void ChessBoard::GetEvasions(std::vector<Move>& moves) {
@@ -65,9 +130,9 @@ int ChessBoard::ApplyMove(const Move& m)
   return 0;
 }
 
-char PieceFEN(const Piece& p)
+char PieceFEN(const PieceInfo& info)
 {
-  PieceType type = PieceType(p.type());
+  PieceType type = PieceType(info.type());
   char c;
   const char LOWER_DIFF = 'a' - 'A';
   switch (type) {
@@ -95,45 +160,47 @@ char PieceFEN(const Piece& p)
     break;
   }
 
-  if (p.color() == uint8_t(PieceColor::BLACK)) {
+  if (info.color() == uint8_t(PieceColor::BLACK)) {
     c += LOWER_DIFF;
   }
   return c;
 }
 
-void Char2Piece(char c, Piece & p) 
+PieceInfo Char2PieceInfo(char c)
 {
+  PieceInfo info(0);
   const char LOWER_DIFF = 'a' - 'A';
   if (c > 'a') {
-    p.SetColor(PieceColor::BLACK);
+    info.SetColor(PieceColor::BLACK);
     c -= LOWER_DIFF;
   }
   else {
-    p.SetColor(PieceColor::WHITE);
+    info.SetColor(PieceColor::WHITE);
   }
   switch (c) {
   case 'P':
-    p.SetType(PieceType::PAWN);
+    info.SetType(PieceType::PAWN);
     break;
   case 'R':
-    p.SetType(PieceType::ROOK);
+    info.SetType(PieceType::ROOK);
     break;
   case  'N':
-    p.SetType(PieceType::KNIGHT);
+    info.SetType(PieceType::KNIGHT);
     break;
   case 'B':
-    p.SetType(PieceType::BISHOP);
+    info.SetType(PieceType::BISHOP);
     break;
   case 'Q':
-    p.SetType(PieceType::QUEEN);
+    info.SetType(PieceType::QUEEN);
     break;
   case 'K':
-    p.SetType(PieceType::KING);
+    info.SetType(PieceType::KING);
     break;
   default:
     //unknown shouldn't really get here ever.
     break;
   }
+  return info;
 }
 
 std::string coordString(const ChessCoord& coord)
@@ -180,7 +247,7 @@ int ChessBoard::FromFen(const std::string& fen)
       }
       else {
         Piece p;
-        Char2Piece(c, p);
+        p.info = Char2PieceInfo(c);
         AddPiece(col, row, p);
         col++;
         strIdx++;
@@ -265,7 +332,7 @@ std::string ChessBoard::GetFen()
         if (emptyCnt > 0) {
           oss << emptyCnt;
         }
-        char c = PieceFEN(p);
+        char c = PieceFEN(p.info);
         oss << c;
         emptyCnt = 0;
       }

@@ -67,40 +67,85 @@ struct ChessCoord
   uint8_t coord;
 };
 
-///2 bytes in total.
-///1 byte position and 1 byte type and color
-struct Piece {
-  ///3 bits type 1 bit color
+///ran out of good names.
+struct PieceInfo
+{
   uint8_t info;
-  ChessCoord pos;
-  Piece() :info(0) {}
+  PieceInfo() :info(0) {}
+
+  PieceInfo(uint8_t i) :info(i) {}
+
   uint8_t color()const {
     return info >> 3;
   }
+
   uint8_t type()const {
     return info & 7;
   }
 
   void SetColor(PieceColor c) {
-    info = (info & (~8)) | ( uint8_t(c) << 3);
+    info = (info & (~8)) | (uint8_t(c) << 3);
   }
 
   void SetType(PieceType t) {
     info = (info & (~7)) | uint8_t(t);
   }
+
+  bool operator == (const PieceInfo& b) {
+    return info == b.info;
+  }
+  
+  bool operator == (uint8_t b) {
+    return info == b;
+  }
+
+  bool operator != (uint8_t b) {
+    return info != b;
+  }
 };
 
-void Char2Piece(char c, Piece& p);
+///2 bytes in total.
+///1 byte position and 1 byte type and color
+struct Piece {
+  ///3 bits type 1 bit color
+  PieceInfo info;
+  ChessCoord pos;
+  Piece() :info(0) {}
 
-char PieceFEN(const Piece& p);
+  uint8_t color()const {
+    return info.color();
+  }
+  
+  uint8_t type()const {
+    return info.type();
+  }
+
+  void SetColor(PieceColor c) {
+    info.SetColor(c);;
+  }
+
+  void SetType(PieceType t) {
+    info.SetType(t);
+  }
+};
+
+PieceInfo Char2PieceInfo(char c);
+
+char PieceFEN(const PieceInfo& info);
 
 struct Move
 {
   ChessCoord src;
   ChessCoord dst;
   //promote to piece. usually none.
-  uint8_t promo=0;
+  PieceInfo promo;
+
   Move(){}
+
+  Move(const ChessCoord& from, const ChessCoord& to):
+  src(from), dst(to){
+  }
+
   Move(const std::string& from, const std::string& to):
     src(from), dst(to){    
   }
@@ -112,9 +157,7 @@ struct Move
   }
 
   void SetPromo(char c) {
-    Piece p;
-    Char2Piece(c, p);
-    promo = p.info;
+    promo = Char2PieceInfo(c);
   }
 
   bool operator==(const Move& b) {
@@ -126,7 +169,7 @@ struct Move
     if (promo != 0) {
       Piece p;
       p.info = promo;
-      char c = PieceFEN(p);
+      char c = PieceFEN(p.info);
       s = s + " " + c;
     }
     return s;
@@ -200,6 +243,8 @@ private:
 	void GetNonEvasions(std::vector<Move>& moves);
 	void GetCaptures(std::vector<Move>& moves);
 	void GetQuiets(std::vector<Move>& moves);
+  void GetQuiets(std::vector<Move>& moves, const Piece & p);
+  void GetQuietsPawn(std::vector<Move>& moves, const Piece& p);
 
 	int numChecks();
 };
