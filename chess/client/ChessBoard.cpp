@@ -341,12 +341,17 @@ int ChessBoard::ApplyMove(const Move& m)
   enPassantDst = ChessCoord();
   halfMoves++;
   CastleMove castling = CASTLE_NONE;
+  //is this move en Passant
+  bool isEnPassant=false;
   if (color == uint8_t(PieceColor::BLACK) ){
     switch (type) {
     case PieceType::PAWN:
       if (m.src.Row() == 6 && m.dst.Row() == 4) {
         enPassantDst = ChessCoord(m.dst.Col(), 5);
         hasEnPassant = true;
+      }
+      if (m.src.Col() != m.dst.Col() && GetPiece(m.dst)->isEmpty()) {
+        isEnPassant = true;
       }
       halfMoves = 0;
       break;
@@ -381,6 +386,9 @@ int ChessBoard::ApplyMove(const Move& m)
         enPassantDst = ChessCoord(m.dst.Col(), 2);
         hasEnPassant = true;
       }
+      if (m.src.Col() != m.dst.Col() && GetPiece(m.dst)->isEmpty()) {
+        isEnPassant = true;
+      }
       halfMoves = 0;
       break;
     case PieceType::KING:
@@ -411,7 +419,14 @@ int ChessBoard::ApplyMove(const Move& m)
   if (!m.promo.isEmpty()) {
     dstp->info = m.promo;
   }
-
+  if (isEnPassant) {
+    if (m.dst.Row() == 5) {
+      RemovePiece(ChessCoord(m.dst.Col(), m.dst.Row() - 1));
+    }
+    else if (m.dst.Row() == 2) {
+      RemovePiece(ChessCoord(m.dst.Col(), m.dst.Row() + 1));
+    }
+  }
   switch (castling) {
     //move the rook
   case CASTLE_BQ:
