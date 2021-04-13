@@ -7,7 +7,7 @@ function createWindow () {
   // Create the browser window.
   let win = new BrowserWindow({
     width: 900,
-    height: 600,
+    height: 700,
     webPreferences: {
       nodeIntegration: true
     }
@@ -15,6 +15,8 @@ function createWindow () {
 
   // and load the index.html of the app.
   win.loadFile('index.html')
+  //show debug console for debugging frontend code.
+  //win.webContents.openDevTools()
 }
 
 app.whenReady().then(createWindow)

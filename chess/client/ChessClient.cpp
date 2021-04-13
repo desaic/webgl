@@ -97,6 +97,9 @@ void ChessClient::HandleCmd(const std::string& cmd) {
     }
     SendBoard();
   }
+  else if (tokens[0] == "fen") {
+    SendBoard();
+  }
 }
 
 void ChessClient::HandleCli(const std::string& cmd)

@@ -28,6 +28,13 @@
 
 <body>
   <p>Test chess ui</p>
+  <select id="selectPromo" name="promoUI" onchange="promoCallback(this);">
+    <option value="none" selected="selected">Promote to</option>
+    <option value="N">N</option>
+    <option value="B">B</option>
+    <option value="R">R</option>
+    <option value="Q">Q</option>
+  </select>
   <div id="maincontainer">
     <div id="left">
       <div id="myBoard" style="width: 400px"></div>
@@ -39,7 +46,6 @@
     </div>
   </div>
   <script>
-	window.nodeRequire = require;
 	delete window.require;
 	delete window.exports;
 	delete window.module;
