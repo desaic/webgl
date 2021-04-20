@@ -95,7 +95,7 @@ void ChessBoard::GetCaptures(std::vector<Move>& moves, const Piece& p)
     GetCapturesQueen(moves, p);
     break;
   case PieceType::KING:
-
+    GetCapturesKing(moves, p);
     break;
   }
 }
@@ -298,6 +298,33 @@ void ChessBoard::GetCapturesQueen(std::vector<Move> & moves, const Piece& p)
   }
 }
 
+void ChessBoard::GetCapturesKing(std::vector<Move>& moves, const Piece& p)
+{
+  uint8_t color = p.color();
+  char r0 = char(p.pos.Row());
+  char c0 = char(p.pos.Col());
+  const unsigned NUM_DIRS = 8;
+  char dir[NUM_DIRS][2] = { {-1,0},{1,0},{0,-1},{0,1},
+  {-1,-1},{-1,1},{1,-1},{1,1} };
+  for (unsigned d = 0; d < NUM_DIRS; d++) {
+    char col = c0 + dir[d][0];
+    char row = r0 + dir[d][1];
+    if (col < 0 || col >= BOARD_SIZE) {
+      continue;
+    }
+    if (row < 0 || row >= BOARD_SIZE) {
+      continue;
+    }
+    Piece* dstPiece = GetPiece(col, row);
+    if (!dstPiece->isEmpty()) {
+      if (dstPiece->color() != color) {
+        Move m(p.pos, ChessCoord(col, row));
+        moves.push_back(m);
+      }
+    }
+  }
+}
+
 void ChessBoard::GetQuiets(std::vector<Move>& moves)
 {
   if (nextColor == PieceColor::BLACK) {
@@ -332,7 +359,7 @@ void ChessBoard::GetQuiets(std::vector<Move>& moves, const Piece& p)
     GetQuietsQueen(moves, p);
     break;
   case PieceType::KING:
-
+    GetQuietsKing(moves, p);
     break;
   }
 }
@@ -530,6 +557,31 @@ void ChessBoard::GetQuietsQueen(std::vector<Move>& moves, const Piece& p)
       else {
         break;
       }
+    }
+  }
+}
+
+void ChessBoard::GetQuietsKing(std::vector<Move> & moves, const Piece & p)
+{
+  uint8_t color = p.color();
+  char r0 = char(p.pos.Row());
+  char c0 = char(p.pos.Col());
+  const unsigned NUM_DIRS = 8;
+  char dir[NUM_DIRS][2] = { {-1,0},{1,0},{0,-1},{0,1},
+  {-1,-1},{-1,1},{1,-1},{1,1} };
+  for (unsigned d = 0; d < NUM_DIRS; d++) {
+    char col = c0 + dir[d][0];
+    char row = r0 + dir[d][1];
+    if (col < 0 || col >= BOARD_SIZE) {
+      continue;
+    }
+    if (row < 0 || row >= BOARD_SIZE) {
+      continue;
+    }
+    Piece* dstPiece = GetPiece(col, row);
+    if (dstPiece->isEmpty()) {
+      Move m(p.pos, ChessCoord(col, row));
+      moves.push_back(m);
     }
   }
 }
