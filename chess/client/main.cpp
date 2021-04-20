@@ -2,6 +2,7 @@
 #include "ChessBoard.h"
 #include "ChessClient.h"
 #include <iostream>
+#include <iomanip>
 #include <mutex>
 #include <vector>
 #include <string>
