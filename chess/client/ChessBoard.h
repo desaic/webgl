@@ -307,6 +307,7 @@ private:
   void GetCapturesPawn(std::vector<Move>& moves, const Piece& p);
   void GetCapturesRook(std::vector<Move>& moves, const Piece& p);
   void GetCapturesKnight(std::vector<Move>& moves, const Piece& p);
+  void GetCapturesBishop(std::vector<Move>& moves, const Piece& p);
 
   void AddBlackPawnCaptures(ChessCoord src, ChessCoord dst, std::vector<Move>& moves);
   void AddWhitePawnCaptures(ChessCoord src, ChessCoord dst, std::vector<Move>& moves);
@@ -316,5 +317,7 @@ private:
   void GetQuietsPawn(std::vector<Move>& moves, const Piece& p);
   void GetQuietsRook(std::vector<Move>& moves, const Piece& p);
   void GetQuietsKnight(std::vector<Move>& moves, const Piece& p);
+  void GetQuietsBishop(std::vector<Move>& moves, const Piece& p);
+
   int numChecks();
 };
