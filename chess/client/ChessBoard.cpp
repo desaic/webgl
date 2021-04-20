@@ -92,7 +92,7 @@ void ChessBoard::GetCaptures(std::vector<Move>& moves, const Piece& p)
     GetCapturesBishop(moves, p);
     break;
   case PieceType::QUEEN:
-
+    GetCapturesQueen(moves, p);
     break;
   case PieceType::KING:
 
@@ -266,6 +266,38 @@ void ChessBoard::GetCapturesBishop(std::vector<Move>& moves, const Piece& p)
   }
 }
 
+void ChessBoard::GetCapturesQueen(std::vector<Move> & moves, const Piece& p)
+{
+  uint8_t color = p.color();
+  char r0 = char(p.pos.Row());
+  char c0 = char(p.pos.Col());
+  const unsigned NUM_DIRS = 8;
+  char dir[NUM_DIRS][2] = { {-1,0},{1,0},{0,-1},{0,1},
+  {-1,-1},{-1,1},{1,-1},{1,1} };
+  for (unsigned d = 0; d < NUM_DIRS; d++) {
+    char row = r0;
+    char col = c0;
+    for (char step = 0; step < BOARD_SIZE; step++) {
+      col += dir[d][0];
+      if (col < 0 || col >= BOARD_SIZE) {
+        break;
+      }
+      row += dir[d][1];
+      if (row < 0 || row >= BOARD_SIZE) {
+        break;
+      }
+      Piece* dstPiece = GetPiece(col, row);
+      if (!dstPiece->isEmpty()) {
+        if (dstPiece->color() != color) {
+          Move m(p.pos, ChessCoord(col, row));
+          moves.push_back(m);
+        }
+        break;
+      }
+    }
+  }
+}
+
 void ChessBoard::GetQuiets(std::vector<Move>& moves)
 {
   if (nextColor == PieceColor::BLACK) {
@@ -297,7 +329,7 @@ void ChessBoard::GetQuiets(std::vector<Move>& moves, const Piece& p)
     GetQuietsBishop(moves, p);
     break;
   case PieceType::QUEEN:
-
+    GetQuietsQueen(moves, p);
     break;
   case PieceType::KING:
 
@@ -446,6 +478,38 @@ void ChessBoard::GetQuietsBishop(std::vector<Move>& moves, const Piece& p) {
   char c0 = char(p.pos.Col());
   const unsigned NUM_DIRS = 4;
   char dir[NUM_DIRS][2] = { {-1,-1},{-1,1},{1,-1},{1,1} };
+  for (unsigned d = 0; d < NUM_DIRS; d++) {
+    char row = r0;
+    char col = c0;
+    for (char step = 0; step < BOARD_SIZE; step++) {
+      col += dir[d][0];
+      if (col < 0 || col >= BOARD_SIZE) {
+        break;
+      }
+      row += dir[d][1];
+      if (row < 0 || row >= BOARD_SIZE) {
+        break;
+      }
+      Piece* dstPiece = GetPiece(col, row);
+      if (dstPiece->isEmpty()) {
+        Move m(p.pos, ChessCoord(col, row));
+        moves.push_back(m);
+      }
+      else {
+        break;
+      }
+    }
+  }
+}
+
+void ChessBoard::GetQuietsQueen(std::vector<Move>& moves, const Piece& p)
+{
+  uint8_t color = p.color();
+  char r0 = char(p.pos.Row());
+  char c0 = char(p.pos.Col());
+  const unsigned NUM_DIRS = 8;
+  char dir[NUM_DIRS][2] = { {-1,0},{1,0},{0,-1},{0,1},
+  {-1,-1},{-1,1},{1,-1},{1,1} };
   for (unsigned d = 0; d < NUM_DIRS; d++) {
     char row = r0;
     char col = c0;
