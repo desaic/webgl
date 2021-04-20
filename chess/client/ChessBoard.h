@@ -322,6 +322,7 @@ private:
   void GetQuietsBishop(std::vector<Move>& moves, const Piece& p);
   void GetQuietsQueen(std::vector<Move>& moves, const Piece& p);
   void GetQuietsKing(std::vector<Move>& moves, const Piece& p);
-
+  void GetCastleBlack(std::vector<Move>& moves);
+  void GetCastleWhite(std::vector<Move>& moves);
   int numChecks();
 };

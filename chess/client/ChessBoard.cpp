@@ -3,6 +3,7 @@
 #include <sstream>
 
 #define a1 0
+#define b1 1
 #define c1 2
 #define d1 3
 #define e1 4
@@ -10,6 +11,7 @@
 #define g1 6
 #define h1 7
 #define a8 56
+#define b8 57
 #define c8 58
 #define d8 59
 #define e8 60
@@ -561,6 +563,41 @@ void ChessBoard::GetQuietsQueen(std::vector<Move>& moves, const Piece& p)
   }
 }
 
+///@TODO cannot castle if king's path is under attack.
+void ChessBoard::GetCastleBlack(std::vector<Move>& moves)
+{
+  if (castleBK) {
+    if (GetPiece(f8)->isEmpty() && GetPiece(g8)->isEmpty()) {
+      Move m(e8, g8);
+      moves.push_back(m);
+    }
+  }
+  if (castleBQ) {
+    if (GetPiece(b8)->isEmpty() && GetPiece(c8)->isEmpty()
+      && GetPiece(d8)->isEmpty()) {
+      Move m(e8, c8);
+      moves.push_back(m);
+    }
+  }
+}
+
+void ChessBoard::GetCastleWhite(std::vector<Move>& moves)
+{
+  if (castleWK) {
+    if (GetPiece(f1)->isEmpty() && GetPiece(g1)->isEmpty()) {
+      Move m(e1, g1);
+      moves.push_back(m);
+    }
+  }
+  if (castleWQ) {
+    if (GetPiece(b1)->isEmpty() && GetPiece(c1)->isEmpty()
+      && GetPiece(d1)->isEmpty()) {
+      Move m(e1, c1);
+      moves.push_back(m);
+    }
+  }
+}
+
 void ChessBoard::GetQuietsKing(std::vector<Move> & moves, const Piece & p)
 {
   uint8_t color = p.color();
@@ -583,6 +620,13 @@ void ChessBoard::GetQuietsKing(std::vector<Move> & moves, const Piece & p)
       Move m(p.pos, ChessCoord(col, row));
       moves.push_back(m);
     }
+  }
+
+  if (color == uint8_t(PieceColor::BLACK)) {
+    GetCastleBlack(moves);
+  }
+  else {
+    GetCastleWhite(moves);
   }
 }
 
@@ -722,16 +766,16 @@ int ChessBoard::ApplyMove(const Move& m)
   switch (castling) {
     //move the rook
   case CASTLE_BQ:
-    MovePiece(d8, a8);
+    MovePiece(a8, d8);
     break;
   case CASTLE_BK:
-    MovePiece(f8, h8);
+    MovePiece(h8, f8);
     break;
   case CASTLE_WQ:
-    MovePiece(d1, a1);
+    MovePiece(a1, d1);
     break;
   case CASTLE_WK:
-    MovePiece(f1, h1);
+    MovePiece(h1, f1);
     break;
   }
   return 0;
