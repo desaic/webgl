@@ -50,54 +50,53 @@ halfMoves(0),
 fullMoves(0)
 {
   board.resize(64);
-  for (size_t i = 0; i < board.size(); i++) {
-    board[i].pos = uint8_t(i);
-  }
 }
 
-int ChessBoard::numChecks() {
+int ChessBoard::numChecks()
+{
 	return 0;
 }
 
-void ChessBoard::GetKingEvasions(std::vector<Move>& moves) {
+void ChessBoard::GetKingEvasions(std::vector<Move>& moves)
+{
 
 }
 
 void ChessBoard::GetCaptures(std::vector<Move>& moves)
 {
   if (nextColor == PieceColor::BLACK) {
-    for (const Piece* p : black) {
-      GetCaptures(moves, *p);
+    for (ChessCoord c : black) {
+      GetCaptures(moves, c);
     }
   }
   else if (nextColor == PieceColor::WHITE) {
-    for (const Piece* p : white) {
-      GetCaptures(moves, *p);
+    for (ChessCoord c : white) {
+      GetCaptures(moves, c);
     }
   }
 }
 
-void ChessBoard::GetCaptures(std::vector<Move>& moves, const Piece& p)
+void ChessBoard::GetCaptures(std::vector<Move>& moves, ChessCoord c)
 {
-  PieceType type = PieceType(p.type());
+  PieceType type = PieceType(GetPiece(c)->type());
   switch (type) {
   case PieceType::PAWN:
-    GetCapturesPawn(moves, p);
+    GetCapturesPawn(moves, c);
     break;
   case PieceType::ROOK:
-    GetCapturesRook(moves, p);
+    GetCapturesRook(moves, c);
     break;
   case PieceType::KNIGHT:
-    GetCapturesKnight(moves, p);
+    GetCapturesKnight(moves, c);
     break;
   case PieceType::BISHOP:
-    GetCapturesBishop(moves, p);
+    GetCapturesBishop(moves, c);
     break;
   case PieceType::QUEEN:
-    GetCapturesQueen(moves, p);
+    GetCapturesQueen(moves, c);
     break;
   case PieceType::KING:
-    GetCapturesKing(moves, p);
+    GetCapturesKing(moves, c);
     break;
   }
 }
@@ -137,53 +136,53 @@ void ChessBoard::AddWhitePawnCaptures(ChessCoord src, ChessCoord dst, std::vecto
   }
 }
 
-void ChessBoard::GetCapturesPawn(std::vector<Move>& moves, const Piece& p)
+void ChessBoard::GetCapturesPawn(std::vector<Move>& moves, ChessCoord c)
 {
-  PieceColor color = PieceColor(p.color());
-  uint8_t row = p.pos.Row();
-  uint8_t col = p.pos.Col();
+  PieceColor color = PieceColor(GetPiece(c)->color());
+  uint8_t row = c.Row();
+  uint8_t col = c.Col();
   if (color == PieceColor::BLACK) {
     if (row == 0) {
       //shouldn't happen because it should have been promoted.
       return;
     }
-    ChessCoord dst = p.pos;
+    ChessCoord dst = c;
     if (col > 0) {
       dst.DecRow();
       dst.DecCol();
-      AddBlackPawnCaptures(p.pos, dst, moves);
+      AddBlackPawnCaptures(c, dst, moves);
     }
     if (col < 7) {
-      dst = p.pos;
+      dst = c;
       dst.DecRow();
       dst.IncCol();
-      AddBlackPawnCaptures(p.pos, dst, moves);
+      AddBlackPawnCaptures(c, dst, moves);
     }
   }
   else {
     if (row == 7) {
       return;
     }
-    ChessCoord dst = p.pos;
+    ChessCoord dst = c;
     if (col > 0) {
       dst.IncRow();
       dst.DecCol();
-      AddWhitePawnCaptures(p.pos, dst, moves);
+      AddWhitePawnCaptures(c, dst, moves);
     }
     if (col < 7) {
-      dst = p.pos;
+      dst = c;
       dst.IncRow();
       dst.IncCol();
-      AddWhitePawnCaptures(p.pos, dst, moves);
+      AddWhitePawnCaptures(c, dst, moves);
     }
   }
 }
 
-void ChessBoard::GetCapturesRook(std::vector<Move>& moves, const Piece& p)
+void ChessBoard::GetCapturesRook(std::vector<Move>& moves, ChessCoord c)
 {
-  uint8_t color = p.color();
-  char r0 = char (p.pos.Row());
-  char c0 = char (p.pos.Col());
+  uint8_t color = GetPiece(c)->color();
+  char r0 = char (c.Row());
+  char c0 = char (c.Col());
   const unsigned NUM_DIRS = 4;
   char dir[NUM_DIRS][2] = { {-1,0},{1,0},{0,-1},{0,1} };
   for (unsigned d = 0; d < NUM_DIRS; d++) {
@@ -201,7 +200,7 @@ void ChessBoard::GetCapturesRook(std::vector<Move>& moves, const Piece& p)
       Piece * dstPiece = GetPiece(col, row);
       if (!dstPiece->isEmpty()) {
         if (dstPiece->color() != color) {
-          Move m(p.pos, ChessCoord(col, row));
+          Move m(c, ChessCoord(col, row));
           moves.push_back(m);
         }
         break;
@@ -210,11 +209,11 @@ void ChessBoard::GetCapturesRook(std::vector<Move>& moves, const Piece& p)
   }
 }
 
-void ChessBoard::GetCapturesKnight(std::vector<Move>& moves, const Piece& p)
+void ChessBoard::GetCapturesKnight(std::vector<Move>& moves, ChessCoord c)
 {
-  uint8_t color = p.color();
-  char r0 = char(p.pos.Row());
-  char c0 = char(p.pos.Col());
+  uint8_t color = GetPiece(c)->color();
+  char r0 = char(c.Row());
+  char c0 = char(c.Col());
   const unsigned NUM_DIRS = 8;
   char dir[NUM_DIRS][2] = { {-2,-1},{-2,1},{-1,2},{1,2},
     {2,1},{2,-1},{1,-2},{-1,-2} };
@@ -230,18 +229,18 @@ void ChessBoard::GetCapturesKnight(std::vector<Move>& moves, const Piece& p)
     Piece* dstPiece = GetPiece(col, row);
     if (!dstPiece->isEmpty()) {
       if (dstPiece->color() != color) {
-        Move m(p.pos, ChessCoord(col, row));
+        Move m(c, ChessCoord(col, row));
         moves.push_back(m);
       }      
     }
   }
 }
 
-void ChessBoard::GetCapturesBishop(std::vector<Move>& moves, const Piece& p)
+void ChessBoard::GetCapturesBishop(std::vector<Move>& moves, ChessCoord c)
 {
-  uint8_t color = p.color();
-  char r0 = char(p.pos.Row());
-  char c0 = char(p.pos.Col());
+  uint8_t color = GetPiece(c)->color();
+  char r0 = char(c.Row());
+  char c0 = char(c.Col());
   const unsigned NUM_DIRS = 4;
   char dir[NUM_DIRS][2] = { {-1,-1},{-1,1},{1,-1},{1,1} };
   for (unsigned d = 0; d < NUM_DIRS; d++) {
@@ -259,7 +258,7 @@ void ChessBoard::GetCapturesBishop(std::vector<Move>& moves, const Piece& p)
       Piece* dstPiece = GetPiece(col, row);
       if (!dstPiece->isEmpty()) {
         if (dstPiece->color() != color) {
-          Move m(p.pos, ChessCoord(col, row));
+          Move m(c, ChessCoord(col, row));
           moves.push_back(m);
         }
         break;
@@ -268,11 +267,11 @@ void ChessBoard::GetCapturesBishop(std::vector<Move>& moves, const Piece& p)
   }
 }
 
-void ChessBoard::GetCapturesQueen(std::vector<Move> & moves, const Piece& p)
+void ChessBoard::GetCapturesQueen(std::vector<Move> & moves, ChessCoord c)
 {
-  uint8_t color = p.color();
-  char r0 = char(p.pos.Row());
-  char c0 = char(p.pos.Col());
+  uint8_t color = GetPiece(c)->color();
+  char r0 = char(c.Row());
+  char c0 = char(c.Col());
   const unsigned NUM_DIRS = 8;
   char dir[NUM_DIRS][2] = { {-1,0},{1,0},{0,-1},{0,1},
   {-1,-1},{-1,1},{1,-1},{1,1} };
@@ -291,7 +290,7 @@ void ChessBoard::GetCapturesQueen(std::vector<Move> & moves, const Piece& p)
       Piece* dstPiece = GetPiece(col, row);
       if (!dstPiece->isEmpty()) {
         if (dstPiece->color() != color) {
-          Move m(p.pos, ChessCoord(col, row));
+          Move m(c, ChessCoord(col, row));
           moves.push_back(m);
         }
         break;
@@ -300,11 +299,11 @@ void ChessBoard::GetCapturesQueen(std::vector<Move> & moves, const Piece& p)
   }
 }
 
-void ChessBoard::GetCapturesKing(std::vector<Move>& moves, const Piece& p)
+void ChessBoard::GetCapturesKing(std::vector<Move>& moves, ChessCoord c)
 {
-  uint8_t color = p.color();
-  char r0 = char(p.pos.Row());
-  char c0 = char(p.pos.Col());
+  uint8_t color = GetPiece(c)->color();
+  char r0 = char(c.Row());
+  char c0 = char(c.Col());
   const unsigned NUM_DIRS = 8;
   char dir[NUM_DIRS][2] = { {-1,0},{1,0},{0,-1},{0,1},
   {-1,-1},{-1,1},{1,-1},{1,1} };
@@ -320,7 +319,7 @@ void ChessBoard::GetCapturesKing(std::vector<Move>& moves, const Piece& p)
     Piece* dstPiece = GetPiece(col, row);
     if (!dstPiece->isEmpty()) {
       if (dstPiece->color() != color) {
-        Move m(p.pos, ChessCoord(col, row));
+        Move m(c, ChessCoord(col, row));
         moves.push_back(m);
       }
     }
@@ -330,38 +329,38 @@ void ChessBoard::GetCapturesKing(std::vector<Move>& moves, const Piece& p)
 void ChessBoard::GetQuiets(std::vector<Move>& moves)
 {
   if (nextColor == PieceColor::BLACK) {
-    for (const Piece* p : black) {
-      GetQuiets(moves, *p);
+    for (ChessCoord c : black) {
+      GetQuiets(moves, c);
     }
   }
   else if (nextColor == PieceColor::WHITE) {
-    for (const Piece* p : white) {
-      GetQuiets(moves, *p);
+    for (ChessCoord c : white) {
+      GetQuiets(moves, c);
     }
   }
 }
 
-void ChessBoard::GetQuiets(std::vector<Move>& moves, const Piece& p)
+void ChessBoard::GetQuiets(std::vector<Move>& moves, ChessCoord c)
 {
-  PieceType type = PieceType(p.type());
+  PieceType type = PieceType(GetPiece(c)->type());
   switch (type) {
   case PieceType::PAWN:
-    GetQuietsPawn(moves, p);
+    GetQuietsPawn(moves, c);
     break;
   case PieceType::ROOK:
-    GetQuietsRook(moves, p);
+    GetQuietsRook(moves, c);
     break;
   case PieceType::KNIGHT:
-    GetQuietsKnight(moves, p);
+    GetQuietsKnight(moves, c);
     break;
   case PieceType::BISHOP:
-    GetQuietsBishop(moves, p);
+    GetQuietsBishop(moves, c);
     break;
   case PieceType::QUEEN:
-    GetQuietsQueen(moves, p);
+    GetQuietsQueen(moves, c);
     break;
   case PieceType::KING:
-    GetQuietsKing(moves, p);
+    GetQuietsKing(moves, c);
     break;
   }
 }
@@ -390,20 +389,20 @@ void AddWhitePromos(const Move& m_in, std::vector<Move>& moves) {
   moves.push_back(m);
 }
 
-void ChessBoard::GetQuietsPawn(std::vector<Move>& moves, const Piece& p)
+void ChessBoard::GetQuietsPawn(std::vector<Move>& moves, ChessCoord c)
 {
-  PieceColor color = PieceColor(p.color());
-  uint8_t row = p.pos.Row();
-  uint8_t col = p.pos.Col();
+  PieceColor color = PieceColor(GetPiece(c)->color());
+  uint8_t row = c.Row();
+  uint8_t col = c.Col();
   if (color == PieceColor::BLACK) {
     if (row == 0) {
       //shouldn't happen because it should have been promoted.
       return;
     }
-    ChessCoord dst = p.pos;
+    ChessCoord dst = c;
     dst.DecRow();
     if (GetPiece(dst)->isEmpty()) {
-      Move m(p.pos, dst);
+      Move m(c, dst);
       if (row == 1) {
         AddBlackPromos(m, moves);
       }
@@ -423,10 +422,10 @@ void ChessBoard::GetQuietsPawn(std::vector<Move>& moves, const Piece& p)
     if (row == 7) {
       return;
     }
-    ChessCoord dst = p.pos;
+    ChessCoord dst = c;
     dst.IncRow();
     if (GetPiece(dst)->isEmpty()) {
-      Move m(p.pos, dst);
+      Move m(c, dst);
       if (row == 6) {
         AddWhitePromos(m, moves);
       }
@@ -444,11 +443,11 @@ void ChessBoard::GetQuietsPawn(std::vector<Move>& moves, const Piece& p)
   }
 }
 
-void ChessBoard::GetQuietsRook(std::vector<Move>& moves, const Piece& p)
+void ChessBoard::GetQuietsRook(std::vector<Move>& moves, ChessCoord c)
 {
-  uint8_t color = p.color();
-  char r0 = char(p.pos.Row());
-  char c0 = char(p.pos.Col());
+  uint8_t color = GetPiece(c)->color();
+  char r0 = char(c.Row());
+  char c0 = char(c.Col());
   const unsigned NUM_DIRS = 4;
   char dir[NUM_DIRS][2] = { {-1,0},{1,0},{0,-1},{0,1} };
   for (unsigned d = 0; d < NUM_DIRS; d++) {
@@ -465,7 +464,7 @@ void ChessBoard::GetQuietsRook(std::vector<Move>& moves, const Piece& p)
       }
       Piece* dstPiece = GetPiece(col, row);
       if (dstPiece->isEmpty()) {
-        Move m(p.pos, ChessCoord(col, row));
+        Move m(c, ChessCoord(col, row));
         moves.push_back(m);
         continue;
       }
@@ -476,11 +475,11 @@ void ChessBoard::GetQuietsRook(std::vector<Move>& moves, const Piece& p)
   }
 }
 
-void ChessBoard::GetQuietsKnight(std::vector<Move>& moves, const Piece& p)
+void ChessBoard::GetQuietsKnight(std::vector<Move>& moves, ChessCoord c)
 {
-  uint8_t color = p.color();
-  char r0 = char(p.pos.Row());
-  char c0 = char(p.pos.Col());
+  uint8_t color = GetPiece(c)->color();
+  char r0 = char(c.Row());
+  char c0 = char(c.Col());
   const unsigned NUM_DIRS = 8;
   char dir[NUM_DIRS][2] = { {-2,-1},{-2,1},{-1,2},{1,2},
     {2,1},{2,-1},{1,-2},{-1,-2} };
@@ -495,16 +494,16 @@ void ChessBoard::GetQuietsKnight(std::vector<Move>& moves, const Piece& p)
     }
     Piece* dstPiece = GetPiece(col, row);
     if (dstPiece->isEmpty()) {
-      Move m(p.pos, ChessCoord(col, row));
+      Move m(c, ChessCoord(col, row));
       moves.push_back(m);
     }
   }
 }
 
-void ChessBoard::GetQuietsBishop(std::vector<Move>& moves, const Piece& p) {
-  uint8_t color = p.color();
-  char r0 = char(p.pos.Row());
-  char c0 = char(p.pos.Col());
+void ChessBoard::GetQuietsBishop(std::vector<Move>& moves, ChessCoord c) {
+  uint8_t color = GetPiece(c)->color();
+  char r0 = char(c.Row());
+  char c0 = char(c.Col());
   const unsigned NUM_DIRS = 4;
   char dir[NUM_DIRS][2] = { {-1,-1},{-1,1},{1,-1},{1,1} };
   for (unsigned d = 0; d < NUM_DIRS; d++) {
@@ -521,7 +520,7 @@ void ChessBoard::GetQuietsBishop(std::vector<Move>& moves, const Piece& p) {
       }
       Piece* dstPiece = GetPiece(col, row);
       if (dstPiece->isEmpty()) {
-        Move m(p.pos, ChessCoord(col, row));
+        Move m(c, ChessCoord(col, row));
         moves.push_back(m);
       }
       else {
@@ -531,11 +530,11 @@ void ChessBoard::GetQuietsBishop(std::vector<Move>& moves, const Piece& p) {
   }
 }
 
-void ChessBoard::GetQuietsQueen(std::vector<Move>& moves, const Piece& p)
+void ChessBoard::GetQuietsQueen(std::vector<Move>& moves, ChessCoord c)
 {
-  uint8_t color = p.color();
-  char r0 = char(p.pos.Row());
-  char c0 = char(p.pos.Col());
+  uint8_t color = GetPiece(c)->color();
+  char r0 = char(c.Row());
+  char c0 = char(c.Col());
   const unsigned NUM_DIRS = 8;
   char dir[NUM_DIRS][2] = { {-1,0},{1,0},{0,-1},{0,1},
   {-1,-1},{-1,1},{1,-1},{1,1} };
@@ -553,7 +552,7 @@ void ChessBoard::GetQuietsQueen(std::vector<Move>& moves, const Piece& p)
       }
       Piece* dstPiece = GetPiece(col, row);
       if (dstPiece->isEmpty()) {
-        Move m(p.pos, ChessCoord(col, row));
+        Move m(c, ChessCoord(col, row));
         moves.push_back(m);
       }
       else {
@@ -598,11 +597,11 @@ void ChessBoard::GetCastleWhite(std::vector<Move>& moves)
   }
 }
 
-void ChessBoard::GetQuietsKing(std::vector<Move> & moves, const Piece & p)
+void ChessBoard::GetQuietsKing(std::vector<Move> & moves, ChessCoord c)
 {
-  uint8_t color = p.color();
-  char r0 = char(p.pos.Row());
-  char c0 = char(p.pos.Col());
+  uint8_t color = GetPiece(c)->color();
+  char r0 = char(c.Row());
+  char c0 = char(c.Col());
   const unsigned NUM_DIRS = 8;
   char dir[NUM_DIRS][2] = { {-1,0},{1,0},{0,-1},{0,1},
   {-1,-1},{-1,1},{1,-1},{1,1} };
@@ -617,7 +616,7 @@ void ChessBoard::GetQuietsKing(std::vector<Move> & moves, const Piece & p)
     }
     Piece* dstPiece = GetPiece(col, row);
     if (dstPiece->isEmpty()) {
-      Move m(p.pos, ChessCoord(col, row));
+      Move m(c, ChessCoord(col, row));
       moves.push_back(m);
     }
   }
@@ -642,7 +641,6 @@ void ChessBoard::GetNonEvasions(std::vector<Move>& moves) {
 	GetCaptures(moves);
 	GetQuiets(moves);
 }
-
 
 std::vector<Move> ChessBoard::GetMoves()
 {
@@ -753,7 +751,7 @@ int ChessBoard::ApplyMove(const Move& m)
   MovePiece(m.src, m.dst);
   Piece* dstp = GetPiece(m.dst);
   if (!m.promo.isEmpty()) {
-    dstp->info = m.promo;
+    *dstp = m.promo;
   }
   if (isEnPassant) {
     if (m.dst.Row() == 5) {
@@ -781,7 +779,7 @@ int ChessBoard::ApplyMove(const Move& m)
   return 0;
 }
 
-char PieceFEN(const PieceInfo& info)
+char PieceFEN(const Piece& info)
 {
   PieceType type = PieceType(info.type());
   char c;
@@ -817,9 +815,9 @@ char PieceFEN(const PieceInfo& info)
   return c;
 }
 
-PieceInfo Char2PieceInfo(char c)
+Piece Char2Piece(char c)
 {
-  PieceInfo info(0);
+  Piece info(0);
   const char LOWER_DIFF = 'a' - 'A';
   if (c > 'a') {
     info.SetColor(PieceColor::BLACK);
@@ -897,8 +895,8 @@ int ChessBoard::FromFen(const std::string& fen)
         strIdx++;
       }
       else {
-        PieceInfo info = Char2PieceInfo(c);
-        AddPiece(ChessCoord(col, row), info);
+        Piece p = Char2Piece(c);
+        AddPiece(ChessCoord(col, row), p);
         col++;
         strIdx++;
       }
@@ -1038,22 +1036,22 @@ std::string ChessBoard::GetFen()
   return oss.str();  
 }
 
-bool ChessBoard::AddPiece(ChessCoord c, PieceInfo info)
+bool ChessBoard::AddPiece(ChessCoord c, Piece info)
 {
   Piece* p = GetPiece(c);
   if (!p->isEmpty()) {
     return false;
   }
-  p->info = info;
+  *p = info;
 
-  std::vector<Piece*>* list;
+  std::vector<ChessCoord>* list;
   if (p->color() == uint8_t(PieceColor::WHITE)) {
     list = &white;
   }
   else {
     list = &black;
   }
-  list->push_back(p);
+  list->push_back(c);
   return true;
 }
 
@@ -1063,7 +1061,7 @@ bool ChessBoard::RemovePiece(ChessCoord c)
   if (p->isEmpty()) {
     return false;
   }
-  std::vector<Piece*>* list;
+  std::vector<ChessCoord>* list;
   if (p->color() == uint8_t(PieceColor::WHITE) ){
     list = &white;
   }
@@ -1071,8 +1069,7 @@ bool ChessBoard::RemovePiece(ChessCoord c)
     list = &black;
   }
   for (auto it = list->begin(); it != list->end(); it++) {
-    Piece* ptr = (*it);
-    if (ptr->pos == c){
+    if ((*it) == c){
       list->erase(it);
       break;
     }
@@ -1091,7 +1088,7 @@ bool ChessBoard::MovePiece(ChessCoord src, ChessCoord dst)
   }
   RemovePiece(dst);
 
-  std::vector<Piece*>* list;
+  std::vector<ChessCoord>* list;
   if (p->color() == uint8_t(PieceColor::WHITE)) {
     list = &white;
   }
@@ -1099,15 +1096,15 @@ bool ChessBoard::MovePiece(ChessCoord src, ChessCoord dst)
     list = &black;
   }
   for (size_t i = 0; i < list->size(); i++) {
-    Piece* ptr = (*list)[i];
-    if (ptr->pos == src) {
+    if ( (*list)[i] == src) {
       Piece* dstPiece = GetPiece(dst);
-      (*list)[i] = dstPiece;
+      (*list)[i] = dst;
       dstPiece->info = p->info;
       p->clear();
       break;
     }
   }
+  return true;
 }
 
 void ChessBoard::Clear()
@@ -1127,4 +1124,11 @@ void ChessBoard::Clear()
   castleWK = true;
   castleWQ = true;
 
+}
+
+BitBoard ChessBoard::GetAttackedSquares()
+{
+  //std::vector<
+  //if(nextColor == )
+  return BitBoard();
 }

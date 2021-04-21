@@ -23,7 +23,7 @@ int initWSA() {
 void TestFEN()
 {
   ChessBoard board;
-  PieceInfo p;
+  Piece p;
   p.SetType(PieceType::PAWN);
   p.SetColor(PieceColor::WHITE);
   board.AddPiece(ChessCoord(0, 1), p);
