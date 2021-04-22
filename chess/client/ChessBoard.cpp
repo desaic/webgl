@@ -1,5 +1,6 @@
 #include "ChessBoard.h"
 
+#include <algorithm>
 #include <sstream>
 
 #define a1 0
@@ -50,11 +51,6 @@ halfMoves(0),
 fullMoves(0)
 {
   board.resize(64);
-}
-
-int ChessBoard::numChecks()
-{
-	return 0;
 }
 
 void ChessBoard::GetKingEvasions(std::vector<Move>& moves)
@@ -630,9 +626,11 @@ void ChessBoard::GetQuietsKing(std::vector<Move> & moves, ChessCoord c)
 }
 
 void ChessBoard::GetEvasions(std::vector<Move>& moves) {
-	GetKingEvasions(moves);
-
-	if (numChecks() > 1) return; // If multiple pieces are checking the king, he has to move
+    
+  GetKingEvasions(moves);
+  
+  // If multiple pieces are checking the king, he has to move
+  if (checksInfo.attackers.size() > 1) { return; }
 
 	// Generate blocks/captures to get out of check
 }
@@ -645,8 +643,8 @@ void ChessBoard::GetNonEvasions(std::vector<Move>& moves) {
 std::vector<Move> ChessBoard::GetMoves()
 {
   std::vector<Move> moves;
-
-  if (numChecks() > 0) {
+  checksInfo = ComputeChecks();
+  if (checksInfo.attackers.size() > 0) {
 	  GetEvasions(moves);
   }
   else {
@@ -1126,9 +1124,235 @@ void ChessBoard::Clear()
 
 }
 
-BitBoard ChessBoard::GetAttackedSquares()
+void ComputeChecksPawn(ChecksInfo & info, ChessCoord coord, PieceColor color,
+  ChessCoord kingCoord)
 {
-  //std::vector<
-  //if(nextColor == )
-  return BitBoard();
+  uint8_t offsets[2] = { 7,9 };
+  if (color == PieceColor::BLACK) { 
+    for (unsigned i = 0; i < 2; i++) {
+      ChessCoord dst = coord;
+      dst.coord -= offsets[i];
+      info.attacked.SetBit(dst.coord);
+      if (dst == kingCoord) {
+        info.attackers.push_back(coord);
+      }
+    }
+  }
+  else {
+    for (unsigned i = 0; i < 2; i++) {
+      ChessCoord dst = coord;
+      dst.coord += offsets[i];
+      info.attacked.SetBit(dst.coord);
+      if (dst == kingCoord) {
+        info.attackers.push_back(coord);
+      }
+    }
+  }
+}
+
+void ComputeChecksKnight(ChecksInfo& info, ChessCoord coord, PieceColor color,
+  ChessCoord kingCoord)
+{
+  char r0 = char(coord.Row());
+  char c0 = char(coord.Col());
+  const unsigned NUM_DIRS = 8;
+  char dir[NUM_DIRS][2] = { {-2,-1},{-2,1},{-1,2},{1,2},
+    {2,1},{2,-1},{1,-2},{-1,-2} };
+  for (unsigned d = 0; d < NUM_DIRS; d++) {
+    char col = c0 + dir[d][0];
+    char row = r0 + dir[d][1];
+    if (col < 0 || col >= BOARD_SIZE) {
+      continue;
+    }
+    if (row < 0 || row >= BOARD_SIZE) {
+      continue;
+    }
+    ChessCoord dst(col, row);
+    info.attacked.SetBit(dst.coord);
+    if (dst == kingCoord) {
+      info.attackers.push_back(coord);
+    }
+  }
+}
+
+void ComputeChecksKing(ChecksInfo& info, ChessCoord coord, PieceColor color,
+  ChessCoord kingCoord)
+{
+  char r0 = char(coord.Row());
+  char c0 = char(coord.Col());
+  const unsigned NUM_DIRS = 8;
+  char dir[NUM_DIRS][2] = { {-1,-1},{-1,0},{-1,1},{0,-1},
+    {0,1},{1,-1},{1,0},{1,1} };
+  for (unsigned d = 0; d < NUM_DIRS; d++) {
+    char col = c0 + dir[d][0];
+    char row = r0 + dir[d][1];
+    if (col < 0 || col >= BOARD_SIZE) {
+      continue;
+    }
+    if (row < 0 || row >= BOARD_SIZE) {
+      continue;
+    }
+    ChessCoord dst(col, row);
+    info.attacked.SetBit(dst.coord);
+    if (dst == kingCoord) {
+      info.attackers.push_back(coord);
+    }
+  }
+}
+
+void InsertUnique(std::vector<ChessCoord>& coords, ChessCoord c)
+{
+  auto it = std::find(coords.begin(), coords.end(), c);
+  if (it != coords.end()) {
+    coords.push_back(c);
+  }
+}
+
+void ChessBoard::ComputeChecksRay(ChecksInfo& checks, ChessCoord coord, PieceColor color,
+  ChessCoord kingCoord, char dx, char dy)
+{
+  char row = char(coord.Row());
+  char col = char(coord.Col());
+  //first opposite color pieces along the line.
+  ChessCoord firstHit(255);
+  bool attackKing = false;
+  for (char step = 0; step < BOARD_SIZE; step++) {
+    col += dx;
+    if (col < 0 || col >= BOARD_SIZE) {
+      break;
+    }
+    row += dy;
+    if (row < 0 || row >= BOARD_SIZE) {
+      break;
+    }
+    ChessCoord dst(col, row);
+    if (dst == kingCoord) {
+      checks.attackers.push_back(coord);
+
+    }
+    Piece* dstPiece = GetPiece(dst);
+    if (dstPiece->isEmpty()) {
+      if (!firstHit.inBound()) {
+        checks.attacked.SetBit(dst.coord);
+      }
+      continue;
+    }
+
+    if (dstPiece->color() == uint8_t(color)) {
+      if (!firstHit.inBound()) {
+        //this piece is guarded by attacker, so king can't
+        //capture this piece.
+        checks.attacked.SetBit(dst.coord);
+      }
+      break;
+    }
+    else {
+      uint8_t attackedType = dstPiece->type();
+      //already attacking king and then hit another piece,
+      //no need to continue
+      if (attackKing) {
+        break;
+      }
+      //has a hit before
+      if (firstHit.inBound()) {
+        if (attackedType == uint8_t(PieceType::KING)) {
+          InsertUnique(checks.blockers, firstHit);
+        }
+        break;
+      }
+      else {
+        if (attackedType == uint8_t(PieceType::KING)) {
+          //king can't block for itself
+          attackKing = true;
+          checks.attacked.SetBit(dst.coord);
+        }
+        else {
+          firstHit = dst;
+        }
+      }
+    }
+  }
+}
+
+void ChessBoard::ComputeChecksRook(ChecksInfo& checks, ChessCoord coord, PieceColor color,
+  ChessCoord kingCoord)
+{
+  const unsigned NUM_DIRS = 4;
+  char dir[NUM_DIRS][2] = { {-1,0},{1,0},{0,-1},{0,1} };
+  for (unsigned d = 0; d < NUM_DIRS; d++) {
+    ComputeChecksRay(checks, coord, color, kingCoord, dir[d][0], dir[d][1]);
+  }
+}
+
+void ChessBoard::ComputeChecksBishop(ChecksInfo& checks, ChessCoord coord, PieceColor color,
+  ChessCoord kingCoord)
+{
+  const unsigned NUM_DIRS = 4;
+  char dir[NUM_DIRS][2] = { {-1,-1},{-1,1},{1,-1},{1,1} };
+  for (unsigned d = 0; d < NUM_DIRS; d++) {
+    ComputeChecksRay(checks, coord, color, kingCoord, dir[d][0], dir[d][1]);
+  }
+}
+
+void ChessBoard::ComputeChecksQueen(ChecksInfo& checks, ChessCoord coord, PieceColor color,
+  ChessCoord kingCoord)
+{
+  const unsigned NUM_DIRS = 8;
+  char dir[NUM_DIRS][2] = { {-1,0},{1,0},{0,-1},{0,1} ,
+    {-1,-1},{-1,1},{1,-1},{1,1} };
+  for (unsigned d = 0; d < NUM_DIRS; d++) {
+    ComputeChecksRay(checks, coord, color, kingCoord, dir[d][0], dir[d][1]);
+  }
+}
+
+ChecksInfo ChessBoard::ComputeChecks()
+{
+  ChecksInfo checks;
+  std::vector<ChessCoord>* list;
+  std::vector<ChessCoord>* attackerList;
+  PieceColor attackerColor;
+  if (nextColor == PieceColor::BLACK) {
+    list = &black;
+    attackerList = &white;
+    attackerColor = PieceColor::WHITE;
+  }
+  else {
+    list = &white;
+    attackerList = &black;
+    attackerColor = PieceColor::BLACK;
+  }
+  ChessCoord kingCoord;
+  for (ChessCoord c : (*attackerList)) {
+    if (GetPiece(c)->type() == uint8_t(PieceType::KING)) {
+      kingCoord = c;
+      break;
+    }
+  }
+
+  for (ChessCoord c : (*attackerList)) {
+    Piece* p = GetPiece(c);
+    PieceType type = PieceType (p->type());
+    switch (type) {
+    case PieceType::PAWN:
+      ComputeChecksPawn(checks, c, attackerColor, kingCoord);
+      break;
+    case PieceType::KNIGHT:
+      ComputeChecksKnight(checks, c, attackerColor, kingCoord);
+      break;
+    case PieceType::KING:
+      ComputeChecksKing(checks, c, attackerColor, kingCoord);
+      break;
+    case PieceType::ROOK:
+      ComputeChecksRook(checks, c, attackerColor, kingCoord);
+      break;
+    case PieceType::BISHOP:
+      ComputeChecksBishop(checks, c, attackerColor, kingCoord);
+      break;
+    case PieceType::QUEEN:
+      ComputeChecksQueen(checks, c, attackerColor, kingCoord);
+      break;
+    }
+  }
+
+  return checks;
 }

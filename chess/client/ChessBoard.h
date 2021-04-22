@@ -90,6 +90,10 @@ struct ChessCoord
     return s;
   }
 
+  bool inBound() {
+    return coord < 64;
+  }
+
   uint8_t coord;
 };
 
@@ -320,8 +324,15 @@ private:
   void GetCastleBlack(std::vector<Move>& moves);
   void GetCastleWhite(std::vector<Move>& moves);
 
-  //For the next color to move, get squares attacked by opposite color.
-  BitBoard GetAttackedSquares();
+  void ComputeChecksRook(ChecksInfo& info, ChessCoord coord, PieceColor color,
+    ChessCoord kingCoord);
+  void ComputeChecksBishop(ChecksInfo& checks, ChessCoord coord, PieceColor color,
+    ChessCoord kingCoord);
+  void ComputeChecksQueen(ChecksInfo& checks, ChessCoord coord, PieceColor color,
+    ChessCoord kingCoord);
+  void ComputeChecksRay(ChecksInfo& checks, ChessCoord coord, PieceColor color,
+    ChessCoord kingCoord, char dx, char dy);
+  ChecksInfo ComputeChecks();
 
-  int numChecks();
+  ChecksInfo checksInfo;
 };
