@@ -204,8 +204,16 @@ struct BitBoard
     return GetBit( (x | (y << 3)) );
   }
 
+  uint8_t GetBit(ChessCoord c) {
+    return GetBit(c.coord);
+  }
+
   void SetBit(uint8_t i) {
     bits |= (1ll << i);
+  }
+
+  void SetBit(ChessCoord c) {
+    SetBit(c.coord);
   }
 
   void ClearBit(uint8_t i) {
@@ -215,9 +223,19 @@ struct BitBoard
 
 ///infomation about checks
 struct ChecksInfo {
+  ChessCoord kingCoord;
   BitBoard attacked;
+  
+  //pieces that directly attacks the king
   std::vector<ChessCoord> attackers;
-  std::vector<ChessCoord> blockers;
+
+  //pieces pinning pieces to the king.
+  //for a pinned piece at coordinate c
+  //pinner[c] is pinning it.
+  std::vector<ChessCoord> pinners;
+  //bit set for dst in pins structure.
+  //redundant for quicker lookup.
+  BitBoard blockers;
 };
 
 class ChessBoard {
@@ -296,9 +314,15 @@ public:
   std::string GetFen();
 
 private:
-	
+  std::vector<ChessCoord>* GetPieceList(PieceColor c);
+
   void GetEvasions(std::vector<Move>& moves);
 	void GetKingEvasions(std::vector<Move>& moves);
+  ///generate blocking/capturing moves when there is only 1
+  ///attacker checking the king.
+  void GetBlockingMoves(std::vector<Move>& moves);
+  std::vector<ChessCoord> GetBlockingPawn(ChessCoord c, bool canUseEnPassant);
+  std::vector<ChessCoord> GetQuietSquaresRook(ChessCoord c);
 
 	void GetNonEvasions(std::vector<Move>& moves);
 	void GetCaptures(std::vector<Move>& moves);
