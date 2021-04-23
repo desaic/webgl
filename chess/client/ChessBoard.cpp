@@ -222,6 +222,10 @@ void ChessBoard::GetBlockingMoves(std::vector<Move>& moves)
       dstCoords = GetDstBishop(c);
       AddBlockingMoves(c, dstCoords, targetSquares, moves);
       break;
+    case PieceType::QUEEN:
+      dstCoords = GetDstQueen(c);
+      AddBlockingMoves(c, dstCoords, targetSquares, moves);
+      break;
     }
   }
 }
@@ -805,13 +809,17 @@ void ChessBoard::GetQuietsQueen(std::vector<Move>& moves, ChessCoord c)
 ///@TODO cannot castle if king's path is under attack.
 void ChessBoard::GetCastleBlack(std::vector<Move>& moves)
 {
-  if (castleBK) {
+  if (castleBK 
+    && (!checksInfo.attacked.GetBit(f8)) 
+    && (!checksInfo.attacked.GetBit(g8)) ) {
     if (GetPiece(f8)->isEmpty() && GetPiece(g8)->isEmpty()) {
       Move m(e8, g8);
       moves.push_back(m);
     }
   }
-  if (castleBQ) {
+  if (castleBQ
+    && (!checksInfo.attacked.GetBit(c8))
+    && (!checksInfo.attacked.GetBit(d8))) {
     if (GetPiece(b8)->isEmpty() && GetPiece(c8)->isEmpty()
       && GetPiece(d8)->isEmpty()) {
       Move m(e8, c8);
@@ -822,13 +830,17 @@ void ChessBoard::GetCastleBlack(std::vector<Move>& moves)
 
 void ChessBoard::GetCastleWhite(std::vector<Move>& moves)
 {
-  if (castleWK) {
+  if (castleWK
+    && (!checksInfo.attacked.GetBit(f1))
+    && (!checksInfo.attacked.GetBit(g1))) {
     if (GetPiece(f1)->isEmpty() && GetPiece(g1)->isEmpty()) {
       Move m(e1, g1);
       moves.push_back(m);
     }
   }
-  if (castleWQ) {
+  if (castleWQ
+    && (!checksInfo.attacked.GetBit(c1))
+    && (!checksInfo.attacked.GetBit(d1))) {
     if (GetPiece(b1)->isEmpty() && GetPiece(c1)->isEmpty()
       && GetPiece(d1)->isEmpty()) {
       Move m(e1, c1);
