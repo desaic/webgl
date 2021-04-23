@@ -57,6 +57,7 @@ std::vector<Move> ChessBoard::GetMoves()
 {
   std::vector<Move> moves;
   checksInfo = ComputeChecks();
+  std::cout << "Debug attacked squares: " << checksInfo.attacked.ToString() << "\n";
   if (checksInfo.attackers.size() > 0) {
     GetEvasions(moves);
   }
@@ -1568,13 +1569,13 @@ ChecksInfo ChessBoard::ComputeChecks()
     attackerColor = PieceColor::BLACK;
   }
   ChessCoord kingCoord;
-  for (ChessCoord c : (*attackerList)) {
+  for (ChessCoord c : (*list)) {
     if (GetPiece(c)->type() == uint8_t(PieceType::KING)) {
       kingCoord = c;
       break;
     }
   }
-  checksInfo.kingCoord = kingCoord;
+  checks.kingCoord = kingCoord;
   for (ChessCoord c : (*attackerList)) {
     Piece* p = GetPiece(c);
     PieceType type = PieceType (p->type());

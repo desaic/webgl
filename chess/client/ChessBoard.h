@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 #include <list>
+#include <iostream>
+#include <sstream>
 
 #define BOARD_SIZE 8
 
@@ -222,6 +224,17 @@ struct BitBoard
 
   void ClearBit(uint8_t i) {
     bits &= (~(1ll << i));
+  }
+
+  std::string ToString() {
+    std::ostringstream oss;
+    for (char row = 7; row >=0; row--) {
+      for (uint8_t col = 0; col < 8; col++) {
+        oss << int(GetBit(col, uint8_t(row)) );
+      }
+      oss << "\n";
+    }
+    return oss.str();
   }
 };
 

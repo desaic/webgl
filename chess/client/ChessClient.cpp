@@ -108,6 +108,15 @@ void ChessClient::HandleCli(const std::string& cmd)
     board.SetStartPos();
     SendBoard();
   }
+  else if (cmd == "fen") {
+    std::string fen = board.GetFen();
+    std::cout << fen << "\n";
+  }
+  else if (cmd == "debug") {
+    std::string fen = "rnbqk1nr/pppp1ppp/8/4p3/1b2P3/3P4/PPP2PPP/RNBQKBNR w KQkq - 1 3";
+    board.FromFen(fen);
+    SendBoard();
+  }
   else {
     SendCmd(cmd);
   }

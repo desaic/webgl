@@ -51,10 +51,10 @@ int main(int argc, char* argv[])
     std::this_thread::sleep_for(std::chrono::milliseconds(pollInterval));
     std::string command;
     std::getline(std::cin, command);
-    if (command.size() > 3) {
-      client.HandleCli(command);
-    }else if (command == "q") {
+    if (command == "q") {
       break;
+    }else if (command.size() > 0) {
+      client.HandleCli(command);
     }
   }
   return 0;
