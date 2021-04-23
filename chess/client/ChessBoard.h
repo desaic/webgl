@@ -324,6 +324,8 @@ private:
   std::vector<ChessCoord> GetBlockingPawn(ChessCoord c, bool canUseEnPassant);
   std::vector<ChessCoord> GetDstRook(ChessCoord c);
   std::vector<ChessCoord> GetDstKnight(ChessCoord c);
+  std::vector<ChessCoord> GetDstBishop(ChessCoord c);
+  std::vector<ChessCoord> GetDstQueen(ChessCoord c);
 
 	void GetNonEvasions(std::vector<Move>& moves);
 	void GetCaptures(std::vector<Move>& moves);
