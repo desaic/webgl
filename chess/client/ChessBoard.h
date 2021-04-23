@@ -322,7 +322,8 @@ private:
   ///attacker checking the king.
   void GetBlockingMoves(std::vector<Move>& moves);
   std::vector<ChessCoord> GetBlockingPawn(ChessCoord c, bool canUseEnPassant);
-  std::vector<ChessCoord> GetDstSquaresRook(ChessCoord c);
+  std::vector<ChessCoord> GetDstRook(ChessCoord c);
+  std::vector<ChessCoord> GetDstKnight(ChessCoord c);
 
 	void GetNonEvasions(std::vector<Move>& moves);
 	void GetCaptures(std::vector<Move>& moves);
