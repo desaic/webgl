@@ -215,6 +215,8 @@ void ChessBoard::GetBlockingMoves(std::vector<Move>& moves)
       AddBlockingMoves(c, dstCoords, targetSquares, moves);
       break;
     case PieceType::KNIGHT:
+      dstCoords = GetDstKnight(c);
+      AddBlockingMoves(c, dstCoords, targetSquares, moves);
       break;
     }
   }
@@ -496,7 +498,9 @@ void ChessBoard::GetCapturesKnight(std::vector<Move>& moves, ChessCoord c)
   }
   std::vector<ChessCoord> dsts = GetDstKnight(c);
   for (ChessCoord dst : dsts) {
-    moves.push_back(Move(c, dst));
+    if (!GetPiece(dst)->isEmpty()) {
+      moves.push_back(Move(c, dst));
+    }
   }
 }
 
