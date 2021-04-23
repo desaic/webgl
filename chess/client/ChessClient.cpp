@@ -90,7 +90,7 @@ void ChessClient::HandleCmd(const std::string& cmd) {
       }
     }
     if (!legal) {
-      std::cout << "illegal move " + attempt.toString() + "\n";
+      std::cout << "illegal move " + attempt.ToString() + "\n";
     }
     else {
       board.ApplyMove(attempt);

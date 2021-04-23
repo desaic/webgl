@@ -88,7 +88,7 @@ struct ChessCoord
     return coord != b;
   }
 
-  std::string toString() {
+  std::string ToString() {
     std::string s;
     s.resize(2);
     s[0] = Col() + 'a';
@@ -186,8 +186,8 @@ struct Move
     return src == b.src && dst == b.dst && promo == b.promo;
   }
 
-  std::string toString() {
-    std::string s = src.toString() + " " + dst.toString();
+  std::string ToString() {
+    std::string s = src.ToString() + " " + dst.ToString();
     if (!promo.isEmpty()) {
       char c = PieceFEN(promo);
       s = s + " " + c;
@@ -240,6 +240,8 @@ struct BitBoard
 
 ///infomation about checks
 struct ChecksInfo {
+  ChecksInfo() :pinners(BOARD_SIZE*BOARD_SIZE) {}
+
   ChessCoord kingCoord;
   BitBoard attacked;
   
@@ -253,6 +255,19 @@ struct ChecksInfo {
   //bit set for dst in pins structure.
   //redundant for quicker lookup.
   BitBoard blockers;
+
+  std::string ToString() {
+    std::ostringstream oss;
+    oss << "king: " << kingCoord.ToString() << "\nattacked squares:\n";
+    oss << attacked.ToString() << "\n";
+    oss << "attackers " << attackers.size() << "\n";
+    for (ChessCoord c : attackers) {
+      oss << c.ToString() << " ";
+    }
+    oss << "\n";
+    oss << "blockers:\n" << blockers.ToString();
+    return oss.str();
+  }
 };
 
 class ChessBoard {

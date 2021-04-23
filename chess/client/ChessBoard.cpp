@@ -101,7 +101,12 @@ void ChessBoard::GetKingEvasions(std::vector<Move>& moves)
     }
     ChessCoord dst(dstCol, dstRow);
     bool attacked = checksInfo.attacked.GetBit(dst.coord);
-    if (!attacked) {
+    if (attacked) {
+      continue;
+    }
+    Piece* dstPiece = GetPiece(dst);
+    bool available = (dstPiece->isEmpty() || dstPiece->color() != uint8_t(nextColor));
+    if (available) {
       moves.push_back(Move(kingCoord, dst));
     }  
   }
@@ -159,7 +164,7 @@ void ChessBoard::GetBlockingMoves(std::vector<Move>& moves)
     if (yDist > 0) {
       dy = 1;
     }
-    else if (xDist < 0) {
+    else if (yDist < 0) {
       dy = -1;
     }
     char numSteps = 0;
@@ -1473,8 +1478,16 @@ void ChessBoard::ComputeChecksRay(ChecksInfo& checks, ChessCoord coord, PieceCol
     }
     ChessCoord dst(col, row);
     if (dst == kingCoord) {
-      checks.attackers.push_back(coord);
-
+      if (!firstHit.inBound()) {
+        checks.attackers.push_back(coord);
+        attackKing = true;
+        checks.attacked.SetBit(dst.coord);
+      }
+      else {
+        checks.blockers.SetBit(firstHit.coord);
+        checks.pinners[firstHit.coord] = coord;
+        break;
+      }
     }
     Piece* dstPiece = GetPiece(dst);
     if (dstPiece->isEmpty()) {
@@ -1493,6 +1506,7 @@ void ChessBoard::ComputeChecksRay(ChecksInfo& checks, ChessCoord coord, PieceCol
       break;
     }
     else {
+      //dst piece == king already handled above.
       uint8_t attackedType = dstPiece->type();
       //already attacking king and then hit another piece,
       //no need to continue
@@ -1501,21 +1515,10 @@ void ChessBoard::ComputeChecksRay(ChecksInfo& checks, ChessCoord coord, PieceCol
       }
       //has a hit before
       if (firstHit.inBound()) {
-        if (attackedType == uint8_t(PieceType::KING)) {
-          checks.blockers.SetBit(firstHit.coord);
-          checks.pinners[firstHit.coord] = coord;
-        }
         break;
       }
       else {
-        if (attackedType == uint8_t(PieceType::KING)) {
-          //king can't block for itself
-          attackKing = true;
-          checks.attacked.SetBit(dst.coord);
-        }
-        else {
-          firstHit = dst;
-        }
+        firstHit = dst;
       }
     }
   }
