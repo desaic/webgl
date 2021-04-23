@@ -665,10 +665,14 @@ void ChessBoard::GetCapturesKing(std::vector<Move>& moves, ChessCoord c)
     if (row < 0 || row >= BOARD_SIZE) {
       continue;
     }
-    Piece* dstPiece = GetPiece(col, row);
+    ChessCoord dst = ChessCoord(col, row);
+    if (checksInfo.attacked.GetBit(dst)) {
+      continue;
+    }
+    Piece* dstPiece = GetPiece(dst);
     if (!dstPiece->isEmpty()) {
       if (dstPiece->color() != color) {
-        Move m(c, ChessCoord(col, row));
+        Move m(c, dst);
         moves.push_back(m);
       }
     }
@@ -890,9 +894,13 @@ void ChessBoard::GetQuietsKing(std::vector<Move> & moves, ChessCoord c)
     if (row < 0 || row >= BOARD_SIZE) {
       continue;
     }
+    ChessCoord dst = ChessCoord(col, row);
+    if (checksInfo.attacked.GetBit(dst)) {
+      continue;
+    }
     Piece* dstPiece = GetPiece(col, row);
     if (dstPiece->isEmpty()) {
-      Move m(c, ChessCoord(col, row));
+      Move m(c, dst);
       moves.push_back(m);
     }
   }
