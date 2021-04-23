@@ -1183,6 +1183,7 @@ int ChessBoard::FromFen(const std::string& fen)
   castleBQ = false;
   while (c != ' ' && strIdx<fen.size()) {
     if (c == '-') {
+      strIdx++;
       break;
     }
     else if (c == 'K') {
