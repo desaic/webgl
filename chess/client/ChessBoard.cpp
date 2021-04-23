@@ -139,12 +139,12 @@ void ChessBoard::GetBlockingMoves(std::vector<Move>& moves)
   if (hasEnPassant && attackerType == uint8_t(PieceType::PAWN)
     && col == char(enPassantDst.Col()) ) {
     if (nextColor == PieceColor::BLACK) {
-      if (row == char(enPassantDst.Row() - 2)) {
+      if (row == char(enPassantDst.Row() + 1)) {
         canUseEnPassant = true;
       }
     }
     else {
-      if (row == char(enPassantDst.Row() + 2)) {
+      if (row == char(enPassantDst.Row() - 1)) {
         canUseEnPassant = true;
       }
     }
@@ -212,6 +212,13 @@ void ChessBoard::GetBlockingMoves(std::vector<Move>& moves)
           }
           else {
             moves.push_back(m);
+          }
+        }
+      }
+      if (canUseEnPassant) {
+        for (ChessCoord dst : dstCoords) {
+          if (dst == enPassantDst) {
+            moves.push_back(Move(c, dst));
           }
         }
       }
@@ -1215,6 +1222,7 @@ int ChessBoard::FromFen(const std::string& fen)
     c = fen[strIdx];
     uint8_t row = c - '1';
     enPassantDst.Set(col, row);
+    hasEnPassant = true;
   }
  
   strIdx+=2;
