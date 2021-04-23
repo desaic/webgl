@@ -265,7 +265,13 @@ struct ChecksInfo {
       oss << c.ToString() << " ";
     }
     oss << "\n";
-    oss << "blockers:\n" << blockers.ToString();
+    oss << "blockers:\n" << blockers.ToString() << "\n";;
+    oss << "pins:\n";
+    for (uint8_t c = 0; c < 64; c++) {
+      if (blockers.GetBit(c)) {
+        oss << pinners[c].ToString() << " " << ChessCoord(c).ToString() << " , ";
+      }
+    }
     return oss.str();
   }
 };

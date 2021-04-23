@@ -57,7 +57,7 @@ std::vector<Move> ChessBoard::GetMoves()
 {
   std::vector<Move> moves;
   checksInfo = ComputeChecks();
-  std::cout << "Debug attacked squares: " << checksInfo.attacked.ToString() << "\n";
+  std::cout << "Debug:\n" << checksInfo.ToString() << "\n";
   if (checksInfo.attackers.size() > 0) {
     GetEvasions(moves);
   }
