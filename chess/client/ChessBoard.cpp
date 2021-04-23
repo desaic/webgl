@@ -106,6 +106,16 @@ void ChessBoard::GetKingEvasions(std::vector<Move>& moves)
   }
 }
 
+void AddBlockingMoves(ChessCoord src, const std::vector<ChessCoord> & dsts,
+  BitBoard targetSquares, std::vector<Move> & moves)
+{
+  for (ChessCoord dst : dsts) {
+    if (targetSquares.GetBit(dst)) {
+      moves.push_back(Move(src, dst));
+    }
+  }
+}
+
 void ChessBoard::GetBlockingMoves(std::vector<Move>& moves)
 {
   ChessCoord kingCoord = checksInfo.kingCoord;
@@ -201,12 +211,10 @@ void ChessBoard::GetBlockingMoves(std::vector<Move>& moves)
       }
       break;
     case PieceType::ROOK:
-      dstCoords = GetQuietSquaresRook(c);
-      for (ChessCoord dst : dstCoords) {
-        if (targetSquares.GetBit(dst)) {
-          moves.push_back(Move(c, dst));
-        }
-      }
+      dstCoords = GetDstSquaresRook(c);
+      AddBlockingMoves(c, dstCoords, targetSquares, moves);
+      break;
+    case PieceType::KNIGHT:
       break;
     }
   }
@@ -273,9 +281,10 @@ std::vector<ChessCoord> ChessBoard::GetBlockingPawn(ChessCoord c,
   }
 }
 
-std::vector<ChessCoord> ChessBoard::GetQuietSquaresRook(ChessCoord c)
+std::vector<ChessCoord> ChessBoard::GetDstSquaresRook(ChessCoord c)
 {
   std::vector<ChessCoord> coords;
+  uint8_t color = GetPiece(c)->color();
   //rook can block by quiets
   char r0 = char(c.Row());
   char c0 = char(c.Col());
@@ -295,11 +304,12 @@ std::vector<ChessCoord> ChessBoard::GetQuietSquaresRook(ChessCoord c)
       }
       Piece* dstPiece = GetPiece(col, row);
       if (dstPiece->isEmpty()) {
-        ChessCoord dst = ChessCoord(col, row);
-        coords.push_back(dst);
-        continue;
+        coords.push_back(ChessCoord(col, row));
       }
       else {
+        if (dstPiece->color() != color) {
+          coords.push_back(ChessCoord(col, row));
+        }
         break;
       }
     }
@@ -434,30 +444,19 @@ void ChessBoard::GetCapturesPawn(std::vector<Move>& moves, ChessCoord c)
 
 void ChessBoard::GetCapturesRook(std::vector<Move>& moves, ChessCoord c)
 {
-  uint8_t color = GetPiece(c)->color();
-  char r0 = char (c.Row());
-  char c0 = char (c.Col());
-  const unsigned NUM_DIRS = 4;
-  char dir[NUM_DIRS][2] = { {-1,0},{1,0},{0,-1},{0,1} };
-  for (unsigned d = 0; d < NUM_DIRS; d++) {
-    char row = r0;
-    char col = c0;
-    for (char step = 0; step < BOARD_SIZE; step++) {
-      col += dir[d][0];
-      if (col < 0 || col >= BOARD_SIZE) {
-        break;
+  std::vector<ChessCoord> dsts = GetDstSquaresRook(c);
+  if (checksInfo.blockers.GetBit(c)) {
+    ChessCoord pinner = checksInfo.pinners[c.coord];
+    for (ChessCoord dst : dsts) {
+      if (dst == pinner) {
+        moves.push_back(Move(c, dst));
       }
-      row += dir[d][1];
-      if (row < 0 || row >= BOARD_SIZE) {
-        break;
-      }
-      Piece * dstPiece = GetPiece(col, row);
-      if (!dstPiece->isEmpty()) {
-        if (dstPiece->color() != color) {
-          Move m(c, ChessCoord(col, row));
-          moves.push_back(m);
-        }
-        break;
+    }
+  }
+  else {
+    for (ChessCoord dst : dsts) {
+      if (!GetPiece(dst)->isEmpty()) {
+        moves.push_back(Move(c, dst));
       }
     }
   }
@@ -697,9 +696,11 @@ void ChessBoard::GetQuietsPawn(std::vector<Move>& moves, ChessCoord c)
 
 void ChessBoard::GetQuietsRook(std::vector<Move>& moves, ChessCoord c)
 {
-  std::vector<ChessCoord> dsts = GetQuietSquaresRook(c);
+  std::vector<ChessCoord> dsts = GetDstSquaresRook(c);
   for (ChessCoord dst : dsts) {
-    moves.push_back(Move(c, dst));
+    if (GetPiece(dst)->isEmpty()) {
+      moves.push_back(Move(c, dst));
+    }
   }
 }
 
