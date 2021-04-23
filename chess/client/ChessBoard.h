@@ -74,6 +74,10 @@ struct ChessCoord
     return coord == b.coord;
   }
 
+  bool operator!=(const ChessCoord& b) const {
+    return coord != b.coord;
+  }
+
   bool operator == (uint8_t b) const {
     return coord == b;
   }

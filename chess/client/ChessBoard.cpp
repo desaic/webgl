@@ -475,6 +475,15 @@ void ChessBoard::GetCaptures(std::vector<Move>& moves, ChessCoord c)
 
 void ChessBoard::AddBlackPawnCaptures(ChessCoord src, ChessCoord dst, std::vector<Move>& moves)
 {
+  ChessCoord pinner;
+  bool pinned = checksInfo.blockers.GetBit(src);
+  if (pinned) {
+    pinner = checksInfo.pinners[src.coord];
+  }
+  if (pinned && dst != pinner) {
+    return;
+  }
+
   Piece* dstPiece = GetPiece(dst);
   bool hasWhitePiece = (!dstPiece->isEmpty()) 
     && (dstPiece->color() == uint8_t(PieceColor::WHITE));
@@ -492,6 +501,15 @@ void ChessBoard::AddBlackPawnCaptures(ChessCoord src, ChessCoord dst, std::vecto
 
 void ChessBoard::AddWhitePawnCaptures(ChessCoord src, ChessCoord dst, std::vector<Move>& moves)
 {
+  ChessCoord pinner;
+  bool pinned = checksInfo.blockers.GetBit(src);
+  if (pinned) {
+    pinner = checksInfo.pinners[src.coord];
+  }
+  if (pinned && dst != pinner) {
+    return;
+  }
+
   Piece* dstPiece = GetPiece(dst);
   bool hasBlackPiece = (!dstPiece->isEmpty())
     && (dstPiece->color() == uint8_t(PieceColor::BLACK));
