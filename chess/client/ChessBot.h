@@ -17,7 +17,7 @@ class ChessBot
 {
 public:
   static const int MAX_SCORE;
-
+  static const int CASTLE_SCORE;
   std::vector<int> materialScore;
 
   ChessBot();

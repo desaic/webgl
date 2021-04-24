@@ -280,9 +280,8 @@ class ChessBoard {
 
 public:
   ChessBoard(); 
-  
-  std::vector<ChessCoord> black;
-  std::vector<ChessCoord> white;
+  //black then white. consistent with enum PieceColor.
+  std::vector<ChessCoord> pieces[2];
   ///8x8 board with 64 squares
   std::vector<Piece> board;
   PieceColor nextColor;
@@ -293,6 +292,8 @@ public:
   bool castleWQ;
 
   bool hasEnPassant;
+
+  bool hasCastled[2];
 
   ///En passant target square.
   ChessCoord enPassantDst;

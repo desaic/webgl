@@ -50,6 +50,8 @@ enPassantDst(0, 0),
 halfMoves(0),
 fullMoves(0)
 {
+  hasCastled[0] = false;
+  hasCastled[1] = false;
   board.resize(64);
 }
 
@@ -440,13 +442,7 @@ std::vector<ChessCoord>ChessBoard::GetDstQueen(ChessCoord c)
 
 std::vector<ChessCoord> * ChessBoard::GetPieceList(PieceColor c)
 {
-  std::vector<ChessCoord>* list = nullptr;
-  if (nextColor == PieceColor::BLACK) {
-    list = &black;
-  }
-  else {
-    list = &white;
-  }
+  std::vector<ChessCoord>* list = &(pieces[unsigned(c)]);
   return list;
 }
 
@@ -1310,13 +1306,7 @@ bool ChessBoard::AddPiece(ChessCoord c, Piece info)
   }
   *p = info;
 
-  std::vector<ChessCoord>* list;
-  if (p->color() == uint8_t(PieceColor::WHITE)) {
-    list = &white;
-  }
-  else {
-    list = &black;
-  }
+  std::vector<ChessCoord>* list = GetPieceList(PieceColor(p->color()));
   list->push_back(c);
   return true;
 }
@@ -1327,13 +1317,7 @@ bool ChessBoard::RemovePiece(ChessCoord c)
   if (p->isEmpty()) {
     return false;
   }
-  std::vector<ChessCoord>* list;
-  if (p->color() == uint8_t(PieceColor::WHITE) ){
-    list = &white;
-  }
-  else {
-    list = &black;
-  }
+  std::vector<ChessCoord>* list = GetPieceList(PieceColor(p->color()));
   for (auto it = list->begin(); it != list->end(); it++) {
     if ((*it) == c){
       list->erase(it);
@@ -1354,13 +1338,7 @@ bool ChessBoard::MovePiece(ChessCoord src, ChessCoord dst)
   }
   RemovePiece(dst);
 
-  std::vector<ChessCoord>* list;
-  if (p->color() == uint8_t(PieceColor::WHITE)) {
-    list = &white;
-  }
-  else {
-    list = &black;
-  }
+  std::vector<ChessCoord>* list = GetPieceList(PieceColor(p->color()));
   for (size_t i = 0; i < list->size(); i++) {
     if ( (*list)[i] == src) {
       Piece* dstPiece = GetPiece(dst);
@@ -1375,8 +1353,8 @@ bool ChessBoard::MovePiece(ChessCoord src, ChessCoord dst)
 
 void ChessBoard::Clear()
 {
-  black.clear();
-  white.clear();
+  pieces[0].clear();
+  pieces[1].clear();
   for (size_t i = 0; i < board.size(); i++) {
     board[i].clear();
   }
@@ -1390,6 +1368,8 @@ void ChessBoard::Clear()
   castleWK = true;
   castleWQ = true;
 
+  hasCastled[0] = false;
+  hasCastled[1] = false;
 }
 
 void ComputeChecksPawn(ChecksInfo & info, ChessCoord coord, PieceColor color,
@@ -1579,13 +1559,13 @@ ChecksInfo ChessBoard::ComputeChecks()
   std::vector<ChessCoord>* attackerList;
   PieceColor attackerColor;
   if (nextColor == PieceColor::BLACK) {
-    list = &black;
-    attackerList = &white;
+    list = &(pieces[0]);
+    attackerList = &(pieces[1]);
     attackerColor = PieceColor::WHITE;
   }
   else {
-    list = &white;
-    attackerList = &black;
+    list = &(pieces[1]);
+    attackerList = &(pieces[0]);
     attackerColor = PieceColor::BLACK;
   }
   ChessCoord kingCoord;
