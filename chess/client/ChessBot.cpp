@@ -5,8 +5,17 @@ static void SleepMs(int ms)
   std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 }
 
+const int ChessBot::MAX_SCORE = 10000;
+
 ChessBot::ChessBot():running(false)
 {
+  materialScore.resize( unsigned(PieceType::NUM_TYPES) );
+  materialScore[unsigned(PieceType::PAWN)] = 1;
+  materialScore[unsigned(PieceType::KNIGHT)] = 3;
+  materialScore[unsigned(PieceType::BISHOP)] = 3;
+  materialScore[unsigned(PieceType::ROOK)] = 5;
+  materialScore[unsigned(PieceType::QUEEN)] = 9;
+  materialScore[unsigned(PieceType::KING)] = 0;
   Run();
 }
 
@@ -15,16 +24,18 @@ ChessBot::~ChessBot()
   Stop();
 }
 
-float ChessBot::eval(const ChessBoard& b)
+float evalDirect(const ChessBoard& b)
 {
-  return 0.0f;
+  float score = 0.0f;
+
+  return score;
 }
 
-Move ChessBot::bestMove(const ChessBoard& b)
+std::vector<MoveScore> ChessBot::BestMoves(const ChessBoard& b)
 {
-  Move m;
+  std::vector<MoveScore> moves;
 
-  return m;
+  return moves;
 }
 
 void ChessBot::WorkerLoop()
