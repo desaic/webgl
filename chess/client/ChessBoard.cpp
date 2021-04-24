@@ -1025,15 +1025,19 @@ int ChessBoard::ApplyMove(const Move& m)
     //move the rook
   case CASTLE_BQ:
     MovePiece(a8, d8);
+    hasCastled[0] = true;
     break;
   case CASTLE_BK:
     MovePiece(h8, f8);
+    hasCastled[0] = true;
     break;
   case CASTLE_WQ:
     MovePiece(a1, d1);
+    hasCastled[1] = true;
     break;
   case CASTLE_WK:
     MovePiece(h1, f1);
+    hasCastled[1] = true;
     break;
   }
   return 0;
