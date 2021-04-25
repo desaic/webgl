@@ -322,7 +322,15 @@ public:
     return &(board[c.coord]);
   }
 
+  const Piece* GetPiece(ChessCoord c) const {
+    return &(board[c.coord]);
+  }
+
   Piece* GetPiece(uint8_t c) {
+    return &(board[c]);
+  }
+
+  const Piece* GetPiece(uint8_t c) const{
     return &(board[c]);
   }
 

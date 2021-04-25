@@ -23,8 +23,14 @@ public:
   ChessBot();
   ~ChessBot();
   
-  //eval the board only based on current position and without any search.
-  float evalDirect(const ChessBoard& b);
+  ///score from the point of view of the next color to play.
+  ///eval the board only based on current position and without any search.
+  ///does not understand mate here. mate is handled in alpha beta search
+  int EvalDirect(const ChessBoard& b);
+
+  int CheckMateScore();
+
+  int StaleMateScore();
 
   ///finds best moves at a given position
   std::vector<MoveScore> BestMoves(const ChessBoard& b);

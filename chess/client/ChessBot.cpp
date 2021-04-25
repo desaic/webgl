@@ -5,7 +5,7 @@ static void SleepMs(int ms)
   std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 }
 
-const int ChessBot::MAX_SCORE = 10000;
+const int ChessBot::MAX_SCORE = 100000;
 
 const int ChessBot::CASTLE_SCORE = 10;
 
@@ -75,11 +75,113 @@ ChessBot::~ChessBot()
   Stop();
 }
 
-float evalDirect(const ChessBoard& b)
+int ChessBot::EvalDirect(const ChessBoard& b)
 {
-  float score = 0.0f;
+  int score = 0;
+  //sum of rook knight bishop queen.
+  //some copying some old code. not sure why it helps.
+  int blackRNBQ = 0, whiteRNBQ = 0;
 
+  ChessCoord blackKing, whiteKing;
+  int blackSum = 0, whiteSum = 0;
+  //black pieces.
+  for (size_t i = 0; i < b.pieces[0].size(); i++) {
+    ChessCoord c = b.pieces[0][i];
+    ChessCoord blackc(c.Col(), 7 - c.Row());
+    const Piece* piece = b.GetPiece(c);
+    uint8_t typeIdx = piece->type();
+    blackSum += materialScore[typeIdx];
+    PieceType type = PieceType(typeIdx);
+    switch (type) {
+    case PieceType::PAWN:
+      blackSum += pawnpos[blackc.coord];
+      break;
+    case PieceType::ROOK:
+      blackRNBQ++;
+      break;
+    case PieceType::KNIGHT:
+      blackSum += knightpos[blackc.coord];
+      blackRNBQ++;
+      break;
+    case PieceType::BISHOP:
+      blackSum += bishoppos[blackc.coord];
+      blackRNBQ++;
+      break;
+    case PieceType::QUEEN:
+      blackRNBQ += 2;
+      break;
+    case PieceType::KING:
+      blackKing = c;
+      break;
+    }
+  }
+
+  //white pieces.
+  for (size_t i = 0; i < b.pieces[1].size(); i++) {
+    ChessCoord c = b.pieces[1][i];
+    const Piece* piece = b.GetPiece(c);
+    uint8_t typeIdx = piece->type();
+    whiteSum += materialScore[typeIdx];
+    PieceType type = PieceType(typeIdx);
+    switch (type) {
+    case PieceType::PAWN:
+      whiteSum += pawnpos[c.coord];
+      break;
+    case PieceType::ROOK:
+      blackRNBQ++;
+      break;
+    case PieceType::KNIGHT:
+      whiteSum += knightpos[c.coord];
+      blackRNBQ++;
+      break;
+    case PieceType::BISHOP:
+      whiteSum += bishoppos[c.coord];
+      blackRNBQ++;
+      break;
+    case PieceType::QUEEN:
+      blackRNBQ += 2;
+      break;
+    case PieceType::KING:
+      whiteKing = c;
+      break;
+    }
+  }
+
+  if (b.hasCastled[0]) {
+    blackSum += CASTLE_SCORE;
+  }
+  if (b.hasCastled[1]) {
+    whiteSum += CASTLE_SCORE;
+  }
+  int blackRNBQval, whiteRNBQval;
+  if (whiteRNBQ != 0) {
+    blackRNBQval = blackRNBQ * 100 / whiteRNBQ;
+  }
+  else{
+    blackRNBQval = 255 * blackRNBQ;
+  }
+  if (blackRNBQ != 0) {
+    whiteRNBQval = whiteRNBQ * 100 / blackRNBQ;
+  }
+  else {
+    whiteRNBQval = 255 * whiteRNBQ;
+  }
+  score = whiteSum - blackSum;
+  score += whiteRNBQval - blackRNBQval;
+  if (b.nextColor == PieceColor::BLACK) {
+    score = -score;
+  }
   return score;
+}
+
+int ChessBot::CheckMateScore()
+{
+  return MAX_SCORE;
+}
+
+int ChessBot::StaleMateScore()
+{
+  return 0;
 }
 
 std::vector<MoveScore> ChessBot::BestMoves(const ChessBoard& b)
