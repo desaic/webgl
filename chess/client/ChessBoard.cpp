@@ -40,7 +40,7 @@ enum CastleMove {
 void AddWhitePromos(const Move& m_in, std::vector<Move>& moves);
 void AddBlackPromos(const Move& m_in, std::vector<Move>& moves);
 
-ChessBoard::ChessBoard() :nextColor(PieceColor::WHITE),
+ChessBoard::ChessBoard() :nextColor(PIECE_WHITE),
 castleBK(true),
 castleBQ(true),
 castleWK(true),
@@ -138,9 +138,9 @@ void ChessBoard::GetBlockingMoves(std::vector<Move>& moves)
   char row = attacker.Row();
   char col = attacker.Col();
   bool canUseEnPassant = false;
-  if (hasEnPassant && attackerType == uint8_t(PieceType::PAWN)
+  if (hasEnPassant && attackerType == uint8_t(PIECE_PAWN)
     && col == char(enPassantDst.Col()) ) {
-    if (nextColor == PieceColor::BLACK) {
+    if (nextColor == PIECE_BLACK) {
       if (row == char(enPassantDst.Row() + 1)) {
         canUseEnPassant = true;
       }
@@ -152,9 +152,9 @@ void ChessBoard::GetBlockingMoves(std::vector<Move>& moves)
     }
   }
 
-  if ( (attackerType == uint8_t(PieceType::ROOK))
-    || (attackerType == uint8_t(PieceType::BISHOP))
-    || (attackerType == uint8_t(PieceType::QUEEN)) ) {
+  if ( (attackerType == PIECE_ROOK)
+    || (attackerType == PIECE_BISHOP)
+    || (attackerType == PIECE_QUEEN) ) {
     char xDist = char(kingCoord.Col()) - char(col);
     char yDist = char(kingCoord.Row()) - char(row);
     char dx = 0, dy = 0;
@@ -197,19 +197,19 @@ void ChessBoard::GetBlockingMoves(std::vector<Move>& moves)
     if (c == checksInfo.kingCoord) {
       continue;
     }
-    PieceType type = PieceType (GetPiece(c)->type());
+    uint8_t type = GetPiece(c)->type();
     std::vector<ChessCoord> dstCoords;
     switch (type) {
-    case PieceType::PAWN:
+    case PIECE_PAWN:
       //pawn is a pain in the ass
       dstCoords = GetBlockingPawn(c, canUseEnPassant);
       for (ChessCoord dst : dstCoords) {
         if (targetSquares.GetBit(dst)) {
           Move m(c, dst);
-          if (nextColor == PieceColor::BLACK && row==1) {
+          if (nextColor == PIECE_BLACK && row==1) {
             AddBlackPromos(m, moves);
           }
-          else if (nextColor == PieceColor::WHITE && row == 6) {
+          else if (nextColor == PIECE_WHITE && row == 6) {
             AddWhitePromos(m, moves);
           }
           else {
@@ -225,19 +225,19 @@ void ChessBoard::GetBlockingMoves(std::vector<Move>& moves)
         }
       }
       break;
-    case PieceType::ROOK:
+    case PIECE_ROOK:
       dstCoords = GetDstRook(c);
       AddBlockingMoves(c, dstCoords, targetSquares, moves);
       break;
-    case PieceType::KNIGHT:
+    case PIECE_KNIGHT:
       dstCoords = GetDstKnight(c);
       AddBlockingMoves(c, dstCoords, targetSquares, moves);
       break;
-    case PieceType::BISHOP:
+    case PIECE_BISHOP:
       dstCoords = GetDstBishop(c);
       AddBlockingMoves(c, dstCoords, targetSquares, moves);
       break;
-    case PieceType::QUEEN:
+    case PIECE_QUEEN:
       dstCoords = GetDstQueen(c);
       AddBlockingMoves(c, dstCoords, targetSquares, moves);
       break;
@@ -252,7 +252,7 @@ std::vector<ChessCoord> ChessBoard::GetBlockingPawn(ChessCoord c,
   uint8_t row = c.Row();
   uint8_t col = c.Col();
   //pawn can block by quiets or en passant
-  if (nextColor == PieceColor::BLACK) {
+  if (nextColor == PIECE_BLACK) {
     ChessCoord dst = ChessCoord(col, row - 1);
     if (GetPiece(dst)->isEmpty()) {
       coords.push_back(dst);
@@ -440,9 +440,9 @@ std::vector<ChessCoord>ChessBoard::GetDstQueen(ChessCoord c)
   return coords;
 }
 
-std::vector<ChessCoord> * ChessBoard::GetPieceList(PieceColor c)
+std::vector<ChessCoord> * ChessBoard::GetPieceList(uint8_t c)
 {
-  std::vector<ChessCoord>* list = &(pieces[unsigned(c)]);
+  std::vector<ChessCoord>* list = &(pieces[c]);
   return list;
 }
 
@@ -459,24 +459,24 @@ void ChessBoard::GetCaptures(std::vector<Move>& moves)
 
 void ChessBoard::GetCaptures(std::vector<Move>& moves, ChessCoord c)
 {
-  PieceType type = PieceType(GetPiece(c)->type());
+  uint8_t type = GetPiece(c)->type();
   switch (type) {
-  case PieceType::PAWN:
+  case PIECE_PAWN:
     GetCapturesPawn(moves, c);
     break;
-  case PieceType::ROOK:
+  case PIECE_ROOK:
     GetCapturesRook(moves, c);
     break;
-  case PieceType::KNIGHT:
+  case PIECE_KNIGHT:
     GetCapturesKnight(moves, c);
     break;
-  case PieceType::BISHOP:
+  case PIECE_BISHOP:
     GetCapturesBishop(moves, c);
     break;
-  case PieceType::QUEEN:
+  case PIECE_QUEEN:
     GetCapturesQueen(moves, c);
     break;
-  case PieceType::KING:
+  case PIECE_KING:
     GetCapturesKing(moves, c);
     break;
   }
@@ -495,7 +495,7 @@ void ChessBoard::AddBlackPawnCaptures(ChessCoord src, ChessCoord dst, std::vecto
 
   Piece* dstPiece = GetPiece(dst);
   bool hasWhitePiece = (!dstPiece->isEmpty()) 
-    && (dstPiece->color() == uint8_t(PieceColor::WHITE));
+    && (dstPiece->isWhite());
   if (hasWhitePiece || 
     (src.Row() == 3 && enPassantDst == dst) ) {
     Move m(src, dst);
@@ -521,7 +521,7 @@ void ChessBoard::AddWhitePawnCaptures(ChessCoord src, ChessCoord dst, std::vecto
 
   Piece* dstPiece = GetPiece(dst);
   bool hasBlackPiece = (!dstPiece->isEmpty())
-    && (dstPiece->color() == uint8_t(PieceColor::BLACK));
+    && (dstPiece->isBlack());
 
   if (hasBlackPiece ||
     (src.Row() == 4 && enPassantDst == dst)) {
@@ -537,10 +537,10 @@ void ChessBoard::AddWhitePawnCaptures(ChessCoord src, ChessCoord dst, std::vecto
 
 void ChessBoard::GetCapturesPawn(std::vector<Move>& moves, ChessCoord c)
 {
-  PieceColor color = PieceColor(GetPiece(c)->color());
+  uint8_t color = GetPiece(c)->color();
   uint8_t row = c.Row();
   uint8_t col = c.Col();
-  if (color == PieceColor::BLACK) {
+  if (color == PIECE_BLACK) {
     if (row == 0) {
       //shouldn't happen because it should have been promoted.
       return;
@@ -696,24 +696,24 @@ void ChessBoard::GetQuiets(std::vector<Move>& moves)
 
 void ChessBoard::GetQuiets(std::vector<Move>& moves, ChessCoord c)
 {
-  PieceType type = PieceType(GetPiece(c)->type());
+  uint8_t type = GetPiece(c)->type();
   switch (type) {
-  case PieceType::PAWN:
+  case PIECE_PAWN:
     GetQuietsPawn(moves, c);
     break;
-  case PieceType::ROOK:
+  case PIECE_ROOK:
     GetQuietsRook(moves, c);
     break;
-  case PieceType::KNIGHT:
+  case PIECE_KNIGHT:
     GetQuietsKnight(moves, c);
     break;
-  case PieceType::BISHOP:
+  case PIECE_BISHOP:
     GetQuietsBishop(moves, c);
     break;
-  case PieceType::QUEEN:
+  case PIECE_QUEEN:
     GetQuietsQueen(moves, c);
     break;
-  case PieceType::KING:
+  case PIECE_KING:
     GetQuietsKing(moves, c);
     break;
   }
@@ -745,10 +745,10 @@ void AddWhitePromos(const Move& m_in, std::vector<Move>& moves) {
 
 void ChessBoard::GetQuietsPawn(std::vector<Move>& moves, ChessCoord c)
 {
-  PieceColor color = PieceColor(GetPiece(c)->color());
+  uint8_t color = GetPiece(c)->color();
   uint8_t row = c.Row();
   uint8_t col = c.Col();
-  if (color == PieceColor::BLACK) {
+  if (color == PIECE_BLACK) {
     if (row == 0) {
       //shouldn't happen because it should have been promoted.
       return;
@@ -908,7 +908,7 @@ void ChessBoard::GetQuietsKing(std::vector<Move> & moves, ChessCoord c)
     }
   }
 
-  if (color == uint8_t(PieceColor::BLACK)) {
+  if (color == uint8_t(PIECE_BLACK)) {
     GetCastleBlack(moves);
   }
   else {
@@ -923,23 +923,23 @@ int ChessBoard::ApplyMove(const Move& m)
   if (m.src == m.dst) {
     return -1;
   }
-  if (color == uint8_t(nextColor)) {
-    nextColor = PieceColor(!color);
+  if (color == nextColor) {
+    nextColor = !color;
   }
   else {
     return -2;
   }
 
-  PieceType type = PieceType(p->type());
+  uint8_t type = p->type();
   hasEnPassant = false;
   enPassantDst = ChessCoord();
   halfMoves++;
   CastleMove castling = CASTLE_NONE;
   //is this move en Passant
   bool isEnPassant=false;
-  if (color == uint8_t(PieceColor::BLACK) ){
+  if (color == PIECE_BLACK ){
     switch (type) {
-    case PieceType::PAWN:
+    case PIECE_PAWN:
       if (m.src.Row() == 6 && m.dst.Row() == 4) {
         enPassantDst = ChessCoord(m.dst.Col(), 5);
         hasEnPassant = true;
@@ -949,7 +949,7 @@ int ChessBoard::ApplyMove(const Move& m)
       }
       halfMoves = 0;
       break;
-    case PieceType::KING:
+    case PIECE_KING:
       if (m.src == e8) {
         if (castleBQ && m.dst == c8) {
           castling = CASTLE_BQ;
@@ -961,7 +961,7 @@ int ChessBoard::ApplyMove(const Move& m)
       castleBK = false;
       castleBQ = false;
       break;
-    case PieceType::ROOK:
+    case PIECE_ROOK:
       if (m.src.Col() == 0) {
         castleBQ = false;
       }
@@ -975,7 +975,7 @@ int ChessBoard::ApplyMove(const Move& m)
   }
   else {
     switch (type) {
-    case PieceType::PAWN:
+    case PIECE_PAWN:
       if (m.src.Row() == 1 && m.dst.Row() == 3) {
         enPassantDst = ChessCoord(m.dst.Col(), 2);
         hasEnPassant = true;
@@ -985,7 +985,7 @@ int ChessBoard::ApplyMove(const Move& m)
       }
       halfMoves = 0;
       break;
-    case PieceType::KING:
+    case PIECE_KING:
       if (m.src == e1) {
         if (castleWQ && m.dst == c1) {
           castling = CASTLE_WQ;
@@ -997,7 +997,7 @@ int ChessBoard::ApplyMove(const Move& m)
       castleWK = false;
       castleWQ = false;
       break;
-    case PieceType::ROOK:
+    case PIECE_ROOK:
       if (m.src.Col() == 0) {
         castleWQ = false;
       }
@@ -1043,37 +1043,33 @@ int ChessBoard::ApplyMove(const Move& m)
   return 0;
 }
 
+UndoMove ChessBoard::GetUndoMove(const Move& m)
+{
+  UndoMove u;
+  u.m = m;
+  u.captured = *(GetPiece(m.dst));
+  Piece srcPiece = (*GetPiece(m.src));
+  if (srcPiece.type() == PIECE_PAWN ){
+
+  }
+  return u;
+}
+
+void ChessBoard::Undo(const UndoMove& u)
+{
+
+}
+
 char PieceFEN(const Piece& info)
 {
-  PieceType type = PieceType(info.type());
+  uint8_t type = info.type();
   char c;
   const char LOWER_DIFF = 'a' - 'A';
-  switch (type) {
-  case PieceType::PAWN:
-    c = 'P';
-    break;
-  case PieceType::ROOK:
-    c='R';
-    break;
-  case PieceType::KNIGHT:
-    c='N';
-    break;
-  case PieceType::BISHOP:
-    c='B';
-    break;
-  case PieceType::QUEEN:
-    c='Q';
-    break;
-  case PieceType::KING:
-    c='K';
-    break;
-  default:
-    //unknown shouldn't really get here ever.
-    c = 'U';
-    break;
-  }
-
-  if (info.color() == uint8_t(PieceColor::BLACK)) {
+  char PieceChar[PIECE_NUM_TYPES] = {
+    '0','P','R','N','B','Q','K'
+  };
+  c = PieceChar[type];
+  if (info.color() == PIECE_BLACK) {
     c += LOWER_DIFF;
   }
   return c;
@@ -1084,30 +1080,30 @@ Piece Char2Piece(char c)
   Piece info(0);
   const char LOWER_DIFF = 'a' - 'A';
   if (c > 'a') {
-    info.SetColor(PieceColor::BLACK);
+    info.SetColor(PIECE_BLACK);
     c -= LOWER_DIFF;
   }
   else {
-    info.SetColor(PieceColor::WHITE);
+    info.SetColor(PIECE_WHITE);
   }
   switch (c) {
   case 'P':
-    info.SetType(PieceType::PAWN);
+    info.SetType(PIECE_PAWN);
     break;
   case 'R':
-    info.SetType(PieceType::ROOK);
+    info.SetType(PIECE_ROOK);
     break;
-  case  'N':
-    info.SetType(PieceType::KNIGHT);
+  case 'N':
+    info.SetType(PIECE_KNIGHT);
     break;
   case 'B':
-    info.SetType(PieceType::BISHOP);
+    info.SetType(PIECE_BISHOP);
     break;
   case 'Q':
-    info.SetType(PieceType::QUEEN);
+    info.SetType(PIECE_QUEEN);
     break;
   case 'K':
-    info.SetType(PieceType::KING);
+    info.SetType(PIECE_KING);
     break;
   default:
     //unknown shouldn't really get here ever.
@@ -1176,10 +1172,10 @@ int ChessBoard::FromFen(const std::string& fen)
   strIdx++;
   char c = fen[strIdx];
   if (c == 'w') {
-    nextColor = PieceColor::WHITE;
+    nextColor = PIECE_WHITE;
   }
   else {
-    nextColor = PieceColor::BLACK;
+    nextColor = PIECE_BLACK;
   }
   strIdx += 2;
 
@@ -1239,7 +1235,7 @@ std::string ChessBoard::GetFen()
     int emptyCnt = 0;
     for (int col = 0; col < BOARD_SIZE; col++){
       const Piece& p = (*this)(col, row);
-      if (p.type() == uint8_t(PieceType::EMPTY)) {
+      if (p.isEmpty()) {
         emptyCnt++;
       }
       else {
@@ -1259,7 +1255,7 @@ std::string ChessBoard::GetFen()
     }
   }
   oss << " ";
-  if (nextColor == PieceColor::WHITE) {
+  if (nextColor == PIECE_WHITE) {
     oss << "w ";
   }
   else {
@@ -1310,7 +1306,7 @@ bool ChessBoard::AddPiece(ChessCoord c, Piece info)
   }
   *p = info;
 
-  std::vector<ChessCoord>* list = GetPieceList(PieceColor(p->color()));
+  std::vector<ChessCoord>* list = GetPieceList(p->color());
   list->push_back(c);
   return true;
 }
@@ -1321,7 +1317,7 @@ bool ChessBoard::RemovePiece(ChessCoord c)
   if (p->isEmpty()) {
     return false;
   }
-  std::vector<ChessCoord>* list = GetPieceList(PieceColor(p->color()));
+  std::vector<ChessCoord>* list = GetPieceList(p->color());
   for (auto it = list->begin(); it != list->end(); it++) {
     if ((*it) == c){
       list->erase(it);
@@ -1342,7 +1338,7 @@ bool ChessBoard::MovePiece(ChessCoord src, ChessCoord dst)
   }
   RemovePiece(dst);
 
-  std::vector<ChessCoord>* list = GetPieceList(PieceColor(p->color()));
+  std::vector<ChessCoord>* list = GetPieceList(p->color());
   for (size_t i = 0; i < list->size(); i++) {
     if ( (*list)[i] == src) {
       Piece* dstPiece = GetPiece(dst);
@@ -1376,11 +1372,11 @@ void ChessBoard::Clear()
   hasCastled[1] = false;
 }
 
-void ComputeChecksPawn(ChecksInfo & info, ChessCoord coord, PieceColor color,
+void ComputeChecksPawn(ChecksInfo & info, ChessCoord coord, uint8_t color,
   ChessCoord kingCoord)
 {
   uint8_t offsets[2] = { 7,9 };
-  if (color == PieceColor::BLACK) { 
+  if (color == PIECE_BLACK) {
     for (unsigned i = 0; i < 2; i++) {
       ChessCoord dst = coord;
       dst.coord -= offsets[i];
@@ -1402,7 +1398,7 @@ void ComputeChecksPawn(ChecksInfo & info, ChessCoord coord, PieceColor color,
   }
 }
 
-void ComputeChecksKnight(ChecksInfo& info, ChessCoord coord, PieceColor color,
+void ComputeChecksKnight(ChecksInfo& info, ChessCoord coord, uint8_t color,
   ChessCoord kingCoord)
 {
   char r0 = char(coord.Row());
@@ -1427,7 +1423,7 @@ void ComputeChecksKnight(ChecksInfo& info, ChessCoord coord, PieceColor color,
   }
 }
 
-void ComputeChecksKing(ChecksInfo& info, ChessCoord coord, PieceColor color,
+void ComputeChecksKing(ChecksInfo& info, ChessCoord coord, uint8_t color,
   ChessCoord kingCoord)
 {
   char r0 = char(coord.Row());
@@ -1460,7 +1456,7 @@ void InsertUnique(std::vector<ChessCoord>& coords, ChessCoord c)
   }
 }
 
-void ChessBoard::ComputeChecksRay(ChecksInfo& checks, ChessCoord coord, PieceColor color,
+void ChessBoard::ComputeChecksRay(ChecksInfo& checks, ChessCoord coord, uint8_t color,
   ChessCoord kingCoord, char dx, char dy)
 {
   char row = char(coord.Row());
@@ -1525,7 +1521,7 @@ void ChessBoard::ComputeChecksRay(ChecksInfo& checks, ChessCoord coord, PieceCol
   }
 }
 
-void ChessBoard::ComputeChecksRook(ChecksInfo& checks, ChessCoord coord, PieceColor color,
+void ChessBoard::ComputeChecksRook(ChecksInfo& checks, ChessCoord coord, uint8_t color,
   ChessCoord kingCoord)
 {
   const unsigned NUM_DIRS = 4;
@@ -1535,7 +1531,7 @@ void ChessBoard::ComputeChecksRook(ChecksInfo& checks, ChessCoord coord, PieceCo
   }
 }
 
-void ChessBoard::ComputeChecksBishop(ChecksInfo& checks, ChessCoord coord, PieceColor color,
+void ChessBoard::ComputeChecksBishop(ChecksInfo& checks, ChessCoord coord, uint8_t color,
   ChessCoord kingCoord)
 {
   const unsigned NUM_DIRS = 4;
@@ -1545,7 +1541,7 @@ void ChessBoard::ComputeChecksBishop(ChecksInfo& checks, ChessCoord coord, Piece
   }
 }
 
-void ChessBoard::ComputeChecksQueen(ChecksInfo& checks, ChessCoord coord, PieceColor color,
+void ChessBoard::ComputeChecksQueen(ChecksInfo& checks, ChessCoord coord, uint8_t color,
   ChessCoord kingCoord)
 {
   const unsigned NUM_DIRS = 8;
@@ -1561,20 +1557,20 @@ ChecksInfo ChessBoard::ComputeChecks()
   ChecksInfo checks;
   std::vector<ChessCoord>* list;
   std::vector<ChessCoord>* attackerList;
-  PieceColor attackerColor;
-  if (nextColor == PieceColor::BLACK) {
+  uint8_t attackerColor;
+  if (nextColor == PIECE_BLACK) {
     list = &(pieces[0]);
     attackerList = &(pieces[1]);
-    attackerColor = PieceColor::WHITE;
+    attackerColor = PIECE_WHITE;
   }
   else {
     list = &(pieces[1]);
     attackerList = &(pieces[0]);
-    attackerColor = PieceColor::BLACK;
+    attackerColor = PIECE_BLACK;
   }
   ChessCoord kingCoord;
   for (ChessCoord c : (*list)) {
-    if (GetPiece(c)->type() == uint8_t(PieceType::KING)) {
+    if (GetPiece(c)->type() == PIECE_KING) {
       kingCoord = c;
       break;
     }
@@ -1582,24 +1578,24 @@ ChecksInfo ChessBoard::ComputeChecks()
   checks.kingCoord = kingCoord;
   for (ChessCoord c : (*attackerList)) {
     Piece* p = GetPiece(c);
-    PieceType type = PieceType (p->type());
+    uint8_t type = p->type();
     switch (type) {
-    case PieceType::PAWN:
+    case PIECE_PAWN:
       ComputeChecksPawn(checks, c, attackerColor, kingCoord);
       break;
-    case PieceType::KNIGHT:
+    case PIECE_KNIGHT:
       ComputeChecksKnight(checks, c, attackerColor, kingCoord);
       break;
-    case PieceType::KING:
+    case PIECE_KING:
       ComputeChecksKing(checks, c, attackerColor, kingCoord);
       break;
-    case PieceType::ROOK:
+    case PIECE_ROOK:
       ComputeChecksRook(checks, c, attackerColor, kingCoord);
       break;
-    case PieceType::BISHOP:
+    case PIECE_BISHOP:
       ComputeChecksBishop(checks, c, attackerColor, kingCoord);
       break;
-    case PieceType::QUEEN:
+    case PIECE_QUEEN:
       ComputeChecksQueen(checks, c, attackerColor, kingCoord);
       break;
     }

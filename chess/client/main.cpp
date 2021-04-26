@@ -1,5 +1,6 @@
 #include <WinSock2.h>
 #include "ChessBoard.h"
+#include "ChessBot.h"
 #include "ChessClient.h"
 #include <iostream>
 #include <iomanip>
@@ -24,8 +25,8 @@ void TestFEN()
 {
   ChessBoard board;
   Piece p;
-  p.SetType(PieceType::PAWN);
-  p.SetColor(PieceColor::WHITE);
+  p.SetType(PIECE_PAWN);
+  p.SetColor(PIECE_WHITE);
   board.AddPiece(ChessCoord(0, 1), p);
   board.AddPiece(ChessCoord(0, 2), p);
   board.AddPiece(ChessCoord(0, 3), p);
@@ -38,9 +39,18 @@ void TestFEN()
   std::cout << "out fen " << outFen << "\n";
 }
 
+void TestEvalDirect() {
+  ChessBoard board;
+  ChessBot bot;
+  std::string inputFen = "r3r1k1/p1p2ppp/3q1n2/1p3b2/4PN2/3p1P2/PP3KPP/1RB1Q2R b - - 0 17";
+  board.FromFen(inputFen);
+  std::cout << "score:" << bot.EvalDirect(board) << "\n";
+}
+
 int main(int argc, char* argv[])
 {
   TestFEN();
+  TestEvalDirect();
   initWSA();
  
   ChessClient client;

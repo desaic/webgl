@@ -60,13 +60,13 @@ int bishoppos[64] =
 
 ChessBot::ChessBot():running(false)
 {
-  materialScore.resize( unsigned(PieceType::NUM_TYPES) );
-  materialScore[unsigned(PieceType::PAWN)] = 100;
-  materialScore[unsigned(PieceType::KNIGHT)] = 300;
-  materialScore[unsigned(PieceType::BISHOP)] = 300;
-  materialScore[unsigned(PieceType::ROOK)] = 500;
-  materialScore[unsigned(PieceType::QUEEN)] = 900;
-  materialScore[unsigned(PieceType::KING)] = 0;
+  materialScore.resize(PIECE_NUM_TYPES);
+  materialScore[PIECE_PAWN] = 100;
+  materialScore[PIECE_KNIGHT] = 300;
+  materialScore[PIECE_BISHOP] = 300;
+  materialScore[PIECE_ROOK] = 500;
+  materialScore[PIECE_QUEEN] = 900;
+  materialScore[PIECE_KING] = 0;
   Run();
 }
 
@@ -89,28 +89,27 @@ int ChessBot::EvalDirect(const ChessBoard& b)
     ChessCoord c = b.pieces[0][i];
     ChessCoord blackc(c.Col(), 7 - c.Row());
     const Piece* piece = b.GetPiece(c);
-    uint8_t typeIdx = piece->type();
-    blackSum += materialScore[typeIdx];
-    PieceType type = PieceType(typeIdx);
+    uint8_t type = piece->type();
+    blackSum += materialScore[type];
     switch (type) {
-    case PieceType::PAWN:
+    case PIECE_PAWN:
       blackSum += pawnpos[blackc.coord];
       break;
-    case PieceType::ROOK:
+    case PIECE_ROOK:
       blackRNBQ++;
       break;
-    case PieceType::KNIGHT:
+    case PIECE_KNIGHT:
       blackSum += knightpos[blackc.coord];
       blackRNBQ++;
       break;
-    case PieceType::BISHOP:
+    case PIECE_BISHOP:
       blackSum += bishoppos[blackc.coord];
       blackRNBQ++;
       break;
-    case PieceType::QUEEN:
+    case PIECE_QUEEN:
       blackRNBQ += 2;
       break;
-    case PieceType::KING:
+    case PIECE_KING:
       blackKing = c;
       break;
     }
@@ -120,28 +119,27 @@ int ChessBot::EvalDirect(const ChessBoard& b)
   for (size_t i = 0; i < b.pieces[1].size(); i++) {
     ChessCoord c = b.pieces[1][i];
     const Piece* piece = b.GetPiece(c);
-    uint8_t typeIdx = piece->type();
-    whiteSum += materialScore[typeIdx];
-    PieceType type = PieceType(typeIdx);
+    uint8_t type = piece->type();
+    whiteSum += materialScore[type];
     switch (type) {
-    case PieceType::PAWN:
+    case PIECE_PAWN:
       whiteSum += pawnpos[c.coord];
       break;
-    case PieceType::ROOK:
-      blackRNBQ++;
+    case PIECE_ROOK:
+      whiteRNBQ++;
       break;
-    case PieceType::KNIGHT:
+    case PIECE_KNIGHT:
       whiteSum += knightpos[c.coord];
-      blackRNBQ++;
+      whiteRNBQ++;
       break;
-    case PieceType::BISHOP:
+    case PIECE_BISHOP:
       whiteSum += bishoppos[c.coord];
-      blackRNBQ++;
+      whiteRNBQ++;
       break;
-    case PieceType::QUEEN:
-      blackRNBQ += 2;
+    case PIECE_QUEEN:
+      whiteRNBQ += 2;
       break;
-    case PieceType::KING:
+    case PIECE_KING:
       whiteKing = c;
       break;
     }
@@ -168,7 +166,7 @@ int ChessBot::EvalDirect(const ChessBoard& b)
   }
   score = whiteSum - blackSum;
   score += whiteRNBQval - blackRNBQval;
-  if (b.nextColor == PieceColor::BLACK) {
+  if (b.nextColor == PIECE_BLACK) {
     score = -score;
   }
   return score;

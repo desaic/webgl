@@ -10,16 +10,17 @@
 
 #define BOARD_SIZE 8
 
-enum class PieceType
-{
-  EMPTY = 0, PAWN=1, ROOK = 2, KNIGHT=3, BISHOP=4,
-  QUEEN=5, KING=6, NUM_TYPES=7
-};
+#define PIECE_EMPTY 0
+#define PIECE_PAWN 1
+#define PIECE_ROOK 2
+#define PIECE_KNIGHT 3
+#define PIECE_BISHOP 4
+#define PIECE_QUEEN 5
+#define PIECE_KING 6
+#define PIECE_NUM_TYPES 7
 
-enum class PieceColor {
-  BLACK=0,
-  WHITE=1
-};
+#define PIECE_BLACK 0
+#define PIECE_WHITE 1
 
 ///machine friendly coordinates in [0,7]
 ///64 cells in total. 1 byte is enough
@@ -114,16 +115,24 @@ struct Piece
     return info >> 3;
   }
 
+  bool isBlack() {
+    return !(info >> 3);
+  }
+
+  bool isWhite() {
+    return info >> 3;
+  }
+
   uint8_t type()const {
     return info & 7;
   }
 
-  void SetColor(PieceColor c) {
-    info = (info & (~8)) | (uint8_t(c) << 3);
+  void SetColor(uint8_t c) {
+    info = (info & (~8)) | (c << 3);
   }
 
-  void SetType(PieceType t) {
-    info = (info & (~7)) | uint8_t(t);
+  void SetType(uint8_t t) {
+    info = (info & (~7)) | t;
   }
 
   bool operator == (const Piece& b)const {
@@ -276,6 +285,13 @@ struct ChecksInfo {
   }
 };
 
+struct UndoMove
+{
+  Move m;
+  Piece captured;
+  bool isEnPassant=false;
+};
+
 class ChessBoard {
 
 public:
@@ -284,7 +300,7 @@ public:
   std::vector<ChessCoord> pieces[2];
   ///8x8 board with 64 squares
   std::vector<Piece> board;
-  PieceColor nextColor;
+  uint8_t nextColor;
   
   bool castleBK;
   bool castleBQ;
@@ -353,6 +369,23 @@ public:
   /// simplicity.
   int ApplyMove(const Move & m);
 
+  UndoMove GetUndoMove(const Move& m);
+
+  void Undo(const UndoMove& u);
+
+  void ApplyNullMove()
+  {
+    FlipTurn();
+  }
+
+  void UndoNullMove() {
+    FlipTurn();
+  }
+
+  void FlipTurn() {
+    nextColor = 1-nextColor;
+  }
+
   void SetStartPos();
 
   ///\return 0 on success
@@ -361,7 +394,7 @@ public:
   std::string GetFen();
 
 private:
-  std::vector<ChessCoord>* GetPieceList(PieceColor c);
+  std::vector<ChessCoord>* GetPieceList(uint8_t color);
 
   void GetEvasions(std::vector<Move>& moves);
 	void GetKingEvasions(std::vector<Move>& moves);
@@ -398,13 +431,13 @@ private:
   void GetCastleBlack(std::vector<Move>& moves);
   void GetCastleWhite(std::vector<Move>& moves);
 
-  void ComputeChecksRook(ChecksInfo& info, ChessCoord coord, PieceColor color,
+  void ComputeChecksRook(ChecksInfo& info, ChessCoord coord, uint8_t color,
     ChessCoord kingCoord);
-  void ComputeChecksBishop(ChecksInfo& checks, ChessCoord coord, PieceColor color,
+  void ComputeChecksBishop(ChecksInfo& checks, ChessCoord coord, uint8_t color,
     ChessCoord kingCoord);
-  void ComputeChecksQueen(ChecksInfo& checks, ChessCoord coord, PieceColor color,
+  void ComputeChecksQueen(ChecksInfo& checks, ChessCoord coord, uint8_t color,
     ChessCoord kingCoord);
-  void ComputeChecksRay(ChecksInfo& checks, ChessCoord coord, PieceColor color,
+  void ComputeChecksRay(ChecksInfo& checks, ChessCoord coord, uint8_t color,
     ChessCoord kingCoord, char dx, char dy);
   ChecksInfo ComputeChecks();
 
