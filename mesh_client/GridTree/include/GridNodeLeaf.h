@@ -11,30 +11,23 @@ public:
     size_t numEntries = 1ULL << (3 * log2BF);
     val.Allocate(numEntries);
   }
-
-  ///get linear index
-  unsigned GetLinIdx(unsigned x, unsigned y, unsigned z)
-  {
-    unsigned idx = (x << (2 * log2BF)) | (y << log2BF) | z;
-    return idx;
-  }
   
   //GridNodeLeaf() :origin(0) {}
-  void SetValue(unsigned x, unsigned y, unsigned z, void* valp) override {
+  void SetValue(uint8_t x, uint8_t y, uint8_t z, void* valp) override {
     val.SetValue(GetLinIdx(x, y, z), *(ValueT*)valp);
   }
   
-  void AddValue(unsigned x, unsigned y, unsigned z, void* valp) override {
+  void AddValue(uint8_t x, uint8_t y, uint8_t z, void* valp) override {
     val.AddValue(GetLinIdx(x, y, z), *(ValueT*)valp);
   }
 
-  bool HasValue(unsigned x, unsigned y, unsigned z) override
+  bool HasValue(uint8_t x, uint8_t y, uint8_t z) override
   {
     unsigned linIdx = GetLinIdx(x, y, z);
     return val.HasValue(linIdx);
   }
 
-  void GetValue(unsigned x, unsigned y, unsigned z, void* valp) override
+  void GetValue(uint8_t x, uint8_t y, uint8_t z, void* valp) override
   {
     *(ValueT*)(valp) = val.GetValue(GetLinIdx(x, y, z));
   }
@@ -44,12 +37,12 @@ public:
     return val.GetNumValues();
   }
 
-  GridNode* GetChild(unsigned x, unsigned y, unsigned z) override {
+  GridNode* GetChild(uint8_t x, uint8_t y, uint8_t z) override {
     return nullptr;
   }
 
   ///doesn't do anything.
-  void AddChild(GridNode* child, unsigned x, unsigned y, unsigned z) {}
+  void AddChild(GridNode* child, uint8_t x, uint8_t y, uint8_t z) {}
 
   //is there value for cell i
   SparseSet<ValueT> val;

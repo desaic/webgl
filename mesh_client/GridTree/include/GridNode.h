@@ -5,23 +5,29 @@ public:
 
   GridNode() :log2BF(3),origin(0) {}
 
-  virtual void AddValue(unsigned x, unsigned y, unsigned z, void* valp)=0;
+  unsigned GetLinIdx(uint8_t x, uint8_t y, uint8_t z)
+  {
+    unsigned idx = (unsigned(x) << (2 * log2BF)) | (unsigned(y) << log2BF) | z;
+    return idx;
+  }
+
+  virtual void AddValue(uint8_t x, uint8_t y, uint8_t z, void* valp)=0;
 
   ///\param valp pointer to a value.
-  virtual void SetValue(unsigned x, unsigned y, unsigned z, void* valp)=0;
+  virtual void SetValue(uint8_t x, uint8_t y, uint8_t z, void* valp)=0;
   
-  virtual void GetValue(unsigned x, unsigned y, unsigned z, void* valp) = 0;
+  virtual void GetValue(uint8_t x, uint8_t y, uint8_t z, void* valp) = 0;
   
-  virtual bool HasValue(unsigned x, unsigned y, unsigned z) = 0;
+  virtual bool HasValue(uint8_t x, uint8_t y, uint8_t z) = 0;
 
   virtual unsigned GetNumValues() const { return 0; }
 
-  virtual void SetLog2BF(unsigned char l) { log2BF = l; }
+  virtual void SetLog2BF(uint8_t l) { log2BF = l; }
 
   ///Get child node by local x y z index. returns nullptr if child does not exist.
-  virtual GridNode* GetChild(unsigned x, unsigned y, unsigned z) = 0;
+  virtual GridNode* GetChild(uint8_t x, uint8_t y, uint8_t z) = 0;
 
-  virtual void AddChild(GridNode* child, unsigned x, unsigned y, unsigned z) = 0;
+  virtual void AddChild(GridNode* child, uint8_t x, uint8_t y, uint8_t z) = 0;
 
   ///obviously not thread safe.
   ///\return a list of GridNode * .
@@ -31,7 +37,7 @@ public:
 
   virtual ~GridNode() {}
 
-  virtual void SetOrigin(unsigned x, unsigned y, unsigned z) {
+  virtual void SetOrigin(uint8_t x, uint8_t y, uint8_t z) {
     origin = 0;
     origin = ((uint64_t(x) << 40) | (uint64_t(y) << 20) | z);
   }

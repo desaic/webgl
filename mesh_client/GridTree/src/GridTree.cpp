@@ -7,26 +7,25 @@
 
 void TreePointer::Init(GridTreeAbs* t)
 {
-  indices.clear();
-  nodes.clear();
-  nodes.push_back(t->GetRoot());
-  indices.push_back(Vec3u(0,0,0));
+  nodes.resize(1, t->GetRoot());
+  indices.resize(1, Vec3uc(0,0,0));
   tree = t;
+  valid = true;
 }
 
-///point pointer to node at level containing voxel (x,y,z).
-bool TreePointer::PointTo(unsigned l, unsigned x, unsigned y, unsigned z)
+///point pointer to sequence of nodes to reach voxel (x,y,z).
+bool TreePointer::PointTo(unsigned x, unsigned y, unsigned z)
 {
-  indices.resize( size_t(l + 1));
+  valid = true;
+  indices.resize( tree->GetNumLevels() + 1);
   //which block does (x,y,z) fall in.
   //the block index at the leaf node is the input voxel index.
   Vec3u blockIndex(x, y, z);
+  unsigned log2Bf = tree->GetLog2BF();
   for (size_t i = 0; i < indices.size(); i++) {
     unsigned level = indices.size() - i - 1;
-    unsigned blockSize = tree->GetBlockSize(level);
-    unsigned childSize = tree->GetBlockSize(level + 1);
     for (unsigned d = 0; d < 3; d++) {
-      indices[level][d] = (blockIndex[d] % blockSize) / childSize ;
+      indices[level][d] = blockIndex[d] << ;
     }
   }
   nodes.resize(indices.size());
@@ -41,21 +40,12 @@ bool TreePointer::PointTo(unsigned l, unsigned x, unsigned y, unsigned z)
     }
     nodes[i] = child;
   }
-
   return true;
-}
-
-bool TreePointer::PointToLeaf(unsigned x, unsigned y, unsigned z)
-{
-  unsigned level = tree->GetNumLevels() - 1;
-  bool exists = PointTo(level, x, y, z);
-  return exists;
 }
 
 void TreePointer::CreateLeaf(unsigned x, unsigned y, unsigned z)
 {
-  unsigned level = tree->GetNumLevels() - 1;
-  bool exists = PointTo(level, x, y, z);
+  bool exists = PointTo(x, y, z);
   if (!exists) {
     CreatePath();
   }
@@ -66,11 +56,11 @@ bool TreePointer::HasValue()const
   if (nodes[nodes.size() - 1] == nullptr) {
     return false;
   }
-  Vec3u idx = indices.back();
+  Vec3uc idx = indices.back();
   return nodes[nodes.size() - 1]->HasValue(idx[0], idx[1], idx[2]);
 }
 
-void TreePointer::MoveToSameNode(unsigned x, unsigned y, unsigned z)
+void TreePointer::MoveWithinNode(unsigned x, unsigned y, unsigned z)
 {
   unsigned level = indices.size() - 1;
   unsigned blockSize = tree->GetBlockSize(level);
@@ -85,15 +75,13 @@ bool TreePointer::Increment(unsigned axis)
   unsigned gridSize = 1 << log2BF;
   unsigned level = unsigned(indices.size()) - 1;
   
-  std::vector<Vec3u> oldInd = indices;
-
   for (unsigned i = 0; i < indices.size(); i++) {
     level = unsigned(indices.size()) - 1 - i;
     unsigned childIdx = indices[level][axis] + 1;
     if (childIdx >= gridSize) {
       if (level == 0) {
-        indices = oldInd;
         //root level. no more block to jump to .
+        valid = false;
         return false;
       }
       //move on to the next block.
@@ -122,14 +110,13 @@ bool TreePointer::Decrement(unsigned axis)
   unsigned level = unsigned(indices.size()) - 1;
   unsigned log2BF = tree->GetLog2BF();
   unsigned gridSize = 1 << log2BF;
-  std::vector<Vec3u> oldInd = indices;
   for (unsigned i = 0; i < indices.size(); i++) {
     level = unsigned(indices.size()) - 1 - i;
     int childIdx = int(indices[level][axis]) - 1;
     if (childIdx < 0) {
       if (level == 0) {
         //root level. no more block to jump to .
-        indices = oldInd;
+        valid = false;
         return false;
       }
       //move on to the next block.

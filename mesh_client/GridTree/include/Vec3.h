@@ -120,6 +120,7 @@ T Dot(const Vec3<T>& v0, const Vec3<T>& v1)
 typedef Vec3<float> Vec3f;
 typedef Vec3<double> Vec3d;
 typedef Vec3<unsigned> Vec3u;
+typedef Vec3<unsigned char> Vec3uc;
 typedef Vec3<int> Vec3i;
 typedef Vec3<unsigned long long> Vec3ul;
 

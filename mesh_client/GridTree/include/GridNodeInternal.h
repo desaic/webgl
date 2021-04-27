@@ -9,34 +9,27 @@ class GridNodeInternal : public GridNode {
 public:
   GridNodeInternal() {}
 
-  ///get linear index
-  unsigned GetLinIdx(unsigned x, unsigned y, unsigned z) 
-  {
-    unsigned idx = (x << (2 * log2BF)) | (y << log2BF) | z;
-    return idx;
-  }
-
   ///assumes that the spot exists. otherwise use AddValue.
-  void SetValue(unsigned x, unsigned y, unsigned z, void* valp) override 
+  void SetValue(uint8_t x, uint8_t y, uint8_t z, void* valp) override
   {
     unsigned linIdx = GetLinIdx(x, y, z);
     val.SetValue(linIdx, *(ValueT*)(valp));
   }
 
   ///assumes that the spot does not exist. otherwise use SetValue.
-  void AddValue(unsigned x, unsigned y, unsigned z, void* valp) override 
+  void AddValue(uint8_t x, uint8_t y, uint8_t z, void* valp) override
   {
       unsigned linIdx = GetLinIdx(x, y, z);
       val.AddValue(linIdx, *(ValueT*)valp);
   }
 
-  bool HasValue(unsigned x, unsigned y, unsigned z) override
+  bool HasValue(uint8_t x, uint8_t y, uint8_t z) override
   {
     unsigned linIdx = GetLinIdx(x, y, z);
     return val.HasValue(linIdx);
   }
 
-  void GetValue(unsigned x, unsigned y, unsigned z, void* valp) override
+  void GetValue(uint8_t x, uint8_t y, uint8_t z, void* valp) override
   {
     unsigned linIdx = GetLinIdx(x, y, z);
     *(ValueT*)valp = val.GetValue(linIdx);
@@ -44,13 +37,13 @@ public:
   
   unsigned GetNumValues() const override{ return val.GetNumValues(); }
 
-  GridNode* GetChild(unsigned x, unsigned y, unsigned z) override
+  GridNode* GetChild(uint8_t x, uint8_t y, uint8_t z) override
   {
     unsigned linIdx = GetLinIdx(x, y, z);
     return children.GetValue(linIdx);
   }
 
-  void AddChild(GridNode* child, unsigned x, unsigned y, unsigned z) override
+  void AddChild(GridNode* child, uint8_t x, uint8_t y, uint8_t z) override
   {
     unsigned linIdx = GetLinIdx(x, y, z);
     children.AddValue(linIdx, child);

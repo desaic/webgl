@@ -8,8 +8,6 @@
 
 #include <iostream>
 
-#define MAX_LOG2_BRANCHING_FACTOR 10
-
 #define DEFAULT_LOG2_BF 3
 
 class TrigMesh;
@@ -29,7 +27,8 @@ public:
   virtual GridNode* MakeNode(unsigned level) = 0;
   virtual ~GridTreeAbs() {}
   virtual Vec3u GetSize()const { return size; }
-
+  ///limited by 8 bit int.
+  static const int MAX_LOG2_BF=7;
 protected:
   //sizes in x y z axes.
   Vec3u size;
@@ -55,16 +54,16 @@ public:
   }
 
   void SetLog2BF(unsigned bf) override {
-    if (bf <= MAX_LOG2_BRANCHING_FACTOR) {
+    if (bf <= MAX_LOG2_BF) {
       log2BF = bf;
     }
   }
 
-  ///root is level 0. numLevels = 2 means having a root
-  ///level + 1 leaf level.
+  ///root is level 0 and does not count towards numLevels.
+  /// minimum level is 1, which is 1 grid of values directly attached to root.
   unsigned GetNumLevels()const override{ return numLevels; }
 
-  unsigned GetBlockSize(unsigned level)const override { return blockSize[level]; }
+  unsigned GetBlockSize(unsigned level)const override { return blockSize; }
 
   GridNode * GetRoot() override{ return (GridNode*)(&root); }
   
@@ -103,21 +102,22 @@ private:
 
   unsigned numLevels;
 
-  ///block size at each level.
   ///calculated during allocation.
-  ///blockSize at voxel level = 1.
-  std::vector<unsigned> blockSize;
+  unsigned blockSize;
 };
 
 class TreePointer {
 public:
   ///child indices from root
   ///the size of indices must be greater than or equal to the size of nodes.
-  std::vector<Vec3u> indices;
+  std::vector<Vec3uc> indices;
+
+  ///never empty.
+  ///nodes[0] always points to tree root.
   std::vector<GridNode *> nodes;
   GridTreeAbs* tree;
-
-  TreePointer(GridTreeAbs* t) {
+  bool valid;
+  TreePointer(GridTreeAbs* t):valid(false) {
     Init(t);
   }
 
@@ -125,23 +125,23 @@ public:
   ///point pointer to node at level containing voxel (x,y,z).
   ///root is level 0
   ///\return false if the value or node does not exist 
-  bool PointTo(unsigned level, unsigned x, unsigned y, unsigned z);
-
-  /// PointTo(numLevels - 1)
-  bool PointToLeaf(unsigned x, unsigned y, unsigned z);
+  bool PointTo(unsigned x, unsigned y, unsigned z);
 
   /// creates path if non existent
   void CreateLeaf(unsigned x, unsigned y, unsigned z);
 
+  bool Valid()const {
+    return valid;
+  }
+
   bool HasValue()const;
   ///move to a voxel within the same node.
   ///assuming pointer is pointing at a valid path.
-  void MoveToSameNode(unsigned x, unsigned y, unsigned z);
+  void MoveWithinNode(unsigned x, unsigned y, unsigned z);
 
   ///move x y or z axis by +1.
   ///the new voxel may be empty.
-  ///\return false if the move will be out of bound, in which case
-  /// the pointer points to the original coordinate.
+  ///\return false if the move will be out of bound.
   bool Increment(unsigned axis);
 
   bool Decrement(unsigned axis);
@@ -163,13 +163,7 @@ void GridTree<ValueT>::Allocate(unsigned x, unsigned y, unsigned z) {
   }
   numLevels = log2Size / log2BF + ( (log2Size % log2BF) > 0) ;
 
-  blockSize.resize(numLevels+1);
-  unsigned s = 1U << log2BF;
-  for (size_t i = 0; i < numLevels; i++) {
-    blockSize[numLevels - i - 1] = s;
-    s = s << log2BF;
-  }
-  blockSize[blockSize.size() - 1] = 1;
+  blockSize = 1U << log2BF;
   root.SetLog2BF(log2BF);
   root.SetOrigin(0, 0, 0);
   root.Allocate();
@@ -186,14 +180,14 @@ void SetVoxelValue(TreePointer & ptr, const ValueT & val) {
 
 template <typename ValueT>
 void AddVoxelValue(TreePointer& ptr, const ValueT& val) {
-  Vec3u idx = ptr.indices.back();
+  Vec3uc idx = ptr.indices.back();
   GridNode* node = ptr.nodes.back();
   node->AddValue(idx[0], idx[1], idx[2], (void*)(&val));
 }
 
 template <typename ValueT>
 void GetVoxelValue(const TreePointer& ptr, const ValueT& val) {
-  Vec3u idx = ptr.indices.back();
+  Vec3uc idx = ptr.indices.back();
   GridNode* node = ptr.nodes.back();
   node->GetValue(idx[0], idx[1], idx[2], (void*)(&val));
 }

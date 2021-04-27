@@ -101,7 +101,7 @@ void TestCPT(TrayClient* client)
   sdf.mesh = &meshes[0];
   sdf.band = 5;
   //mm
-  const float voxelSize = 0.1;
+  const float voxelSize = 0.25;
   sdf.voxelSize = voxelSize;
   cpt(sdf);
   FastMarch(sdf);
