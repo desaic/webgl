@@ -59,5 +59,6 @@ public:
   std::deque<char> q;
 
   ChessBoard board;
+  std::vector<UndoMove> undoStack;
   std::thread loopThread;
 };

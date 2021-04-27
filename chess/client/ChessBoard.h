@@ -5,19 +5,22 @@
 #include <string>
 #include <vector>
 #include <list>
+#include <iostream>
+#include <sstream>
 
 #define BOARD_SIZE 8
 
-enum class PieceType
-{
-  EMPTY = 0, PAWN=1, ROOK = 2, KNIGHT=3, BISHOP=4,
-  QUEEN=5, KING=6
-};
+#define PIECE_EMPTY 0
+#define PIECE_PAWN 1
+#define PIECE_ROOK 2
+#define PIECE_KNIGHT 3
+#define PIECE_BISHOP 4
+#define PIECE_QUEEN 5
+#define PIECE_KING 6
+#define PIECE_NUM_TYPES 7
 
-enum class PieceColor {
-  BLACK=0,
-  WHITE=1
-};
+#define PIECE_BLACK 0
+#define PIECE_WHITE 1
 
 ///machine friendly coordinates in [0,7]
 ///64 cells in total. 1 byte is enough
@@ -74,6 +77,10 @@ struct ChessCoord
     return coord == b.coord;
   }
 
+  bool operator!=(const ChessCoord& b) const {
+    return coord != b.coord;
+  }
+
   bool operator == (uint8_t b) const {
     return coord == b;
   }
@@ -82,7 +89,7 @@ struct ChessCoord
     return coord != b;
   }
 
-  std::string toString() {
+  std::string ToString() {
     std::string s;
     s.resize(2);
     s[0] = Col() + 'a';
@@ -90,18 +97,29 @@ struct ChessCoord
     return s;
   }
 
+  bool inBound() {
+    return coord < 64;
+  }
+
   uint8_t coord;
 };
 
-///ran out of good names.
-struct PieceInfo
+struct Piece
 {
   uint8_t info;
-  PieceInfo() :info(0) {}
+  Piece() :info(0) {}
 
-  PieceInfo(uint8_t i) :info(i) {}
+  Piece(uint8_t i) :info(i) {}
 
   uint8_t color()const {
+    return info >> 3;
+  }
+
+  bool isBlack() {
+    return !(info >> 3);
+  }
+
+  bool isWhite() {
     return info >> 3;
   }
 
@@ -109,15 +127,15 @@ struct PieceInfo
     return info & 7;
   }
 
-  void SetColor(PieceColor c) {
-    info = (info & (~8)) | (uint8_t(c) << 3);
+  void SetColor(uint8_t c) {
+    info = (info & (~8)) | (c << 3);
   }
 
-  void SetType(PieceType t) {
-    info = (info & (~7)) | uint8_t(t);
+  void SetType(uint8_t t) {
+    info = (info & (~7)) | t;
   }
 
-  bool operator == (const PieceInfo& b)const {
+  bool operator == (const Piece& b)const {
     return info == b.info;
   }
   
@@ -142,49 +160,16 @@ struct PieceInfo
   }
 };
 
-///2 bytes in total.
-///1 byte position and 1 byte type and color
-struct Piece {
-  ///3 bits type 1 bit color
-  PieceInfo info;
-  ChessCoord pos;
-  Piece() :info(0) {}
+Piece Char2Piece(char c);
 
-  uint8_t color()const {
-    return info.color();
-  }
-  
-  uint8_t type()const {
-    return info.type();
-  }
-
-  void SetColor(PieceColor c) {
-    info.SetColor(c);;
-  }
-
-  void SetType(PieceType t) {
-    info.SetType(t);
-  }
-
-  void clear() {
-    info = 0;
-  }
-
-  bool isEmpty() const {
-    return info.isEmpty();
-  }
-};
-
-PieceInfo Char2PieceInfo(char c);
-
-char PieceFEN(const PieceInfo& info);
+char PieceFEN(const Piece& info);
 
 struct Move
 {
   ChessCoord src;
   ChessCoord dst;
   //promote to piece. usually none.
-  PieceInfo promo;
+  Piece promo;
 
   Move(){}
 
@@ -203,35 +188,119 @@ struct Move
   }
 
   void SetPromo(char c) {
-    promo = Char2PieceInfo(c);
+    promo = Char2Piece(c);
   }
 
   bool operator==(const Move& b) {
     return src == b.src && dst == b.dst && promo == b.promo;
   }
 
-  std::string toString() {
-    std::string s = src.toString() + " " + dst.toString();
+  std::string ToString() {
+    std::string s = src.ToString() + " " + dst.ToString();
     if (!promo.isEmpty()) {
-      Piece p;
-      p.info = promo;
-      char c = PieceFEN(p.info);
+      char c = PieceFEN(promo);
       s = s + " " + c;
     }
     return s;
   }
 };
 
+///1 bit per position. 
+struct BitBoard
+{
+  int64_t bits;
+  BitBoard() :bits(0) {}
+  
+  uint8_t GetBit(uint8_t idx) {
+    return (bits >> idx) & 1;
+  }
+  
+  uint8_t GetBit(uint8_t x, uint8_t y) {
+    return GetBit( (x | (y << 3)) );
+  }
+
+  uint8_t GetBit(ChessCoord c) {
+    return GetBit(c.coord);
+  }
+
+  void SetBit(uint8_t i) {
+    bits |= (1ll << i);
+  }
+
+  void SetBit(ChessCoord c) {
+    SetBit(c.coord);
+  }
+
+  void ClearBit(uint8_t i) {
+    bits &= (~(1ll << i));
+  }
+
+  std::string ToString() {
+    std::ostringstream oss;
+    for (char row = 7; row >=0; row--) {
+      for (uint8_t col = 0; col < 8; col++) {
+        oss << int(GetBit(col, uint8_t(row)) );
+      }
+      oss << "\n";
+    }
+    return oss.str();
+  }
+};
+
+///infomation about checks
+struct ChecksInfo {
+  ChecksInfo() :pinners(BOARD_SIZE*BOARD_SIZE) {}
+
+  ChessCoord kingCoord;
+  BitBoard attacked;
+  
+  //pieces that directly attacks the king
+  std::vector<ChessCoord> attackers;
+
+  //pieces pinning pieces to the king.
+  //for a pinned piece at coordinate c
+  //pinner[c] is pinning it.
+  std::vector<ChessCoord> pinners;
+  //bit set for dst in pins structure.
+  //redundant for quicker lookup.
+  BitBoard blockers;
+
+  std::string ToString() {
+    std::ostringstream oss;
+    oss << "king: " << kingCoord.ToString() << "\nattacked squares:\n";
+    oss << attacked.ToString() << "\n";
+    oss << "attackers " << attackers.size() << "\n";
+    for (ChessCoord c : attackers) {
+      oss << c.ToString() << " ";
+    }
+    oss << "\n";
+    oss << "blockers:\n" << blockers.ToString() << "\n";;
+    oss << "pins:\n";
+    for (uint8_t c = 0; c < 64; c++) {
+      if (blockers.GetBit(c)) {
+        oss << pinners[c].ToString() << " " << ChessCoord(c).ToString() << " , ";
+      }
+    }
+    return oss.str();
+  }
+};
+
+struct UndoMove
+{
+  Move m;
+  Piece captured;
+  bool isEnPassant=false;
+};
+
 class ChessBoard {
 
 public:
   ChessBoard(); 
-  
-  std::vector<Piece*> black;
-  std::vector<Piece*> white;
+  //black then white. consistent with enum PieceColor.
+  std::vector<ChessCoord> pieces[2];
   ///8x8 board with 64 squares
   std::vector<Piece> board;
-  PieceColor nextColor;
+  uint8_t nextColor;
   
   bool castleBK;
   bool castleBQ;
@@ -239,6 +308,8 @@ public:
   bool castleWQ;
 
   bool hasEnPassant;
+
+  bool hasCastled[2];
 
   ///En passant target square.
   ChessCoord enPassantDst;
@@ -267,11 +338,19 @@ public:
     return &(board[c.coord]);
   }
 
+  const Piece* GetPiece(ChessCoord c) const {
+    return &(board[c.coord]);
+  }
+
   Piece* GetPiece(uint8_t c) {
     return &(board[c]);
   }
 
-  bool AddPiece(ChessCoord c, PieceInfo info);
+  const Piece* GetPiece(uint8_t c) const{
+    return &(board[c]);
+  }
+
+  bool AddPiece(ChessCoord c, Piece p);
 
   bool RemovePiece(ChessCoord c);
 
@@ -290,6 +369,23 @@ public:
   /// simplicity.
   int ApplyMove(const Move & m);
 
+  UndoMove GetUndoMove(const Move& m);
+
+  void Undo(const UndoMove& u);
+
+  void ApplyNullMove()
+  {
+    FlipTurn();
+  }
+
+  void UndoNullMove() {
+    FlipTurn();
+  }
+
+  void FlipTurn() {
+    nextColor = 1-nextColor;
+  }
+
   void SetStartPos();
 
   ///\return 0 on success
@@ -298,20 +394,52 @@ public:
   std::string GetFen();
 
 private:
-	void GetEvasions(std::vector<Move>& moves);
+  std::vector<ChessCoord>* GetPieceList(uint8_t color);
+
+  void GetEvasions(std::vector<Move>& moves);
 	void GetKingEvasions(std::vector<Move>& moves);
+  ///generate blocking/capturing moves when there is only 1
+  ///attacker checking the king.
+  void GetBlockingMoves(std::vector<Move>& moves);
+  std::vector<ChessCoord> GetBlockingPawn(ChessCoord c, bool canUseEnPassant);
+  std::vector<ChessCoord> GetDstRook(ChessCoord c);
+  std::vector<ChessCoord> GetDstKnight(ChessCoord c);
+  std::vector<ChessCoord> GetDstBishop(ChessCoord c);
+  std::vector<ChessCoord> GetDstQueen(ChessCoord c);
 
 	void GetNonEvasions(std::vector<Move>& moves);
 	void GetCaptures(std::vector<Move>& moves);
-  void GetCaptures(std::vector<Move>& moves, const Piece& p);
-  void GetCapturesPawn(std::vector<Move>& moves, const Piece& p);
+  void GetCaptures(std::vector<Move>& moves, ChessCoord c);
+  void GetCapturesPawn(std::vector<Move>& moves, ChessCoord c);
+  void GetCapturesRook(std::vector<Move>& moves, ChessCoord c);
+  void GetCapturesKnight(std::vector<Move>& moves, ChessCoord c);
+  void GetCapturesBishop(std::vector<Move>& moves, ChessCoord c);
+  void GetCapturesQueen(std::vector<Move>& moves, ChessCoord c);
+  void GetCapturesKing(std::vector<Move>& moves, ChessCoord c);
 
   void AddBlackPawnCaptures(ChessCoord src, ChessCoord dst, std::vector<Move>& moves);
   void AddWhitePawnCaptures(ChessCoord src, ChessCoord dst, std::vector<Move>& moves);
 
 	void GetQuiets(std::vector<Move>& moves);
-  void GetQuiets(std::vector<Move>& moves, const Piece & p);
-  void GetQuietsPawn(std::vector<Move>& moves, const Piece& p);
+  void GetQuiets(std::vector<Move>& moves, ChessCoord c);
+  void GetQuietsPawn(std::vector<Move>& moves, ChessCoord c);
+  void GetQuietsRook(std::vector<Move>& moves, ChessCoord c);
+  void GetQuietsKnight(std::vector<Move>& moves, ChessCoord c);
+  void GetQuietsBishop(std::vector<Move>& moves, ChessCoord c);
+  void GetQuietsQueen(std::vector<Move>& moves, ChessCoord c);
+  void GetQuietsKing(std::vector<Move>& moves, ChessCoord c);
+  void GetCastleBlack(std::vector<Move>& moves);
+  void GetCastleWhite(std::vector<Move>& moves);
 
-	int numChecks();
+  void ComputeChecksRook(ChecksInfo& info, ChessCoord coord, uint8_t color,
+    ChessCoord kingCoord);
+  void ComputeChecksBishop(ChecksInfo& checks, ChessCoord coord, uint8_t color,
+    ChessCoord kingCoord);
+  void ComputeChecksQueen(ChecksInfo& checks, ChessCoord coord, uint8_t color,
+    ChessCoord kingCoord);
+  void ComputeChecksRay(ChecksInfo& checks, ChessCoord coord, uint8_t color,
+    ChessCoord kingCoord, char dx, char dy);
+  ChecksInfo ComputeChecks();
+
+  ChecksInfo checksInfo;
 };

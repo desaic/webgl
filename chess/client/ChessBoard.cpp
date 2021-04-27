@@ -1,8 +1,10 @@
 #include "ChessBoard.h"
 
+#include <algorithm>
 #include <sstream>
 
 #define a1 0
+#define b1 1
 #define c1 2
 #define d1 3
 #define e1 4
@@ -10,6 +12,7 @@
 #define g1 6
 #define h1 7
 #define a8 56
+#define b8 57
 #define c8 58
 #define d8 59
 #define e8 60
@@ -37,7 +40,7 @@ enum CastleMove {
 void AddWhitePromos(const Move& m_in, std::vector<Move>& moves);
 void AddBlackPromos(const Move& m_in, std::vector<Move>& moves);
 
-ChessBoard::ChessBoard() :nextColor(PieceColor::WHITE),
+ChessBoard::ChessBoard() :nextColor(PIECE_WHITE),
 castleBK(true),
 castleBQ(true),
 castleWK(true),
@@ -47,64 +50,452 @@ enPassantDst(0, 0),
 halfMoves(0),
 fullMoves(0)
 {
+  hasCastled[0] = false;
+  hasCastled[1] = false;
   board.resize(64);
-  for (size_t i = 0; i < board.size(); i++) {
-    board[i].pos = uint8_t(i);
+}
+
+std::vector<Move> ChessBoard::GetMoves()
+{
+  std::vector<Move> moves;
+  checksInfo = ComputeChecks();
+  std::cout << "Debug:\n" << checksInfo.ToString() << "\n";
+  if (checksInfo.attackers.size() > 0) {
+    GetEvasions(moves);
+  }
+  else {
+    GetNonEvasions(moves);
+  }
+
+  return moves;
+}
+
+void ChessBoard::GetEvasions(std::vector<Move>& moves)
+{
+  GetKingEvasions(moves);
+
+  // If multiple pieces are checking the king, he has to move
+  if (checksInfo.attackers.size() > 1) { return; }
+
+  // Generate blocks/captures to get out of check
+  GetBlockingMoves(moves);
+}
+
+void ChessBoard::GetNonEvasions(std::vector<Move>& moves) {
+  GetCaptures(moves);
+  GetQuiets(moves);
+}
+
+void ChessBoard::GetKingEvasions(std::vector<Move>& moves)
+{
+  ChessCoord kingCoord = checksInfo.kingCoord;
+
+  const unsigned NUM_DIRS = 8;
+  char dir[NUM_DIRS][2] = { {-1,0},{1,0},{0,-1},{0,1},
+    {-1,-1},{-1,1},{1,-1},{1,1} };
+  char row = kingCoord.Row();
+  char col = kingCoord.Col();
+  for (unsigned d = 0; d < NUM_DIRS; d++) {
+    char dstCol = col + dir[d][0];
+    char dstRow = row + dir[d][1];
+    if (dstCol < 0 || dstCol>7 || dstRow < 0 || dstCol>7) {
+      continue;
+    }
+    ChessCoord dst(dstCol, dstRow);
+    bool attacked = checksInfo.attacked.GetBit(dst.coord);
+    if (attacked) {
+      continue;
+    }
+    Piece* dstPiece = GetPiece(dst);
+    bool available = (dstPiece->isEmpty() || dstPiece->color() != uint8_t(nextColor));
+    if (available) {
+      moves.push_back(Move(kingCoord, dst));
+    }  
   }
 }
 
-int ChessBoard::numChecks() {
-	return 0;
+void AddBlockingMoves(ChessCoord src, const std::vector<ChessCoord> & dsts,
+  BitBoard targetSquares, std::vector<Move> & moves)
+{
+  for (ChessCoord dst : dsts) {
+    if (targetSquares.GetBit(dst)) {
+      moves.push_back(Move(src, dst));
+    }
+  }
 }
 
-void ChessBoard::GetKingEvasions(std::vector<Move>& moves) {
+void ChessBoard::GetBlockingMoves(std::vector<Move>& moves)
+{
+  ChessCoord kingCoord = checksInfo.kingCoord;
+  //there should be only 1 attacker.
+  ChessCoord attacker = checksInfo.attackers[0];
+  uint8_t attackerType = GetPiece(attacker)->type();
+  //need to move to any of the target squares.
+  BitBoard targetSquares;
+  //one option is to capture the attacker
+  targetSquares.SetBit(attacker);
+  //en passant is a bitch
+  char row = attacker.Row();
+  char col = attacker.Col();
+  bool canUseEnPassant = false;
+  if (hasEnPassant && attackerType == uint8_t(PIECE_PAWN)
+    && col == char(enPassantDst.Col()) ) {
+    if (nextColor == PIECE_BLACK) {
+      if (row == char(enPassantDst.Row() + 1)) {
+        canUseEnPassant = true;
+      }
+    }
+    else {
+      if (row == char(enPassantDst.Row() - 1)) {
+        canUseEnPassant = true;
+      }
+    }
+  }
 
+  if ( (attackerType == PIECE_ROOK)
+    || (attackerType == PIECE_BISHOP)
+    || (attackerType == PIECE_QUEEN) ) {
+    char xDist = char(kingCoord.Col()) - char(col);
+    char yDist = char(kingCoord.Row()) - char(row);
+    char dx = 0, dy = 0;
+    if (xDist > 0) {
+      dx = 1;
+    } else if (xDist < 0) {
+      dx = -1;
+    }
+    if (yDist > 0) {
+      dy = 1;
+    }
+    else if (yDist < 0) {
+      dy = -1;
+    }
+    char numSteps = 0;
+    if (dx != 0) {
+      numSteps = xDist / dx - 1;
+    }
+    else {
+      //dx and dy can't both be 0
+      numSteps = yDist / dy - 1;
+    }
+
+    for (char step = 0; step < numSteps; step++) {
+      col += dx;
+      row += dy;
+      ChessCoord dst=ChessCoord(uint8_t(col), uint8_t(row));
+      targetSquares.SetBit(dst);
+    }
+  }
+  //else can't block knight and pawn. king can't give checks.
+
+  std::vector<ChessCoord>* list = GetPieceList(nextColor);
+  for (ChessCoord c : (*list)) {
+    //when in check, cannot move pinned pieces.
+    if (checksInfo.blockers.GetBit(c)) {
+      continue;
+    }
+    //can't use king to block
+    if (c == checksInfo.kingCoord) {
+      continue;
+    }
+    uint8_t type = GetPiece(c)->type();
+    std::vector<ChessCoord> dstCoords;
+    switch (type) {
+    case PIECE_PAWN:
+      //pawn is a pain in the ass
+      dstCoords = GetBlockingPawn(c, canUseEnPassant);
+      for (ChessCoord dst : dstCoords) {
+        if (targetSquares.GetBit(dst)) {
+          Move m(c, dst);
+          if (nextColor == PIECE_BLACK && row==1) {
+            AddBlackPromos(m, moves);
+          }
+          else if (nextColor == PIECE_WHITE && row == 6) {
+            AddWhitePromos(m, moves);
+          }
+          else {
+            moves.push_back(m);
+          }
+        }
+      }
+      if (canUseEnPassant) {
+        for (ChessCoord dst : dstCoords) {
+          if (dst == enPassantDst) {
+            moves.push_back(Move(c, dst));
+          }
+        }
+      }
+      break;
+    case PIECE_ROOK:
+      dstCoords = GetDstRook(c);
+      AddBlockingMoves(c, dstCoords, targetSquares, moves);
+      break;
+    case PIECE_KNIGHT:
+      dstCoords = GetDstKnight(c);
+      AddBlockingMoves(c, dstCoords, targetSquares, moves);
+      break;
+    case PIECE_BISHOP:
+      dstCoords = GetDstBishop(c);
+      AddBlockingMoves(c, dstCoords, targetSquares, moves);
+      break;
+    case PIECE_QUEEN:
+      dstCoords = GetDstQueen(c);
+      AddBlockingMoves(c, dstCoords, targetSquares, moves);
+      break;
+    }
+  }
+}
+
+std::vector<ChessCoord> ChessBoard::GetBlockingPawn(ChessCoord c, 
+  bool canUseEnPassant)
+{
+  std::vector<ChessCoord> coords;
+  uint8_t row = c.Row();
+  uint8_t col = c.Col();
+  //pawn can block by quiets or en passant
+  if (nextColor == PIECE_BLACK) {
+    ChessCoord dst = ChessCoord(col, row - 1);
+    if (GetPiece(dst)->isEmpty()) {
+      coords.push_back(dst);
+      if (row == 6) {
+        dst.coord -= 8;
+        if (GetPiece(dst)->isEmpty()) {
+          coords.push_back(dst);
+        }
+      }
+    }
+    if (canUseEnPassant && row == 3) {
+      if (col > 0) {
+        dst = ChessCoord(col - 1, row - 1);
+        if (hasEnPassant && dst == enPassantDst) {
+          coords.push_back(dst);
+        }
+      }
+      if (col < 7) {
+        dst = ChessCoord(col + 1, row - 1);
+        if (hasEnPassant && dst == enPassantDst) {
+          coords.push_back(dst);
+        }
+      }
+    }
+  }
+  else {
+    ChessCoord dst = ChessCoord(col, row + 1);
+    if (GetPiece(dst)->isEmpty()) {
+      coords.push_back(dst);
+      if (row == 1) {
+        dst.coord += 8;
+        if (GetPiece(dst)->isEmpty()) {
+          coords.push_back(dst);
+        }
+      }
+    }
+    if (canUseEnPassant && row == 4) {
+      if (col > 0) {
+        dst = ChessCoord(col - 1, row + 1);
+        if (hasEnPassant && dst == enPassantDst) {
+          coords.push_back(dst);
+        }
+      }
+      if (col < 7) {
+        dst = ChessCoord(col + 1, row + 1);
+        if (hasEnPassant && dst == enPassantDst) {
+          coords.push_back(dst);
+        }
+      }
+    }
+  }
+  return coords;
+}
+
+std::vector<ChessCoord> ChessBoard::GetDstRook(ChessCoord c)
+{
+  std::vector<ChessCoord> coords;
+  uint8_t color = GetPiece(c)->color();
+  //rook can block by quiets
+  char r0 = char(c.Row());
+  char c0 = char(c.Col());
+  const unsigned NUM_DIRS = 4;
+  char dir[NUM_DIRS][2] = { {-1,0},{1,0},{0,-1},{0,1} };
+  for (unsigned d = 0; d < NUM_DIRS; d++) {
+    char row = r0;
+    char col = c0;
+    for (char step = 0; step < BOARD_SIZE; step++) {
+      col += dir[d][0];
+      if (col < 0 || col >= BOARD_SIZE) {
+        break;
+      }
+      row += dir[d][1];
+      if (row < 0 || row >= BOARD_SIZE) {
+        break;
+      }
+      Piece* dstPiece = GetPiece(col, row);
+      if (dstPiece->isEmpty()) {
+        coords.push_back(ChessCoord(col, row));
+      }
+      else {
+        if (dstPiece->color() != color) {
+          coords.push_back(ChessCoord(col, row));
+        }
+        break;
+      }
+    }
+  }
+  return coords;
+}
+
+std::vector<ChessCoord> ChessBoard::GetDstKnight(ChessCoord c)
+{
+  std::vector<ChessCoord> coords;
+  uint8_t color = uint8_t(nextColor);
+  char r0 = char(c.Row());
+  char c0 = char(c.Col());
+  const unsigned NUM_DIRS = 8;
+  char dir[NUM_DIRS][2] = { {-2,-1},{-2,1},{-1,2},{1,2},
+    {2,1},{2,-1},{1,-2},{-1,-2} };
+  for (unsigned d = 0; d < NUM_DIRS; d++) {
+    char col = c0 + dir[d][0];
+    char row = r0 + dir[d][1];
+    if (col < 0 || col >= BOARD_SIZE) {
+      continue;
+    }
+    if (row < 0 || row >= BOARD_SIZE) {
+      continue;
+    }
+    Piece* dstPiece = GetPiece(col, row);
+    if (dstPiece->isEmpty() || dstPiece->color() != color) {
+      coords.push_back( ChessCoord(col, row));
+    }
+  }
+  return coords;
+}
+
+std::vector<ChessCoord>ChessBoard::GetDstBishop(ChessCoord c)
+{
+  uint8_t color = GetPiece(c)->color();
+  char r0 = char(c.Row());
+  char c0 = char(c.Col());
+  const unsigned NUM_DIRS = 4;
+  char dir[NUM_DIRS][2] = { {-1,-1},{-1,1},{1,-1},{1,1} };
+  std::vector<ChessCoord> coords;
+  for (unsigned d = 0; d < NUM_DIRS; d++) {
+    char row = r0;
+    char col = c0;
+    for (char step = 0; step < BOARD_SIZE; step++) {
+      col += dir[d][0];
+      if (col < 0 || col >= BOARD_SIZE) {
+        break;
+      }
+      row += dir[d][1];
+      if (row < 0 || row >= BOARD_SIZE) {
+        break;
+      }
+      Piece* dstPiece = GetPiece(col, row);
+      if (!dstPiece->isEmpty()) {
+        if (dstPiece->color() != color) {
+          coords.push_back(ChessCoord(col, row));
+        }
+        break;
+      }
+      else {
+        coords.push_back(ChessCoord(col, row));
+      }
+    }
+  }
+  return coords;
+}
+
+std::vector<ChessCoord>ChessBoard::GetDstQueen(ChessCoord c)
+{
+  uint8_t color = GetPiece(c)->color();
+  char r0 = char(c.Row());
+  char c0 = char(c.Col());
+  const unsigned NUM_DIRS = 8;
+  char dir[NUM_DIRS][2] = { {-1,0},{1,0},{0,-1},{0,1} , 
+    {-1,-1},{-1,1},{1,-1},{1,1} };
+  std::vector<ChessCoord> coords;
+  for (unsigned d = 0; d < NUM_DIRS; d++) {
+    char row = r0;
+    char col = c0;
+    for (char step = 0; step < BOARD_SIZE; step++) {
+      col += dir[d][0];
+      if (col < 0 || col >= BOARD_SIZE) {
+        break;
+      }
+      row += dir[d][1];
+      if (row < 0 || row >= BOARD_SIZE) {
+        break;
+      }
+      Piece* dstPiece = GetPiece(col, row);
+      if (!dstPiece->isEmpty()) {
+        if (dstPiece->color() != color) {
+          coords.push_back(ChessCoord(col, row));
+        }
+        break;
+      }
+      else {
+        coords.push_back(ChessCoord(col, row));
+      }
+    }
+  }
+  return coords;
+}
+
+std::vector<ChessCoord> * ChessBoard::GetPieceList(uint8_t c)
+{
+  std::vector<ChessCoord>* list = &(pieces[c]);
+  return list;
 }
 
 void ChessBoard::GetCaptures(std::vector<Move>& moves)
 {
-  if (nextColor == PieceColor::BLACK) {
-    for (const Piece* p : black) {
-      GetCaptures(moves, *p);
-    }
-  }
-  else if (nextColor == PieceColor::WHITE) {
-    for (const Piece* p : white) {
-      GetCaptures(moves, *p);
-    }
+  std::vector<ChessCoord>* list = GetPieceList(nextColor);
+  for (ChessCoord c : (*list) ){
+    ///@TODO
+    //if pinned have to take the pinner
+    std::vector<ChessCoord> dsts;
+    GetCaptures(moves, c);
   }
 }
 
-void ChessBoard::GetCaptures(std::vector<Move>& moves, const Piece& p)
+void ChessBoard::GetCaptures(std::vector<Move>& moves, ChessCoord c)
 {
-  PieceType type = PieceType(p.type());
+  uint8_t type = GetPiece(c)->type();
   switch (type) {
-  case PieceType::PAWN:
-    GetCapturesPawn(moves, p);
+  case PIECE_PAWN:
+    GetCapturesPawn(moves, c);
     break;
-  case PieceType::ROOK:
-
+  case PIECE_ROOK:
+    GetCapturesRook(moves, c);
     break;
-  case PieceType::KNIGHT:
-
+  case PIECE_KNIGHT:
+    GetCapturesKnight(moves, c);
     break;
-  case PieceType::BISHOP:
-
+  case PIECE_BISHOP:
+    GetCapturesBishop(moves, c);
     break;
-  case PieceType::QUEEN:
-
+  case PIECE_QUEEN:
+    GetCapturesQueen(moves, c);
     break;
-  case PieceType::KING:
-
+  case PIECE_KING:
+    GetCapturesKing(moves, c);
     break;
   }
 }
 
 void ChessBoard::AddBlackPawnCaptures(ChessCoord src, ChessCoord dst, std::vector<Move>& moves)
 {
+  ChessCoord pinner;
+  bool pinned = checksInfo.blockers.GetBit(src);
+  if (pinned) {
+    pinner = checksInfo.pinners[src.coord];
+  }
+  if (pinned && dst != pinner) {
+    return;
+  }
+
   Piece* dstPiece = GetPiece(dst);
   bool hasWhitePiece = (!dstPiece->isEmpty()) 
-    && (dstPiece->color() == uint8_t(PieceColor::WHITE));
+    && (dstPiece->isWhite());
   if (hasWhitePiece || 
     (src.Row() == 3 && enPassantDst == dst) ) {
     Move m(src, dst);
@@ -119,9 +510,18 @@ void ChessBoard::AddBlackPawnCaptures(ChessCoord src, ChessCoord dst, std::vecto
 
 void ChessBoard::AddWhitePawnCaptures(ChessCoord src, ChessCoord dst, std::vector<Move>& moves)
 {
+  ChessCoord pinner;
+  bool pinned = checksInfo.blockers.GetBit(src);
+  if (pinned) {
+    pinner = checksInfo.pinners[src.coord];
+  }
+  if (pinned && dst != pinner) {
+    return;
+  }
+
   Piece* dstPiece = GetPiece(dst);
   bool hasBlackPiece = (!dstPiece->isEmpty())
-    && (dstPiece->color() == uint8_t(PieceColor::BLACK));
+    && (dstPiece->isBlack());
 
   if (hasBlackPiece ||
     (src.Row() == 4 && enPassantDst == dst)) {
@@ -135,83 +535,186 @@ void ChessBoard::AddWhitePawnCaptures(ChessCoord src, ChessCoord dst, std::vecto
   }
 }
 
-void ChessBoard::GetCapturesPawn(std::vector<Move>& moves, const Piece& p)
+void ChessBoard::GetCapturesPawn(std::vector<Move>& moves, ChessCoord c)
 {
-  PieceColor color = PieceColor(p.color());
-  uint8_t row = p.pos.Row();
-  uint8_t col = p.pos.Col();
-  if (color == PieceColor::BLACK) {
+  uint8_t color = GetPiece(c)->color();
+  uint8_t row = c.Row();
+  uint8_t col = c.Col();
+  if (color == PIECE_BLACK) {
     if (row == 0) {
       //shouldn't happen because it should have been promoted.
       return;
     }
-    ChessCoord dst = p.pos;
+    ChessCoord dst = c;
     if (col > 0) {
       dst.DecRow();
       dst.DecCol();
-      AddBlackPawnCaptures(p.pos, dst, moves);
+      AddBlackPawnCaptures(c, dst, moves);
     }
     if (col < 7) {
-      dst = p.pos;
+      dst = c;
       dst.DecRow();
       dst.IncCol();
-      AddBlackPawnCaptures(p.pos, dst, moves);
+      AddBlackPawnCaptures(c, dst, moves);
     }
   }
   else {
     if (row == 7) {
       return;
     }
-    ChessCoord dst = p.pos;
+    ChessCoord dst = c;
     if (col > 0) {
       dst.IncRow();
       dst.DecCol();
-      AddWhitePawnCaptures(p.pos, dst, moves);
+      AddWhitePawnCaptures(c, dst, moves);
     }
     if (col < 7) {
-      dst = p.pos;
+      dst = c;
       dst.IncRow();
       dst.IncCol();
-      AddWhitePawnCaptures(p.pos, dst, moves);
+      AddWhitePawnCaptures(c, dst, moves);
+    }
+  }
+}
+
+void ChessBoard::GetCapturesRook(std::vector<Move>& moves, ChessCoord c)
+{
+  std::vector<ChessCoord> dsts = GetDstRook(c);
+  if (checksInfo.blockers.GetBit(c)) {
+    ChessCoord pinner = checksInfo.pinners[c.coord];
+    for (ChessCoord dst : dsts) {
+      if (dst == pinner) {
+        moves.push_back(Move(c, dst));
+      }
+    }
+  }
+  else {
+    for (ChessCoord dst : dsts) {
+      if (!GetPiece(dst)->isEmpty()) {
+        moves.push_back(Move(c, dst));
+      }
+    }
+  }
+}
+
+void ChessBoard::GetCapturesKnight(std::vector<Move>& moves, ChessCoord c)
+{
+  //knight can't unpin by capturing the pinner.
+  if (checksInfo.blockers.GetBit(c)) {
+    return;
+  }
+  std::vector<ChessCoord> dsts = GetDstKnight(c);
+  for (ChessCoord dst : dsts) {
+    if (!GetPiece(dst)->isEmpty()) {
+      moves.push_back(Move(c, dst));
+    }
+  }
+}
+
+void ChessBoard::GetCapturesBishop(std::vector<Move>& moves, ChessCoord c)
+{
+  std::vector<ChessCoord> dsts = GetDstBishop(c);
+  if (checksInfo.blockers.GetBit(c)) {
+    ChessCoord pinner = checksInfo.pinners[c.coord];
+    for (ChessCoord dst : dsts) {
+      if (dst == pinner) {
+        moves.push_back(Move(c, dst));
+      }
+    }
+  }
+  else {
+    for (ChessCoord dst : dsts) {
+      if (!GetPiece(dst)->isEmpty()) {
+        moves.push_back(Move(c, dst));
+      }
+    }
+  }
+}
+
+void ChessBoard::GetCapturesQueen(std::vector<Move> & moves, ChessCoord c)
+{
+  std::vector<ChessCoord> dsts = GetDstQueen(c);
+  if (checksInfo.blockers.GetBit(c)) {
+    ChessCoord pinner = checksInfo.pinners[c.coord];
+    for (ChessCoord dst : dsts) {
+      if (dst == pinner) {
+        moves.push_back(Move(c, dst));
+      }
+    }
+  }
+  else {
+    for (ChessCoord dst : dsts) {
+      if (!GetPiece(dst)->isEmpty()) {
+        moves.push_back(Move(c, dst));
+      }
+    }
+  }
+}
+
+void ChessBoard::GetCapturesKing(std::vector<Move>& moves, ChessCoord c)
+{
+  uint8_t color = GetPiece(c)->color();
+  char r0 = char(c.Row());
+  char c0 = char(c.Col());
+  const unsigned NUM_DIRS = 8;
+  char dir[NUM_DIRS][2] = { {-1,0},{1,0},{0,-1},{0,1},
+  {-1,-1},{-1,1},{1,-1},{1,1} };
+  for (unsigned d = 0; d < NUM_DIRS; d++) {
+    char col = c0 + dir[d][0];
+    char row = r0 + dir[d][1];
+    if (col < 0 || col >= BOARD_SIZE) {
+      continue;
+    }
+    if (row < 0 || row >= BOARD_SIZE) {
+      continue;
+    }
+    ChessCoord dst = ChessCoord(col, row);
+    if (checksInfo.attacked.GetBit(dst)) {
+      continue;
+    }
+    Piece* dstPiece = GetPiece(dst);
+    if (!dstPiece->isEmpty()) {
+      if (dstPiece->color() != color) {
+        Move m(c, dst);
+        moves.push_back(m);
+      }
     }
   }
 }
 
 void ChessBoard::GetQuiets(std::vector<Move>& moves)
 {
-  if (nextColor == PieceColor::BLACK) {
-    for (const Piece* p : black) {
-      GetQuiets(moves, *p);
+  std::vector<ChessCoord>* list = GetPieceList(nextColor);
+  for (ChessCoord c : (*list)) {
+    if (checksInfo.blockers.GetBit(c)) {
+      //if pinned cannot make a quiet move
+      continue;
     }
-  }
-  else if (nextColor == PieceColor::WHITE) {
-    for (const Piece* p : white) {
-      GetQuiets(moves, *p);
-    }
+    GetQuiets(moves, c);
   }
 }
 
-void ChessBoard::GetQuiets(std::vector<Move>& moves, const Piece& p)
+void ChessBoard::GetQuiets(std::vector<Move>& moves, ChessCoord c)
 {
-  PieceType type = PieceType(p.type());
+  uint8_t type = GetPiece(c)->type();
   switch (type) {
-  case PieceType::PAWN:
-    GetQuietsPawn(moves, p);
+  case PIECE_PAWN:
+    GetQuietsPawn(moves, c);
     break;
-  case PieceType::ROOK:
-
+  case PIECE_ROOK:
+    GetQuietsRook(moves, c);
     break;
-  case PieceType::KNIGHT:
-
+  case PIECE_KNIGHT:
+    GetQuietsKnight(moves, c);
     break;
-  case PieceType::BISHOP:
-
+  case PIECE_BISHOP:
+    GetQuietsBishop(moves, c);
     break;
-  case PieceType::QUEEN:
-
+  case PIECE_QUEEN:
+    GetQuietsQueen(moves, c);
     break;
-  case PieceType::KING:
-
+  case PIECE_KING:
+    GetQuietsKing(moves, c);
     break;
   }
 }
@@ -240,20 +743,20 @@ void AddWhitePromos(const Move& m_in, std::vector<Move>& moves) {
   moves.push_back(m);
 }
 
-void ChessBoard::GetQuietsPawn(std::vector<Move>& moves, const Piece& p)
+void ChessBoard::GetQuietsPawn(std::vector<Move>& moves, ChessCoord c)
 {
-  PieceColor color = PieceColor(p.color());
-  uint8_t row = p.pos.Row();
-  uint8_t col = p.pos.Col();
-  if (color == PieceColor::BLACK) {
+  uint8_t color = GetPiece(c)->color();
+  uint8_t row = c.Row();
+  uint8_t col = c.Col();
+  if (color == PIECE_BLACK) {
     if (row == 0) {
       //shouldn't happen because it should have been promoted.
       return;
     }
-    ChessCoord dst = p.pos;
+    ChessCoord dst = c;
     dst.DecRow();
     if (GetPiece(dst)->isEmpty()) {
-      Move m(p.pos, dst);
+      Move m(c, dst);
       if (row == 1) {
         AddBlackPromos(m, moves);
       }
@@ -273,10 +776,10 @@ void ChessBoard::GetQuietsPawn(std::vector<Move>& moves, const Piece& p)
     if (row == 7) {
       return;
     }
-    ChessCoord dst = p.pos;
+    ChessCoord dst = c;
     dst.IncRow();
     if (GetPiece(dst)->isEmpty()) {
-      Move m(p.pos, dst);
+      Move m(c, dst);
       if (row == 6) {
         AddWhitePromos(m, moves);
       }
@@ -294,32 +797,128 @@ void ChessBoard::GetQuietsPawn(std::vector<Move>& moves, const Piece& p)
   }
 }
 
-void ChessBoard::GetEvasions(std::vector<Move>& moves) {
-	GetKingEvasions(moves);
-
-	if (numChecks() > 1) return; // If multiple pieces are checking the king, he has to move
-
-	// Generate blocks/captures to get out of check
-}
-
-void ChessBoard::GetNonEvasions(std::vector<Move>& moves) {
-	GetCaptures(moves);
-	GetQuiets(moves);
-}
-
-
-std::vector<Move> ChessBoard::GetMoves()
+void ChessBoard::GetQuietsRook(std::vector<Move>& moves, ChessCoord c)
 {
-  std::vector<Move> moves;
+  std::vector<ChessCoord> dsts = GetDstRook(c);
+  for (ChessCoord dst : dsts) {
+    if (GetPiece(dst)->isEmpty()) {
+      moves.push_back(Move(c, dst));
+    }
+  }
+}
 
-  if (numChecks() > 0) {
-	  GetEvasions(moves);
+void ChessBoard::GetQuietsKnight(std::vector<Move>& moves, ChessCoord c)
+{
+  std::vector<ChessCoord> dsts = GetDstKnight(c);
+  for (ChessCoord dst : dsts) {
+    if (GetPiece(dst)->isEmpty()) {
+      moves.push_back(Move(c, dst));
+    }
+  }
+}
+
+void ChessBoard::GetQuietsBishop(std::vector<Move>& moves, ChessCoord c) 
+{
+  std::vector<ChessCoord> dsts = GetDstBishop(c);
+  for (ChessCoord dst : dsts) {
+    if (GetPiece(dst)->isEmpty()) {
+      moves.push_back(Move(c, dst));
+    }
+  }
+}
+
+void ChessBoard::GetQuietsQueen(std::vector<Move>& moves, ChessCoord c)
+{
+  std::vector<ChessCoord> dsts = GetDstQueen(c);
+  for (ChessCoord dst : dsts) {
+    if (GetPiece(dst)->isEmpty()) {
+      moves.push_back(Move(c, dst));
+    }
+  }
+}
+
+void ChessBoard::GetCastleBlack(std::vector<Move>& moves)
+{
+  if (hasCastled[PIECE_BLACK]) {
+    return;
+  }
+  if (castleBK 
+    && (!checksInfo.attacked.GetBit(f8)) 
+    && (!checksInfo.attacked.GetBit(g8)) ) {
+    if (GetPiece(f8)->isEmpty() && GetPiece(g8)->isEmpty()) {
+      Move m(e8, g8);
+      moves.push_back(m);
+    }
+  }
+  if (castleBQ
+    && (!checksInfo.attacked.GetBit(c8))
+    && (!checksInfo.attacked.GetBit(d8))) {
+    if (GetPiece(b8)->isEmpty() && GetPiece(c8)->isEmpty()
+      && GetPiece(d8)->isEmpty()) {
+      Move m(e8, c8);
+      moves.push_back(m);
+    }
+  }
+}
+
+void ChessBoard::GetCastleWhite(std::vector<Move>& moves)
+{
+  if (hasCastled[PIECE_WHITE]) {
+    return;
+  }
+  if (castleWK
+    && (!checksInfo.attacked.GetBit(f1))
+    && (!checksInfo.attacked.GetBit(g1))) {
+    if (GetPiece(f1)->isEmpty() && GetPiece(g1)->isEmpty()) {
+      Move m(e1, g1);
+      moves.push_back(m);
+    }
+  }
+  if (castleWQ
+    && (!checksInfo.attacked.GetBit(c1))
+    && (!checksInfo.attacked.GetBit(d1))) {
+    if (GetPiece(b1)->isEmpty() && GetPiece(c1)->isEmpty()
+      && GetPiece(d1)->isEmpty()) {
+      Move m(e1, c1);
+      moves.push_back(m);
+    }
+  }
+}
+
+void ChessBoard::GetQuietsKing(std::vector<Move> & moves, ChessCoord c)
+{
+  uint8_t color = GetPiece(c)->color();
+  char r0 = char(c.Row());
+  char c0 = char(c.Col());
+  const unsigned NUM_DIRS = 8;
+  char dir[NUM_DIRS][2] = { {-1,0},{1,0},{0,-1},{0,1},
+  {-1,-1},{-1,1},{1,-1},{1,1} };
+  for (unsigned d = 0; d < NUM_DIRS; d++) {
+    char col = c0 + dir[d][0];
+    char row = r0 + dir[d][1];
+    if (col < 0 || col >= BOARD_SIZE) {
+      continue;
+    }
+    if (row < 0 || row >= BOARD_SIZE) {
+      continue;
+    }
+    ChessCoord dst = ChessCoord(col, row);
+    if (checksInfo.attacked.GetBit(dst)) {
+      continue;
+    }
+    Piece* dstPiece = GetPiece(col, row);
+    if (dstPiece->isEmpty()) {
+      Move m(c, dst);
+      moves.push_back(m);
+    }
+  }
+
+  if (color == uint8_t(PIECE_BLACK)) {
+    GetCastleBlack(moves);
   }
   else {
-	  GetNonEvasions(moves);
+    GetCastleWhite(moves);
   }
-
-  return moves;
 }
 
 int ChessBoard::ApplyMove(const Move& m)
@@ -329,23 +928,23 @@ int ChessBoard::ApplyMove(const Move& m)
   if (m.src == m.dst) {
     return -1;
   }
-  if (color == uint8_t(nextColor)) {
-    nextColor = PieceColor(!color);
+  if (color == nextColor) {
+    nextColor = !color;
   }
   else {
     return -2;
   }
 
-  PieceType type = PieceType(p->type());
+  uint8_t type = p->type();
   hasEnPassant = false;
   enPassantDst = ChessCoord();
   halfMoves++;
   CastleMove castling = CASTLE_NONE;
   //is this move en Passant
   bool isEnPassant=false;
-  if (color == uint8_t(PieceColor::BLACK) ){
+  if (color == PIECE_BLACK ){
     switch (type) {
-    case PieceType::PAWN:
+    case PIECE_PAWN:
       if (m.src.Row() == 6 && m.dst.Row() == 4) {
         enPassantDst = ChessCoord(m.dst.Col(), 5);
         hasEnPassant = true;
@@ -355,19 +954,19 @@ int ChessBoard::ApplyMove(const Move& m)
       }
       halfMoves = 0;
       break;
-    case PieceType::KING:
+    case PIECE_KING:
       if (m.src == e8) {
         if (castleBQ && m.dst == c8) {
           castling = CASTLE_BQ;
+          castleBQ = false;
         }
         else if (castleBK && m.dst == g8) {
           castling = CASTLE_BK;
+          castleBK = false;
         }
       }
-      castleBK = false;
-      castleBQ = false;
       break;
-    case PieceType::ROOK:
+    case PIECE_ROOK:
       if (m.src.Col() == 0) {
         castleBQ = false;
       }
@@ -381,7 +980,7 @@ int ChessBoard::ApplyMove(const Move& m)
   }
   else {
     switch (type) {
-    case PieceType::PAWN:
+    case PIECE_PAWN:
       if (m.src.Row() == 1 && m.dst.Row() == 3) {
         enPassantDst = ChessCoord(m.dst.Col(), 2);
         hasEnPassant = true;
@@ -391,19 +990,19 @@ int ChessBoard::ApplyMove(const Move& m)
       }
       halfMoves = 0;
       break;
-    case PieceType::KING:
+    case PIECE_KING:
       if (m.src == e1) {
         if (castleWQ && m.dst == c1) {
           castling = CASTLE_WQ;
+          castleWK = false;
         }
         else if (castleWK && m.dst == g1) {
           castling = CASTLE_WK;
+          castleWQ = false;
         }
       }
-      castleWK = false;
-      castleWQ = false;
       break;
-    case PieceType::ROOK:
+    case PIECE_ROOK:
       if (m.src.Col() == 0) {
         castleWQ = false;
       }
@@ -417,7 +1016,7 @@ int ChessBoard::ApplyMove(const Move& m)
   MovePiece(m.src, m.dst);
   Piece* dstp = GetPiece(m.dst);
   if (!m.promo.isEmpty()) {
-    dstp->info = m.promo;
+    *dstp = m.promo;
   }
   if (isEnPassant) {
     if (m.dst.Row() == 5) {
@@ -430,86 +1029,112 @@ int ChessBoard::ApplyMove(const Move& m)
   switch (castling) {
     //move the rook
   case CASTLE_BQ:
-    MovePiece(d8, a8);
+    MovePiece(a8, d8);
+    hasCastled[0] = true;
     break;
   case CASTLE_BK:
-    MovePiece(f8, h8);
+    MovePiece(h8, f8);
+    hasCastled[0] = true;
     break;
   case CASTLE_WQ:
-    MovePiece(d1, a1);
+    MovePiece(a1, d1);
+    hasCastled[1] = true;
     break;
   case CASTLE_WK:
-    MovePiece(f1, h1);
+    MovePiece(h1, f1);
+    hasCastled[1] = true;
     break;
   }
   return 0;
 }
 
-char PieceFEN(const PieceInfo& info)
+UndoMove ChessBoard::GetUndoMove(const Move& m)
 {
-  PieceType type = PieceType(info.type());
+  UndoMove u;
+  u.m = m;
+  u.captured = *(GetPiece(m.dst));
+  Piece srcPiece = (*GetPiece(m.src));
+  if (srcPiece.type() == PIECE_PAWN && m.dst == enPassantDst){
+    u.isEnPassant = true;
+  }
+  return u;
+}
+
+void ChessBoard::Undo(const UndoMove& u)
+{
+  bool isCastle = false;
+  //src piece is now at dst.
+  Piece srcPiece = *GetPiece(u.m.dst);
+  if (srcPiece.type() == PIECE_KING) {
+    if (u.m.src == e1) {
+      if (u.m.dst == g1) {
+        isCastle = true;
+      }
+      else if (u.m.dst == c1) {
+        isCastle = true;
+      }
+    }
+    else if (u.m.src == e8) {
+      if (u.m.dst == g8) {
+        isCastle = true;
+      }
+      else if (u.m.dst == c8) {
+        isCastle = true;
+      }
+    }
+  }
+  FlipTurn();
+  if (isCastle) {
+    if (nextColor == PIECE_BLACK) {
+      castleBQ = true;
+    }
+  }
+}
+
+char PieceFEN(const Piece& info)
+{
+  uint8_t type = info.type();
   char c;
   const char LOWER_DIFF = 'a' - 'A';
-  switch (type) {
-  case PieceType::PAWN:
-    c = 'P';
-    break;
-  case PieceType::ROOK:
-    c='R';
-    break;
-  case PieceType::KNIGHT:
-    c='N';
-    break;
-  case PieceType::BISHOP:
-    c='B';
-    break;
-  case PieceType::QUEEN:
-    c='Q';
-    break;
-  case PieceType::KING:
-    c='K';
-    break;
-  default:
-    //unknown shouldn't really get here ever.
-    c = 'U';
-    break;
-  }
-
-  if (info.color() == uint8_t(PieceColor::BLACK)) {
+  char PieceChar[PIECE_NUM_TYPES] = {
+    '0','P','R','N','B','Q','K'
+  };
+  c = PieceChar[type];
+  if (info.color() == PIECE_BLACK) {
     c += LOWER_DIFF;
   }
   return c;
 }
 
-PieceInfo Char2PieceInfo(char c)
+Piece Char2Piece(char c)
 {
-  PieceInfo info(0);
+  Piece info(0);
   const char LOWER_DIFF = 'a' - 'A';
   if (c > 'a') {
-    info.SetColor(PieceColor::BLACK);
+    info.SetColor(PIECE_BLACK);
     c -= LOWER_DIFF;
   }
   else {
-    info.SetColor(PieceColor::WHITE);
+    info.SetColor(PIECE_WHITE);
   }
   switch (c) {
   case 'P':
-    info.SetType(PieceType::PAWN);
+    info.SetType(PIECE_PAWN);
     break;
   case 'R':
-    info.SetType(PieceType::ROOK);
+    info.SetType(PIECE_ROOK);
     break;
-  case  'N':
-    info.SetType(PieceType::KNIGHT);
+  case 'N':
+    info.SetType(PIECE_KNIGHT);
     break;
   case 'B':
-    info.SetType(PieceType::BISHOP);
+    info.SetType(PIECE_BISHOP);
     break;
   case 'Q':
-    info.SetType(PieceType::QUEEN);
+    info.SetType(PIECE_QUEEN);
     break;
   case 'K':
-    info.SetType(PieceType::KING);
+    info.SetType(PIECE_KING);
     break;
   default:
     //unknown shouldn't really get here ever.
@@ -561,8 +1186,8 @@ int ChessBoard::FromFen(const std::string& fen)
         strIdx++;
       }
       else {
-        PieceInfo info = Char2PieceInfo(c);
-        AddPiece(ChessCoord(col, row), info);
+        Piece p = Char2Piece(c);
+        AddPiece(ChessCoord(col, row), p);
         col++;
         strIdx++;
       }
@@ -578,10 +1203,10 @@ int ChessBoard::FromFen(const std::string& fen)
   strIdx++;
   char c = fen[strIdx];
   if (c == 'w') {
-    nextColor = PieceColor::WHITE;
+    nextColor = PIECE_WHITE;
   }
   else {
-    nextColor = PieceColor::BLACK;
+    nextColor = PIECE_BLACK;
   }
   strIdx += 2;
 
@@ -592,6 +1217,7 @@ int ChessBoard::FromFen(const std::string& fen)
   castleBQ = false;
   while (c != ' ' && strIdx<fen.size()) {
     if (c == '-') {
+      strIdx++;
       break;
     }
     else if (c == 'K') {
@@ -623,6 +1249,7 @@ int ChessBoard::FromFen(const std::string& fen)
     c = fen[strIdx];
     uint8_t row = c - '1';
     enPassantDst.Set(col, row);
+    hasEnPassant = true;
   }
  
   strIdx+=2;
@@ -639,7 +1266,7 @@ std::string ChessBoard::GetFen()
     int emptyCnt = 0;
     for (int col = 0; col < BOARD_SIZE; col++){
       const Piece& p = (*this)(col, row);
-      if (p.type() == uint8_t(PieceType::EMPTY)) {
+      if (p.isEmpty()) {
         emptyCnt++;
       }
       else {
@@ -659,7 +1286,7 @@ std::string ChessBoard::GetFen()
     }
   }
   oss << " ";
-  if (nextColor == PieceColor::WHITE) {
+  if (nextColor == PIECE_WHITE) {
     oss << "w ";
   }
   else {
@@ -702,22 +1329,16 @@ std::string ChessBoard::GetFen()
   return oss.str();  
 }
 
-bool ChessBoard::AddPiece(ChessCoord c, PieceInfo info)
+bool ChessBoard::AddPiece(ChessCoord c, Piece info)
 {
   Piece* p = GetPiece(c);
   if (!p->isEmpty()) {
     return false;
   }
-  p->info = info;
+  *p = info;
 
-  std::vector<Piece*>* list;
-  if (p->color() == uint8_t(PieceColor::WHITE)) {
-    list = &white;
-  }
-  else {
-    list = &black;
-  }
-  list->push_back(p);
+  std::vector<ChessCoord>* list = GetPieceList(p->color());
+  list->push_back(c);
   return true;
 }
 
@@ -727,16 +1348,9 @@ bool ChessBoard::RemovePiece(ChessCoord c)
   if (p->isEmpty()) {
     return false;
   }
-  std::vector<Piece*>* list;
-  if (p->color() == uint8_t(PieceColor::WHITE) ){
-    list = &white;
-  }
-  else {
-    list = &black;
-  }
+  std::vector<ChessCoord>* list = GetPieceList(p->color());
   for (auto it = list->begin(); it != list->end(); it++) {
-    Piece* ptr = (*it);
-    if (ptr->pos == c){
+    if ((*it) == c){
       list->erase(it);
       break;
     }
@@ -755,29 +1369,23 @@ bool ChessBoard::MovePiece(ChessCoord src, ChessCoord dst)
   }
   RemovePiece(dst);
 
-  std::vector<Piece*>* list;
-  if (p->color() == uint8_t(PieceColor::WHITE)) {
-    list = &white;
-  }
-  else {
-    list = &black;
-  }
+  std::vector<ChessCoord>* list = GetPieceList(p->color());
   for (size_t i = 0; i < list->size(); i++) {
-    Piece* ptr = (*list)[i];
-    if (ptr->pos == src) {
+    if ( (*list)[i] == src) {
       Piece* dstPiece = GetPiece(dst);
-      (*list)[i] = dstPiece;
+      (*list)[i] = dst;
       dstPiece->info = p->info;
       p->clear();
       break;
     }
   }
+  return true;
 }
 
 void ChessBoard::Clear()
 {
-  black.clear();
-  white.clear();
+  pieces[0].clear();
+  pieces[1].clear();
   for (size_t i = 0; i < board.size(); i++) {
     board[i].clear();
   }
@@ -791,4 +1399,238 @@ void ChessBoard::Clear()
   castleWK = true;
   castleWQ = true;
 
+  hasCastled[0] = false;
+  hasCastled[1] = false;
+}
+
+void ComputeChecksPawn(ChecksInfo & info, ChessCoord coord, uint8_t color,
+  ChessCoord kingCoord)
+{
+  uint8_t offsets[2] = { 7,9 };
+  if (color == PIECE_BLACK) {
+    for (unsigned i = 0; i < 2; i++) {
+      ChessCoord dst = coord;
+      dst.coord -= offsets[i];
+      info.attacked.SetBit(dst.coord);
+      if (dst == kingCoord) {
+        info.attackers.push_back(coord);
+      }
+    }
+  }
+  else {
+    for (unsigned i = 0; i < 2; i++) {
+      ChessCoord dst = coord;
+      dst.coord += offsets[i];
+      info.attacked.SetBit(dst.coord);
+      if (dst == kingCoord) {
+        info.attackers.push_back(coord);
+      }
+    }
+  }
+}
+
+void ComputeChecksKnight(ChecksInfo& info, ChessCoord coord, uint8_t color,
+  ChessCoord kingCoord)
+{
+  char r0 = char(coord.Row());
+  char c0 = char(coord.Col());
+  const unsigned NUM_DIRS = 8;
+  char dir[NUM_DIRS][2] = { {-2,-1},{-2,1},{-1,2},{1,2},
+    {2,1},{2,-1},{1,-2},{-1,-2} };
+  for (unsigned d = 0; d < NUM_DIRS; d++) {
+    char col = c0 + dir[d][0];
+    char row = r0 + dir[d][1];
+    if (col < 0 || col >= BOARD_SIZE) {
+      continue;
+    }
+    if (row < 0 || row >= BOARD_SIZE) {
+      continue;
+    }
+    ChessCoord dst(col, row);
+    info.attacked.SetBit(dst.coord);
+    if (dst == kingCoord) {
+      info.attackers.push_back(coord);
+    }
+  }
+}
+
+void ComputeChecksKing(ChecksInfo& info, ChessCoord coord, uint8_t color,
+  ChessCoord kingCoord)
+{
+  char r0 = char(coord.Row());
+  char c0 = char(coord.Col());
+  const unsigned NUM_DIRS = 8;
+  char dir[NUM_DIRS][2] = { {-1,-1},{-1,0},{-1,1},{0,-1},
+    {0,1},{1,-1},{1,0},{1,1} };
+  for (unsigned d = 0; d < NUM_DIRS; d++) {
+    char col = c0 + dir[d][0];
+    char row = r0 + dir[d][1];
+    if (col < 0 || col >= BOARD_SIZE) {
+      continue;
+    }
+    if (row < 0 || row >= BOARD_SIZE) {
+      continue;
+    }
+    ChessCoord dst(col, row);
+    info.attacked.SetBit(dst.coord);
+    if (dst == kingCoord) {
+      info.attackers.push_back(coord);
+    }
+  }
+}
+
+void InsertUnique(std::vector<ChessCoord>& coords, ChessCoord c)
+{
+  auto it = std::find(coords.begin(), coords.end(), c);
+  if (it != coords.end()) {
+    coords.push_back(c);
+  }
+}
+
+void ChessBoard::ComputeChecksRay(ChecksInfo& checks, ChessCoord coord, uint8_t color,
+  ChessCoord kingCoord, char dx, char dy)
+{
+  char row = char(coord.Row());
+  char col = char(coord.Col());
+  //first opposite color pieces along the line.
+  ChessCoord firstHit(255);
+  bool attackKing = false;
+  for (char step = 0; step < BOARD_SIZE; step++) {
+    col += dx;
+    if (col < 0 || col >= BOARD_SIZE) {
+      break;
+    }
+    row += dy;
+    if (row < 0 || row >= BOARD_SIZE) {
+      break;
+    }
+    ChessCoord dst(col, row);
+    if (dst == kingCoord) {
+      if (!firstHit.inBound()) {
+        checks.attackers.push_back(coord);
+        attackKing = true;
+        checks.attacked.SetBit(dst.coord);
+      }
+      else {
+        checks.blockers.SetBit(firstHit.coord);
+        checks.pinners[firstHit.coord] = coord;
+        break;
+      }
+    }
+    Piece* dstPiece = GetPiece(dst);
+    if (dstPiece->isEmpty()) {
+      if (!firstHit.inBound()) {
+        checks.attacked.SetBit(dst.coord);
+      }
+      continue;
+    }
+
+    if (dstPiece->color() == uint8_t(color)) {
+      if (!firstHit.inBound()) {
+        //this piece is guarded by attacker, so king can't
+        //capture this piece.
+        checks.attacked.SetBit(dst.coord);
+      }
+      break;
+    }
+    else {
+      //dst piece == king already handled above.
+      uint8_t attackedType = dstPiece->type();
+      //already attacking king and then hit another piece,
+      //no need to continue
+      if (attackKing) {
+        break;
+      }
+      //has a hit before
+      if (firstHit.inBound()) {
+        break;
+      }
+      else {
+        firstHit = dst;
+      }
+    }
+  }
+}
+
+void ChessBoard::ComputeChecksRook(ChecksInfo& checks, ChessCoord coord, uint8_t color,
+  ChessCoord kingCoord)
+{
+  const unsigned NUM_DIRS = 4;
+  char dir[NUM_DIRS][2] = { {-1,0},{1,0},{0,-1},{0,1} };
+  for (unsigned d = 0; d < NUM_DIRS; d++) {
+    ComputeChecksRay(checks, coord, color, kingCoord, dir[d][0], dir[d][1]);
+  }
+}
+
+void ChessBoard::ComputeChecksBishop(ChecksInfo& checks, ChessCoord coord, uint8_t color,
+  ChessCoord kingCoord)
+{
+  const unsigned NUM_DIRS = 4;
+  char dir[NUM_DIRS][2] = { {-1,-1},{-1,1},{1,-1},{1,1} };
+  for (unsigned d = 0; d < NUM_DIRS; d++) {
+    ComputeChecksRay(checks, coord, color, kingCoord, dir[d][0], dir[d][1]);
+  }
+}
+
+void ChessBoard::ComputeChecksQueen(ChecksInfo& checks, ChessCoord coord, uint8_t color,
+  ChessCoord kingCoord)
+{
+  const unsigned NUM_DIRS = 8;
+  char dir[NUM_DIRS][2] = { {-1,0},{1,0},{0,-1},{0,1} ,
+    {-1,-1},{-1,1},{1,-1},{1,1} };
+  for (unsigned d = 0; d < NUM_DIRS; d++) {
+    ComputeChecksRay(checks, coord, color, kingCoord, dir[d][0], dir[d][1]);
+  }
+}
+
+ChecksInfo ChessBoard::ComputeChecks()
+{
+  ChecksInfo checks;
+  std::vector<ChessCoord>* list;
+  std::vector<ChessCoord>* attackerList;
+  uint8_t attackerColor;
+  if (nextColor == PIECE_BLACK) {
+    list = &(pieces[0]);
+    attackerList = &(pieces[1]);
+    attackerColor = PIECE_WHITE;
+  }
+  else {
+    list = &(pieces[1]);
+    attackerList = &(pieces[0]);
+    attackerColor = PIECE_BLACK;
+  }
+  ChessCoord kingCoord;
+  for (ChessCoord c : (*list)) {
+    if (GetPiece(c)->type() == PIECE_KING) {
+      kingCoord = c;
+      break;
+    }
+  }
+  checks.kingCoord = kingCoord;
+  for (ChessCoord c : (*attackerList)) {
+    Piece* p = GetPiece(c);
+    uint8_t type = p->type();
+    switch (type) {
+    case PIECE_PAWN:
+      ComputeChecksPawn(checks, c, attackerColor, kingCoord);
+      break;
+    case PIECE_KNIGHT:
+      ComputeChecksKnight(checks, c, attackerColor, kingCoord);
+      break;
+    case PIECE_KING:
+      ComputeChecksKing(checks, c, attackerColor, kingCoord);
+      break;
+    case PIECE_ROOK:
+      ComputeChecksRook(checks, c, attackerColor, kingCoord);
+      break;
+    case PIECE_BISHOP:
+      ComputeChecksBishop(checks, c, attackerColor, kingCoord);
+      break;
+    case PIECE_QUEEN:
+      ComputeChecksQueen(checks, c, attackerColor, kingCoord);
+      break;
+    }
+  }
+
+  return checks;
 }
