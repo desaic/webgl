@@ -837,9 +837,11 @@ void ChessBoard::GetQuietsQueen(std::vector<Move>& moves, ChessCoord c)
   }
 }
 
-///@TODO cannot castle if king's path is under attack.
 void ChessBoard::GetCastleBlack(std::vector<Move>& moves)
 {
+  if (hasCastled[PIECE_BLACK]) {
+    return;
+  }
   if (castleBK 
     && (!checksInfo.attacked.GetBit(f8)) 
     && (!checksInfo.attacked.GetBit(g8)) ) {
@@ -861,6 +863,9 @@ void ChessBoard::GetCastleBlack(std::vector<Move>& moves)
 
 void ChessBoard::GetCastleWhite(std::vector<Move>& moves)
 {
+  if (hasCastled[PIECE_WHITE]) {
+    return;
+  }
   if (castleWK
     && (!checksInfo.attacked.GetBit(f1))
     && (!checksInfo.attacked.GetBit(g1))) {
@@ -953,13 +958,13 @@ int ChessBoard::ApplyMove(const Move& m)
       if (m.src == e8) {
         if (castleBQ && m.dst == c8) {
           castling = CASTLE_BQ;
+          castleBQ = false;
         }
         else if (castleBK && m.dst == g8) {
           castling = CASTLE_BK;
+          castleBK = false;
         }
       }
-      castleBK = false;
-      castleBQ = false;
       break;
     case PIECE_ROOK:
       if (m.src.Col() == 0) {
@@ -989,13 +994,13 @@ int ChessBoard::ApplyMove(const Move& m)
       if (m.src == e1) {
         if (castleWQ && m.dst == c1) {
           castling = CASTLE_WQ;
+          castleWK = false;
         }
         else if (castleWK && m.dst == g1) {
           castling = CASTLE_WK;
+          castleWQ = false;
         }
       }
-      castleWK = false;
-      castleWQ = false;
       break;
     case PIECE_ROOK:
       if (m.src.Col() == 0) {
@@ -1049,15 +1054,41 @@ UndoMove ChessBoard::GetUndoMove(const Move& m)
   u.m = m;
   u.captured = *(GetPiece(m.dst));
   Piece srcPiece = (*GetPiece(m.src));
-  if (srcPiece.type() == PIECE_PAWN ){
-
+  if (srcPiece.type() == PIECE_PAWN && m.dst == enPassantDst){
+    u.isEnPassant = true;
   }
   return u;
 }
 
 void ChessBoard::Undo(const UndoMove& u)
 {
-
+  bool isCastle = false;
+  //src piece is now at dst.
+  Piece srcPiece = *GetPiece(u.m.dst);
+  if (srcPiece.type() == PIECE_KING) {
+    if (u.m.src == e1) {
+      if (u.m.dst == g1) {
+        isCastle = true;
+      }
+      else if (u.m.dst == c1) {
+        isCastle = true;
+      }
+    }
+    else if (u.m.src == e8) {
+      if (u.m.dst == g8) {
+        isCastle = true;
+      }
+      else if (u.m.dst == c8) {
+        isCastle = true;
+      }
+    }
+  }
+  FlipTurn();
+  if (isCastle) {
+    if (nextColor == PIECE_BLACK) {
+      castleBQ = true;
+    }
+  }
 }
 
 char PieceFEN(const Piece& info)

@@ -106,6 +106,7 @@ void ChessClient::HandleCli(const std::string& cmd)
 {
   if (cmd == "start") {
     board.SetStartPos();
+    undoStack.clear();
     SendBoard();
   }
   else if (cmd == "fen") {
@@ -115,6 +116,7 @@ void ChessClient::HandleCli(const std::string& cmd)
   else if (cmd == "debug") {
     std::string fen = "r7/1ppr3p/p2N4/2B1Rbk1/1K4pP/2P5/PP6/8 b - h3 0 34";
     board.FromFen(fen);
+    undoStack.clear();
     SendBoard();
   }
   else {
