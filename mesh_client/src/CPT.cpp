@@ -145,7 +145,7 @@ void ExactDistance(SDFMesh* sdf)
   float h = sdf->voxelSize;
   for (size_t x = 0; x < gridSize[0]; x++) {
     for (size_t y = 0; y < gridSize[1]; y++) {
-      ptr.PointToLeaf(x, y, 0);
+      ptr.PointTo(x, y, 0);
       for (size_t z = 0; z < gridSize[2]; z++) {
         bool exists = ptr.HasValue();
         if (!exists) {
@@ -180,7 +180,7 @@ void ExactDistance(SDFMesh* sdf)
 
         float dist = std::sqrt(minInfo.sqrDist);
         dist /= h;
-        distPtr.PointToLeaf(x, y, z);
+        distPtr.PointTo(x, y, z);
         distPtr.CreatePath();
 
         AddVoxelValue(distPtr, dist);
@@ -215,7 +215,7 @@ void Voxelize(size_t tidx, SDFMesh* sdf)
       for (int iz = box.mn[2]; iz <= (box.mx[2]); iz++) {
         Vec3i gi(ix, iy, iz);
         if (trigCubeIntersect(trig.data(), gi, sdf->voxelSize)) {
-          ptr.PointToLeaf(ix, iy, iz);
+          ptr.PointTo(ix, iy, iz);
           ptr.CreatePath();
           size_t listIdx = 0;
           if (ptr.HasValue()) {

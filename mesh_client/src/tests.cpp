@@ -56,7 +56,7 @@ void TestPng()
     for (unsigned y = 0; y < s[1]; y++) {
       float dy = y / float(s[1]);
       dy -= 0.4f;
-      ptr.PointToLeaf(x, y, 0);
+      ptr.PointTo(x, y, 0);
       for (unsigned z = 0; z < s[2]; z++) {
         float dz = z / float(s[2]);
         dz -= 0.5f;
@@ -77,7 +77,7 @@ void TestPng()
     for (unsigned y = 0; y < s[1]; y++) {
       float dy = y / float(s[1]);
       dy -= 0.4f;
-      bool exists = ptr.PointToLeaf(x, y, z);
+      bool exists = ptr.PointTo(x, y, z);
       if (exists) {
         float d = 0.0f;
         GetVoxelValue(ptr, d);
@@ -115,7 +115,7 @@ void TestCPT(TrayClient* client)
     TreePointer ptr(&sdf.sdf);
     for (size_t x = 0; x < gridSize[0]; x++) {
       for (size_t y = 0; y < gridSize[1]; y++) {
-        ptr.PointToLeaf(x, y, z);
+        ptr.PointTo(x, y, z);
         bool exists = ptr.HasValue();
         if (!exists) {
           continue;

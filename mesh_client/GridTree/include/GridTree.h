@@ -59,8 +59,8 @@ public:
     }
   }
 
-  ///root is level 0 and does not count towards numLevels.
-  /// minimum level is 1, which is 1 grid of values directly attached to root.
+  ///root is level 0.
+  /// minimum level is 1, which is 1 grid of values directly contained in root.
   unsigned GetNumLevels()const override{ return numLevels; }
 
   unsigned GetBlockSize(unsigned level)const override { return blockSize; }

@@ -17,15 +17,17 @@ void TreePointer::Init(GridTreeAbs* t)
 bool TreePointer::PointTo(unsigned x, unsigned y, unsigned z)
 {
   valid = true;
-  indices.resize( tree->GetNumLevels() + 1);
+  indices.resize( tree->GetNumLevels());
   //which block does (x,y,z) fall in.
   //the block index at the leaf node is the input voxel index.
   Vec3u blockIndex(x, y, z);
   unsigned log2Bf = tree->GetLog2BF();
+  unsigned indexMask = (1 << log2Bf) - 1;
   for (size_t i = 0; i < indices.size(); i++) {
     unsigned level = indices.size() - i - 1;
     for (unsigned d = 0; d < 3; d++) {
-      indices[level][d] = blockIndex[d] << ;
+      indices[level][d] = blockIndex[d] & indexMask;
+      blockIndex[d] >> 3;
     }
   }
   nodes.resize(indices.size());

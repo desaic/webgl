@@ -63,10 +63,10 @@ void SolveQuadAxis(int x, int y, int z, unsigned axis, FMStructs* fm,
   Vec3i idx(x, y, z);
   if (idx[axis] > 0) {
     idx[axis]--;
-    labPtr.PointToLeaf(idx[0], idx[1], idx[2]);
+    labPtr.PointTo(idx[0], idx[1], idx[2]);
     if (labPtr.HasValue()) {
       GetVoxelValue(labPtr, lab);
-      distPtr.PointToLeaf(idx[0], idx[1], idx[2]);
+      distPtr.PointTo(idx[0], idx[1], idx[2]);
     }
     if (lab == uint8_t(SDFLabel::KNOWN)) {
       GetVoxelValue(distPtr, distMinus);
@@ -79,10 +79,10 @@ void SolveQuadAxis(int x, int y, int z, unsigned axis, FMStructs* fm,
   lab = uint8_t(SDFLabel::FAR);
   if (idx[axis] < s[axis] - 1) {
     idx[axis]++;
-    labPtr.PointToLeaf(idx[0], idx[1], idx[2]);
+    labPtr.PointTo(idx[0], idx[1], idx[2]);
     if (labPtr.HasValue()) {
       GetVoxelValue(labPtr, lab);
-      distPtr.PointToLeaf(idx[0], idx[1], idx[2]);
+      distPtr.PointTo(idx[0], idx[1], idx[2]);
       GetVoxelValue(distPtr, distPlus);
     }
     if (lab == uint8_t(SDFLabel::KNOWN)) {
@@ -148,7 +148,7 @@ void UpdateNeighbor(int x, int y, int z, FMStructs* fm)
     return;
   }
   TreePointer ptr(&fm->label);
-  ptr.PointToLeaf(x, y, z);
+  ptr.PointTo(x, y, z);
   uint8_t lab = uint8_t(SDFLabel::FAR);
   if (ptr.HasValue()) {
     GetVoxelValue(ptr, lab);
@@ -160,7 +160,7 @@ void UpdateNeighbor(int x, int y, int z, FMStructs* fm)
   float distTemp = SolveQuadratic(x, y, z, fm);
 
   TreePointer distPtr(&fm->sdf->sdf);
-  distPtr.PointToLeaf(x, y, z);
+  distPtr.PointTo(x, y, z);
   float oldDist = INF_DIST;
   if (distPtr.HasValue()) {
     GetVoxelValue(distPtr, oldDist);
@@ -200,7 +200,7 @@ void InitMarch(FMStructs * fm)
   const unsigned zAxis = 2;
   for (unsigned x = 0; x < s[0]; x++) {
     for (unsigned y = 0; y < s[1]; y++) {
-      sdfPtr.PointToLeaf(x, y, 0);
+      sdfPtr.PointTo(x, y, 0);
       for (unsigned z = 0; z < s[2]; z++) {
         if (sdfPtr.HasValue()) {
           labPtr.CreateLeaf(x, y, z);
@@ -220,7 +220,7 @@ void InitPQ(FMStructs* fm)
   const unsigned zAxis = 2;
   for (unsigned x = 0; x < s[0]; x++) {
     for (unsigned y = 0; y < s[1]; y++) {
-      labPtr.PointToLeaf(x, y, 0);
+      labPtr.PointTo(x, y, 0);
       for (unsigned z = 0; z < s[2]; z++) {
         if (labPtr.HasValue()) {
           UpdateNeighbors(x, y, z, fm);
@@ -243,7 +243,7 @@ void MarchNarrowBand(FMStructs* fm) {
       continue;
     }
 
-    labPtr.PointToLeaf(v.vox[0], v.vox[1], v.vox[2]);
+    labPtr.PointTo(v.vox[0], v.vox[1], v.vox[2]);
     uint8_t lab = uint8_t(SDFLabel::FAR);
     if (labPtr.HasValue()) {
       GetVoxelValue(labPtr, lab);
@@ -252,7 +252,7 @@ void MarchNarrowBand(FMStructs* fm) {
       //duplicate
       continue;
     }
-    sdfPtr.PointToLeaf(v.vox[0], v.vox[1], v.vox[2]);
+    sdfPtr.PointTo(v.vox[0], v.vox[1], v.vox[2]);
     lab = uint8_t(SDFLabel::KNOWN);
     AddVoxelValue(labPtr, lab);
     UpdateNeighbors(v.vox[0], v.vox[1], v.vox[2], fm);
@@ -318,37 +318,37 @@ void MarchingCubes(unsigned x, unsigned y, unsigned z,
   cell.p[7][2] += h;
 
   GetVoxelValue(ptr, cell.val[0]);
-  ptr.PointToLeaf(x,y + 1,z);
+  ptr.PointTo(x,y + 1,z);
   if (ptr.HasValue()) {
     GetVoxelValue(ptr, cell.val[1]);
   }
 
-  ptr.PointToLeaf(x+1, y + 1, z);
+  ptr.PointTo(x+1, y + 1, z);
   if (ptr.HasValue()) {
     GetVoxelValue(ptr, cell.val[2]);
   }
 
-  ptr.PointToLeaf(x + 1, y , z);
+  ptr.PointTo(x + 1, y , z);
   if (ptr.HasValue()) {
     GetVoxelValue(ptr, cell.val[3]);
   }
 
-  ptr.PointToLeaf(x, y, z+1);
+  ptr.PointTo(x, y, z+1);
   if (ptr.HasValue()) {
     GetVoxelValue(ptr, cell.val[4]);
   }
 
-  ptr.PointToLeaf(x, y + 1, z + 1);
+  ptr.PointTo(x, y + 1, z + 1);
   if (ptr.HasValue()) {
     GetVoxelValue(ptr, cell.val[5]);
   }
 
-  ptr.PointToLeaf(x + 1, y+1, z + 1);
+  ptr.PointTo(x + 1, y+1, z + 1);
   if (ptr.HasValue()) {
     GetVoxelValue(ptr, cell.val[6]);
   }
 
-  ptr.PointToLeaf(x + 1, y, z + 1);
+  ptr.PointTo(x + 1, y, z + 1);
   if (ptr.HasValue()) {
     GetVoxelValue(ptr, cell.val[7]);
   }
@@ -365,7 +365,7 @@ void MarchingCubes(SDFMesh& sdf, float level, TrigMesh* surf)
     for (unsigned y = 0; y < s[1] - 1; y++) {
       
       for (unsigned z = 0; z < s[2] - 1; z++) {
-        ptr.PointToLeaf(x, y, z);
+        ptr.PointTo(x, y, z);
         if (ptr.HasValue()) {
           MarchingCubes(x,y,z,ptr, sdf, level, surf);
         }
