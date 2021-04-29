@@ -27,7 +27,7 @@ bool TreePointer::PointTo(unsigned x, unsigned y, unsigned z)
     unsigned level = indices.size() - i - 1;
     for (unsigned d = 0; d < 3; d++) {
       indices[level][d] = blockIndex[d] & indexMask;
-      blockIndex[d] >> 3;
+      blockIndex[d]=blockIndex[d] >> 3;
     }
   }
   nodes.resize(indices.size());
