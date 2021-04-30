@@ -1,4 +1,5 @@
 #include "SDF.h"
+#include "heap.hpp"
 #include "MarchingCubes.h"
 #include "Timer.hpp"
 #include <array>
@@ -37,7 +38,8 @@ struct FMStructs
 {
   SDFMesh* sdf;
   GridTree<uint8_t> label;
-  std::priority_queue<VoxDist, std::vector<VoxDist>, CompareVox>pq;
+  //std::priority_queue<VoxDist, std::vector<VoxDist>, CompareVox>pq;
+  heap h;
   FMStructs():sdf(nullptr){}
 };
 
@@ -46,6 +48,17 @@ bool inbound(int x, int y, int z, const Vec3u & size)
   return x >= 0 && x<int(size[0])
     && y >= 0 && y<int(size[1])
     && z >= 0 && z<int(size[2]);
+}
+
+int64_t linIdx(int x, int y, int z, const Vec3u size) {
+  return int64_t(size[0]) * (y + int64_t(size[1]) * z) + x;
+}
+
+void gridIdx(int64_t linIdx, int &x, int& y, int& z, const Vec3u size) {
+  x = linIdx % (size[0]);
+  linIdx /= size[0];
+  y = linIdx % size[1];
+  z = linIdx / size[1];
 }
 
 void SolveQuadAxis(int x, int y, int z, unsigned axis, FMStructs* fm,
@@ -173,10 +186,16 @@ void UpdateNeighbor(int x, int y, int z, FMStructs* fm)
   AddVoxelValue(ptr, lab);
   distPtr.CreatePath();
   AddVoxelValue(distPtr, distTemp);
-  VoxDist voxDist({ { uint32_t(x),uint32_t(y), uint32_t(z) } }, distTemp);
   //pq can contain duplicates because don't
   //want to reimplement pq.
-  fm->pq.push(voxDist);
+  //fm->pq.push(voxDist);
+  int64_t index = linIdx(x, y, z, size);
+  if (fm->h.isInHeap(index)) {
+    fm->h.update(distTemp, index);
+  }
+  else {
+    fm->h.insert(distTemp, index);
+  }
 }
 
 ///input params are int to make bound check easier.
@@ -234,16 +253,17 @@ void InitPQ(FMStructs* fm)
 void MarchNarrowBand(FMStructs* fm) {
   TreePointer labPtr(&fm->label);
   TreePointer sdfPtr(&fm->sdf->sdf);
-  while (!fm->pq.empty()) {
-    VoxDist v = fm->pq.top();
-    fm->pq.pop();
-
-    float dist = v.dist;
+  Vec3u size = fm->label.GetSize();
+  while (fm->h.nElems()>0) {
+    float dist;
+    int64_t linIdx;
+    dist = fm->h.getSmallest(&linIdx);
     if (std::abs(dist) > fm->sdf->band) {
       continue;
     }
-
-    labPtr.PointTo(v.vox[0], v.vox[1], v.vox[2]);
+    int x, y, z;
+    gridIdx(linIdx, x, y, z, size);
+    labPtr.PointTo(x,y,z);
     uint8_t lab = uint8_t(SDFLabel::FAR);
     if (labPtr.HasValue()) {
       GetVoxelValue(labPtr, lab);
@@ -252,10 +272,10 @@ void MarchNarrowBand(FMStructs* fm) {
       //duplicate
       continue;
     }
-    sdfPtr.PointTo(v.vox[0], v.vox[1], v.vox[2]);
+    sdfPtr.PointTo(x,y,z);
     lab = uint8_t(SDFLabel::KNOWN);
     AddVoxelValue(labPtr, lab);
-    UpdateNeighbors(v.vox[0], v.vox[1], v.vox[2], fm);
+    UpdateNeighbors(x,y,z, fm);
   }
 }
 

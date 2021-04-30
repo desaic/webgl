@@ -1,6 +1,7 @@
 #include "TrayClient.h"
 #include "ConfigFile.hpp"
 #include "tests.h"
+#include "heap.hpp"
 
 #include <iostream>
 #include <thread>
@@ -51,6 +52,17 @@ void LoadTestScene(TrayClient & client)
   Vec3f rot(0, 0, 0);
   Vec3f initPos(0, 0, 10);
   int instanceId = scene.AddInstance(meshId, initPos, rot);
+}
+
+void TestHeap() {
+  heap h;
+  h.insert(0.1, 0);
+  h.insert(0.2, 1);
+  h.insert(0.4, 2);
+  h.insert(0.5, 3);
+
+  h.update(0.6, 1);
+  h.printTree();
 }
 
 int main(){
