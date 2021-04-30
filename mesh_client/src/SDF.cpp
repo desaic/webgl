@@ -254,10 +254,12 @@ void MarchNarrowBand(FMStructs* fm) {
   TreePointer labPtr(&fm->label);
   TreePointer sdfPtr(&fm->sdf->sdf);
   Vec3u size = fm->label.GetSize();
+  int64_t loopCnt = 0;
   while (fm->h.nElems()>0) {
     float dist;
     int64_t linIdx;
     dist = fm->h.getSmallest(&linIdx);
+    loopCnt++;
     if (std::abs(dist) > fm->sdf->band) {
       continue;
     }
@@ -277,6 +279,7 @@ void MarchNarrowBand(FMStructs* fm) {
     AddVoxelValue(labPtr, lab);
     UpdateNeighbors(x,y,z, fm);
   }
+  std::cout << "loop cnt " << loopCnt << "\n";
 }
 
 void FastMarch(SDFMesh& sdf)
@@ -297,7 +300,7 @@ void FastMarch(SDFMesh& sdf)
   timer.end();
   seconds = timer.getSeconds();
   std::cout << "InitPQ " << seconds << " s.\n";
-
+  std::cout << "pq size " << fm.h.nElems() << "\n";
   timer.start();
   MarchNarrowBand(&fm);
   timer.end();

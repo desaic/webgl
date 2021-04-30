@@ -1,5 +1,7 @@
 #include <vector>
 #include <unordered_map>
+//stolen from https://github.com/patricknraanes/FM
+
 class heap {
 		public:
 				// Constructor and destructor
