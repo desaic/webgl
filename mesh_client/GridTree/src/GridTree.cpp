@@ -7,9 +7,10 @@
 
 void TreePointer::Init(GridTreeAbs* t)
 {
-  nodes.resize(1, t->GetRoot());
-  indices.resize(1, Vec3uc(0,0,0));
   tree = t;
+  nodes.resize(tree->GetNumLevels());
+  indices.resize(tree->GetNumLevels(), Vec3uc(0,0,0));
+  nodes[0] = tree->GetRoot();
   valid = true;
 }
 
@@ -17,7 +18,6 @@ void TreePointer::Init(GridTreeAbs* t)
 bool TreePointer::PointTo(unsigned x, unsigned y, unsigned z)
 {
   valid = true;
-  indices.resize( tree->GetNumLevels());
   //which block does (x,y,z) fall in.
   //the block index at the leaf node is the input voxel index.
   Vec3u blockIndex(x, y, z);
@@ -30,7 +30,6 @@ bool TreePointer::PointTo(unsigned x, unsigned y, unsigned z)
       blockIndex[d]=blockIndex[d] >> 3;
     }
   }
-  nodes.resize(indices.size());
   for (size_t i = 1; i < indices.size(); i++) {
     nodes[i] = nullptr;
   }

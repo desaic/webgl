@@ -33,14 +33,29 @@ enum class SDFLabel {
   BAND
 };
 
-///data structures for 
+///data structures and function arguments 
+///for fast marching functions
 struct FMStructs
 {
   SDFMesh* sdf;
   GridTree<uint8_t> label;
-  //std::priority_queue<VoxDist, std::vector<VoxDist>, CompareVox>pq;
   heap h;
+  //points into sdf
+  TreePointer distPtr;
+  //points to label
+  TreePointer labelPtr;
   FMStructs():sdf(nullptr){}
+
+  void InitPtr() {
+    labelPtr.Init(&label);
+    distPtr.Init(&sdf->sdf);
+  }
+
+  //some convenience functions
+  void PointTo(int x, int y, int z) {
+    distPtr.PointTo(x, y, z);
+    labelPtr.PointTo(x, y, z);
+  }
 };
 
 bool inbound(int x, int y, int z, const Vec3u & size) 
@@ -65,45 +80,47 @@ void SolveQuadAxis(int x, int y, int z, unsigned axis, FMStructs* fm,
      float * dist, int * h)
 {
   int d = 0;
-  TreePointer labPtr(&fm->label);
-  TreePointer distPtr(&fm->sdf->sdf);
   uint8_t lab = uint8_t(SDFLabel::FAR);
   const Vec3u& s = fm->label.GetSize();
-
   float distMinus = INF_DIST;
   float distPlus = INF_DIST;
   float minDist = INF_DIST;
   Vec3i idx(x, y, z);
   if (idx[axis] > 0) {
-    idx[axis]--;
-    labPtr.PointTo(idx[0], idx[1], idx[2]);
-    if (labPtr.HasValue()) {
-      GetVoxelValue(labPtr, lab);
-      distPtr.PointTo(idx[0], idx[1], idx[2]);
+    //idx[axis]--;
+    fm->labelPtr.Decrement(axis);
+    if (fm->labelPtr.HasValue()) {
+      GetVoxelValue(fm->labelPtr, lab);
     }
     if (lab == uint8_t(SDFLabel::KNOWN)) {
-      GetVoxelValue(distPtr, distMinus);
+      fm->distPtr.Decrement(axis);
+      GetVoxelValue(fm->distPtr, distMinus);
       minDist = distMinus;
       d = -1;
+      fm->distPtr.Increment(axis);
     }
-    idx[axis]++;
+    //idx[axis]++;
+    fm->labelPtr.Increment(axis);
   }
 
   lab = uint8_t(SDFLabel::FAR);
   if (idx[axis] < s[axis] - 1) {
-    idx[axis]++;
-    labPtr.PointTo(idx[0], idx[1], idx[2]);
-    if (labPtr.HasValue()) {
-      GetVoxelValue(labPtr, lab);
-      distPtr.PointTo(idx[0], idx[1], idx[2]);
-      GetVoxelValue(distPtr, distPlus);
+    //idx[axis]++;
+    //labPtr.PointTo(idx[0], idx[1], idx[2]);
+    fm->labelPtr.Increment(axis);
+    if (fm->labelPtr.HasValue()) {
+      GetVoxelValue(fm->labelPtr, lab);
     }
     if (lab == uint8_t(SDFLabel::KNOWN)) {
+      fm->distPtr.Increment(axis);
+      GetVoxelValue(fm->distPtr, distPlus);
+      fm->distPtr.Decrement(axis);
       if (d == 0 || std::abs(distPlus) < std::abs(distMinus)) {
         minDist = distPlus;
         d = 1;
       }
     }
+    fm->labelPtr.Decrement(axis);
   }
 
   if (d != 0) {
@@ -120,6 +137,8 @@ float SolveQuadratic(int x, int y, int z,
   float dist[3] = { 0,0,0 };
   //which direction is the min distance cell
   int h[3] = { 0,0,0 };
+  fm->InitPtr();
+  fm->PointTo(x,y,z);
   SolveQuadAxis(x, y, z, 0, fm, dist, h);
   SolveQuadAxis(x, y, z, 1, fm, dist, h);
   SolveQuadAxis(x, y, z, 2, fm, dist, h);

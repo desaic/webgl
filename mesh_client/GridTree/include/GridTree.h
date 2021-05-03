@@ -120,7 +120,7 @@ public:
   TreePointer(GridTreeAbs* t):valid(false) {
     Init(t);
   }
-
+  TreePointer() :valid(false), tree(nullptr) {}
   void Init(GridTreeAbs* t);
   ///point pointer to node at level containing voxel (x,y,z).
   ///root is level 0
