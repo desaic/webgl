@@ -28,6 +28,8 @@ public:
   ///does not understand mate here. mate is handled in alpha beta search
   int EvalDirect(const ChessBoard& b);
 
+  void SetBoard(ChessBoard& b);
+
   int CheckMateScore();
 
   int StaleMateScore();
@@ -44,4 +46,6 @@ public:
   
   ///used whenever current position updates.
   std::mutex boardMutex;
+  ChessBoard board;
+  bool boardChanged;
 };

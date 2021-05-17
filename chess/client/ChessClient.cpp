@@ -94,6 +94,7 @@ void ChessClient::HandleCmd(const std::string& cmd) {
     }
     else {
       board.ApplyMove(attempt);
+      bot.SetBoard(board);
     }
     SendBoard();
   }

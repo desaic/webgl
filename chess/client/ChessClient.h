@@ -1,5 +1,6 @@
 #include "SocketClient.h"
 #include "ChessBoard.h"
+#include "ChessBot.h"
 
 #include <deque>
 #include <iostream>
@@ -59,6 +60,7 @@ public:
   std::deque<char> q;
 
   ChessBoard board;
+  ChessBot bot;
   std::vector<UndoMove> undoStack;
   std::thread loopThread;
 };

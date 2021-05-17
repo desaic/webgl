@@ -58,7 +58,8 @@ int bishoppos[64] =
    -5, -5, -5, -5, -5, -5, -5, -5
 };
 
-ChessBot::ChessBot():running(false)
+ChessBot::ChessBot():running(false),
+boardChanged(false)
 {
   materialScore.resize(PIECE_NUM_TYPES);
   materialScore[PIECE_PAWN] = 100;
@@ -172,6 +173,13 @@ int ChessBot::EvalDirect(const ChessBoard& b)
   return score;
 }
 
+void ChessBot::SetBoard(ChessBoard& b)
+{
+  std::lock_guard<std::mutex> lock(boardMutex);
+  board = b;
+  boardChanged = true;
+}
+
 int ChessBot::CheckMateScore()
 {
   return MAX_SCORE;
@@ -192,8 +200,20 @@ std::vector<MoveScore> ChessBot::BestMoves(const ChessBoard& b)
 void ChessBot::WorkerLoop()
 {
   int pollInterval = 30;//ms
+  
+  ChessBoard localBoard = board;
+  
+  int printInterval = 2000;
+
   while (running) {
-    
+    boardMutex.lock();
+    if (boardChanged) {
+      localBoard = board;
+      boardChanged = false;
+    }
+    boardMutex.unlock();
+
+
     SleepMs(running);
   }
 }
