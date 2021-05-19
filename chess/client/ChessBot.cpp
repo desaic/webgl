@@ -1,4 +1,6 @@
 #include "ChessBot.h"
+#include "Timer.h"
+#include <chrono>
 
 static void SleepMs(int ms)
 {
@@ -203,8 +205,9 @@ void ChessBot::WorkerLoop()
   
   ChessBoard localBoard = board;
   
-  int printInterval = 2000;
-
+  float printIntervalSec = 2;
+  Timer timer;
+  timer.start();
   while (running) {
     boardMutex.lock();
     if (boardChanged) {
@@ -212,8 +215,11 @@ void ChessBot::WorkerLoop()
       boardChanged = false;
     }
     boardMutex.unlock();
-
-
+    float sec = timer.elapsedSeconds();
+    if (sec > printIntervalSec) {
+      std::cout << "best move\n";
+      timer.start();
+    }
     SleepMs(running);
   }
 }
