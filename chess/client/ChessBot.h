@@ -13,6 +13,20 @@ struct MoveScore
   MoveScore() :score(0), depth(0) {}
 };
 
+struct SearchArg
+{
+public:
+  int alpha, beta, depth;
+  SearchArg();
+};
+
+///dump intermediate evaluation related 
+/// stuff here
+struct EvalCache
+{
+  std::vector<SearchArg> argStack;
+};
+
 class ChessBot
 {
 public:
@@ -41,11 +55,14 @@ public:
   void Run();
   void Stop();
   void WorkerLoop();
+  /// run evaluation for 1 step whatever that means.
+  void EvalStep();
   
   std::thread searchThread;
   
   ///used whenever current position updates.
   std::mutex boardMutex;
   ChessBoard board;
+  EvalCache cache;
   bool boardChanged;
 };

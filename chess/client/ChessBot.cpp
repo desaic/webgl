@@ -199,6 +199,12 @@ std::vector<MoveScore> ChessBot::BestMoves(const ChessBoard& b)
   return moves;
 }
 
+void ChessBot::EvalStep()
+{
+  int alpha, beta;
+
+}
+
 void ChessBot::WorkerLoop()
 {
   int pollInterval = 30;//ms
@@ -215,6 +221,7 @@ void ChessBot::WorkerLoop()
       boardChanged = false;
     }
     boardMutex.unlock();
+    EvalStep();
     float sec = timer.elapsedSeconds();
     if (sec > printIntervalSec) {
       std::cout << "best move\n";
@@ -241,4 +248,12 @@ void ChessBot::Stop()
   if (searchThread.joinable()) {
     searchThread.join();
   }
+}
+
+SearchArg::SearchArg():
+  alpha(-ChessBot::MAX_SCORE),
+  beta(ChessBot::MAX_SCORE),
+  depth(0)
+{
+
 }
