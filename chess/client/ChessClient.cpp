@@ -93,7 +93,9 @@ void ChessClient::HandleCmd(const std::string& cmd) {
       std::cout << "illegal move " + attempt.ToString() + "\n";
     }
     else {
+      undoStack.push_back(board.GetUndoMove(attempt));
       board.ApplyMove(attempt);
+      
       bot.SetBoard(board);
     }
     SendBoard();
@@ -119,6 +121,14 @@ void ChessClient::HandleCli(const std::string& cmd)
     board.FromFen(fen);
     undoStack.clear();
     SendBoard();
+  }
+  else if (cmd == "undo") {
+    if (undoStack.size() > 0) {
+      UndoMove u = undoStack.back();
+      undoStack.pop_back();
+      board.Undo(u);
+      SendBoard();
+    }
   }
   else {
     SendCmd(cmd);

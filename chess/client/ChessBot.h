@@ -10,13 +10,18 @@ struct MoveScore
   int score;
   //depth the score is based on.
   unsigned depth;
+
   MoveScore() :score(0), depth(0) {}
 };
 
 struct SearchArg
 {
 public:
-  int alpha, beta, depth;
+  int alpha, beta;
+  std::vector<Move> moves;
+  size_t moveIdx;
+  UndoMove undo;
+  int score;
   SearchArg();
 };
 
@@ -24,7 +29,16 @@ public:
 /// stuff here
 struct EvalCache
 {
+  //current depth = argStack.size()
+  //depth = 0 at the beginning of a new search.
   std::vector<SearchArg> argStack;
+  unsigned depth;
+  Move bestMove;
+  int bestScore;
+  int maxDepth;
+  void Init();
+  ChessBoard* board;
+  EvalCache();
 };
 
 class ChessBot
@@ -55,6 +69,10 @@ public:
   void Run();
   void Stop();
   void WorkerLoop();
+  
+  /// initialize evaluation.
+  void InitEval();
+  
   /// run evaluation for 1 step whatever that means.
   void EvalStep();
   
