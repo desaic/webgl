@@ -1,0 +1,36 @@
+[Prefix="VHACD::"]
+interface VHACD {
+  void VHACD();
+  boolean Compute(double[] points, unsigned long nPoints, unsigned long[] triangles, unsigned long nTriangles, [Const, Ref]Parameters params);
+  unsigned short GetNConvexHulls();
+  void GetConvexHull(unsigned short index, [Ref]ConvexHull ch);
+  void Cancel();
+  void Clean();
+  void Release();
+};
+
+[Prefix="VHACD::IVHACD::"]
+interface Parameters {
+  void Parameters();
+    attribute double m_concavity;
+    attribute double m_alpha;
+    attribute double m_beta;
+    attribute double m_minVolumePerCH;
+    attribute unsigned short m_resolution;
+    attribute unsigned short m_maxNumVerticesPerCH;
+    attribute long m_planeDownsampling;
+    attribute long m_convexhullDownsampling;
+    attribute long m_pca;
+    attribute long m_mode;
+    attribute long m_convexhullApproximation;
+    attribute long m_oclAcceleration;
+};
+
+[Prefix="VHACD::IVHACD::"]
+interface ConvexHull {
+  void ConvexHull();
+  readonly attribute double[] m_points;
+  readonly attribute long[] m_triangles;
+  readonly attribute unsigned short m_nPoints;
+  readonly attribute unsigned short m_nTriangles;
+};

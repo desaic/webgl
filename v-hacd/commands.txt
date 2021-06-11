@@ -1,0 +1,1 @@
+/d/Program\ Files/CMake/bin/cmake.exe ../v-hacd -G "Visual Studio 16 2019" -A x32
