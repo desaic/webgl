@@ -1,2 +1,2 @@
 source ./emsdk_env.sh
-emcmake /d/Program\ Files/CMake/bin/cmake.exe ../v-hacd -G Ninja
+emcmake /d/Program\ Files/CMake/bin/cmake.exe ../webgl/v-hacd -G Ninja
