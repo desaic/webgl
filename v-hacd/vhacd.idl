@@ -2,6 +2,7 @@
 interface VHACD {
   void VHACD();
   boolean Compute(double[] points, unsigned long nPoints, unsigned long[] triangles, unsigned long nTriangles, [Const, Ref]Parameters params);
+  boolean Compute(float[] points, unsigned long nPoints, unsigned long[] triangles, unsigned long nTriangles, [Const, Ref]Parameters params);
   unsigned long GetNConvexHulls();
   void GetConvexHull(unsigned long index, [Ref]ConvexHull ch);
   void Cancel();
