@@ -216,7 +216,6 @@ private:
             m_dim, m_barycenter, m_rot);
         size_t n = volume.GetNPrimitivesOnSurf() + volume.GetNPrimitivesInsideSurf();
         Update(50.0, 100.0, params);
-
         if (params.m_logger) {
             msg.str("");
             msg << "\t dim = " << m_dim << "\t-> " << n << " voxels" << std::endl;
@@ -255,8 +254,9 @@ private:
         m_stage = "Voxelization";
 
         std::ostringstream msg;
+		msg << "+ " << m_stage << std::endl;
+		printf("%s\n",msg.str().c_str());
         if (params.m_logger) {
-            msg << "+ " << m_stage << std::endl;
             params.m_logger->Log(msg.str().c_str());
         }
 
@@ -301,6 +301,8 @@ private:
         m_overallProgress = 10.0;
         Update(100.0, 100.0, params);
 
+		printf("num voxels on surf and interior %lu, %lu\n", 
+		  m_volume->GetNPrimitivesOnSurf(),m_volume->GetNPrimitivesInsideSurf());
         m_timer.Toc();
         if (params.m_logger) {
             msg.str("");
@@ -316,6 +318,7 @@ private:
         const Parameters& params)
     {
         Init();
+		printf("compute acd init done\n");
         if (params.m_projectHullVertices)
         {
             mRaycastMesh = RaycastMesh::createRaycastMesh(nPoints, points, nTriangles, (const uint32_t *)triangles);
@@ -323,6 +326,7 @@ private:
         if (params.m_oclAcceleration) {
             // build kernels
         }
+		printf("n verts trigs %u %u\n", nPoints, nTriangles);
         AlignMesh(points, 3, nPoints, (int32_t *)triangles, 3, nTriangles, params);
         VoxelizeMesh(points, 3, nPoints, (int32_t *)triangles, 3, nTriangles, params);
         ComputePrimitiveSet(params);

@@ -335,6 +335,8 @@ void Volume::Voxelize(const T* const points, const uint32_t stridePoints, const 
         m_dim[1] = 2 + static_cast<size_t>(dim * d[1] / d[2]);
     }
 
+	printf("bbox %f %f ", m_minBB[0], m_maxBB[1]);
+	
     m_scale = r / (dim - 1);
     double invScale = (dim - 1) / r;
 
