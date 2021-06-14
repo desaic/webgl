@@ -34,3 +34,6 @@ interface ConvexHull {
   readonly attribute unsigned long m_nPoints;
   readonly attribute unsigned long m_nTriangles;
 };
+
+[Prefix="VHACD"]
+IVHACD CreateVHACD();
