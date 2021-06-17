@@ -5,7 +5,7 @@
 #include "heap.hpp"
 
 #define MIN(a,b) ((a)>(b)?(b):(a))
-
+#define ALLOC_INCREMENT 64
 heap::heap() {
 		heapCount = 0;
 }
@@ -113,10 +113,13 @@ int64_t heap::nElems() {
 
 void heap::insert(float time, int64_t Ind){
 		// Insert element at the end of the heap
-		Keys.push_back(time);
-		H2T.push_back(Ind);
-		T2H[Ind] = heapCount;
-
+	if (heapCount >= Keys.size()) {
+		Keys.resize(heapCount + ALLOC_INCREMENT);
+		H2T.resize(heapCount + ALLOC_INCREMENT);
+	}
+	Keys[heapCount] = time;
+	H2T[heapCount] = Ind;
+	T2H[Ind] = heapCount;
 		heapCount++; 
 
 		// Ensure the heap is maintained by moving the 

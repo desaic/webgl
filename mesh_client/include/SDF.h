@@ -3,38 +3,52 @@
 #include "GridTree.h"
 #include "BBox.h"
 
-#include <thread>
-#include <mutex>
-
 class TrigMesh;
 
 //signed distance function computed from a trig mesh.
 struct SDFMesh
 {
-  SDFMesh() :band(3) {}
-  BBox box;
-  TrigMesh* mesh;
+  SDFMesh() : voxelSize(0.25f), band(3), initialized(false) {}
 
-  //origin at 0
-  GridTree<float> sdf;
+  /// get distance from nearest neighbor vertex.
+  /// values are defined on cube corners.
+  /// coordinate in origininal mesh model space.
+  float DistNN(Vec3f coord);
 
-  std::mutex idxMtx;
+  /// get distance using triliear interpolation. queries 8 vertices.
+  /// coordinate in origininal mesh model space.
+  float Dist(Vec3f coord);
 
-  //index into trig list
-  GridTree<size_t> idxGrid;
-  
-  //list of triangles within each non-empty voxel.
-  std::vector < std::vector<size_t> > trigList;
+  //  configs
 
-  //voxel size h
-  //origin at box.min - 0.5h - band.
-  Vec3f gridOrigin;
-  
-  ///h. only supports uniform voxel size.
-  float voxelSize;
-  
   ///multiples of h
   float band;
+
+  ///h. only supports uniform voxel size.
+  float voxelSize;
+
+  //  computed quantities
+
+  BBox box;
+
+  ///origin at box.min - 0.5h - band.
+  Vec3f gridOrigin;
+
+  bool initialized;
+
+  TrigMesh* mesh;
+
+  GridTree<float> sdf;
+
+  //  temporary variables that can be cleared out
+  //  if memory is an issue
+
+  ///index into trig list
+  GridTree<size_t> idxGrid;
+
+  ///list of triangles within each non-empty voxel.
+  std::vector < std::vector<size_t> > trigList;
+
 };
 
 ///computes unsigned distance field using fast marching algo.

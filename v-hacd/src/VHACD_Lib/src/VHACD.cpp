@@ -980,8 +980,9 @@ void VHACD::ComputeACD(const Parameters& params)
     m_stage = "Approximate Convex Decomposition";
     m_stageProgress = 0.0;
     std::ostringstream msg;
+    msg << "+ " << m_stage << std::endl;
+    printf("%s\n", msg.str().c_str());
     if (params.m_logger) {
-        msg << "+ " << m_stage << std::endl;
         params.m_logger->Log(msg.str().c_str());
     }
 
@@ -1243,9 +1244,10 @@ void VHACD::ComputeACD(const Parameters& params)
     m_overallProgress = 95.0;
     Update(100.0, 100.0, params);
     m_timer.Toc();
+    msg.str("");
+    msg << "\t time " << m_timer.GetElapsedTime() / 1000.0 << "s" << std::endl;
+    printf("%s\n", msg.str().c_str());
     if (params.m_logger) {
-        msg.str("");
-        msg << "\t time " << m_timer.GetElapsedTime() / 1000.0 << "s" << std::endl;
         params.m_logger->Log(msg.str().c_str());
     }
 }
@@ -1539,9 +1541,11 @@ void VHACD::SimplifyConvexHulls(const Parameters& params)
     m_overallProgress = 100.0;
     Update(100.0, 100.0, params);
     m_timer.Toc();
+    msg.str("");
+    msg << "\t time " << m_timer.GetElapsedTime() / 1000.0 << "s" << std::endl;
+
+    printf("%s\n", msg.str().c_str());
     if (params.m_logger) {
-        msg.str("");
-        msg << "\t time " << m_timer.GetElapsedTime() / 1000.0 << "s" << std::endl;
         params.m_logger->Log(msg.str().c_str());
     }
 }

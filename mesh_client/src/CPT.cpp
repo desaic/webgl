@@ -1,10 +1,9 @@
 #include "CPT.h"
 #include "TrigMesh.h"
-#include "CPT.h"
 #include "trigAABBIntersect.hpp"
 #include "PointTrigDist.h"
 #include "Timer.hpp"
-
+#include "BBox.h"
 #include <algorithm>
 #include <functional>
 #include <numeric>

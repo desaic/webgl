@@ -56,6 +56,11 @@ public:
     return *this;
   }
 
+  T dot(const Vec3<T>& v1)
+  {
+    return v[0] * v1[0] + v[1] * v1[1] + v[2] * v1[2];
+  }
+
   Vec3<T> cross(const Vec3<T> & b){
 	  Vec3<T> c(v[1] * b[2] - v[2] * b[1],
 	           -v[0] * b[2] + v[2] * b[0],

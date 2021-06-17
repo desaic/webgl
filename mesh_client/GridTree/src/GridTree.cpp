@@ -54,7 +54,7 @@ void TreePointer::CreateLeaf(unsigned x, unsigned y, unsigned z)
 
 bool TreePointer::HasValue()const
 {
-  if (nodes[nodes.size() - 1] == nullptr) {
+  if (nodes[nodes.size() - 1] == nullptr || !valid) {
     return false;
   }
   Vec3uc idx = indices.back();
@@ -74,11 +74,11 @@ bool TreePointer::Increment(unsigned axis)
 {
   unsigned log2BF = tree->GetLog2BF();
   unsigned gridSize = 1 << log2BF;
-  unsigned level = unsigned(indices.size()) - 1;
+  unsigned level = unsigned(indices.size());
   
   for (unsigned i = 0; i < indices.size(); i++) {
-    level = unsigned(indices.size()) - 1 - i;
-    unsigned childIdx = indices[level][axis] + 1;
+    level--;
+    unsigned childIdx = indices[level][axis]+1;
     if (childIdx >= gridSize) {
       if (level == 0) {
         //root level. no more block to jump to .
@@ -223,9 +223,6 @@ void WriteInternalNode(GridNodeInternal<unsigned char>* node, std::ostream& out)
   Vec3u origin;
   node->GetOrigin(origin[0], origin[1], origin[2]);
   out << "origin " << origin[0] << " " << origin[1] << " " << origin[2] << "\n";
-  unsigned numValues = node->GetNumValues();
-  out << "numValues " << numValues << "\n";
-  out << node->val.mask.ToString() << "\n";
 
 }
 

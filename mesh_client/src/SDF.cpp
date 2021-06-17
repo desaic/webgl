@@ -33,6 +33,109 @@ enum class SDFLabel {
   BAND
 };
 
+void ReadVoxel(TreePointer& ptr, float &dst)
+{
+  if (ptr.HasValue()) {
+    GetVoxelValue<float>(ptr, dst);
+  }
+}
+
+float SDFMesh::DistNN(Vec3f coord)
+{
+  Vec3f localCoord = coord - gridOrigin;
+  Vec3i gridIdx;
+  Vec3u size = sdf.GetSize();
+  for (unsigned d = 0; d < 3; d++) {
+    gridIdx[d] = int(localCoord[d] / voxelSize);
+    if (gridIdx[d] < 0) {
+      gridIdx[d] = 0;
+    }
+    if (gridIdx[d] >= int(size[d]) ) {
+      gridIdx[d] = int(size[d]) - 1;
+    }
+  }
+  TreePointer ptr(&sdf);
+  ptr.PointTo(gridIdx[0], gridIdx[1], gridIdx[2]);
+  float dist = 1000.0f;
+  ReadVoxel(ptr, dist);
+
+  return dist * voxelSize;
+}
+
+float SDFMesh::Dist(Vec3f coord)
+{
+  
+  Vec3f localCoord = coord - gridOrigin;
+  //start with bottom left corner.
+  Vec3i gridIdx;
+  Vec3u size = sdf.GetSize();
+  for (unsigned d = 0; d < 3; d++) {
+    localCoord[d] = localCoord[d] / voxelSize - 0.5f;
+    gridIdx[d] = int( localCoord[d] );
+    if (gridIdx[d] < 0) {
+      gridIdx[d] = 0;
+    }
+    if (gridIdx[d] >= int(size[d])) {
+      gridIdx[d] = int(size[d]) - 1;
+    }
+  }
+  TreePointer ptr(&sdf);
+  ptr.PointTo(gridIdx[0], gridIdx[1], gridIdx[2]);
+  float far = 1000.f;
+  float v000 = far;
+  float v001 = far;
+  float v011 = far;
+  float v010 = far;
+  float v100 = far;
+  float v101 = far;
+  float v111 = far;
+  float v110 = far;
+
+  TreePointer nbr = ptr;
+  ReadVoxel(nbr, v000);
+
+  nbr.Increment(0);
+  ReadVoxel(nbr, v001);
+
+  nbr.Increment(1);
+  ReadVoxel(nbr, v011);
+
+  nbr = ptr;
+  nbr.Increment(1);
+  ReadVoxel(nbr, v010);
+
+  nbr = ptr;
+  nbr.Increment(2);
+  ReadVoxel(nbr, v100);
+
+  nbr.Increment(0);
+  ReadVoxel(nbr, v101);
+
+  nbr.Increment(1);
+  ReadVoxel(nbr, v111);
+
+  nbr = ptr;
+  nbr.Increment(1);
+  nbr.Increment(2);
+  ReadVoxel(nbr, v110);
+
+  //natural coordinates in unit cube.
+  float x = localCoord[0] - gridIdx[0];
+  float y = localCoord[1] - gridIdx[1];
+  float z = localCoord[2] - gridIdx[2];
+
+  float v00 = v000 * (1.0f - x) + v001 * x;
+  float v01 = v010 * (1.0f - x) + v011 * x;
+  float v10 = v100 * (1.0f - x) + v101 * x;
+  float v11 = v110 * (1.0f - x) + v111 * x;
+
+  float v0 = v00 * (1 - y) + v01 * y;
+  float v1 = v10 * (1 - y) + v11 * y;
+  float dist = v0 * (1 - z) + v1 * z;
+  return dist*voxelSize;
+}
+
+
 ///data structures and function arguments 
 ///for fast marching functions
 struct FMStructs
@@ -221,7 +324,7 @@ void UpdateNeighbor(int x, int y, int z, FMStructs* fm)
 ///i.e. -1 will be negative
 void UpdateNeighbors(int x, int y, int z, FMStructs * fm) 
 {
-  //human compiler
+  ///TODO initialize tree pointer here.
   UpdateNeighbor(x - 1, y, z, fm);
   UpdateNeighbor(x + 1, y, z, fm);
   UpdateNeighbor(x, y - 1, z, fm);
@@ -279,9 +382,7 @@ void MarchNarrowBand(FMStructs* fm) {
     int64_t linIdx;
     dist = fm->h.getSmallest(&linIdx);
     loopCnt++;
-    if (std::abs(dist) > fm->sdf->band) {
-      continue;
-    }
+
     int x, y, z;
     gridIdx(linIdx, x, y, z, size);
     labPtr.PointTo(x,y,z);
@@ -289,13 +390,18 @@ void MarchNarrowBand(FMStructs* fm) {
     if (labPtr.HasValue()) {
       GetVoxelValue(labPtr, lab);
     }
+    else {
+      labPtr.CreatePath();
+    }
     if (lab == uint8_t(SDFLabel::KNOWN)) {
       //duplicate
       continue;
     }
-    sdfPtr.PointTo(x,y,z);
     lab = uint8_t(SDFLabel::KNOWN);
     AddVoxelValue(labPtr, lab);
+    if (std::abs(dist) > fm->sdf->band) {
+      continue;
+    }
     UpdateNeighbors(x,y,z, fm);
   }
   std::cout << "loop cnt " << loopCnt << "\n";

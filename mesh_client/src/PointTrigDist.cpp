@@ -5,11 +5,11 @@ TrigDistInfo PointTrigDist(const Vec3f& pt, float * trig)
 	Vec3f diff(pt[0] - trig[0], pt[1] - trig[1], pt[2] - trig[2]);
 	Vec3f edge0(trig[3] - trig[0], trig[4] - trig[1], trig[5] - trig[2]);
 	Vec3f edge1(trig[6] - trig[0], trig[7] - trig[1], trig[8] - trig[2]);
-	float a00 = Dot(edge0, edge0);
-	float a01 = Dot(edge0, edge1);
-	float a11 = Dot(edge1, edge1);
-	float b0 = -Dot(diff, edge0);
-	float b1 = -Dot(diff, edge1);
+	float a00 = edge0.dot(edge0);
+	float a01 = edge0.dot(edge1);
+	float a11 = edge1.dot(edge1);
+	float b0 = - (diff.dot(edge0));
+	float b1 = - (diff.dot(edge1));
 
 	float f00 = b0;
 	float f10 = b0 + a00;
@@ -151,7 +151,7 @@ TrigDistInfo PointTrigDist(const Vec3f& pt, float * trig)
 	info.bary[1] = p[0];
 	info.bary[2] = p[1];
 	diff = pt - info.closest;
-	info.sqrDist = Dot(diff, diff);
+	info.sqrDist = diff.dot(diff);
 	return info;
 }
 

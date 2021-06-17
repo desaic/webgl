@@ -130,7 +130,7 @@ void TestCPT(TrayClient* client)
   }
 
   TrigMesh mesh;
-  MarchingCubes(sdf, 1.5, &mesh);
+  MarchingCubes(sdf, 0, &mesh);
   meshes.push_back(mesh);
   client->SendMeshes();
   
