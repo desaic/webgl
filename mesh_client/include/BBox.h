@@ -1,7 +1,14 @@
 #pragma once
 
+#include "Vec2.h"
 #include "Vec3.h"
 #include <vector>
+
+struct BBox2D {
+	Vec2f mn, mx;
+	BBox2D():mn(0,0), mx(0,0){}
+	void Compute(const std::vector<Vec2f> & verts);
+};
 
 struct BBox{
 	Vec3f mn, mx;
