@@ -8,7 +8,9 @@ class TrigMesh;
 //signed distance function computed from a trig mesh.
 struct SDFMesh
 {
-  SDFMesh() : voxelSize(0.25f), band(3), initialized(false) {}
+  SDFMesh() : voxelSize(0.25f), 
+exactBand(1), band(3), initialized(false) 
+  {}
 
   /// get distance from nearest neighbor vertex.
   /// values are defined on cube corners.
@@ -23,6 +25,7 @@ struct SDFMesh
 
   ///multiples of h
   float band;
+  float exactBand;
 
   ///h. only supports uniform voxel size.
   float voxelSize;

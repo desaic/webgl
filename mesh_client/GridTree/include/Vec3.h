@@ -33,6 +33,10 @@ public:
 	v[ 2 ] += v1[ 2 ];
 	return *this;
   }
+  
+  Vec3<T> operator-() {
+    return Vec3<T>(-v[0], -v[1], -v[2]);
+  }
 
   Vec3<T>& operator-= (const Vec3<T>& v1) {
     v[0] -= v1[0];
