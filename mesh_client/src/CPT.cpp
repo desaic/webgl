@@ -13,17 +13,6 @@
 
 #define MAX_GRID_SIZE 1000000
 
-///oriented bounding box
-struct OBBox {
-  Vec3f origin;
-  Vec3f axes[3];
-  OBBox() : origin(0) {
-    axes[0][0] = 1;
-    axes[1][1] = 1;
-    axes[2][2] = 1;
-  }
-};
-
 ///voxelize 1 triangle.
 void Voxelize(size_t tidx, SDFMesh* sdf);
 
