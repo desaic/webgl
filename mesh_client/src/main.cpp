@@ -53,6 +53,7 @@ void LoadTestScene(TrayClient & client)
 }
 
 int main(){
+  TestTrigIter();
   TestTetSlicer();
   initWSA();
   ///\todo add a config file.

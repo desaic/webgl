@@ -16,7 +16,9 @@
 ///voxelize 1 triangle.
 void Voxelize(size_t tidx, SDFMesh* sdf);
 
-///voxel center and triangle distance
+///voxel center and triangle distance.
+/// voxel centers are defined on integer coordinates
+/// e.g. (0,0)
 void ExactDistance(SDFMesh* sdf);
 
 bool trigCubeIntersect(float* verts, Vec3i& cube, float voxSize);
@@ -90,7 +92,7 @@ unsigned closestTrig(const std::vector<size_t>& trigs,
   TrigDistInfo& minInfo)
 {
   float h = sdf->voxelSize;
-  Vec3f center = sdf->gridOrigin + h * Vec3f(x + 0.5f, y + 0.5f, z + 0.5f);
+  Vec3f center = sdf->gridOrigin + h * Vec3f(x, y, z);
   std::vector<float> trig;
   unsigned minT = 0;
   for (size_t t = 0; t < trigs.size(); t++) {

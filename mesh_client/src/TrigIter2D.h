@@ -29,7 +29,7 @@ protected:
   int m_start_y;
   int m_end_x;
   int m_end_y;
-  int m_current_x;
+  int m_x0, m_x1;
   int m_current_y;
 
 protected:
@@ -165,10 +165,9 @@ protected:
 	  this->m_start_x   = this->m_left_ridge_iterator.x();
 	  this->m_end_x    = this->m_right_ridge_iterator.x();
 
-	  this->m_current_x = this->m_left_ridge_iterator.x();
 	  this->m_current_y = this->m_left_ridge_iterator.y();
 
-	  if (this->m_current_x < this->m_end_x) 
+	  if (this->m_start_x < this->m_end_x)
 	  {
 		this->m_state = in_scanline_state;
 		return this->valid();
@@ -186,11 +185,10 @@ protected:
 
 public:
 
-  bool          valid() const  {    return this->m_left_ridge_iterator.valid();  }
-
-  int               x() const  {    return this->m_current_x;  }
-
-  int               y() const  {    return this->m_current_y;  }
+  bool valid() const { return this->m_left_ridge_iterator.valid();  }
+  int     x0() const { return this->m_start_x;  }
+	int     x1() const { return this->m_end_x; }
+  int      y() const { return this->m_current_y;  }
 
 public:
 
@@ -234,7 +232,8 @@ public:
 	this->m_start_y   = iter.m_start_y;
 	this->m_end_x    = iter.m_end_x;
 	this->m_end_y    = iter.m_end_y;
-	this->m_current_x = iter.m_current_x;
+	this->m_x0 = iter.m_x0;
+	this->m_x1 = iter.m_x1;
 	this->m_current_y = iter.m_current_y;
 
 	return *this;
@@ -264,19 +263,13 @@ public:
 	}
 	if (this->m_state == in_scanline_state) 
 	{
-	  if (this->m_current_x < this->m_end_x - 1) 
-	  {
-		++(this->m_current_x);
-	  }
-	  else 
-	  {
+
 		++(this->m_left_ridge_iterator);
 		++(this->m_right_ridge_iterator);
 		if (this->find_nonempty_scanline()) 
 		{
 		  this->m_state = in_scanline_state;
 		}
-	  }
 	}
 	if (this->m_state == scanline_found_state) 
 	{

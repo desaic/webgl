@@ -11,6 +11,7 @@
 #include "LineIter2D.h"
 #include "TrigIter2D.h"
 #include "TetSlicer.h"
+#include "OBBSlicer.h"
 #include <iostream>
 
 void TestNumMeshes(TrayClient* client)
@@ -103,7 +104,7 @@ void TestHeap() {
   h.printTree();
 }
 
-void TestLineIter() {
+void TestTrigIter() {
   std::vector<Vec2f> v(3);
   v[0] = Vec2f(1.5, 2);
   v[1] = Vec2f(5.7, -3.7);
@@ -118,10 +119,14 @@ void TestLineIter() {
   img.Fill(0);
 
   while (trigIter()) {
-    int x = trigIter.x();
+    int x0 = trigIter.x0();
+    int x1 = trigIter.x1();
     int y = trigIter.y();
-    std::cout << "(" << x << ", " << y << ") ";
-    img(x - origin[0], y - origin[1]) = 1;
+    std::cout << "([" << x0 << ", " << x1 << "], " << y << ") ";
+    for (int x = x0; x <= x1; x++) {
+      img(x - origin[0], y - origin[1]) = 1;
+    }
+    
     ++trigIter;
   }
   std::cout << "\n";
@@ -135,6 +140,8 @@ void TestLineIter() {
   std::cout << "\n";
 }
 
+
+
 void TestTetSlicer()
 {
   std::cout << int(-3.7)<<"\n";
@@ -146,6 +153,10 @@ void TestTetSlicer()
   box.axes[0] = Vec3f(obbVals[3], obbVals[4], obbVals[5]);
   box.axes[1] = Vec3f(obbVals[6], obbVals[7], obbVals[8]);
   box.axes[2] = Vec3f(obbVals[9], obbVals[10], obbVals[11]);
+
+  SparseVoxel<int> voxels;
+  OBBSlicer slicer;
+  slicer.Compute(box, voxels);
 }
 
 void TestCPT(TrayClient* client)
