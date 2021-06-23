@@ -10,7 +10,7 @@
 #include "Timer.hpp"
 #include "LineIter2D.h"
 #include "TrigIter2D.h"
-#include "ZTetSlicer.h"
+#include "TetSlicer.h"
 #include <iostream>
 
 void TestNumMeshes(TrayClient* client)
@@ -137,6 +137,8 @@ void TestLineIter() {
 
 void TestTetSlicer()
 {
+  std::cout << int(-3.7)<<"\n";
+  std::cout << int(-3.4) << "\n";
   OBBox box;
   float obbVals[] = { -0.0392107, 1.42734, 2.37363, 21.4142, 21.3849, 1.12073,
     11.4142, - 11.3986, - 0.597374, - 9.53674e-09, 0.104672, - 1.99726 };

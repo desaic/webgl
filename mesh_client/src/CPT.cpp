@@ -24,57 +24,6 @@ bool trigCubeIntersect(float* verts, Vec3i& cube, float voxSize);
 void bbox(const std::vector<float>& verts, BBoxInt& box,
   const Vec3f& voxelSize);
 
-void RasterizeTrig2D(Array2D<uint8_t>& out, const Vec2f & a, 
-  const Vec2f & b, const Vec2f & c);
-
-void RasterizeTrig2D(Array2D<uint8_t>& out, const Vec2f& a,
-  const Vec2f& b, const Vec2f& c)
-{
-  Vec2f v[3];
-  //sort vertices by decreasing y coord.
-  if (a[1] >= b[1]) {
-    if (c[1] >= a[1]) {
-      v[0] = c;
-      v[1] = a;
-      v[2] = b;
-    }
-    else {
-      if (b[1] >= c[1]) {
-        v[0] = a;
-        v[1] = b;
-        v[2] = c;
-      }
-      else {
-        v[0] = a;
-        v[1] = c;
-        v[2] = b;
-      }
-    }
-  }
-  else {
-    if (c[1] >= b[1]) {
-      v[0] = c;
-      v[1] = b;
-      v[2] = a;
-    }
-    else {
-      if (a[1] >= c[1]) {
-        v[0] = b;
-        v[1] = a;
-        v[2] = c;
-      }
-      else {
-        v[0] = b;
-        v[1] = c;
-        v[2] = a;
-      }
-    }
-  }
-
-  float xl = v[2][0], xr=v[2][0];
-  float y = v[2][1];
-}
-
 int cpt(SDFMesh& sdf)
 {
   BBox box;
@@ -83,6 +32,8 @@ int cpt(SDFMesh& sdf)
 
   Vec3u gridSize;
   float h = sdf.voxelSize;
+  
+  //distance values are computed at center of cells.
   float margin = h * (0.5 + sdf.band);
 
   for (unsigned i = 0; i < 3; i++) {

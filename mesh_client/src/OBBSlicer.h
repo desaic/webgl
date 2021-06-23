@@ -5,8 +5,9 @@
 
 #include <functional>
 
-typedef std::function <void(int, int, int)> VoxelCb();
+typedef std::function <void(int, int, int)> VoxelCb;
 
-void SliceOBB(OBBox & obb);
+///@param obb in a coordinate where cell size is uniformly 1.
+void SliceOBB(OBBox & obb, const VoxelCb cb);
 
 #endif

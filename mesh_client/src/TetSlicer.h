@@ -1,8 +1,10 @@
-#ifndef Z_TET_SLICER
-#define Z_TET_SLICER
+#ifndef TET_SLICER
+#define TET_SLICER
+
+#include "Vec2.h"
 #include "Vec3.h"
 
-class ZTetSlicer
+class TetSlicer
 {
 public:
 
@@ -15,7 +17,7 @@ protected:
 
 public:
 
-	ZTetSlicer(
+	TetSlicer(
 	vector3_type const & p0
 	, vector3_type const & p1
 	, vector3_type const & p2
@@ -62,10 +64,10 @@ protected:
   * @param j   The node index of the ending node (got highest z-value).
   * @param p   Upon return this argument holds the intersection point.
   */
-  void intersect(real_type const &  z, int i, int j, vector3_type & p) const
+  void intersect(real_type const &  z, int i, int j, Vec2f & p) const
   {
-	p = m_p[i];
-	vector3_type dir = m_p[j] - m_p[i];
+	p = Vec2f(m_p[i][0], m_p[i][1]);
+	Vec2f dir(m_p[j][0] - m_p[i][0], m_p[j][1] - m_p[i][1]);
 	real_type s = (z-m_p[i][2])/(m_p[j][2]-m_p[i][2]);
 	p += s * dir;
   };
@@ -80,7 +82,7 @@ public:
   *
   * @return        The number of vertices in the sliced tetrahedron.
   */
-  unsigned int intersect(real_type const & z, vector3_type slice[4]) const
+  unsigned int intersect(real_type const & z, Vec2f slice[4]) const
   {
 	if( z < m_p[0][2] || z > m_p[3][2])
 	  return 0;

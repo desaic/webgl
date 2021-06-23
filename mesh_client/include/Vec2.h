@@ -16,6 +16,11 @@ public:
   }
   const T&operator[](unsigned i) const { return v[i]; }
   T & operator[](unsigned i){ return v[i]; }
+  Vec2<T>& operator+= (const Vec2<T>& v1) {
+    v[0] += v1[0];
+    v[1] += v1[1];
+    return *this;
+  }
 private:
   T v[2];
 };
