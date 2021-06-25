@@ -34,10 +34,12 @@ void OBBSlicer::Compute(OBBox& obb, SparseVoxel<int>& voxels)
     boxZMin = std::min(c[i][2], boxZMin);
     boxZMax = std::max(c[i][2], boxZMax);
   }
-  int boxKMin = int(boxZMin);
-
+  int boxKMin = std::ceil(boxZMin);
+  int boxKMax = int(boxZMax);
   const unsigned NUM_TETS = 5;
   const unsigned TET_VERTS = 4;
+  voxels.zmin = boxKMin;
+  voxels.slices.resize( size_t(boxKMax - boxKMin + 1) );
   for (unsigned n = 0; n < NUM_TETS; n++) {
     TetSlicer slicer(tets[n][0], tets[n][1], tets[n][2], tets[n][3]);
     float zmin = tets[n][0][2], zmax = tets[n][0][2];
@@ -46,25 +48,53 @@ void OBBSlicer::Compute(OBBox& obb, SparseVoxel<int>& voxels)
       zmax = std::max(zmax, tets[n][i][2]);
     }
     //integer values of z min and max
-    int k_min = int(zmin);
-    int k_max = int(zmax) + 1;
+    int k_min = std::ceil(zmin);
+    int k_max = int(zmax);
     for (int k = k_min; k <= k_max; k++) {
       Vec2f vertices[4];
-      float z = (k + 0.5f);
+      float z = k;
       int numVerts = slicer.intersect(z, vertices);
       if (numVerts < 3) {
         continue;
       }
+      
       int numTrigs = (numVerts == 3) ? 1 : 2;
+      float fymin=vertices[0][1], fymax=vertices[0][1];
+      for (int vi = 1; vi < numVerts; vi++) {
+        if (fymin > vertices[vi][1]) {
+          fymin = vertices[vi][1];
+        }
+        if (fymax < vertices[vi][1]) {
+          fymax = vertices[vi][1];
+        }
+      }
+      int ymin = std::round(fymin);
+      int ymax = int(fymax);
 
-      for (int c = 1; c <= numTrigs; ++c) {
-        TrigIter2D pixel(vertices[0], vertices[c], vertices[c + 1]);
+      for (int ti = 1; ti <= numTrigs; ++ti) {
+        SparseSlice<int> slice;
+        slice.ymin = ymin;
+        slice.rows.resize( size_t(ymax - ymin + 1), Interval<int> ( 0,-1));
+        
+        TrigIter2D pixel(vertices[0], vertices[ti], vertices[ti + 1]);
         while (pixel()) {
-          Interval row(pixel.x0(), pixel.x1());
+          Interval<int> row(pixel.x0(), pixel.x1());
           int y = pixel.y();
-
+          if (y < ymin) {
+            //should never happen.
+            y = ymin;
+          }
+          size_t yIdx = size_t(y - ymin);
+          if (slice.rows[yIdx].IsEmpty()) {
+            slice.rows[yIdx]=row;
+          }
+          else {
+            slice.rows[yIdx].Expand(row);
+          }
           ++pixel;
         }
+        size_t zIdx = size_t(k - boxKMin);
+        voxels.slices[zIdx].Expand(slice);
       }
     }
   }

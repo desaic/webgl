@@ -26,10 +26,7 @@ protected:
   state_type m_state;
 
   int m_start_x;     // Screen coordinates
-  int m_start_y;
   int m_end_x;
-  int m_end_y;
-  int m_x0, m_x1;
   int m_current_y;
 
 protected:
@@ -229,11 +226,7 @@ public:
 	this->m_state = iter.m_state;
 
 	this->m_start_x   = iter.m_start_x;
-	this->m_start_y   = iter.m_start_y;
 	this->m_end_x    = iter.m_end_x;
-	this->m_end_y    = iter.m_end_y;
-	this->m_x0 = iter.m_x0;
-	this->m_x1 = iter.m_x1;
 	this->m_current_y = iter.m_current_y;
 
 	return *this;

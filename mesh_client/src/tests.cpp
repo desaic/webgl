@@ -123,7 +123,7 @@ void TestTrigIter() {
     int x1 = trigIter.x1();
     int y = trigIter.y();
     std::cout << "([" << x0 << ", " << x1 << "], " << y << ") ";
-    for (int x = x0; x <= x1; x++) {
+    for (int x = x0; x < x1; x++) {
       img(x - origin[0], y - origin[1]) = 1;
     }
     
@@ -140,8 +140,6 @@ void TestTrigIter() {
   std::cout << "\n";
 }
 
-
-
 void TestTetSlicer()
 {
   std::cout << int(-3.7)<<"\n";
@@ -157,6 +155,65 @@ void TestTetSlicer()
   SparseVoxel<int> voxels;
   OBBSlicer slicer;
   slicer.Compute(box, voxels);
+  std::cout << "zmin " << voxels.zmin;
+  int zmax = voxels.zmin + voxels.slices.size();
+  int ymin = 0, ymax = -1;
+  int xmin = 0, xmax = -1;
+  for (size_t z = 0; z < voxels.slices.size(); z++) {
+    const SparseSlice<int>& slice = voxels.slices[z];
+    //skip empty slices.
+    if (slice.IsEmpty() ) {
+      continue;
+    }
+    //uninitialized
+    if (ymax < ymin) {
+      ymin = slice.ymin;
+      ymax = slice.ymin + int(slice.rows.size());
+    }
+    else {
+      ymin = std::min(ymin, slice.ymin);
+      ymax = std::max(ymax, slice.ymin + int(slice.rows.size()));
+    }
+
+    for (size_t y = 0; y < slice.rows.size(); y++) {
+      if (slice.rows[y].IsEmpty()) {
+        continue;
+      }
+      //uninitialized
+      if (xmax < xmin) {
+        xmin = slice.rows[y].lb;
+        xmax = slice.rows[y].ub;
+      }
+      else {
+        xmin = std::min(xmin, slice.rows[y].lb);
+        xmax = std::max(xmax, slice.rows[y].ub);
+      }
+    }
+  }
+  std::cout << "x range " << xmin << ", " << xmax << "\n";
+  std::cout << "y range " << ymin << ", " << ymax << "\n";
+  std::cout << "z range " << voxels.zmin << ", " << zmax << "\n";
+  Array2D<uint8_t> img(xmax - xmin, ymax - ymin);
+  for (size_t z = 0; z < voxels.slices.size(); z++) {
+    img.Fill(0); 
+    const SparseSlice<int>& slice = voxels.slices[z];
+    for (size_t y = 0; y < slice.rows.size(); y++) {
+      int row = int(y) + slice.ymin - ymin;
+      Interval<int> xrange = slice.rows[y];
+      for (int x = xrange.lb; x < xrange.ub; x++) {
+        int col = x - xmin;
+        img(col, row) = 1;
+      }
+    }
+
+    for (size_t row = 0; row < img.GetSize()[1]; row++) {
+      for (size_t col = 0; col < img.GetSize()[0]; col++) {
+        std::cout << int(img(col, row)) << " ";
+      }
+      std::cout << "\n";
+    }
+    std::cout << "\n";
+  }
 }
 
 void TestCPT(TrayClient* client)
