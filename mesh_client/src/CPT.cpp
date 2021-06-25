@@ -6,6 +6,7 @@
 #include "PointTrigDist.h"
 #include "Timer.hpp"
 #include "BBox.h"
+#include "OBBSlicer.h"
 #include <algorithm>
 #include <functional>
 #include <numeric>
@@ -280,6 +281,14 @@ void VoxelizeOBB() {
 
 }
 
+void ScaleOBB(float scale, OBBox& obb)
+{
+  obb.origin *= scale;
+  obb.axes[0] *= scale;
+  obb.axes[1] *= scale;
+  obb.axes[2] *= scale;
+}
+
 void Voxelize(size_t tidx, SDFMesh* sdf)
 {
   BBoxInt box;
@@ -290,28 +299,33 @@ void Voxelize(size_t tidx, SDFMesh* sdf)
   const unsigned dim = 3;
   bbox(trig, box, sdf->voxelSize);
 
-  //ComputeOBB(trig, obb, sdf->exactBand);
-  //TestOBB(trig, obb);
+  ComputeOBB(trig, obb, sdf->exactBand);
   const Vec3u& gridSize = sdf->idxGrid.GetSize();
-  for (unsigned d = 0; d < dim; d++) {
-    if (box.mn[d] > 0) {
-      box.mn[d] -= 1;
-    }
-    if (box.mx[d] < int(gridSize[d]) - 1) {
-      box.mx[d] += 1;
-    }
-  }
-  const unsigned zAxis = 2;
+  float voxelSize = sdf->voxelSize;
+  ScaleOBB(1.0 / voxelSize, obb);
+
+  SparseVoxel<int> voxels;
+  OBBSlicer slicer;
+  slicer.Compute(obb, voxels);
   TreePointer ptr(&sdf->idxGrid);
-  TreePointer sdfPtr(&(sdf->sdf));
-  for (int ix = box.mn[0]; ix <= (box.mx[0]); ix++) {
-    for (int iy = box.mn[1]; iy <= (box.mx[1]); iy++) {
-      for (int iz = box.mn[2]; iz <= (box.mx[2]); iz++) {
-        Vec3i gi(ix, iy, iz);
-        if (trigCubeIntersect(trig.data(), gi, sdf->voxelSize)) {
-          AddTrigToVoxel(tidx, ix, iy, iz, &ptr, sdf);
-        }
-        ptr.Increment(zAxis);
+  for (size_t k = 0; k < voxels.slices.size(); k++) {
+    const SparseSlice<int>& slice = voxels.slices[k];
+    if (slice.IsEmpty()) {
+      continue;
+    }
+    int kGlobal = k + voxels.zmin;
+    float z = (k + voxels.zmin) * voxelSize;
+    for (size_t j = 0; j < slice.rows.size(); j++) {
+      const Interval<int>& interval = slice.rows[j];
+      if (interval.IsEmpty()) {
+        continue;
+      }
+      int jGlobal = j + slice.ymin;
+      float y = (j + slice.ymin) * voxelSize;
+      for (int i = interval.lb; i < interval.ub; i++) {
+        float x = i * voxelSize;
+        ptr.PointTo(i, jGlobal, kGlobal);          
+        AddTrigToVoxel(tidx, i, jGlobal, kGlobal, &ptr, sdf);
       }
     }
   }
