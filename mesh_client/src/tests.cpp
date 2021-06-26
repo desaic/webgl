@@ -231,7 +231,7 @@ void TestCPT(TrayClient* client)
   const float voxelSize = 0.25;
   sdf.voxelSize = voxelSize;
   cpt(sdf);
-  FastMarch(sdf);
+ // FastMarch(sdf);
   Vec3u gridSize = sdf.idxGrid.GetSize();
   for (int z = 0; z < 50; z++) {
     if (z >= gridSize[2]) {
@@ -257,7 +257,7 @@ void TestCPT(TrayClient* client)
   }
 
   TrigMesh mesh;
-  MarchingCubes(sdf, 0.5, &mesh);
+  MarchingCubes(sdf, 1, &mesh);
   meshes.push_back(mesh);
   client->SendMeshes();
   

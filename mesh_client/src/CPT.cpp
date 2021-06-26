@@ -171,21 +171,22 @@ void ExactDistance(SDFMesh* sdf)
         size_t trigIdx = trigs[minT];
 
         //need to check neighboring cells
-        if (minInfo.sqrDist >= 0.25) {
-          std::vector<size_t> nbrTrigs;
-          GetNeighborTrigs(nbrTrigs, sdf, x, y, z, ptr);
-          if (nbrTrigs.size() > 0) {
-            TrigDistInfo nbrInfo;
-            unsigned nbrMinT = closestTrig(nbrTrigs, sdf, x, y, z, nbrInfo);
-            if (nbrInfo.sqrDist < minInfo.sqrDist) {
-              trigIdx = nbrTrigs[nbrMinT];
-              minInfo = nbrInfo;
-            }
-          }
-        }
+        //if (minInfo.sqrDist >= 0.25) {
+        //  std::vector<size_t> nbrTrigs;
+        //  GetNeighborTrigs(nbrTrigs, sdf, x, y, z, ptr);
+        //  if (nbrTrigs.size() > 0) {
+        //    TrigDistInfo nbrInfo;
+        //    unsigned nbrMinT = closestTrig(nbrTrigs, sdf, x, y, z, nbrInfo);
+        //    if (nbrInfo.sqrDist < minInfo.sqrDist) {
+        //      trigIdx = nbrTrigs[nbrMinT];
+        //      minInfo = nbrInfo;
+        //    }
+        //  }
+        //}
 
         float dist = std::sqrt(minInfo.sqrDist);
         dist /= h;
+        dist = trigs[0] * 0.25f;
         distPtr.PointTo(x, y, z);
         distPtr.CreatePath();
 
@@ -258,12 +259,8 @@ void TestOBB(std::vector<float> & trig, OBBox & obb)
   std::cout << to_string(obb.axes[2]) << "\n";
 }
 
-void AddTrigToVoxel(size_t tidx, int ix, int iy, int iz, 
-  TreePointer * ptr, SDFMesh * sdf)
+void AddTrigToVoxel(size_t tidx, TreePointer * ptr, SDFMesh * sdf)
 {
-  Vec3i gi(ix, iy, iz);
-  
-  ptr->PointTo(ix, iy, iz);
   ptr->CreatePath();
   size_t listIdx = 0;
   if (ptr->HasValue()) {
@@ -275,10 +272,6 @@ void AddTrigToVoxel(size_t tidx, int ix, int iy, int iz,
     sdf->trigList.push_back(std::vector<size_t>());
   }
   sdf->trigList[listIdx].push_back(tidx);  
-}
-
-void VoxelizeOBB() {
-
 }
 
 void ScaleOBB(float scale, OBBox& obb)
@@ -313,19 +306,28 @@ void Voxelize(size_t tidx, SDFMesh* sdf)
     if (slice.IsEmpty()) {
       continue;
     }
-    int kGlobal = k + voxels.zmin;
-    float z = (k + voxels.zmin) * voxelSize;
+    int kGlobal = int(k) + voxels.zmin;
+    if (kGlobal < 0 || kGlobal >= gridSize[2]) {
+      continue;
+    }
     for (size_t j = 0; j < slice.rows.size(); j++) {
+      int jGlobal = int(j) + slice.ymin;
+      if (jGlobal < 0 || jGlobal >= gridSize[1]) {
+        continue;
+      }
       const Interval<int>& interval = slice.rows[j];
       if (interval.IsEmpty()) {
         continue;
       }
-      int jGlobal = j + slice.ymin;
-      float y = (j + slice.ymin) * voxelSize;
-      for (int i = interval.lb; i < interval.ub; i++) {
-        float x = i * voxelSize;
-        ptr.PointTo(i, jGlobal, kGlobal);          
-        AddTrigToVoxel(tidx, i, jGlobal, kGlobal, &ptr, sdf);
+      int lb = interval.lb;
+      if (lb < 0) { lb = 0; }
+      int ub = interval.ub;
+      if (ub > gridSize[0]) {
+        ub = gridSize[0];
+      }
+      for (int i = lb; i < interval.ub; i++) {
+        ptr.PointTo(i, jGlobal, kGlobal);
+        AddTrigToVoxel(tidx, &ptr, sdf);
       }
     }
   }
