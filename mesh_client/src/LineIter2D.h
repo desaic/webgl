@@ -17,11 +17,11 @@ bool m_valid;
 
 // An RigdeIterator might have more than one edge. We have hardwired this implementation to have atmost two edges.
 bool      m_has_multiple_edges;
-Vec2f m_next_vertex;
+Vec2i m_next_vertex;
 
 // Local variables concerned with the vertices
-Vec2f m_start_vertex;
-Vec2f m_end_vertex;
+Vec2i m_start_vertex;
+Vec2i m_end_vertex;
 
 int m_start_x;
 int m_start_y;
@@ -58,8 +58,8 @@ virtual ~LineIter2D(){}
 public:
 
   LineIter2D(
-  Vec2f const & v1
-  , Vec2f const & v2
+  Vec2i const & v1
+  , Vec2i const & v2
   )
   : m_has_multiple_edges(false)
 {
@@ -67,9 +67,9 @@ public:
 }
 
   LineIter2D(
-  Vec2f const & v1
-  , Vec2f const & v2
-  , Vec2f const & v3
+  Vec2i const & v1
+  , Vec2i const & v2
+  , Vec2i const & v3
   )
   : m_has_multiple_edges(true)
   , m_next_vertex(v3)
@@ -116,24 +116,21 @@ bool operator++()
 
 protected:
 
-void initialize(Vec2f const & v1, Vec2f const & v2)
+void initialize(Vec2i const & v1, Vec2i const & v2)
 {
   this->m_valid = true;
-
-  Vec2f V1(std::round(v1[0]), std::round(v1[1]));
-  Vec2f V2(std::round(v2[0]), std::round(v2[1]));
 
   // We scan-convert from low y-values to high y-values
   // Interchange the end points if necessary.
   // That secures that Dy is always positive.
-  if (V1[1] <= V2[1]) {
-	  this->m_start_vertex   = V1;
-	  this->m_end_vertex     = V2;
+  if (v1[1] <= v2[1]) {
+	  this->m_start_vertex   = v1;
+	  this->m_end_vertex     = v2;
   }else{
-	  this->m_start_vertex   = V2;
-	  this->m_end_vertex     = V1;
+	  this->m_start_vertex   = v2;
+	  this->m_end_vertex     = v1;
   }
-  if (V1[1] == V2[1]) {
+  if (v1[1] == v2[1]) {
   	// Horizontal edge_type, throw it away, because we draw triangles/polygons - not edges.
 	  // Horizontal Edges in triangles/polygons are thrown away, because the left and right 
 	  // edges will handle Xstart and Xstop. See Foley.

@@ -3,10 +3,12 @@
 #include "Vec2.h"
 #include "LineIter2D.h"
 
+int obb_round(float f);
+
 class TrigIter2D 
 {
 protected:
-  Vec2f m_vertex[3];     ///< The 3D Transformed vertices
+  Vec2i m_vertex[3];     ///< The 3D Transformed vertices
 
   int m_lower_left_idx;
   int m_upper_left_idx;
@@ -90,8 +92,8 @@ protected:
 	// Let u be the vector from 'lowerleft' to 'upperleft', and let v be the vector
 	// from 'lowerleft' to 'theother'. If the cross product u x v is positive then
 	// the point 'theother' is to the left of u.
-	Vec2f u = this->m_vertex[this->m_upper_left_idx] - this->m_vertex[this->m_lower_left_idx];
-	Vec2f v = this->m_vertex[this->m_the_other_idx]  - this->m_vertex[this->m_lower_left_idx];
+	Vec2i u = this->m_vertex[this->m_upper_left_idx] - this->m_vertex[this->m_lower_left_idx];
+	Vec2i v = this->m_vertex[this->m_the_other_idx]  - this->m_vertex[this->m_lower_left_idx];
 
 	real_type cross_product = u[0] * v[1] - u[1] * v[0];
 
@@ -119,8 +121,8 @@ protected:
 	// from 'lowerleft' to 'theother'. If the cross product u x v is negative then
 	// the point 'theother' is to the right of u.
 
-	Vec2f u = this->m_vertex[this->m_upper_left_idx] - this->m_vertex[this->m_lower_left_idx];
-	Vec2f v = this->m_vertex[this->m_the_other_idx]  - this->m_vertex[this->m_lower_left_idx];
+	Vec2i u = this->m_vertex[this->m_upper_left_idx] - this->m_vertex[this->m_lower_left_idx];
+	Vec2i v = this->m_vertex[this->m_the_other_idx]  - this->m_vertex[this->m_lower_left_idx];
 
 	real_type cross_product = u[0] * v[1] - u[1] * v[0];
 
@@ -287,9 +289,9 @@ public:
 	, Vec2f const & v3
 	)
   {
-	this->m_vertex[0] = Vec2f(std::round(v1[0]), std::round(v1[1]));
-	this->m_vertex[1] = Vec2f(std::round(v2[0]), std::round(v2[1]));
-	this->m_vertex[2] = Vec2f(std::round(v3[0]), std::round(v3[1]));
+	this->m_vertex[0] = Vec2i(obb_round(v1[0]), obb_round(v1[1]));
+	this->m_vertex[1] = Vec2i(obb_round(v2[0]), obb_round(v2[1]));
+	this->m_vertex[2] = Vec2i(obb_round(v3[0]), obb_round(v3[1]));
 
 	this->m_lower_left_idx = this->find_lower_left_vertex_index();
 	this->m_upper_left_idx = this->find_upper_left_vertex_index();
@@ -310,7 +312,6 @@ public:
 	this->m_state = find_nonempty_scanline_state;
 	this->find_nonempty_scanline();
   }
-
 };
 
 #endif

@@ -2,6 +2,19 @@
 #include "TetSlicer.h"
 #include "TrigIter2D.h"
 
+int obb_ceil(float f){
+  int i = int(f);
+  if (i == f) {
+    return i;
+  }
+  if (f < 0) {
+    return i;
+  }
+  else {
+    return i + 1;
+  }
+}
+
 void OBBSlicer::Compute(OBBox& obb, SparseVoxel<int>& voxels)
 {
   // For each OBB, the 8 corners are numerated as:
@@ -34,7 +47,7 @@ void OBBSlicer::Compute(OBBox& obb, SparseVoxel<int>& voxels)
     boxZMin = std::min(c[i][2], boxZMin);
     boxZMax = std::max(c[i][2], boxZMax);
   }
-  int boxKMin = std::ceil(boxZMin);
+  int boxKMin = obb_ceil(boxZMin);
   int boxKMax = int(boxZMax);
   const unsigned NUM_TETS = 5;
   const unsigned TET_VERTS = 4;
@@ -48,7 +61,7 @@ void OBBSlicer::Compute(OBBox& obb, SparseVoxel<int>& voxels)
       zmax = std::max(zmax, tets[n][i][2]);
     }
     //integer values of z min and max
-    int k_min = std::ceil(zmin);
+    int k_min = obb_ceil(zmin);
     int k_max = int(zmax);
     for (int k = k_min; k <= k_max; k++) {
       Vec2f vertices[4];
@@ -68,8 +81,8 @@ void OBBSlicer::Compute(OBBox& obb, SparseVoxel<int>& voxels)
           fymax = vertices[vi][1];
         }
       }
-      int ymin = std::round(fymin);
-      int ymax = int(fymax);
+      int ymin = obb_round(fymin);
+      int ymax = int(0.5 + fymax);
 
       for (int ti = 1; ti <= numTrigs; ++ti) {
         SparseSlice<int> slice;
@@ -97,5 +110,15 @@ void OBBSlicer::Compute(OBBox& obb, SparseVoxel<int>& voxels)
         voxels.slices[zIdx].Expand(slice);
       }
     }
+  }
+}
+
+int obb_round(float f)
+{
+  if (f >= 0) {
+    return int(f + 0.5f);
+  }
+  else {
+    return int(f - 0.5f);
   }
 }

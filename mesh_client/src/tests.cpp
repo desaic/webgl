@@ -216,6 +216,31 @@ void TestTetSlicer()
   }
 }
 
+void TestCeil() {
+  std::cout << obb_ceil(0) << " ";
+  std::cout << obb_ceil(1) << " ";
+  std::cout << obb_ceil(-2) << " ";
+  std::cout << obb_ceil(3.1) << " ";
+  std::cout << obb_ceil(-4.1) << " ";
+  std::cout << obb_ceil(5.49999) << " ";
+  std::cout << obb_ceil(-6.49999) << " ";
+  std::cout << obb_ceil(7.500001) << " ";
+  std::cout << obb_ceil(-8.500001) << " ";
+}
+
+void TestRound() {
+  std::cout << obb_round(0) << " ";
+  std::cout << obb_round(1) << " ";
+  std::cout << obb_round(-2) << " ";
+  std::cout << obb_round(3.1) << " ";
+  std::cout << obb_round(-4.1) << " ";
+  std::cout << obb_round(5.49999) << " ";
+  std::cout << obb_round(-6.49999) << " ";
+  std::cout << obb_round(7.500001) << " ";
+  std::cout << obb_round(-8.500001) << " ";
+}
+
+
 void TestCPT(TrayClient* client)
 {
   SDFMesh sdf;
@@ -228,10 +253,10 @@ void TestCPT(TrayClient* client)
   sdf.mesh = &meshes[0];
   sdf.band = 5;
   //mm
-  const float voxelSize = 0.25;
+  const float voxelSize = 0.1;
   sdf.voxelSize = voxelSize;
   cpt(sdf);
-  FastMarch(sdf);
+  //FastMarch(sdf);
   Vec3u gridSize = sdf.idxGrid.GetSize();
   for (int z = 0; z < 50; z++) {
     if (z >= gridSize[2]) {
@@ -257,7 +282,7 @@ void TestCPT(TrayClient* client)
   }
 
   TrigMesh mesh;
-  MarchingCubes(sdf, 0, &mesh);
+  MarchingCubes(sdf, 1, &mesh);
   meshes.push_back(mesh);
   client->SendMeshes();
   

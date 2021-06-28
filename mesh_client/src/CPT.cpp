@@ -21,8 +21,8 @@ void Voxelize(size_t tidx, SDFMesh* sdf);
 ///voxel center and triangle distance.
 /// voxel centers are defined on integer coordinates
 /// e.g. (0,0)
-void ExactDistance(SDFMesh* sdf);
-
+void ExactDistance(SDFMesh* sdf, std::vector<unsigned>& minTIdx);
+void ExactDistanceBruteForce(SDFMesh* sdf, std::vector<unsigned>& minTIdx);
 bool trigCubeIntersect(float* verts, Vec3i& cube, float voxSize);
 
 void bbox(const std::vector<float>& verts, BBoxInt& box,
@@ -37,8 +37,8 @@ int cpt(SDFMesh& sdf)
   Vec3u gridSize;
   float h = sdf.voxelSize;
   
-  //distance values are computed at center of cells.
-  float margin = h * (0.5 + sdf.band);
+  //distance values are computed at integer coordinates.
+  float margin = h * (sdf.band);
 
   for (unsigned i = 0; i < 3; i++) {
     gridSize[i] = (box.mx[i] - box.mn[i] + 2 * margin) / h;
@@ -67,7 +67,9 @@ int cpt(SDFMesh& sdf)
 
   timer.start();
 
-  ExactDistance(&sdf);
+  std::vector<unsigned> minTIdx;
+  ExactDistanceBruteForce(&sdf, minTIdx);
+  ExactDistance(&sdf, minTIdx);
 
   timer.end();
   seconds = timer.getSeconds();
@@ -94,14 +96,13 @@ unsigned closestTrig(const std::vector<size_t>& trigs,
   TrigDistInfo& minInfo)
 {
   float h = sdf->voxelSize;
-  Vec3f center = sdf->gridOrigin + h * Vec3f(x, y, z);
+  Vec3f corner = sdf->gridOrigin + h * Vec3f(x, y, z);
   std::vector<float> trig;
   unsigned minT = 0;
   for (size_t t = 0; t < trigs.size(); t++) {
     size_t tidx = trigs[t];
     GetTrig(trig, tidx, sdf->mesh, Vec3f(0, 0, 0));
-    Vec3f bary;
-    TrigDistInfo info = PointTrigDist(center, trig.data());
+    TrigDistInfo info = PointTrigDist(corner, trig.data());
     if (t == 0 || info.sqrDist < minInfo.sqrDist) {
       minT = t;
       minInfo = info;
@@ -142,8 +143,55 @@ void GetNeighborTrigs(std::vector<size_t>& trigs,
   std::vector<size_t> v(trigSet.begin(), trigSet.end());
 }
 
-void ExactDistance(SDFMesh* sdf)
+void ExactDistanceBruteForce(SDFMesh* sdf, std::vector<unsigned> & minTIdx)
 {
+  Vec3u size = sdf->sdf.GetSize();
+  size_t numVoxels = size[0] * size[1] * size_t( size[2]);
+  const size_t MAX_NUM_VOX = 10000000;
+  if (numVoxels < MAX_NUM_VOX) {
+    minTIdx.resize(numVoxels, 0);
+  }
+  ///\TODO use iterator instead of going through all voxels.
+  Vec3u gridSize = sdf->idxGrid.GetSize();
+  TreePointer ptr(&(sdf->idxGrid));
+  TreePointer distPtr(&(sdf->sdf));
+  const int ZAxis = 2;
+  float h = sdf->voxelSize;
+  for (size_t x = 0; x < gridSize[0]; x++) {
+    for (size_t y = 0; y < gridSize[1]; y++) {
+      ptr.PointTo(x, y, 0);
+      for (size_t z = 0; z < gridSize[2]; z++) {
+        std::vector<size_t> trigs(sdf->mesh->t.size() / 3);
+        for (size_t i = 0; i < trigs.size(); i++) {
+          trigs[i] = i;
+        }
+        if (trigs.size() == 0) {
+          //should never happen.
+          continue;
+        }
+        TrigDistInfo minInfo;
+        unsigned minT = closestTrig(trigs, sdf, x, y, z, minInfo);
+
+        size_t linIdx = x + size[0] * (size_t(y) + z * size[1]);
+        if (minTIdx.size() > linIdx) {
+          minTIdx[linIdx] = minT;
+        }
+
+        float dist = std::sqrt(minInfo.sqrDist);
+        dist /= h;
+        distPtr.PointTo(x, y, z);
+        distPtr.CreatePath();
+
+        AddVoxelValue(distPtr, dist);
+        ptr.Increment(ZAxis);
+      }
+    }
+  }
+}
+
+void ExactDistance(SDFMesh* sdf, std::vector<unsigned>& minTIdx)
+{
+  Vec3u size = sdf->sdf.GetSize();
   ///\TODO use iterator instead of going through all voxels.
   Vec3u gridSize = sdf->idxGrid.GetSize();
   TreePointer ptr(&(sdf->idxGrid));
@@ -171,23 +219,25 @@ void ExactDistance(SDFMesh* sdf)
         unsigned minT = closestTrig(trigs, sdf, x, y, z, minInfo);
         size_t trigIdx = trigs[minT];
 
-        //need to check neighboring cells
-        //if (minInfo.sqrDist >= 0.25) {
-        //  std::vector<size_t> nbrTrigs;
-        //  GetNeighborTrigs(nbrTrigs, sdf, x, y, z, ptr);
-        //  if (nbrTrigs.size() > 0) {
-        //    TrigDistInfo nbrInfo;
-        //    unsigned nbrMinT = closestTrig(nbrTrigs, sdf, x, y, z, nbrInfo);
-        //    if (nbrInfo.sqrDist < minInfo.sqrDist) {
-        //      trigIdx = nbrTrigs[nbrMinT];
-        //      minInfo = nbrInfo;
-        //    }
-        //  }
-        //}
-
         float dist = std::sqrt(minInfo.sqrDist);
         dist /= h;
-        //dist = trigs[0] * 0.25f;
+        if (dist > sdf->exactBand) {
+          ptr.Increment(ZAxis);
+          continue;
+        }
+
+        if (minTIdx.size() > 0) {
+          size_t linIdx = x + size[0] * (size_t(y) + z * size[1]);
+          unsigned actualMinT = minTIdx[linIdx];
+          std::vector<float> trig;
+          GetTrig(trig, actualMinT, sdf->mesh, Vec3f(0, 0, 0));
+          Vec3f corner = sdf->gridOrigin + h * Vec3f(x, y, z);
+          TrigDistInfo refInfo = PointTrigDist(corner, trig.data());
+          if (actualMinT != trigIdx && std::abs(refInfo.sqrDist - minInfo.sqrDist) > 0.001f) {
+            std::cout << x << " " << y << " " << z << " " << trigIdx << " " << actualMinT << "\n";
+          }
+        }
+
         distPtr.PointTo(x, y, z);
         distPtr.CreatePath();
 
@@ -296,12 +346,18 @@ void Voxelize(size_t tidx, SDFMesh* sdf)
 {
   BBoxInt box;
   OBBox obb;
-
+  if (tidx % 10000 == 0) {
+    float progress = (100.0f * tidx) / (sdf->mesh->t.size() / 3);
+    std::cout << "voxelized " << tidx << "/" << (sdf->mesh->t.size() / 3) << " = " << progress << "%\n";
+  }
+  std::vector<Vec3f> points;
   std::vector<float> trig;
   GetTrig(trig, tidx, sdf->mesh, sdf->gridOrigin);
   const unsigned dim = 3;
   bbox(trig, box, sdf->voxelSize);
-
+  if (tidx == 11) {
+    std::cout << "debug\n";
+  }
   ComputeOBB(trig, obb, sdf->exactBand * sdf->voxelSize);
   const Vec3u& gridSize = sdf->idxGrid.GetSize();
   float voxelSize = sdf->voxelSize;
@@ -339,9 +395,13 @@ void Voxelize(size_t tidx, SDFMesh* sdf)
       for (int i = lb; i < ub; i++) {
         ptr.PointTo(i, jGlobal, kGlobal);
         AddTrigToVoxel(tidx, &ptr, sdf);
+        Vec3f pt(i, jGlobal, kGlobal);
+        points.push_back(pt);
       }
     }
   }
+  std::string filename = "t" + std::to_string(tidx) + ".obj";
+  SavePointsToObj(filename, points);
 }
 
 bool trigCubeIntersect(float* verts, Vec3i& cube, float voxSize)

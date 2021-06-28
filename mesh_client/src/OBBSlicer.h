@@ -67,7 +67,7 @@ struct SparseSlice{
     rowOffset = size_t(s1.ymin - ymin);
     for (size_t row = 0; row < s1.rows.size(); row++) {
       Interval<T> i0 = newRows[row + rowOffset];
-      if (i0.ub < i0.lb) {
+      if (i0.IsEmpty()) {
         newRows[row + rowOffset] = s1.rows[row];
       }
       else {
@@ -97,5 +97,5 @@ public:
 
 };
 
-
+int obb_ceil(float f);
 #endif

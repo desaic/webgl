@@ -34,6 +34,7 @@ std::string to_string(const Vec2<T> & v)
 }
 
 typedef Vec2<float> Vec2f;
+typedef Vec2<int> Vec2i;
 typedef Vec2<double> Vec2d;
 typedef Vec2<unsigned> Vec2u;
 typedef Vec2<unsigned long long> Vec2ul;
