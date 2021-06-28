@@ -9,7 +9,7 @@ class TrigMesh;
 struct SDFMesh
 {
   SDFMesh() : voxelSize(0.25f), 
-exactBand(1), band(3), initialized(false) 
+exactBand(2), band(3), initialized(false) 
   {}
 
   /// get distance from nearest neighbor vertex.

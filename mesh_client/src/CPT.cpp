@@ -8,6 +8,7 @@
 #include "BBox.h"
 #include "OBBSlicer.h"
 #include <algorithm>
+#include <fstream>
 #include <functional>
 #include <numeric>
 #include <set>
@@ -186,7 +187,7 @@ void ExactDistance(SDFMesh* sdf)
 
         float dist = std::sqrt(minInfo.sqrDist);
         dist /= h;
-        dist = trigs[0] * 0.25f;
+        //dist = trigs[0] * 0.25f;
         distPtr.PointTo(x, y, z);
         distPtr.CreatePath();
 
@@ -282,6 +283,15 @@ void ScaleOBB(float scale, OBBox& obb)
   obb.axes[2] *= scale;
 }
 
+void SavePointsToObj(const std::string & filename, const std::vector<Vec3f> & points)
+{
+  std::ofstream out(filename);
+  for (size_t i = 0; i < points.size(); i++) {
+    out << "v " << points[i][0] << " " << points[i][1] << " " << points[i][2] << "\n";
+  }
+  out.close();
+}
+
 void Voxelize(size_t tidx, SDFMesh* sdf)
 {
   BBoxInt box;
@@ -292,7 +302,7 @@ void Voxelize(size_t tidx, SDFMesh* sdf)
   const unsigned dim = 3;
   bbox(trig, box, sdf->voxelSize);
 
-  ComputeOBB(trig, obb, sdf->exactBand);
+  ComputeOBB(trig, obb, sdf->exactBand * sdf->voxelSize);
   const Vec3u& gridSize = sdf->idxGrid.GetSize();
   float voxelSize = sdf->voxelSize;
   ScaleOBB(1.0 / voxelSize, obb);
@@ -301,6 +311,7 @@ void Voxelize(size_t tidx, SDFMesh* sdf)
   OBBSlicer slicer;
   slicer.Compute(obb, voxels);
   TreePointer ptr(&sdf->idxGrid);
+
   for (size_t k = 0; k < voxels.slices.size(); k++) {
     const SparseSlice<int>& slice = voxels.slices[k];
     if (slice.IsEmpty()) {
@@ -325,7 +336,7 @@ void Voxelize(size_t tidx, SDFMesh* sdf)
       if (ub > gridSize[0]) {
         ub = gridSize[0];
       }
-      for (int i = lb; i < interval.ub; i++) {
+      for (int i = lb; i < ub; i++) {
         ptr.PointTo(i, jGlobal, kGlobal);
         AddTrigToVoxel(tidx, &ptr, sdf);
       }

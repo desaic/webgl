@@ -44,7 +44,7 @@ void LoadTestScene(TrayClient & client)
   
   TrigMesh mesh;
   ///\todo change to config instead of hardcoded.
-  std::string meshFile = "F:/dolphin/meshes/tiltedSlab.stl";
+  std::string meshFile = "F:/dolphin/meshes/Falcon1.stl";
   int status = mesh.LoadStl(meshFile);
   int meshId = scene.AddMesh(mesh);
   Vec3f rot(0, 0, 0);
