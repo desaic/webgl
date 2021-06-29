@@ -46,6 +46,10 @@ void LoadTestScene(TrayClient & client)
   ///\todo change to config instead of hardcoded.
   std::string meshFile = "F:/dolphin/meshes/Eiffel.stl";
   int status = mesh.LoadStl(meshFile);
+  if (status < 0) {
+    std::cout << "can't find file " << meshFile << "\n";
+    return;
+  }
   int meshId = scene.AddMesh(mesh);
   Vec3f rot(0, 0, 0);
   Vec3f initPos(0, 0, 10);
@@ -62,6 +66,8 @@ int main(){
   LoadTestScene(client);
   client.SetHost("localhost", port);
   client.RunTCPThread();
+  //test code. can remove
+  TestCPT(&client);
   CommandLoop(&client);
   client.Stop();
 
