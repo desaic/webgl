@@ -325,21 +325,12 @@ void AddTrigToVoxel(size_t tidx, TreePointer * ptr, SDFMesh * sdf)
   sdf->trigList[listIdx].push_back(tidx);  
 }
 
-void ScaleOBB(float scale, OBBox& obb)
+static void ScaleOBB(float scale, OBBox& obb)
 {
   obb.origin *= scale;
   obb.axes[0] *= scale;
   obb.axes[1] *= scale;
   obb.axes[2] *= scale;
-}
-
-void SavePointsToObj(const std::string & filename, const std::vector<Vec3f> & points)
-{
-  std::ofstream out(filename);
-  for (size_t i = 0; i < points.size(); i++) {
-    out << "v " << points[i][0] << " " << points[i][1] << " " << points[i][2] << "\n";
-  }
-  out.close();
 }
 
 void Voxelize(size_t tidx, SDFMesh* sdf)
@@ -350,14 +341,11 @@ void Voxelize(size_t tidx, SDFMesh* sdf)
     float progress = (100.0f * tidx) / (sdf->mesh->t.size() / 3);
     std::cout << "voxelized " << tidx << "/" << (sdf->mesh->t.size() / 3) << " = " << progress << "%\n";
   }
-  std::vector<Vec3f> points;
+
   std::vector<float> trig;
   GetTrig(trig, tidx, sdf->mesh, sdf->gridOrigin);
   const unsigned dim = 3;
   bbox(trig, box, sdf->voxelSize);
-  if (tidx == 11) {
-    std::cout << "debug\n";
-  }
   ComputeOBB(trig, obb, sdf->exactBand * sdf->voxelSize);
   const Vec3u& gridSize = sdf->idxGrid.GetSize();
   float voxelSize = sdf->voxelSize;
@@ -395,13 +383,9 @@ void Voxelize(size_t tidx, SDFMesh* sdf)
       for (int i = lb; i < ub; i++) {
         ptr.PointTo(i, jGlobal, kGlobal);
         AddTrigToVoxel(tidx, &ptr, sdf);
-        Vec3f pt(i, jGlobal, kGlobal);
-        points.push_back(pt);
       }
     }
   }
-  std::string filename = "t" + std::to_string(tidx) + ".obj";
-  SavePointsToObj(filename, points);
 }
 
 bool trigCubeIntersect(float* verts, Vec3i& cube, float voxSize)

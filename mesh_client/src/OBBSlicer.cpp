@@ -1,7 +1,7 @@
 #include "OBBSlicer.h"
 #include "TetSlicer.h"
 #include "TrigIter2D.h"
-
+#include <fstream>
 int obb_ceil(float f){
   int i = int(f);
   if (i == f) {
@@ -13,6 +13,14 @@ int obb_ceil(float f){
   else {
     return i + 1;
   }
+}
+static void SavePointsToObj(const std::string& filename, const std::vector<Vec3f>& points)
+{
+  std::ofstream out(filename);
+  for (size_t i = 0; i < points.size(); i++) {
+    out << "v " << points[i][0] << " " << points[i][1] << " " << points[i][2] << "\n";
+  }
+  out.close();
 }
 
 void OBBSlicer::Compute(OBBox& obb, SparseVoxel<int>& voxels)
@@ -40,10 +48,11 @@ void OBBSlicer::Compute(OBBox& obb, SparseVoxel<int>& voxels)
   Vec3f tets[5][4] = { {c[0], c[4], c[5], c[6]}, {c[0], c[5], c[1], c[3]}, 
     {c[6], c[2], c[3], c[0] }, {c[7], c[6], c[3], c[5]}, {c[6], c[5], c[0], c[3]} };
 
+
   float boxZMin = c[0][2];
   float boxZMax = c[0][2];
   const unsigned NUM_BOX_VERTS = 8;
-  for (unsigned i = 0; i < NUM_BOX_VERTS; i++) {
+  for (unsigned i = 1; i < NUM_BOX_VERTS; i++) {
     boxZMin = std::min(c[i][2], boxZMin);
     boxZMax = std::max(c[i][2], boxZMax);
   }
@@ -54,6 +63,8 @@ void OBBSlicer::Compute(OBBox& obb, SparseVoxel<int>& voxels)
   voxels.zmin = boxKMin;
   voxels.slices.resize( size_t(boxKMax - boxKMin + 1) );
   for (unsigned n = 0; n < NUM_TETS; n++) {
+  //unsigned n = 3;{
+  
     TetSlicer slicer(tets[n][0], tets[n][1], tets[n][2], tets[n][3]);
     float zmin = tets[n][0][2], zmax = tets[n][0][2];
     for (unsigned i = 1; i < TET_VERTS; i++) {
@@ -70,7 +81,7 @@ void OBBSlicer::Compute(OBBox& obb, SparseVoxel<int>& voxels)
       if (numVerts < 3) {
         continue;
       }
-      
+
       int numTrigs = (numVerts == 3) ? 1 : 2;
       float fymin=vertices[0][1], fymax=vertices[0][1];
       for (int vi = 1; vi < numVerts; vi++) {
@@ -82,7 +93,7 @@ void OBBSlicer::Compute(OBBox& obb, SparseVoxel<int>& voxels)
         }
       }
       int ymin = obb_round(fymin);
-      int ymax = int(0.5 + fymax);
+      int ymax = obb_ceil(fymax);
 
       for (int ti = 1; ti <= numTrigs; ++ti) {
         SparseSlice<int> slice;
@@ -111,6 +122,7 @@ void OBBSlicer::Compute(OBBox& obb, SparseVoxel<int>& voxels)
       }
     }
   }
+
 }
 
 int obb_round(float f)

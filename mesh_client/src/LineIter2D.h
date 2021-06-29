@@ -130,6 +130,7 @@ void initialize(Vec2i const & v1, Vec2i const & v2)
 	  this->m_start_vertex   = v2;
 	  this->m_end_vertex     = v1;
   }
+  this->m_end_vertex[1] ++;
   if (v1[1] == v2[1]) {
   	// Horizontal edge_type, throw it away, because we draw triangles/polygons - not edges.
 	  // Horizontal Edges in triangles/polygons are thrown away, because the left and right 

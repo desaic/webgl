@@ -13,6 +13,7 @@
 #include "TetSlicer.h"
 #include "OBBSlicer.h"
 #include <iostream>
+#include <fstream>
 
 void TestNumMeshes(TrayClient* client)
 {
@@ -240,9 +241,76 @@ void TestRound() {
   std::cout << obb_round(-8.500001) << " ";
 }
 
+static void SavePointsToObj(const std::string& filename, const std::vector<Vec3f>& points)
+{
+  std::ofstream out(filename);
+  for (size_t i = 0; i < points.size(); i++) {
+    out << "v " << points[i][0] << " " << points[i][1] << " " << points[i][2] << "\n";
+  }
+  out.close();
+}
+
+static void ScaleOBB(float scale, OBBox& obb)
+{
+  obb.origin *= scale;
+  obb.axes[0] *= scale;
+  obb.axes[1] *= scale;
+  obb.axes[2] *= scale;
+}
+
+void TestOBBSlicer()
+{
+  OBBox obb;
+  std::vector<float> trig = {0.5, 20.577, 1.547,
+      0.5, 20.473, 3.544,
+    20.5, 20.473, 3.544 };
+  ComputeOBB(trig, obb, 0.2f);
+  Vec3u gridSize(210,210,40);
+  float voxelSize = 0.1f;
+  ScaleOBB(1.0 / voxelSize, obb);
+
+  OBBSlicer slicer;
+  SparseVoxel<int> voxels;
+  slicer.Compute(obb, voxels);
+  std::vector<Vec3f> points;
+
+  for (size_t k = 0; k < voxels.slices.size(); k++) {
+    const SparseSlice<int>& slice = voxels.slices[k];
+    if (slice.IsEmpty()) {
+      continue;
+    }
+    int kGlobal = int(k) + voxels.zmin;
+    //if (kGlobal < 0 || kGlobal >= gridSize[2]) {
+    //  continue;
+    //}
+    for (size_t j = 0; j < slice.rows.size(); j++) {
+      int jGlobal = int(j) + slice.ymin;
+      //if (jGlobal < 0 || jGlobal >= gridSize[1]) {
+      //  continue;
+      //}
+      const Interval<int>& interval = slice.rows[j];
+      if (interval.IsEmpty()) {
+        continue;
+      }
+      int lb = interval.lb;
+      //if (lb < 0) { lb = 0; }
+      int ub = interval.ub;
+      //if (ub > gridSize[0]) {
+      //  ub = gridSize[0];
+      //}
+      for (int i = lb; i < ub; i++) {
+        Vec3f pt(i, jGlobal, kGlobal);
+        points.push_back(pt);
+      }
+    }
+  }
+  std::string filename = "debug_points.obj";
+  SavePointsToObj(filename, points);
+}
 
 void TestCPT(TrayClient* client)
 {
+  TestOBBSlicer();
   SDFMesh sdf;
   Scene& s = client->GetScene();
   std::vector<TrigMesh>& meshes = s.GetMeshes();
