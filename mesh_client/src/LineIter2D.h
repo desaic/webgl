@@ -6,7 +6,7 @@
 #define LINE_ITER_2D
 
 #include "Vec2.h"
-#include <cmath>
+#include <iostream>
 
 class LineIter2D
 {
@@ -160,7 +160,9 @@ void initialize(Vec2i const & v1, Vec2i const & v2)
 
   this->m_current_x = this->m_start_x;
   this->m_current_y = this->m_start_y;
-
+  if (this->m_current_y < -1000000000) {
+    std::cout << "debug LineInter2D.h line " << __LINE__ << "\n";
+  }
   this->m_valid = (this->m_start_y == this->m_end_y) ? false : true;
 }
 

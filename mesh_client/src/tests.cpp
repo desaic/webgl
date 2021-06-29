@@ -280,37 +280,37 @@ void TestOBBSlicer()
       continue;
     }
     int kGlobal = int(k) + voxels.zmin;
-    //if (kGlobal < 0 || kGlobal >= gridSize[2]) {
-    //  continue;
-    //}
+    if (kGlobal < 0 || kGlobal >= gridSize[2]) {
+      continue;
+    }
     for (size_t j = 0; j < slice.rows.size(); j++) {
       int jGlobal = int(j) + slice.ymin;
-      //if (jGlobal < 0 || jGlobal >= gridSize[1]) {
-      //  continue;
-      //}
+      if (jGlobal < 0 || jGlobal >= gridSize[1]) {
+        continue;
+      }
       const Interval<int>& interval = slice.rows[j];
       if (interval.IsEmpty()) {
         continue;
       }
       int lb = interval.lb;
-      //if (lb < 0) { lb = 0; }
+      if (lb < 0) { lb = 0; }
       int ub = interval.ub;
-      //if (ub > gridSize[0]) {
-      //  ub = gridSize[0];
-      //}
+      if (ub > gridSize[0]) {
+        ub = gridSize[0];
+      }
       for (int i = lb; i < ub; i++) {
         Vec3f pt(i, jGlobal, kGlobal);
         points.push_back(pt);
       }
     }
   }
-  std::string filename = "debug_points.obj";
-  SavePointsToObj(filename, points);
+  //std::string filename = "debug_points.obj";
+  //SavePointsToObj(filename, points);
 }
 
 void TestCPT(TrayClient* client)
 {
-  TestOBBSlicer();
+  //TestOBBSlicer();
   SDFMesh sdf;
   Scene& s = client->GetScene();
   std::vector<TrigMesh>& meshes = s.GetMeshes();
@@ -321,10 +321,10 @@ void TestCPT(TrayClient* client)
   sdf.mesh = &meshes[0];
   sdf.band = 5;
   //mm
-  const float voxelSize = 0.1;
+  const float voxelSize = 0.25;
   sdf.voxelSize = voxelSize;
   cpt(sdf);
-  //FastMarch(sdf);
+  FastMarch(sdf);
   Vec3u gridSize = sdf.idxGrid.GetSize();
   for (int z = 0; z < 50; z++) {
     if (z >= gridSize[2]) {

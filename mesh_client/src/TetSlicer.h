@@ -84,7 +84,7 @@ public:
   */
   unsigned int intersect(real_type const & z, Vec2f slice[4]) const
   {
-	if( z < m_p[0][2] || z > m_p[3][2])
+	if( z < m_p[0][2] || z >= m_p[3][2])
 	  return 0;
 	if( z<m_p[1][2])
 	{

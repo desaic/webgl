@@ -63,8 +63,6 @@ void OBBSlicer::Compute(OBBox& obb, SparseVoxel<int>& voxels)
   voxels.zmin = boxKMin;
   voxels.slices.resize( size_t(boxKMax - boxKMin + 1) );
   for (unsigned n = 0; n < NUM_TETS; n++) {
-  //unsigned n = 3;{
-  
     TetSlicer slicer(tets[n][0], tets[n][1], tets[n][2], tets[n][3]);
     float zmin = tets[n][0][2], zmax = tets[n][0][2];
     for (unsigned i = 1; i < TET_VERTS; i++) {
@@ -122,7 +120,6 @@ void OBBSlicer::Compute(OBBox& obb, SparseVoxel<int>& voxels)
       }
     }
   }
-
 }
 
 int obb_round(float f)

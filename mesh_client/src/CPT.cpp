@@ -68,7 +68,6 @@ int cpt(SDFMesh& sdf)
   timer.start();
 
   std::vector<unsigned> minTIdx;
-  ExactDistanceBruteForce(&sdf, minTIdx);
   ExactDistance(&sdf, minTIdx);
 
   timer.end();
@@ -350,7 +349,6 @@ void Voxelize(size_t tidx, SDFMesh* sdf)
   const Vec3u& gridSize = sdf->idxGrid.GetSize();
   float voxelSize = sdf->voxelSize;
   ScaleOBB(1.0 / voxelSize, obb);
-
   SparseVoxel<int> voxels;
   OBBSlicer slicer;
   slicer.Compute(obb, voxels);
