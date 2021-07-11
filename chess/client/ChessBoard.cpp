@@ -20,10 +20,12 @@
 #define g8 62
 #define h8 63
 
+#define BLACK_PAWN (1)
 #define BLACK_ROOK (2)
 #define BLACK_KNIGHT (3)
 #define BLACK_BISHOP (4)
 #define BLACK_QUEEN (5)
+#define WHITE_PAWN (9)
 #define WHITE_ROOK (10)
 #define WHITE_KNIGHT (11)
 #define WHITE_BISHOP (12)
@@ -1081,20 +1083,38 @@ void ChessBoard::Undo(const UndoMove& u)
       }
     }
   }
+  
   FlipTurn();
   MovePiece(u.m.dst, u.m.src);
+  
   if (isCastle) {
     //castling either direction is available again
     if (nextColor == PIECE_BLACK) {
       castleBQ = true;
       castleBK = true;
-      hasCastled[0] = false;
+      hasCastled[PIECE_BLACK] = false;
     }
     else {
       castleWQ = true;
       castleWK = true;
-      hasCastled[1] = false;
+      hasCastled[PIECE_WHITE] = false;
     }
+  }
+  else if (u.isEnPassant) {
+    hasEnPassant = true;
+    enPassantDst = u.m.dst;
+    ChessCoord captured = enPassantDst;
+    if (nextColor == PIECE_BLACK) {
+      captured.IncRow();
+      AddPiece(captured, WHITE_PAWN);
+    }
+    else {
+      captured.DecRow();
+      AddPiece(captured, BLACK_PAWN);
+    }
+  }
+  else if (u.captured != PIECE_EMPTY) {
+    AddPiece(u.m.dst, u.captured);
   }
 }
 
