@@ -302,6 +302,7 @@ public:
   std::vector<Piece> board;
   uint8_t nextColor;
   
+  ///is castling available
   bool castleBK;
   bool castleBQ;
   bool castleWK;
@@ -309,6 +310,8 @@ public:
 
   bool hasEnPassant;
 
+  ///used by bot for board eval.
+  ///black then white
   bool hasCastled[2];
 
   ///En passant target square.

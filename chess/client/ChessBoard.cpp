@@ -839,9 +839,6 @@ void ChessBoard::GetQuietsQueen(std::vector<Move>& moves, ChessCoord c)
 
 void ChessBoard::GetCastleBlack(std::vector<Move>& moves)
 {
-  if (hasCastled[PIECE_BLACK]) {
-    return;
-  }
   if (castleBK 
     && (!checksInfo.attacked.GetBit(f8)) 
     && (!checksInfo.attacked.GetBit(g8)) ) {
@@ -863,9 +860,6 @@ void ChessBoard::GetCastleBlack(std::vector<Move>& moves)
 
 void ChessBoard::GetCastleWhite(std::vector<Move>& moves)
 {
-  if (hasCastled[PIECE_WHITE]) {
-    return;
-  }
   if (castleWK
     && (!checksInfo.attacked.GetBit(f1))
     && (!checksInfo.attacked.GetBit(g1))) {
@@ -1069,24 +1063,37 @@ void ChessBoard::Undo(const UndoMove& u)
     if (u.m.src == e1) {
       if (u.m.dst == g1) {
         isCastle = true;
+        MovePiece(f1, h1);
       }
       else if (u.m.dst == c1) {
         isCastle = true;
+        MovePiece(d1, a1);
       }
     }
     else if (u.m.src == e8) {
       if (u.m.dst == g8) {
         isCastle = true;
+        MovePiece(f8, h8);
       }
       else if (u.m.dst == c8) {
         isCastle = true;
+        MovePiece(d8, a8);
       }
     }
   }
   FlipTurn();
+  MovePiece(u.m.dst, u.m.src);
   if (isCastle) {
+    //castling either direction is available again
     if (nextColor == PIECE_BLACK) {
       castleBQ = true;
+      castleBK = true;
+      hasCastled[0] = false;
+    }
+    else {
+      castleWQ = true;
+      castleWK = true;
+      hasCastled[1] = false;
     }
   }
 }
