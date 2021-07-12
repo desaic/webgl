@@ -47,6 +47,19 @@ void TestEvalDirect() {
   std::cout << "score:" << bot.EvalDirect(board) << "\n";
 }
 
+void TestEvalRecursive()
+{
+  ChessBoard board;
+  ChessBot bot;
+  bot.SetBoard(board);
+  bot.InitEval();
+  size_t numSteps = 10000;
+  for (size_t s = 0; s < numSteps; s++) {
+    bot.EvalStep();
+  }
+
+}
+
 int main(int argc, char* argv[])
 {
   TestFEN();

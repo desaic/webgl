@@ -219,6 +219,7 @@ void ChessBot::InitEval()
 
 void ChessBot::EvalStep()
 {
+  std::lock_guard<std::mutex> lock(cacheMutex);
   unsigned d = cache.depth;
   
   if (d >= cache.maxDepth) {
@@ -250,6 +251,12 @@ void ChessBot::EvalStep()
   cache.argStack[d].undo = cache.board->GetUndoMove(m);
   cache.board->ApplyMove(m);  
   cache.depth++;
+}
+
+Move ChessBot::CurrentBestMove()
+{
+  std::lock_guard<std::mutex> lock(cacheMutex);
+  return cache.bestMove;
 }
 
 void ChessBot::WorkerLoop()

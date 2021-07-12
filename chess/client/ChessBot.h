@@ -76,11 +76,15 @@ public:
   /// run evaluation for 1 step whatever that means.
   void EvalStep();
   
+  /// get best move even if search is not finished.
+  Move CurrentBestMove();
+
   std::thread searchThread;
   
   ///used whenever current position updates.
   std::mutex boardMutex;
   ChessBoard board;
+  std::mutex cacheMutex;
   EvalCache cache;
   bool boardChanged;
 };
