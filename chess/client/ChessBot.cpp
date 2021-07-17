@@ -71,6 +71,9 @@ boardChanged(false)
   materialScore[PIECE_ROOK] = 500;
   materialScore[PIECE_QUEEN] = 900;
   materialScore[PIECE_KING] = 0;
+
+  cache.board = &workingBoard;
+
   Run();
 }
 
@@ -242,7 +245,9 @@ void ChessBot::EvalStep()
     //this depth finished.
     if (cache.argStack.size() > 0) {
       cache.argStack.pop_back();
-      cache.depth--;
+      if (cache.depth > 0) {
+        cache.depth--;
+      }
     }
     return;
   }
@@ -262,9 +267,7 @@ Move ChessBot::CurrentBestMove()
 void ChessBot::WorkerLoop()
 {
   int pollIntervalMs = 100;//ms
-  
-  ChessBoard localBoard = board;
-  cache.board = &localBoard;
+
   float printIntervalSec = 2;
   Timer timer;
   timer.start();
@@ -284,7 +287,7 @@ void ChessBot::WorkerLoop()
     if (pollSec > pollIntervalMs / 1000.0f) {
       boardMutex.lock();
       if (boardChanged) {
-        localBoard = board;
+        workingBoard = board;
         boardChanged = false;
         InitEval();
       }

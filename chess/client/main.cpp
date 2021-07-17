@@ -47,8 +47,9 @@ void TestEvalDirect() {
   std::cout << "score:" << bot.EvalDirect(board) << "\n";
 }
 
-void TestEvalRecursive()
+void TestEvalWithSearch()
 {
+  std::cout << "TestEvalWithSearch()\n";
   ChessBoard board;
   ChessBot bot;
   bot.SetBoard(board);
@@ -57,13 +58,15 @@ void TestEvalRecursive()
   for (size_t s = 0; s < numSteps; s++) {
     bot.EvalStep();
   }
-
+  Move bestMove = bot.CurrentBestMove();
+  std::cout << bestMove.ToString() << " \n";
 }
 
 int main(int argc, char* argv[])
 {
   TestFEN();
-  TestEvalDirect();
+  TestEvalWithSearch();
+
   initWSA();
  
   ChessClient client;

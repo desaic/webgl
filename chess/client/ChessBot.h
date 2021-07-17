@@ -84,6 +84,8 @@ public:
   ///used whenever current position updates.
   std::mutex boardMutex;
   ChessBoard board;
+  ///board used by search
+  ChessBoard workingBoard;
   std::mutex cacheMutex;
   EvalCache cache;
   bool boardChanged;
