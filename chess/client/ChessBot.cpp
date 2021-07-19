@@ -186,9 +186,14 @@ void ChessBot::SetBoard(ChessBoard& b)
   boardChanged = true;
 }
 
-int ChessBot::CheckMateScore()
+int ChessBot::CheckMateScore(uint8_t color)
 {
-  return MAX_SCORE;
+  if (color == PIECE_WHITE) {
+    return MAX_SCORE;
+  }
+  else {
+    return -MAX_SCORE;
+  }
 }
 
 int ChessBot::StaleMateScore()
@@ -210,7 +215,7 @@ EvalCache::EvalCache() :maxDepth(10)
 
 void EvalCache::Init()
 {
-  argStack.clear();
+  stack.clear();
   bestScore = 0;
   depth = 0;
 }
@@ -220,42 +225,89 @@ void ChessBot::InitEval()
   cache.Init();
 }
 
-void ChessBot::EvalStep()
+///https://en.wikipedia.org/wiki/Principal_variation_search
+int ChessBot::EvalStep()
 {
   std::lock_guard<std::mutex> lock(cacheMutex);
   unsigned d = cache.depth;
-  
-  if (d >= cache.maxDepth) {
-    cache.argStack[d].score = EvalDirect(*(cache.board));
-    return;
+
+  //root node.
+  if (d == 0) {
+    cache.stack.push_back(SearchArg());
+    cache.stack[0].moves = cache.board->GetMoves();
   }
 
-  if (cache.argStack.size() == d) {
-    cache.argStack.push_back(SearchArg());
-    cache.argStack[d].moves = cache.board->GetMoves();
-    if (cache.argStack[d].moves.size() == 0) {
-
+  // leaf node
+  if (d >= cache.maxDepth) {
+    cache.stack[d].score = EvalDirect(*(cache.board));
+    if (cache.depth > 0) {
+      cache.depth--;
+      return 0;
+    }
+    else {
+      return -1;
     }
   }
-  
-  SearchArg& arg = cache.argStack[d];
-  std::vector<Move> & moves = cache.argStack[d].moves;
+
+  SearchArg& arg = cache.stack[d];
+  std::vector<Move>& moves = cache.stack[d].moves;
+
+  if (moves.size() == 0) {
+    if (cache.board->IsInCheck()) {
+      // if I'm in check, the other player wins
+      arg.score = CheckMateScore((1 - cache.board->nextColor));
+    }
+    else {
+      arg.score = StaleMateScore();
+    }
+  }
+
+  // process return value from child node
+  // free child node stack
+  // can be optimized so that only 1 stack is allocated
+  // for all child nodes
+  if (d + 1 < cache.stack.size()) {
+    int score = -cache.stack[d + 1].score;
+    cache.stack.pop_back();
+    arg.alpha = std::max(arg.alpha, score);
+    if (arg.moveIdx> 0 && arg.alpha < score < arg.beta) {
+      //full re-search 
+      cache.depth++;
+      cache.stack.push_back(SearchArg(-arg.beta, -score));
+      return;
+    }
+
+    cache.board->Undo(arg.undo);
+    //beta cutoff
+    if (arg.alpha >= arg.beta) {
+      arg.score = arg.alpha;
+      arg.moveIdx = moves.size();
+    }
+  }
 
   if (arg.moveIdx >= moves.size()) {
-    //this depth finished.
-    if (cache.argStack.size() > 0) {
-      cache.argStack.pop_back();
-      if (cache.depth > 0) {
-        cache.depth--;
-      }
+    if (cache.depth > 0) {
+      cache.depth--;
+      return 0;
     }
-    return;
+    else {
+      //no more positions
+      return -1;
+    }
   }
 
   Move m = moves[arg.moveIdx];
-  cache.argStack[d].undo = cache.board->GetUndoMove(m);
-  cache.board->ApplyMove(m);  
+  arg.undo = cache.board->GetUndoMove(m);
+  cache.board->ApplyMove(m);
   cache.depth++;
+  if (arg.moveIdx == 0) {
+    cache.stack.push_back(SearchArg(-arg.beta, -arg.alpha));
+  }
+  else {
+    cache.stack.push_back(SearchArg(-arg.alpha-1, -arg.alpha));
+  }
+  arg.moveIdx++;
+  return 0;
 }
 
 Move ChessBot::CurrentBestMove()
@@ -324,3 +376,8 @@ SearchArg::SearchArg():
   score(0)
 {
 }
+
+SearchArg::SearchArg(float a, float b) :
+  alpha(a), beta(b),
+  moveIdx(0), score(0)
+{}

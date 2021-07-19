@@ -23,6 +23,7 @@ public:
   UndoMove undo;
   int score;
   SearchArg();
+  SearchArg(float alpha, float beta);
 };
 
 ///dump intermediate evaluation related 
@@ -31,7 +32,7 @@ struct EvalCache
 {
   //current depth = argStack.size()
   //depth = 0 at the beginning of a new search.
-  std::vector<SearchArg> argStack;
+  std::vector<SearchArg> stack;
   unsigned depth;
   Move bestMove;
   int bestScore;
@@ -58,7 +59,7 @@ public:
 
   void SetBoard(ChessBoard& b);
 
-  int CheckMateScore();
+  int CheckMateScore(uint8_t color);
 
   int StaleMateScore();
 
@@ -74,7 +75,9 @@ public:
   void InitEval();
   
   /// run evaluation for 1 step whatever that means.
-  void EvalStep();
+  ///@return -1 if no more positions to search, which can happen
+  ///when not many moves are available.
+  int EvalStep();
   
   /// get best move even if search is not finished.
   Move CurrentBestMove();

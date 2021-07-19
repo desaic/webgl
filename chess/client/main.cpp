@@ -51,12 +51,17 @@ void TestEvalWithSearch()
 {
   std::cout << "TestEvalWithSearch()\n";
   ChessBoard board;
+  std::string inputFen = "r3r1k1/p1p2ppp/3q1n2/1p3b2/4PN2/3p1P2/PP3KPP/1RB1Q2R b - - 0 17";
+  board.FromFen(inputFen);
   ChessBot bot;
   bot.SetBoard(board);
   bot.InitEval();
   size_t numSteps = 10000;
   for (size_t s = 0; s < numSteps; s++) {
-    bot.EvalStep();
+    int ret = bot.EvalStep();
+    if (ret < 0) {
+      break;
+    }
   }
   Move bestMove = bot.CurrentBestMove();
   std::cout << bestMove.ToString() << " \n";
@@ -65,7 +70,7 @@ void TestEvalWithSearch()
 int main(int argc, char* argv[])
 {
   TestFEN();
-  TestEvalWithSearch();
+  //TestEvalWithSearch();
 
   initWSA();
  

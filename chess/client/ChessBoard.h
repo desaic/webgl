@@ -251,6 +251,11 @@ struct BitBoard
 struct ChecksInfo {
   ChecksInfo() :pinners(BOARD_SIZE*BOARD_SIZE) {}
 
+  ///valid only after this struct has been filled in
+  bool IsInCheck() {
+    return attacked.GetBit(kingCoord);
+  }
+
   ChessCoord kingCoord;
   BitBoard attacked;
   
@@ -269,6 +274,7 @@ struct ChecksInfo {
     std::ostringstream oss;
     oss << "king: " << kingCoord.ToString() << "\nattacked squares:\n";
     oss << attacked.ToString() << "\n";
+    oss << "in check: " << IsInCheck() << "\n";
     oss << "attackers " << attackers.size() << "\n";
     for (ChessCoord c : attackers) {
       oss << c.ToString() << " ";
@@ -388,6 +394,12 @@ public:
   void FlipTurn() {
     nextColor = 1-nextColor;
   }
+
+  ///valid only after this struct has been filled in
+  bool IsInCheck() {
+    return checksInfo.IsInCheck();
+  }
+
 
   void SetStartPos();
 
