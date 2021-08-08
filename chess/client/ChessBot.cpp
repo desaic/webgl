@@ -223,35 +223,33 @@ void EvalCache::Init()
 void ChessBot::InitEval() 
 {
   cache.Init();
+
+  // create stack and moves for root node 
+  cache.stack.push_back(SearchArg());
+  cache.stack[0].moves = cache.board->GetMoves();
+
 }
 
 ///https://en.wikipedia.org/wiki/Principal_variation_search
 int ChessBot::EvalStep()
 {
   std::lock_guard<std::mutex> lock(cacheMutex);
-  unsigned d = cache.depth;
+  int d = cache.depth;
 
-  //root node.
-  if (d == 0) {
-    cache.stack.push_back(SearchArg());
-    cache.stack[0].moves = cache.board->GetMoves();
+  if (d < 0) {
+    //nothing more to search.
+    return -1;
   }
 
   // leaf node
   if (d >= cache.maxDepth) {
     cache.stack[d].score = EvalDirect(*(cache.board));
-    if (cache.depth > 0) {
-      cache.depth--;
-      return 0;
-    }
-    else {
-      return -1;
-    }
+    cache.depth--;
+    return 0;
   }
 
   SearchArg& arg = cache.stack[d];
   std::vector<Move>& moves = cache.stack[d].moves;
-
   if (moves.size() == 0) {
     if (cache.board->IsInCheck()) {
       // if I'm in check, the other player wins
@@ -260,21 +258,21 @@ int ChessBot::EvalStep()
     else {
       arg.score = StaleMateScore();
     }
+    cache.depth--;
+    return 0;
   }
 
   // process return value from child node
-  // free child node stack
-  // can be optimized so that only 1 stack is allocated
-  // for all child nodes
+  // set up search for the next child node.
+  // free child node stack when no more child left to search.
   if (d + 1 < cache.stack.size()) {
     int score = -cache.stack[d + 1].score;
-    cache.stack.pop_back();
     arg.alpha = std::max(arg.alpha, score);
     if (arg.moveIdx> 0 && arg.alpha < score < arg.beta) {
       //full re-search 
       cache.depth++;
-      cache.stack.push_back(SearchArg(-arg.beta, -score));
-      return;
+      cache.stack[d+1] = SearchArg(-arg.beta, -score);
+      return 0;
     }
 
     cache.board->Undo(arg.undo);
@@ -283,30 +281,35 @@ int ChessBot::EvalStep()
       arg.score = arg.alpha;
       arg.moveIdx = moves.size();
     }
+    arg.moveIdx++;
+    if (arg.moveIdx >= moves.size()) {
+      cache.stack.pop_back();
+      return 0;
+    }
+    //search later child nodes
+    cache.stack[d+1]=SearchArg(-arg.alpha - 1, -arg.alpha);
+  }
+  else {
+    //for debugging.
+    //something in tree traversal algo went really wrong.
+    if (d + 1 != cache.stack.size()) {
+      return -2;
+    }
+    //just entered this node. moves and child stack hasn't been allocated.
+    //set up args for the first child
+    cache.stack.push_back(SearchArg(-arg.beta, -arg.alpha));
   }
 
   if (arg.moveIdx >= moves.size()) {
-    if (cache.depth > 0) {
       cache.depth--;
       return 0;
-    }
-    else {
-      //no more positions
-      return -1;
-    }
   }
-
+  
   Move m = moves[arg.moveIdx];
   arg.undo = cache.board->GetUndoMove(m);
   cache.board->ApplyMove(m);
+  cache.stack[d + 1].moves = cache.board->GetMoves();
   cache.depth++;
-  if (arg.moveIdx == 0) {
-    cache.stack.push_back(SearchArg(-arg.beta, -arg.alpha));
-  }
-  else {
-    cache.stack.push_back(SearchArg(-arg.alpha-1, -arg.alpha));
-  }
-  arg.moveIdx++;
   return 0;
 }
 

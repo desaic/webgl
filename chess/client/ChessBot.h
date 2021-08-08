@@ -33,7 +33,7 @@ struct EvalCache
   //current depth = argStack.size()
   //depth = 0 at the beginning of a new search.
   std::vector<SearchArg> stack;
-  unsigned depth;
+  int depth;
   Move bestMove;
   int bestScore;
   int maxDepth;
