@@ -22,6 +22,7 @@ public:
   size_t moveIdx;
   UndoMove undo;
   int score;
+  bool fullSearch;
   SearchArg();
   SearchArg(float alpha, float beta);
 };
@@ -70,6 +71,8 @@ public:
   void Run();
   void Stop();
   void WorkerLoop();
+
+  void SetMaxDepth(int d) { cache.maxDepth = d; }
   
   /// initialize evaluation.
   void InitEval();

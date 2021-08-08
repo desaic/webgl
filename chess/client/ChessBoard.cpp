@@ -61,7 +61,7 @@ std::vector<Move> ChessBoard::GetMoves()
 {
   std::vector<Move> moves;
   checksInfo = ComputeChecks();
-  std::cout << "Debug:\n" << checksInfo.ToString() << "\n";
+  //std::cout << "Debug:\n" << checksInfo.ToString() << "\n";
   if (checksInfo.attackers.size() > 0) {
     GetEvasions(moves);
   }
@@ -100,7 +100,7 @@ void ChessBoard::GetKingEvasions(std::vector<Move>& moves)
   for (unsigned d = 0; d < NUM_DIRS; d++) {
     char dstCol = col + dir[d][0];
     char dstRow = row + dir[d][1];
-    if (dstCol < 0 || dstCol>7 || dstRow < 0 || dstCol>7) {
+    if (dstCol < 0 || dstCol>7 || dstRow < 0 || dstRow>7) {
       continue;
     }
     ChessCoord dst(dstCol, dstRow);

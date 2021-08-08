@@ -74,7 +74,6 @@ boardChanged(false)
 
   cache.board = &workingBoard;
 
-  Run();
 }
 
 ChessBot::~ChessBot()
@@ -248,18 +247,23 @@ int ChessBot::EvalStep()
     return 0;
   }
 
-  SearchArg& arg = cache.stack[d];
-  std::vector<Move>& moves = cache.stack[d].moves;
-  if (moves.size() == 0) {
+  SearchArg * arg = &( cache.stack[d]);
+  std::vector<Move>* moves = &(cache.stack[d].moves);
+  if (moves->size() == 0) {
     if (cache.board->IsInCheck()) {
       // if I'm in check, the other player wins
-      arg.score = CheckMateScore((1 - cache.board->nextColor));
+      arg->score = CheckMateScore((1 - cache.board->nextColor));
     }
     else {
-      arg.score = StaleMateScore();
+      arg->score = StaleMateScore();
     }
     cache.depth--;
     return 0;
+  }
+
+  if (d + 2 < cache.stack.size()) {
+    //serious bug
+    std::cout << "debug\n";
   }
 
   // process return value from child node
@@ -267,32 +271,35 @@ int ChessBot::EvalStep()
   // free child node stack when no more child left to search.
   if (d + 1 < cache.stack.size()) {
     int score = -cache.stack[d + 1].score;
-    //update current best move at root level.
-    if (d == 0 && score > arg.alpha) {
-      cache.bestMove = moves[arg.moveIdx];
-      cache.bestScore = score;
-    }
-    arg.alpha = std::max(arg.alpha, score);
-    if (arg.moveIdx> 0 && arg.alpha < score < arg.beta) {
+    if (arg->moveIdx > 0 && arg->alpha < score < arg->beta
+      && !(cache.stack[d + 1].fullSearch)) {
       //full re-search 
       cache.depth++;
-      cache.stack[d+1] = SearchArg(-arg.beta, -score);
+      std::vector<Move> moves = cache.stack[d + 1].moves;
+      cache.stack[d + 1] = SearchArg(-arg->beta, -score);
+      cache.stack[d + 1].fullSearch = true;
+      cache.stack[d + 1].moves = moves;
       return 0;
     }
+    //update current best move at root level.
+    if (d == 0 && score > arg->alpha) {
+      cache.bestMove = (*moves)[arg->moveIdx];
+      cache.bestScore = score;
+    }
+    if (d == 1 && cache.stack[0].moveIdx==0 && arg->alpha < score) {
+      std::cout << "debug\n";
+    }
+    arg->alpha = std::max(arg->alpha, score);
 
-    cache.board->Undo(arg.undo);
+    cache.board->Undo(arg->undo);
     //beta cutoff
-    if (arg.alpha >= arg.beta) {
-      arg.score = arg.alpha;
-      arg.moveIdx = moves.size();
+    if (arg->alpha >= arg->beta) {
+      arg->score = arg->alpha;
+      arg->moveIdx = moves->size();
     }
-    arg.moveIdx++;
-    if (arg.moveIdx >= moves.size()) {
-      cache.stack.pop_back();
-      return 0;
-    }
+    arg->moveIdx++;
     //search child nodes after the first child
-    cache.stack[d+1]=SearchArg(-arg.alpha - 1, -arg.alpha);
+    cache.stack[d+1]=SearchArg(-arg->alpha - 1, -arg->alpha);
   }
   else {
     //for debugging.
@@ -302,16 +309,25 @@ int ChessBot::EvalStep()
     }
     //just entered this node. moves and child stack hasn't been allocated.
     //set up args for the first child
-    cache.stack.push_back(SearchArg(-arg.beta, -arg.alpha));
+    cache.stack.push_back(SearchArg(-arg->beta, -arg->alpha));
+    //stack may have been reallocated.
+    arg = &(cache.stack[d]);
+    moves = &(arg->moves);
   }
 
-  if (arg.moveIdx >= moves.size()) {
-      cache.depth--;
-      return 0;
+  if (arg->moveIdx >= moves->size()) {
+    //remove any child stack.
+    while (cache.stack.size() > d + 1) {
+      cache.stack.pop_back();
+    }
+    cache.depth--;
+    //score = alpha
+    cache.stack[d].score = cache.stack[d].alpha;
+    return 0;
   }
   
-  Move m = moves[arg.moveIdx];
-  arg.undo = cache.board->GetUndoMove(m);
+  Move m = (*moves)[arg->moveIdx];
+  arg->undo = cache.board->GetUndoMove(m);
   cache.board->ApplyMove(m);
   cache.stack[d + 1].moves = cache.board->GetMoves();
   cache.depth++;
@@ -386,5 +402,6 @@ SearchArg::SearchArg():
 
 SearchArg::SearchArg(float a, float b) :
   alpha(a), beta(b),
-  moveIdx(0), score(0)
+  moveIdx(0), score(0),
+  fullSearch(false)
 {}
