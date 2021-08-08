@@ -70,7 +70,7 @@ void TestEvalWithSearch()
 int main(int argc, char* argv[])
 {
   TestFEN();
-  //TestEvalWithSearch();
+  TestEvalWithSearch();
 
   initWSA();
  

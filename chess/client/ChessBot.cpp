@@ -267,6 +267,11 @@ int ChessBot::EvalStep()
   // free child node stack when no more child left to search.
   if (d + 1 < cache.stack.size()) {
     int score = -cache.stack[d + 1].score;
+    //update current best move at root level.
+    if (d == 0 && score > arg.alpha) {
+      cache.bestMove = moves[arg.moveIdx];
+      cache.bestScore = score;
+    }
     arg.alpha = std::max(arg.alpha, score);
     if (arg.moveIdx> 0 && arg.alpha < score < arg.beta) {
       //full re-search 
@@ -286,7 +291,7 @@ int ChessBot::EvalStep()
       cache.stack.pop_back();
       return 0;
     }
-    //search later child nodes
+    //search child nodes after the first child
     cache.stack[d+1]=SearchArg(-arg.alpha - 1, -arg.alpha);
   }
   else {
