@@ -223,7 +223,7 @@ void EvalCache::Init()
 void ChessBot::InitEval() 
 {
   cache.Init();
-
+  workingBoard = board;
   // create stack and moves for root node 
   cache.stack.push_back(SearchArg());
   cache.stack[0].moves = cache.board->GetMoves();
@@ -347,7 +347,6 @@ void ChessBot::WorkerLoop()
     if (pollSec > pollIntervalMs / 1000.0f) {
       boardMutex.lock();
       if (boardChanged) {
-        workingBoard = board;
         boardChanged = false;
         InitEval();
       }
