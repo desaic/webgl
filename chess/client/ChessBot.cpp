@@ -285,9 +285,7 @@ int ChessBot::EvalStep()
     if (d == 0 && score > arg->alpha) {
       cache.bestMove = (*moves)[arg->moveIdx];
       cache.bestScore = score;
-    }
-    if (d == 1 && cache.stack[0].moveIdx==0 && arg->alpha < score) {
-      std::cout << "debug\n";
+      std::cout << "move " << cache.bestMove.ToString() << "score " << score << "\n";
     }
     arg->alpha = std::max(arg->alpha, score);
 

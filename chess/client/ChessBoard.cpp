@@ -253,7 +253,7 @@ std::vector<ChessCoord> ChessBoard::GetBlockingPawn(ChessCoord c,
   std::vector<ChessCoord> coords;
   uint8_t row = c.Row();
   uint8_t col = c.Col();
-  //pawn can block by quiets or en passant
+  //pawn can block by quiets or captures including en passant
   if (nextColor == PIECE_BLACK) {
     ChessCoord dst = ChessCoord(col, row - 1);
     if (GetPiece(dst)->isEmpty()) {
@@ -265,6 +265,22 @@ std::vector<ChessCoord> ChessBoard::GetBlockingPawn(ChessCoord c,
         }
       }
     }
+
+    if (col > 0) {
+      dst = ChessCoord(col - 1, row - 1);
+      Piece* dstPiece = GetPiece(dst);
+      if (!dstPiece->isEmpty() && dstPiece->color() == PIECE_WHITE) {
+        coords.push_back(dst);
+      }
+    }
+    if (col < 7) {
+      dst = ChessCoord(col + 1, row - 1);
+      Piece* dstPiece = GetPiece(dst);
+      if (!dstPiece->isEmpty() && dstPiece->color() == PIECE_WHITE) {
+        coords.push_back(dst);
+      }
+    }
+
     if (canUseEnPassant && row == 3) {
       if (col > 0) {
         dst = ChessCoord(col - 1, row - 1);
@@ -291,6 +307,22 @@ std::vector<ChessCoord> ChessBoard::GetBlockingPawn(ChessCoord c,
         }
       }
     }
+
+    if (col > 0) {
+      dst = ChessCoord(col - 1, row + 1);
+      Piece* dstPiece = GetPiece(dst);
+      if (!dstPiece->isEmpty() && dstPiece->color() == PIECE_BLACK) {
+        coords.push_back(dst);
+      }
+    }
+    if (col < 7) {
+      dst = ChessCoord(col + 1, row + 1);
+      Piece* dstPiece = GetPiece(dst);
+      if (!dstPiece->isEmpty() && dstPiece->color() == PIECE_BLACK) {
+        coords.push_back(dst);
+      }
+    }
+
     if (canUseEnPassant && row == 4) {
       if (col > 0) {
         dst = ChessCoord(col - 1, row + 1);
