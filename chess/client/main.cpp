@@ -78,10 +78,11 @@ void TestEvalWithSearch()
   std::string inputFen = "r3r1k1/p1p2ppp/3q1n2/1p3b2/4PN2/3p1P2/PP3KPP/1RB1Q2R b - - 0 17";
   std::string inputFenWhite = "r3r1k1/p1p2ppp/3q4/1p3b2/4nN2/3p1P2/PP3KPP/1RB1Q2R w - - 0 18";
   std::string fen3Black = "r3r1k1/p1p2ppp/3q4/1p3b2/4PN2/3p4/PP3KPP/1RB1Q2R b - - 0 18";
-  std::string fen4 = "r3r1k1/p1p2ppp/8/1p3b2/4Pq2/3p4/PP3KPP/1RB1Q2R w - - 0 19";
+  std::string fen4White = "r5k1/p1p2ppp/3q4/1p3b2/4rN2/3p4/PP3KPP/1RB1Q2R w - - 0 19";
+  std::string fen4WhiteAdvantage = "r3r1k1/p1p2ppp/8/1p3b2/4Pq2/3p4/PP3KPP/1RB1Q2R w - - 0 19";
   std::string fen5Check = "r3r1k1/p1p2ppp/8/1p3b2/4Pq2/8/PP1p1KPP/1RB1Q1R1 w - - 0 20";
   //TestEvalWithSearch(inputFen);
-  TestEvalWithSearch(fen3Black);
+  TestEvalWithSearch(fen4White);
   //TestEvalWithSearch(fen4);
 }
 
