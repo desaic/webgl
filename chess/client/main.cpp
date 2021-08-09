@@ -58,9 +58,6 @@ void TestEvalWithSearch(std::string fen)
 
   size_t numSteps = 10000000;
   for (size_t s = 0; s < numSteps; s++) {
-    if (s == 500714) {
-      std::cout << "debug\n";
-    }
     int ret = bot.EvalStep();
     if (ret < 0) {
       break;
@@ -88,8 +85,8 @@ void TestEvalWithSearch()
 
 int main(int argc, char* argv[])
 {
-  TestFEN();
-  TestEvalWithSearch();
+  //TestFEN();
+  //TestEvalWithSearch();
 
   initWSA();
  

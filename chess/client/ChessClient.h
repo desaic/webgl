@@ -29,6 +29,7 @@ public:
     sock.SetLogCallback(&LogFun);
     state = DISCONNECTED;
     loopThread = std::thread(&ChessClient::Loop, this);
+    bot.Run();
   }
 
   void Stop(){

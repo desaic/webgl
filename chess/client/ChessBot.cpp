@@ -207,7 +207,7 @@ std::vector<MoveScore> ChessBot::BestMoves(const ChessBoard& b)
   return moves;
 }
 
-EvalCache::EvalCache() :maxDepth(10)
+EvalCache::EvalCache() :maxDepth(5)
 {
 
 }
@@ -284,7 +284,7 @@ int ChessBot::EvalStep()
     if (d == 0 && score > arg->alpha) {
       cache.bestMove = (*moves)[arg->moveIdx];
       cache.bestScore = score;
-      std::cout << "move " << cache.bestMove.ToString() << " score " << score << "\n";
+      std::cout << "current best move " << cache.bestMove.ToString() << " score " << score << "\n";
     }
     arg->alpha = std::max(arg->alpha, score);
 
@@ -347,6 +347,8 @@ void ChessBot::WorkerLoop()
 
   Timer pollTimer;
   pollTimer.start();
+  size_t nodeBatchSize = 100000;
+  bool searchFinished = false;
   while (running) {
     //EvalStep();
     float sec = timer.elapsedSeconds();
@@ -361,7 +363,19 @@ void ChessBot::WorkerLoop()
       boardMutex.lock();
       if (boardChanged) {
         boardChanged = false;
+        searchFinished = false;
+        std::cout << "Bot receives new board position\n";
         InitEval();
+      }
+      if (!searchFinished) {
+        for (size_t step = 0; step < nodeBatchSize; step++) {
+          int ret = EvalStep();
+          if (ret < 0) {
+            searchFinished = true;
+            std::cout << "search finished\n";
+            break;
+          }
+        }
       }
       boardMutex.unlock();
       pollTimer.start();

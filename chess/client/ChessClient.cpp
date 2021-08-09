@@ -140,6 +140,7 @@ void ChessClient::SendBoard()
   std::string fen = board.GetFen();
   std::string cmd = "fen " + fen;
   SendCmd(cmd);
+  bot.SetBoard(board);
 }
 
 void ChessClient::SendCmd(const std::string& command)
