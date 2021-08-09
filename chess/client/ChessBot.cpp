@@ -252,7 +252,7 @@ int ChessBot::EvalStep()
   if (moves->size() == 0) {
     if (cache.board->IsInCheck()) {
       // if I'm in check, the other player wins
-      arg->score = CheckMateScore((1 - cache.board->nextColor));
+      arg->score = -CheckMateScore(PIECE_WHITE);
     }
     else {
       arg->score = StaleMateScore();
