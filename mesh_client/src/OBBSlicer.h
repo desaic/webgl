@@ -89,6 +89,10 @@ struct SparseVoxel
   SparseVoxel<T>() : zmin(0) {}
 };
 
+///voxelizes an oriented bounding box.
+///results are stored in a sparse grid where for each
+/// segment in x direction, only the start and end points 
+/// are stored.
 class OBBSlicer
 {
 public:

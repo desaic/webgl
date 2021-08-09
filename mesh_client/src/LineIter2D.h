@@ -7,7 +7,7 @@
 
 #include "Vec2.h"
 #include <iostream>
-
+/// rasterizes a 2D line segment to integer coordinates.
 class LineIter2D
 {
 protected:

@@ -5,10 +5,12 @@
 
 int obb_round(float f);
 
+/// rasterizes a 2D triangle at integer coordinates.
+/// result is retrieved using an iterator interface.
 class TrigIter2D 
 {
 protected:
-  Vec2i m_vertex[3];     ///< The 3D Transformed vertices
+  Vec2i m_vertex[3];     ///2D integer vertices
 
   int m_lower_left_idx;
   int m_upper_left_idx;

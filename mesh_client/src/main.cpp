@@ -38,13 +38,13 @@ void CommandLoop(TrayClient * client) {
   }
 }
 
-void LoadTestScene(TrayClient & client)
+void LoadTestScene(TrayClient & client, const std::string & meshFile)
 {
   Scene& scene = client.GetScene();
   
   TrigMesh mesh;
   ///\todo change to config instead of hardcoded.
-  std::string meshFile = "F:/dolphin/meshes/Eiffel.stl";
+  
   int status = mesh.LoadStl(meshFile);
   if (status < 0) {
     std::cout << "can't find file " << meshFile << "\n";
@@ -56,14 +56,19 @@ void LoadTestScene(TrayClient & client)
   int instanceId = scene.AddInstance(meshId, initPos, rot);
 }
 
-int main(){
+int main(int argc, char * argv[]){
+  if (argc < 2) {
+    std::cout << "Usage: mesh_client.exe path/to/some_mesh.stl\n";
+    return 0;
+  }
+  std::string meshFile = argv[1];
   initWSA();
   ///\todo add a config file.
   ConfigFile conf;
   
   int port = 9001;
   TrayClient client;
-  LoadTestScene(client);
+  LoadTestScene(client, meshFile);
   client.SetHost("localhost", port);
   client.RunTCPThread();
   //test code. can remove

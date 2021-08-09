@@ -3,7 +3,9 @@
 
 #include "Vec2.h"
 #include "Vec3.h"
-
+///computes intersection points between
+/// a z plane and a tetrahedron.
+/// returns no intersections if a face lies exactly on z plane.
 class TetSlicer
 {
 public:
