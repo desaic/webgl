@@ -53,11 +53,14 @@ void TestEvalWithSearch(std::string fen)
   board.FromFen(fen);
   ChessBot bot;
   bot.SetBoard(board);
-  bot.SetMaxDepth(5);
+  bot.SetMaxDepth(4);
   bot.InitEval();
 
-  size_t numSteps = 1000000;
+  size_t numSteps = 10000000;
   for (size_t s = 0; s < numSteps; s++) {
+    if (s == 12092) {
+      std::cout << "debug\n";
+    }
     int ret = bot.EvalStep();
     if (ret < 0) {
       break;
@@ -74,8 +77,12 @@ void TestEvalWithSearch()
 
   std::string inputFen = "r3r1k1/p1p2ppp/3q1n2/1p3b2/4PN2/3p1P2/PP3KPP/1RB1Q2R b - - 0 17";
   std::string inputFenWhite = "r3r1k1/p1p2ppp/3q4/1p3b2/4nN2/3p1P2/PP3KPP/1RB1Q2R w - - 0 18";
+  std::string fen3Black = "r3r1k1/p1p2ppp/3q4/1p3b2/4PN2/3p4/PP3KPP/1RB1Q2R b - - 0 18";
+  std::string fen4 = "r3r1k1/p1p2ppp/8/1p3b2/4Pq2/3p4/PP3KPP/1RB1Q2R w - - 0 19";
+  std::string fen5Check = "r3r1k1/p1p2ppp/8/1p3b2/4Pq2/8/PP1p1KPP/1RB1Q1R1 w - - 0 20";
   //TestEvalWithSearch(inputFen);
-  TestEvalWithSearch(inputFenWhite);
+  TestEvalWithSearch(fen3Black);
+  //TestEvalWithSearch(fen4);
 }
 
 int main(int argc, char* argv[])

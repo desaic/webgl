@@ -226,7 +226,7 @@ void ChessBot::InitEval()
   // create stack and moves for root node 
   cache.stack.push_back(SearchArg());
   cache.stack[0].moves = cache.board->GetMoves();
-
+  cache.initFen = cache.board->GetFen();
 }
 
 ///https://en.wikipedia.org/wiki/Principal_variation_search
@@ -253,6 +253,7 @@ int ChessBot::EvalStep()
     if (cache.board->IsInCheck()) {
       // if I'm in check, the other player wins
       arg->score = CheckMateScore((1 - cache.board->nextColor));
+      std::cout << cache.board->GetFen() << "\n";
     }
     else {
       arg->score = StaleMateScore();
@@ -265,14 +266,14 @@ int ChessBot::EvalStep()
     //serious bug
     std::cout << "debug\n";
   }
-
   // process return value from child node
   // set up search for the next child node.
   // free child node stack when no more child left to search.
   if (d + 1 < cache.stack.size()) {
     int score = -cache.stack[d + 1].score;
     if (arg->moveIdx > 0 && arg->alpha < score < arg->beta
-      && !(cache.stack[d + 1].fullSearch)) {
+      && !(cache.stack[d + 1].fullSearch)
+      && d+1 < cache.maxDepth) {
       //full re-search 
       cache.depth++;
       std::vector<Move> moves = cache.stack[d + 1].moves;
@@ -281,15 +282,21 @@ int ChessBot::EvalStep()
       cache.stack[d + 1].moves = moves;
       return 0;
     }
+
     //update current best move at root level.
     if (d == 0 && score > arg->alpha) {
       cache.bestMove = (*moves)[arg->moveIdx];
       cache.bestScore = score;
-      std::cout << "move " << cache.bestMove.ToString() << "score " << score << "\n";
+      std::cout << "move " << cache.bestMove.ToString() << " score " << score << "\n";
     }
     arg->alpha = std::max(arg->alpha, score);
 
     cache.board->Undo(arg->undo);
+    if (arg->initFen != cache.board->GetFen()) {
+      std::cout << "debug\n";
+      std::cout << arg->initFen << "\n";
+      std::cout << cache.board->GetFen() << "\n";
+    }
     //beta cutoff
     if (arg->alpha >= arg->beta) {
       arg->score = arg->alpha;
@@ -323,11 +330,20 @@ int ChessBot::EvalStep()
     cache.stack[d].score = cache.stack[d].alpha;
     return 0;
   }
-  
+  if (cache.board->moveCount != d) {
+    std::cout << "debug\n";
+  }
+  if (d == 0 && (cache.board->GetFen() != cache.initFen) ){
+    std::cout << "debug\n";
+    std::cout << cache.board->GetFen() << "\n";
+  }
   Move m = (*moves)[arg->moveIdx];
+  arg->initFen = cache.board->GetFen();
   arg->undo = cache.board->GetUndoMove(m);
   cache.board->ApplyMove(m);
-  cache.stack[d + 1].moves = cache.board->GetMoves();
+  if (d+1 < cache.maxDepth) {
+    cache.stack[d + 1].moves = cache.board->GetMoves();
+  }
   cache.depth++;
   return 0;
 }

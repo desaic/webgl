@@ -1073,6 +1073,8 @@ int ChessBoard::ApplyMove(const Move& m)
     hasCastled[1] = true;
     break;
   }
+
+  moveCount++;
   return 0;
 }
 
@@ -1085,6 +1087,10 @@ UndoMove ChessBoard::GetUndoMove(const Move& m)
   if (srcPiece.type() == PIECE_PAWN && m.dst == enPassantDst){
     u.isEnPassant = true;
   }
+  u.halfMoves = halfMoves;
+  u.hasEnPassant = hasEnPassant;
+  u.enPassantDst = enPassantDst;
+  u.isPromo = (m.promo != PIECE_EMPTY);
   return u;
 }
 
@@ -1118,7 +1124,10 @@ void ChessBoard::Undo(const UndoMove& u)
   
   FlipTurn();
   MovePiece(u.m.dst, u.m.src);
-  
+  if (u.isPromo) {
+    Piece* srcPiece = GetPiece(u.m.src);
+    srcPiece->SetType(PIECE_PAWN);
+  }
   if (isCastle) {
     //castling either direction is available again
     if (nextColor == PIECE_BLACK) {
@@ -1148,6 +1157,14 @@ void ChessBoard::Undo(const UndoMove& u)
   else if (u.captured != PIECE_EMPTY) {
     AddPiece(u.m.dst, u.captured);
   }
+  
+  halfMoves = u.halfMoves;
+  if (nextColor == PIECE_BLACK) {
+    fullMoves--;
+  }
+  moveCount--;
+  hasEnPassant = u.hasEnPassant;
+  enPassantDst = u.enPassantDst;
 }
 
 char PieceFEN(const Piece& info)
@@ -1452,7 +1469,7 @@ void ChessBoard::Clear()
   hasEnPassant = false;
   fullMoves = 0;
   halfMoves = 0;
-
+  moveCount = 0;
   castleBK = true;
   castleBQ = true;
   castleWK = true;
@@ -1569,6 +1586,7 @@ void ChessBoard::ComputeChecksRay(ChecksInfo& checks, ChessCoord coord, uint8_t 
         checks.attackers.push_back(coord);
         attackKing = true;
         checks.attacked.SetBit(dst.coord);
+        continue;
       }
       else {
         checks.blockers.SetBit(firstHit.coord);
@@ -1593,8 +1611,6 @@ void ChessBoard::ComputeChecksRay(ChecksInfo& checks, ChessCoord coord, uint8_t 
       break;
     }
     else {
-      //dst piece == king already handled above.
-      uint8_t attackedType = dstPiece->type();
       //already attacking king and then hit another piece,
       //no need to continue
       if (attackKing) {

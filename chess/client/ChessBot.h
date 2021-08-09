@@ -19,6 +19,8 @@ struct SearchArg
 public:
   int alpha, beta;
   std::vector<Move> moves;
+  ///for debug
+  std::string initFen;
   size_t moveIdx;
   UndoMove undo;
   int score;
@@ -40,6 +42,8 @@ struct EvalCache
   int maxDepth;
   void Init();
   ChessBoard* board;
+  ///debugging
+  std::string initFen;
   EvalCache();
 };
 

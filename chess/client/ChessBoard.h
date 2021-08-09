@@ -295,7 +295,16 @@ struct UndoMove
 {
   Move m;
   Piece captured;
-  bool isEnPassant=false;
+  bool isEnPassant;
+  bool hasEnPassant;
+  bool isPromo;
+  ChessCoord enPassantDst;
+  int halfMoves;
+  UndoMove() : isEnPassant(false),
+  hasEnPassant(false),
+  isPromo(false),
+  halfMoves(0)
+  {}
 };
 
 class ChessBoard {
@@ -330,6 +339,8 @@ public:
   ///number of full moves.
   ///starts at 1 and increments after every black move.
   int fullMoves;
+
+  int moveCount;
 
   Piece& operator()(unsigned x, unsigned y) {
     return board[x + y * BOARD_SIZE];
