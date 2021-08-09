@@ -53,14 +53,11 @@ void TestEvalWithSearch(std::string fen)
   board.FromFen(fen);
   ChessBot bot;
   bot.SetBoard(board);
-  bot.SetMaxDepth(4);
+  bot.SetMaxDepth(5);
   bot.InitEval();
 
   size_t numSteps = 10000000;
   for (size_t s = 0; s < numSteps; s++) {
-    if (s == 12092) {
-      std::cout << "debug\n";
-    }
     int ret = bot.EvalStep();
     if (ret < 0) {
       break;
