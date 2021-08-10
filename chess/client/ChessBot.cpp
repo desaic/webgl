@@ -279,7 +279,6 @@ int ChessBot::EvalStep()
       cache.stack[d + 1].moves = moves;
       return 0;
     }
-
     //update current best move at root level.
     if (d == 0 && score > arg->alpha) {
       cache.bestMove = (*moves)[arg->moveIdx];
@@ -289,6 +288,16 @@ int ChessBot::EvalStep()
     arg->alpha = std::max(arg->alpha, score);
 
     cache.board->Undo(arg->undo);
+
+    std::string restoredFen = cache.board->GetFen();
+    //if (cache.board->moveCount != d) {
+    //  std::cout << "debug\n";
+    //}
+    //if (restoredFen != arg->initFen) {
+    //  std::cout << arg->initFen << "\n";
+    //  std::cout << restoredFen << "\n";
+    //  std::cout << "debug\n";
+    //}
 
     //beta cutoff
     if (arg->alpha >= arg->beta) {
@@ -307,6 +316,9 @@ int ChessBot::EvalStep()
     //stack may have been reallocated.
     arg = &(cache.stack[d]);
     moves = &(arg->moves);
+
+    //debug
+    //arg->initFen = cache.board->GetFen();
   }
 
   if (arg->moveIdx >= moves->size()) {
@@ -323,7 +335,10 @@ int ChessBot::EvalStep()
   Move m = (*moves)[arg->moveIdx];
   arg->initFen = cache.board->GetFen();
   arg->undo = cache.board->GetUndoMove(m);
-  cache.board->ApplyMove(m);
+  int ret = cache.board->ApplyMove(m);
+  if (ret < 0) {
+    std::cout << "debug\n";
+  }
   if (d+1 < cache.maxDepth) {
     cache.stack[d + 1].moves = cache.board->GetMoves();
   }
@@ -404,8 +419,8 @@ void ChessBot::Stop()
 }
 
 SearchArg::SearchArg():
-  alpha(-ChessBot::MAX_SCORE),
-  beta(ChessBot::MAX_SCORE),
+  alpha(-2*ChessBot::MAX_SCORE),
+  beta(2 * ChessBot::MAX_SCORE),
   moveIdx(0),
   score(0)
 {

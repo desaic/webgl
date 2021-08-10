@@ -875,7 +875,10 @@ void ChessBoard::GetCastleBlack(std::vector<Move>& moves)
 {
   if (castleBK 
     && (!checksInfo.attacked.GetBit(f8)) 
-    && (!checksInfo.attacked.GetBit(g8)) ) {
+    && (!checksInfo.attacked.GetBit(g8)) 
+    && (GetPiece(e8)->type() == PIECE_KING)
+    && (GetPiece(h8)->type() == PIECE_ROOK)
+    ) {
     if (GetPiece(f8)->isEmpty() && GetPiece(g8)->isEmpty()) {
       Move m(e8, g8);
       moves.push_back(m);
@@ -883,7 +886,10 @@ void ChessBoard::GetCastleBlack(std::vector<Move>& moves)
   }
   if (castleBQ
     && (!checksInfo.attacked.GetBit(c8))
-    && (!checksInfo.attacked.GetBit(d8))) {
+    && (!checksInfo.attacked.GetBit(d8))
+    && (GetPiece(e8)->type() == PIECE_KING)
+    && (GetPiece(a8)->type() == PIECE_ROOK)
+    ) {
     if (GetPiece(b8)->isEmpty() && GetPiece(c8)->isEmpty()
       && GetPiece(d8)->isEmpty()) {
       Move m(e8, c8);
@@ -896,7 +902,10 @@ void ChessBoard::GetCastleWhite(std::vector<Move>& moves)
 {
   if (castleWK
     && (!checksInfo.attacked.GetBit(f1))
-    && (!checksInfo.attacked.GetBit(g1))) {
+    && (!checksInfo.attacked.GetBit(g1))
+    && (GetPiece(e1)->type() == PIECE_KING)
+    && (GetPiece(h1)->type() == PIECE_ROOK)
+    ) {
     if (GetPiece(f1)->isEmpty() && GetPiece(g1)->isEmpty()) {
       Move m(e1, g1);
       moves.push_back(m);
@@ -904,7 +913,10 @@ void ChessBoard::GetCastleWhite(std::vector<Move>& moves)
   }
   if (castleWQ
     && (!checksInfo.attacked.GetBit(c1))
-    && (!checksInfo.attacked.GetBit(d1))) {
+    && (!checksInfo.attacked.GetBit(d1))
+    && (GetPiece(e1)->type() == PIECE_KING)
+    && (GetPiece(a1)->type() == PIECE_ROOK)
+    ) {
     if (GetPiece(b1)->isEmpty() && GetPiece(c1)->isEmpty()
       && GetPiece(d1)->isEmpty()) {
       Move m(e1, c1);
@@ -956,11 +968,14 @@ int ChessBoard::ApplyMove(const Move& m)
   if (m.src == m.dst) {
     return -1;
   }
+  if (p->isEmpty()) {
+    return -2;
+  }
   if (color == nextColor) {
     nextColor = !color;
   }
   else {
-    return -2;
+    return -3;
   }
 
   uint8_t type = p->type();
@@ -1084,7 +1099,7 @@ UndoMove ChessBoard::GetUndoMove(const Move& m)
   u.m = m;
   u.captured = *(GetPiece(m.dst));
   Piece srcPiece = (*GetPiece(m.src));
-  if (srcPiece.type() == PIECE_PAWN && m.dst == enPassantDst){
+  if (hasEnPassant && srcPiece.type() == PIECE_PAWN && m.dst == enPassantDst){
     u.isEnPassant = true;
   }
   u.halfMoves = halfMoves;
