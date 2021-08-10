@@ -295,14 +295,20 @@ struct UndoMove
 {
   Move m;
   Piece captured;
+  /// TODO combine booleans into a flag
   bool isEnPassant;
   bool hasEnPassant;
   bool isPromo;
+  ///castling rights for the color to move.
+  bool castleK;
+  bool castleQ;
   ChessCoord enPassantDst;
   int halfMoves;
   UndoMove() : isEnPassant(false),
   hasEnPassant(false),
   isPromo(false),
+  castleK(false),
+  castleQ(false),
   halfMoves(0)
   {}
 };

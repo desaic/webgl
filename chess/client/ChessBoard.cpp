@@ -1001,13 +1001,13 @@ int ChessBoard::ApplyMove(const Move& m)
       if (m.src == e8) {
         if (castleBQ && m.dst == c8) {
           castling = CASTLE_BQ;
-          castleBQ = false;
         }
         else if (castleBK && m.dst == g8) {
           castling = CASTLE_BK;
-          castleBK = false;
         }
       }
+      castleBK = false;
+      castleBQ = false;
       break;
     case PIECE_ROOK:
       if (m.src.Col() == 0) {
@@ -1037,13 +1037,13 @@ int ChessBoard::ApplyMove(const Move& m)
       if (m.src == e1) {
         if (castleWQ && m.dst == c1) {
           castling = CASTLE_WQ;
-          castleWK = false;
         }
         else if (castleWK && m.dst == g1) {
           castling = CASTLE_WK;
-          castleWQ = false;
         }
       }
+      castleWK = false;
+      castleWQ = false;
       break;
     case PIECE_ROOK:
       if (m.src.Col() == 0) {
@@ -1106,6 +1106,14 @@ UndoMove ChessBoard::GetUndoMove(const Move& m)
   u.hasEnPassant = hasEnPassant;
   u.enPassantDst = enPassantDst;
   u.isPromo = (m.promo != PIECE_EMPTY);
+  if (nextColor == PIECE_BLACK) {
+    u.castleK = castleBK;
+    u.castleQ = castleBQ;
+  }
+  else {
+    u.castleK = castleWK;
+    u.castleQ = castleWQ;
+  }
   return u;
 }
 
@@ -1174,8 +1182,15 @@ void ChessBoard::Undo(const UndoMove& u)
   }
   
   halfMoves = u.halfMoves;
+
   if (nextColor == PIECE_BLACK) {
+    castleBK = u.castleK;
+    castleBQ = u.castleQ;
     fullMoves--;
+  }
+  else {
+    castleWK = u.castleK;
+    castleWQ = u.castleQ;
   }
   moveCount--;
   hasEnPassant = u.hasEnPassant;
