@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>sound</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="Tone.js"></script>
+	<script src="Tonejs-Instruments.js"></script>
+  </head>
+  <body>
+    <h1>This is a heading</h1>
+	<p>This is a paragraph.</p>
+	<p id="demo"></p>
+	<p id="pout">status</p>
+	<button id="bt1" type="button">start</button>
+	<button id="btDm913" type="button">Dm9 13</button>
+	<button id="btGmaj7" type="button">Gmaj7</button>
+	<button id="btG7" type="button">G7</button>
+	<button id="btCmaj7" type="button">Cmaj7</button>
+	<script>
+	var samples = SampleLibrary.load({
+		instruments: ['piano', 'guitar-acoustic', 'guitar-nylon'],
+		baseUrl: "./samples/"
+	})
+	var currentInst;
+	async function start(){
+	  await Tone.start()
+		for (var property in samples) {
+			if (samples.hasOwnProperty(property)) {
+				console.log(samples[property])
+				samples[property].release = .5;
+				samples[property].toMaster();
+			}
+		}
+		currentInst = samples['piano'];
+	  console.log('audio is ready')
+    }
+	
+	function Dm913(){
+		const chord = ["D4", "F4", "A4", "C5", "E5"];
+		playChord(chord);
+	}
+	function Gmaj7(){
+		const chord = ["G3", "D4", "F#4", "B4", "D5"];
+		playChord(chord);
+	}
+	function G7(){
+		const chord = ["G3", "D4", "F4", "B4", "D5"];
+		playChord(chord);
+	}
+	function Cmaj7(){
+		const chord = ["C3", "G3", "B3", "E4", "G4"];
+		playChord(chord);
+	}
+	///@param chord array of strings, each one is a note name 
+	async function playChord(chord){
+	  if(typeof currentInst === 'undefined'){
+	    await start();
+	  }
+		const synth = new Tone.PolySynth(Tone.AMSynth).toDestination();
+		const now = Tone.now();
+		const interval=0.125;
+		let t = 0;
+		for (i = 0; i<chord.length; i++){
+		  currentInst.triggerAttack(chord[i], now + t);
+		  t = t+interval;
+		}
+		currentInst.triggerRelease(chord, now + t + 1);
+	}
+	  
+	document.getElementById("btDm913").onclick=async ()=>{await Dm913();}
+	document.getElementById("bt1").onclick=Dm913;
+	document.getElementById("btGmaj7").onclick=Gmaj7;
+	document.getElementById("btG7").onclick=G7;
+	document.getElementById("btCmaj7").onclick=Cmaj7;
+	</script>
+  </body>
+</html>
