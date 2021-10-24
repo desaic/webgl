@@ -1,0 +1,64 @@
+#opCode 14
+opCode 28
+depth D:\data\ballBearing\ball0\tracking\0.bin
+printDataDir D:\data\ballBearing\ball0\printSplit/
+printDataIdx 15
+scanIdx0 21
+#dataDir D:\vbshare\watch\3\png
+#dataDir K:\manifold-1203\
+dataDir F:\darpa\checker1108\
+inputImage F:\darpa\checker1108\tif\jcam37.tif
+refImage F:\darpa\checker1108\sumImgT100D70.png
+homography F:\darpa\checker1108\hmat.txt
+#outDir D:\vbshare\watch\2\png\out\
+#dataFile K:\microCT\Manifold_cb_000\0300.cb
+dataFile K:\xilinx\raw4GSampleCoin.txt
+outFile D:\data\ML\coin\lineData1.txt
+laserFile D:\data\ML\coin\data1.txt
+triggerFile D:\data\ML\coin\data0.txt
+printImage K:\scans0118\manifold0105\slicesScaled\398.png
+scanImage K:\scans0118\manifold0105\scan\150.png
+scanFile 1204-140.png
+vol F:\darpa\checker1108\vol\22.vol
+imgOut F:\darpa\checker1108\sumImg.png
+volOut D:\data\kindleScan\kindle4.raw
+prevVol vol320-10um.vol
+#startIdx 922
+#endIdx 2014
+startIdx 29
+endIdx 51
+fullSize list 2
+521
+561
+scanRes list 3
+49.5
+49.5
+4.24
+printRes list 3
+42
+42.333
+15
+scanOrigin list 2
+-11
+17
+sampleCoord list 20
+92
+229
+108
+274
+130
+377
+298
+279
+252
+374
+158
+29
+505
+316
+501
+514
+103
+474
+300
+359

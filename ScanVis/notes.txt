@@ -1,0 +1,8 @@
+F:\dolphin\meshes/MMFinger.zip
+
+splitImages
+
+set res to 0.1 mm
+dumppng
+
+nanovdb

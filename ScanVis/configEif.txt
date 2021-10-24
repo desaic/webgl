@@ -1,0 +1,50 @@
+depth D:\data\ballBearing\ball0\tracking\0.bin
+printDataDir D:\data\ballBearing\ball0\printSplit/
+printDataIdx 910
+#dataDir D:\data\eif\
+#dataDir D:\data\mouthPiece1005\
+dataDir D:\vbshare\cubeLayers\
+outDir D:\data\eif\scan3\
+vol D:\data\1018\tileCoating.vol
+volOut D:\data\1018\tileCoating.raw
+prevVol vol2.vol
+#startIdx 922
+#endIdx 2014
+startIdx 0
+endIdx 199
+layer0 2014
+fullSize list 2
+1122
+1120
+scanRes list 3
+49.5
+49.5
+4.24
+printRes list 3
+42
+42.333
+15
+scanOrigin list 2
+19
+153
+sampleCoord list 20
+92
+229
+108
+274
+130
+377
+298
+279
+252
+374
+158
+29
+505
+316
+501
+514
+103
+474
+300
+359
