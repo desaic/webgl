@@ -1,4 +1,5 @@
 #include "Image.h"
+#include "Array2D.h"
 #include <opencv2/opencv.hpp>
 
 void fitZPlane(const ImageF32 & image, double & a, double &b, double & zcenter, int margin) {
@@ -59,4 +60,25 @@ void transformImage(const ImageF32 & input, ImageF32 & output, double a, double 
       output(i, j) = (float)(input(i, j) + a * (i - centerx) + b * (j - centery));
     }
   }
+}
+
+Array2D8u Scale(const Array2D8u& input, float sx, float sy)
+{
+  Vec2u inSize = input.GetSize();
+  Array2D8u out(inSize[0] * sx, inSize[1] * sy);
+  Vec2u outSize = out.GetSize();
+  for (unsigned row = 0; row < outSize[1]; row++) {
+    unsigned srcRow = row / sy;
+    if (srcRow >= inSize[1]) {
+      break;
+    }
+    for (unsigned col = 0; col < outSize[0]; col++) {
+      unsigned srcCol = col / sx;
+      if (srcCol >= inSize[0]) {
+        break;
+      }
+      out(col, row) = input(srcCol, srcRow);
+    }
+  }
+  return out;
 }

@@ -1,7 +1,9 @@
 #pragma once
+
 #include <string>
 #include <vector>
 #include <DualPixel.hpp>
+
 int SavePrintVolume(std::string filename, std::vector<DualPixel> & vol, int * volSize);
 //identical to SavePrintVolume except argument type.
 int SaveVolume(std::string filename, std::vector<uint8_t> & vol, int * volSize);

@@ -64,5 +64,5 @@ private:
 typedef Array2D<float> Array2Df;
 typedef Array2D<unsigned char> Array2D8u;
 typedef Array2D<unsigned short> Array2D16u;
-
+Array2D8u Scale(const Array2D8u& input, float sx, float sy);
 #endif

@@ -1,3 +1,5 @@
+#ifndef FONT_H
+#define FONT_H
 #include <stdint.h>
 #include <vector>
 struct glyph_dsc_t{
@@ -26,3 +28,4 @@ struct font_t{
      uint32_t glyph_cnt ;			/*Number of glyphs in the font*/
      FontGlyph GetBitmap(char c);
 };
+#endif

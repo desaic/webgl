@@ -31,3 +31,4 @@ typedef Image<float> ImageF32;
 void fitZPlane(const ImageF32 & image, double & a, double &b, double & zcenter, int margin = 0);
 void transformImage(const ImageF32 & input, ImageF32 & output, double a, double b);
 void rotateImage(const ImageF32 & input, ImageF32 & output, double angle);
+
