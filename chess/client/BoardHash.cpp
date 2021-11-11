@@ -1,2 +1,121 @@
 #pragma once
 #include "BoardHash.h"
+
+uint64_t randomNumber() {
+	return
+		(((uint64_t)rand() << 0) & 0x000000000000FFFFull)	 |
+		(((uint64_t)rand() << 16) & 0x00000000FFFF0000ull) |
+		(((uint64_t)rand() << 32) & 0x0000FFFF00000000ull) |
+		(((uint64_t)rand() << 48) & 0xFFFF000000000000ull);
+}
+
+void BoardHash::Init() {
+	for (uint8_t s = 0; s < NUM_SQUARES; ++s) {
+			for (uint8_t p = 0; p < NUM_PIECES; ++p) {
+				positionTable[s][p] = randomNumber();
+			}
+	}
+
+	for (uint8_t i = 0; i < CASTLING_OPTIONS; ++i) {
+		castlingTable[i] = randomNumber();
+	}
+
+	for (uint8_t i = 0; i < CASTLING_OPTIONS; ++i) {
+		enpassantTable[i] = randomNumber();
+	}
+
+	side = randomNumber();
+}
+
+// For initializing a fresh board position
+void BoardHash::Set(const ChessBoard& b) {
+	for (Piece p : b.board) {
+		hash ^= p.info;
+	}
+
+	if (b.hasEnPassant) {
+		hash ^= enpassantTable[b.enPassantDst.Col()];
+	}
+
+	if (b.castleBK) hash ^= castlingTable[0];
+	if (b.castleBQ) hash ^= castlingTable[1];
+	if (b.castleWK) hash ^= castlingTable[2];
+	if (b.castleWQ) hash ^= castlingTable[3];
+
+	if (b.nextColor == PIECE_BLACK) {
+		hash ^= side;
+	}
+}
+
+void BoardHash::Update(const ChessBoard& b, const Move& m) {
+	// undo the source
+	hash ^= positionTable[m.src.coord][b.GetPiece(m.src.coord)->info];
+
+	// add the dst position
+	uint8_t piece = m.promo == PIECE_EMPTY ? b.GetPiece(m.src.coord)->info : m.promo.info;
+	hash ^= positionTable[m.dst.coord][piece];
+
+	// captures
+	const Piece* capturedPiece = b.GetPiece(m.dst.coord);
+	if (capturedPiece != PIECE_EMPTY) {
+		hash ^= positionTable[m.dst.coord][capturedPiece->info];
+	}
+
+	// castles
+	if (b.GetPiece(m.src.coord)->info == PIECE_KING) {
+		if (b.nextColor == PIECE_BLACK) {
+			if (b.castleBK) hash ^= castlingTable[0];
+			if (b.castleBQ) hash ^= castlingTable[1];
+		} else if (b.nextColor == PIECE_WHITE) {
+			if (b.castleWK) hash ^= castlingTable[2];
+			if (b.castleWQ) hash ^= castlingTable[3];
+		}
+
+		if (m.src.coord == m.dst.coord - 2) {
+			hash ^= positionTable[m.dst.coord - 1][PIECE_ROOK];
+			hash ^= positionTable[m.dst.coord + 2][PIECE_ROOK];
+		}
+		if (m.src.coord == m.dst.coord + 2) {
+			hash ^= positionTable[m.dst.coord - 1][PIECE_ROOK];
+			hash ^= positionTable[m.dst.coord + 1][PIECE_ROOK];
+		}
+	}
+
+	if (b.GetPiece(m.src.coord)->info == PIECE_ROOK) {
+		if (m.src.Col() == 0) {
+			if (b.nextColor == PIECE_BLACK) {
+				if (b.castleBQ) hash ^= castlingTable[1];
+			} else {
+				if (b.castleWQ) hash ^= castlingTable[3];
+			}
+		}
+		if (m.src.Col() == 7) {
+			if (b.nextColor == PIECE_BLACK) {
+				if (b.castleBK) hash ^= castlingTable[0];
+			} else {
+				if (b.castleWK) hash ^= castlingTable[2];
+			}
+		}
+	}
+
+	// en passant
+	if (b.hasEnPassant) {
+		hash ^= enpassantTable[b.enPassantDst.Col()];
+	}
+
+	if (b.GetPiece(m.src.coord)->info == PIECE_PAWN) {
+		if (abs(m.dst.Row() - m.src.Row()) == 2) {
+			hash ^= enpassantTable[m.src.Col()];
+		}
+		
+		// en passant capture
+		if (m.src.Col() != m.dst.Col()) {
+			if (b.GetPiece(m.dst.coord) == PIECE_EMPTY) {
+				hash ^= positionTable[m.dst.coord][PIECE_PAWN];
+			}
+		}
+	}
+
+	//side
+	hash ^= side;
+}
