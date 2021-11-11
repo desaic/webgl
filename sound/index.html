@@ -16,7 +16,9 @@
 	<button id="btDm913" type="button">Dm9 13</button>
 	<button id="btGmaj7" type="button">Gmaj7</button>
 	<button id="btG7" type="button">G7</button>
+	<button id="btG7_2" type="button">G7_2</button>
 	<button id="btCmaj7" type="button">Cmaj7</button>
+	<button id="btC7" type="button">C7</button>
 	<script>
 	var samples = SampleLibrary.load({
 		instruments: ['piano', 'guitar-acoustic', 'guitar-nylon'],
@@ -48,8 +50,16 @@
 		const chord = ["G3", "D4", "F4", "B4", "D5"];
 		playChord(chord);
 	}
+	function G7_2(){
+		const chord = ["G2", "D3", "F3", "B3", "D4"];
+		playChord(chord);
+	}
 	function Cmaj7(){
 		const chord = ["C3", "G3", "B3", "E4", "G4"];
+		playChord(chord);
+	}
+	function C7(){
+		const chord = ["C3", "G3", "Bb3", "E4", "G4"];
 		playChord(chord);
 	}
 	///@param chord array of strings, each one is a note name 
@@ -72,7 +82,9 @@
 	document.getElementById("bt1").onclick=Dm913;
 	document.getElementById("btGmaj7").onclick=Gmaj7;
 	document.getElementById("btG7").onclick=G7;
+	document.getElementById("btG7_2").onclick=G7_2;
 	document.getElementById("btCmaj7").onclick=Cmaj7;
+	document.getElementById("btC7").onclick=C7;
 	</script>
   </body>
 </html>
