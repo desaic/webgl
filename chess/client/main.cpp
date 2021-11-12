@@ -86,11 +86,40 @@ void TestEvalWithSearch()
   //TestEvalWithSearch(fen4);
 }
 
+void TestHash()
+{
+  ChessBoard board;
+  BoardHash::Init();
+
+  board.SetStartPos();
+  board.InitHash();
+  
+  uint64_t h = board.HashVal();
+  std::cout << h << "\n";
+  Move m1("e2","e4");
+  Move m2("e7", "e5");
+  Move m3("d2", "d4");
+
+  UndoMove u = board.GetUndoMove(m1);
+  std::vector<UndoMove> undoStack;
+  board.ApplyMove(m1);
+  board.ApplyMove(m2);
+  board.ApplyMove(m3);
+  std::cout << board.HashVal() << "\n";
+
+  board.SetStartPos();
+  board.InitHash();
+  std::cout << board.HashVal() << "\n";
+  board.ApplyMove(m3);
+  board.ApplyMove(m2);
+  board.ApplyMove(m1);
+  std::cout << board.HashVal() << "\n";
+}
+
 int main(int argc, char* argv[])
 {
-  //TestFEN();
-  //TestEvalWithSearch();
-
+ 
+  TestHash();
   initWSA();
  
   ChessClient client;

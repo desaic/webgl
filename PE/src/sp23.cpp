@@ -156,8 +156,8 @@ static long double tetVolV2(const std::vector<int>& s)
   return double(vol);
 }
 
-//int sp23()
-int main()
+int sp23()
+//int main()
 {
   int N = 0;
   std::cin >> N;

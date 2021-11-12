@@ -51,7 +51,7 @@ double tetVolV0(const std::vector<int>& s)
   return vol;
 }
 
-double tetVolV1(const std::vector<int>& s)
+static double tetVolV1(const std::vector<int>& s)
 {
   //uvwUVW
   //012345

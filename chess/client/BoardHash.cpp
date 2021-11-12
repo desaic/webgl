@@ -1,15 +1,25 @@
 #pragma once
+
 #include "BoardHash.h"
+#include "ChessBoard.h"
+
+#include <cstdlib>
+
+uint64_t BoardHash::positionTable[NUM_SQUARES][NUM_PIECES];
+uint64_t BoardHash::castlingTable[CASTLING_OPTIONS];
+uint64_t BoardHash::enpassantTable[ENPASSANT_OPTIONS];
+uint64_t BoardHash::side;
 
 uint64_t randomNumber() {
 	return
-		(((uint64_t)rand() << 0) & 0x000000000000FFFFull)	 |
-		(((uint64_t)rand() << 16) & 0x00000000FFFF0000ull) |
-		(((uint64_t)rand() << 32) & 0x0000FFFF00000000ull) |
-		(((uint64_t)rand() << 48) & 0xFFFF000000000000ull);
+		(((uint64_t)std::rand() << 0) & 0x000000000000FFFFull)	 |
+		(((uint64_t)std::rand() << 16) & 0x00000000FFFF0000ull) |
+		(((uint64_t)std::rand() << 32) & 0x0000FFFF00000000ull) |
+		(((uint64_t)std::rand() << 48) & 0xFFFF000000000000ull);
 }
 
 void BoardHash::Init() {
+	std::srand(123456789);
 	for (uint8_t s = 0; s < NUM_SQUARES; ++s) {
 			for (uint8_t p = 0; p < NUM_PIECES; ++p) {
 				positionTable[s][p] = randomNumber();
@@ -29,6 +39,7 @@ void BoardHash::Init() {
 
 // For initializing a fresh board position
 void BoardHash::Set(const ChessBoard& b) {
+	hash = 0;
 	for (Piece p : b.board) {
 		hash ^= p.info;
 	}

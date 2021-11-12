@@ -211,8 +211,8 @@ void ReconTests()
   }
 }
 
-//int sp20()
-int main()
+int sp20()
+//int main()
 {
   //ReconTests();
   int t;

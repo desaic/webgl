@@ -1,5 +1,7 @@
 #pragma once
 
+#include "BoardHash.h"
+
 #include <array>
 #include <stdint.h>
 #include <string>
@@ -417,13 +419,21 @@ public:
     return checksInfo.IsInCheck();
   }
 
-
   void SetStartPos();
 
   ///\return 0 on success
   int FromFen(const std::string& fen);
 
   std::string GetFen();
+
+  ///initialize hash data structure to current board position.
+  void InitHash();
+  uint64_t HashVal()const;
+  /// cleared by InitHash().
+  /// Pushed onto by ApplyMove()
+  /// popped by Undo()
+  std::vector<uint64_t> hashHistory;
+  BoardHash hash;
 
 private:
   std::vector<ChessCoord>* GetPieceList(uint8_t color);

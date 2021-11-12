@@ -12,6 +12,7 @@
 
 extern void p171();
 extern int sp17();
+extern int sp25();
 
 void TestBigInt()
 {
@@ -69,6 +70,6 @@ void TestThreadSafeQueue()
 int main(int argc, char * argv[]) {
   //TestBigInt();
   //TestThreadSafeQueue();
-  sp17();
+  sp25();
   return 0;
 }

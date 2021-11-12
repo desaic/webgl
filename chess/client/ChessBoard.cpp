@@ -1090,6 +1090,8 @@ int ChessBoard::ApplyMove(const Move& m)
   }
 
   moveCount++;
+  hashHistory.push_back(HashVal());
+  hash.Update(*this, m);
   return 0;
 }
 
@@ -1195,6 +1197,16 @@ void ChessBoard::Undo(const UndoMove& u)
   moveCount--;
   hasEnPassant = u.hasEnPassant;
   enPassantDst = u.enPassantDst;
+  
+  if (hashHistory.size() > 0) {
+    uint64_t oldHash = hashHistory.back();
+    hash.hash = oldHash;
+    hashHistory.pop_back();
+  }
+  else {
+    hash.Set(*this);
+    std::cout << "warning: no more steps to undo.\n";
+  }
 }
 
 char PieceFEN(const Piece& info)
@@ -1275,6 +1287,16 @@ void ChessBoard::SetStartPos()
 {
   const std::string startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
   FromFen(startFen);
+}
+
+void ChessBoard::InitHash()
+{
+  hash.Set(*this);
+}
+
+uint64_t ChessBoard::HashVal()const
+{
+  return hash.hash;
 }
 
 int ChessBoard::FromFen(const std::string& fen)
