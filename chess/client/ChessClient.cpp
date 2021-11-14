@@ -95,7 +95,7 @@ void ChessClient::HandleCmd(const std::string& cmd) {
     else {
       undoStack.push_back(board.GetUndoMove(attempt));
       board.ApplyMove(attempt);
-      
+      std::cout << "hash: " << board.HashVal() << "\n";
       bot.SetBoard(board);
     }
     SendBoard();
@@ -127,6 +127,7 @@ void ChessClient::HandleCli(const std::string& cmd)
       UndoMove u = undoStack.back();
       undoStack.pop_back();
       board.Undo(u);
+      std::cout << "hash: " << board.HashVal() << "\n";
       SendBoard();
     }
   }
