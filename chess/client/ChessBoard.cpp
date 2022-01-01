@@ -971,13 +971,14 @@ int ChessBoard::ApplyMove(const Move& m)
   if (p->isEmpty()) {
     return -2;
   }
-  if (color == nextColor) {
-    nextColor = !color;
-  }
-  else {
+  if (color != nextColor) {
     return -3;
   }
-
+  
+  hashHistory.push_back(HashVal());
+  hash.Update(*this, m);
+  
+  nextColor = !color;
   uint8_t type = p->type();
   hasEnPassant = false;
   enPassantDst = ChessCoord();
@@ -1090,8 +1091,6 @@ int ChessBoard::ApplyMove(const Move& m)
   }
 
   moveCount++;
-  hashHistory.push_back(HashVal());
-  hash.Update(*this, m);
   return 0;
 }
 
@@ -1291,6 +1290,7 @@ void ChessBoard::SetStartPos()
 
 void ChessBoard::InitHash()
 {
+  hashHistory.clear();
   hash.Set(*this);
 }
 
