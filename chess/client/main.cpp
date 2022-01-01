@@ -99,12 +99,14 @@ void TestHash()
   Move m1("e2","e4");
   Move m2("e7", "e5");
   Move m3("d2", "d4");
+  Move m4("g8", "f6");
 
   UndoMove u = board.GetUndoMove(m1);
   std::vector<UndoMove> undoStack;
   board.ApplyMove(m1);
   board.ApplyMove(m2);
   board.ApplyMove(m3);
+  board.ApplyMove(m4);
   std::cout << board.HashVal() << "\n";
 
   board.SetStartPos();
@@ -113,6 +115,7 @@ void TestHash()
   board.ApplyMove(m3);
   board.ApplyMove(m2);
   board.ApplyMove(m1);
+  board.ApplyMove(m4);
   std::cout << board.HashVal() << "\n";
 }
 
