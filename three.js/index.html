@@ -8,12 +8,11 @@
 			canvas { width: 100%; height: 100% }
 		</style>
 	</head>
-	<body>
-		<script src="js/three.js"></script>
-		<script src="js/main.js"></script>
-		<script>		
-		    InitScene();
-			animate();
+	<body>	
+		<script type="module" src="./main.js"></script>
+		<script type="module">
+			import * as main from "./main.js";
+		    main.InitScene();
 		</script>
 	</body>
 </html>
