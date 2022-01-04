@@ -3,12 +3,20 @@ var scene ;
 var camera ;
 var renderer ;
 var cube;
+const fps = 1;
 
 function Animate() {
-    requestAnimationFrame( Animate );
+    setTimeout(() => {
+        requestAnimationFrame( Animate );
+    }, 1000 / fps);
     if(cube!=undefined){
         cube.rotation.x += 0.1;
         cube.rotation.y += 0.1;    
+
+        // Get the first child node of an <ul> element
+        var item = document.getElementById("fps");
+        // Replace the first child node of <ul> with the newly created text node
+        item.innerHTML = "FPS: " + fps;
     }
     if(scene != undefined){
         renderer.render( scene, camera );
