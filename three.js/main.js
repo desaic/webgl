@@ -4,7 +4,7 @@ var camera ;
 var renderer ;
 var cube;
 const fps = 1;
-
+var frameCnt = 0;
 function Animate() {
     setTimeout(() => {
         requestAnimationFrame( Animate );
@@ -14,9 +14,10 @@ function Animate() {
         cube.rotation.y += 0.1;    
 
         // Get the first child node of an <ul> element
-        var item = document.getElementById("fps");
+        var item = document.getElementById("text1");
         // Replace the first child node of <ul> with the newly created text node
-        item.innerHTML = "FPS: " + fps;
+        item.innerHTML = "FPS: " + frameCnt;
+        frameCnt++;
     }
     if(scene != undefined){
         renderer.render( scene, camera );

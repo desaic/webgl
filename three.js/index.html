@@ -9,20 +9,12 @@
 		</style>
 	</head>
 	<body>
+		<div id="text1" style="position:absolute;width:100;height:100;color:white;top:200px;left:200px">
+			 stuff 
+		</div>
 		<script type="module" src="./main.js"></script>
 		<script type="module">			
 			import * as main from "./main.js";
-			var text2 = document.createElement('fps');
-			text2.style.position = 'absolute';
-			text2.style.width = 100;
-			text2.style.height = 100;
-			// text2.style.backgroundColor = "white";
-			text2.style.color = "white";
-			text2.innerHTML = "FPS:" ;
-			text2.style.top = 200 + 'px';
-			text2.style.left = 200 + 'px';
-			document.body.appendChild(text2);
-
 			main.InitScene();
 		</script>
 	</body>
