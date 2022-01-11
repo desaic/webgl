@@ -5,6 +5,11 @@
 
 #include <cstdlib>
 
+#define a4 24
+#define h4 31
+#define a5 32
+#define h5 39
+
 uint64_t BoardHash::positionTable[NUM_SQUARES][NUM_PIECES];
 uint64_t BoardHash::castlingTable[CASTLING_OPTIONS];
 uint64_t BoardHash::enpassantTable[ENPASSANT_OPTIONS];
@@ -17,7 +22,7 @@ uint64_t randomNumber() {
 		(((uint64_t)std::rand() << 32) & 0x0000FFFF00000000ull) |
 		(((uint64_t)std::rand() << 48) & 0xFFFF000000000000ull);
 }
-
+	
 void BoardHash::Init() {
 	std::srand(123456789);
 	for (uint8_t s = 0; s < NUM_SQUARES; ++s) {
@@ -116,9 +121,22 @@ void BoardHash::Update(const ChessBoard& b, const Move& m) {
 
 	if (b.GetPiece(m.src.coord)->info == PIECE_PAWN) {
 		if (abs(m.dst.Row() - m.src.Row()) == 2) {
-			hash ^= enpassantTable[m.src.Col()];
+			bool hasEnpassant = false;
+			if (m.dst.coord != a4 && m.dst.coord != a5) {
+				if (b.GetPiece(m.dst.coord - 1)->info == PIECE_PAWN) {
+					hasEnpassant=true;
+				}
+			}
+			else if (m.dst.coord != h4 && m.dst.coord != h5 && !hasEnpassant) {
+				if (b.GetPiece(m.dst.coord + 1)->info == PIECE_PAWN) {
+					hasEnpassant=true;
+				}
+			}
+			if (hasEnpassant) {
+				hash ^= enpassantTable[m.src.Col()];
+			}
 		}
-		
+
 		// en passant capture
 		if (m.src.Col() != m.dst.Col()) {
 			if (b.GetPiece(m.dst.coord) == PIECE_EMPTY) {

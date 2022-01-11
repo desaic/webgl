@@ -484,4 +484,6 @@ private:
   ChecksInfo ComputeChecks();
 
   ChecksInfo checksInfo;
+
+  void activateEnPassant();
 };

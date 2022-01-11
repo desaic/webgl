@@ -11,6 +11,10 @@
 #define f1 5
 #define g1 6
 #define h1 7
+#define a4 24
+#define h4 31
+#define a5 32
+#define h5 39
 #define a8 56
 #define b8 57
 #define c8 58
@@ -991,7 +995,7 @@ int ChessBoard::ApplyMove(const Move& m)
     case PIECE_PAWN:
       if (m.src.Row() == 6 && m.dst.Row() == 4) {
         enPassantDst = ChessCoord(m.dst.Col(), 5);
-        hasEnPassant = true;
+        activateEnPassant();
       }
       if (m.src.Col() != m.dst.Col() && GetPiece(m.dst)->isEmpty()) {
         isEnPassant = true;
@@ -1027,7 +1031,7 @@ int ChessBoard::ApplyMove(const Move& m)
     case PIECE_PAWN:
       if (m.src.Row() == 1 && m.dst.Row() == 3) {
         enPassantDst = ChessCoord(m.dst.Col(), 2);
-        hasEnPassant = true;
+        activateEnPassant();
       }
       if (m.src.Col() != m.dst.Col() && GetPiece(m.dst)->isEmpty()) {
         isEnPassant = true;
@@ -1106,6 +1110,7 @@ UndoMove ChessBoard::GetUndoMove(const Move& m)
   u.halfMoves = halfMoves;
   u.hasEnPassant = hasEnPassant;
   u.enPassantDst = enPassantDst;
+
   u.isPromo = (m.promo != PIECE_EMPTY);
   if (nextColor == PIECE_BLACK) {
     u.castleK = castleBK;
@@ -1166,8 +1171,9 @@ void ChessBoard::Undo(const UndoMove& u)
     }
   }
   else if (u.isEnPassant) {
-    hasEnPassant = true;
     enPassantDst = u.m.dst;
+    activateEnPassant();
+
     ChessCoord captured = enPassantDst;
     if (nextColor == PIECE_BLACK) {
       captured.IncRow();
@@ -1377,7 +1383,7 @@ int ChessBoard::FromFen(const std::string& fen)
     c = fen[strIdx];
     uint8_t row = c - '1';
     enPassantDst.Set(col, row);
-    hasEnPassant = true;
+    activateEnPassant();
   }
  
   strIdx+=2;
@@ -1760,4 +1766,30 @@ ChecksInfo ChessBoard::ComputeChecks()
   }
 
   return checks;
+}
+
+void ChessBoard::activateEnPassant() {
+  // 0-3, 0-4, 7-3, 7-4
+  //std::vector<uint8_t> badLeft = {
+  //  0 + 3*BOARD_SIZE,
+  //  0 + 4*BOARD_SIZE
+  //};
+  //std::vector<uint8_t> badRight = {
+  //  7 + 3*BOARD_SIZE,
+  //  7 + 4*BOARD_SIZE
+  //};
+
+  if (enPassantDst.coord != a4 && enPassantDst.coord != a5) {
+    if (GetPiece(enPassantDst.coord - 1)->info == PIECE_PAWN) {
+      hasEnPassant = true;
+      return;
+    }
+  }
+
+  if (enPassantDst.coord != h4 && enPassantDst.coord != h5) {
+    if (GetPiece(enPassantDst.coord + 1)->info == PIECE_PAWN) {
+      hasEnPassant = true;
+      return;
+    }
+  }
 }
