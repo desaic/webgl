@@ -14,11 +14,8 @@ function Animate() {
     }, 1000 / fps);
     if(cube!=undefined){ 
 
-        // Get the first child node of an <ul> element
-        var item = document.getElementById("text1");
-        // Replace the first child node of <ul> with the newly created text node
-        item.innerHTML = "Frame: " + frameCnt;
         frameCnt++;
+        camControl.update();
     }
     if(scene != undefined){
         renderer.render( scene, camera );
@@ -38,7 +35,12 @@ function InitScene()
     camControl.minDistance = camZnear;
     camControl.maxDistance = camZfar;
     camControl.maxPolarAngle = Math.PI / 2;
-    
+    camControl.enableDamping = true; // an animation loop is required when either damping or auto-rotation are enabled
+    camControl.dampingFactor = 0.02;
+    camControl.rotateSpeed = 30;
+
+    camControl.screenSpacePanning = false;
+
     var geometry = new THREE.BoxGeometry( 1, 1, 1 );
     var material = new THREE.MeshBasicMaterial( { color: 0x00ff00 } );
     cube = new THREE.Mesh( geometry, material );
