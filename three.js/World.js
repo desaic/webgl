@@ -9,17 +9,68 @@ class World{
         this.renderer.setSize( window.innerWidth, window.innerHeight );
         document.body.appendChild( this.renderer.domElement );
 
-        const  showLightPos = false;
+        const  showLightPos = true;
         this.SetupLights(showLightPos);
         this.SetupCamera();
-        
+
+        // Cube
         var geometry = new THREE.BoxGeometry( 1, 1, 1 );
         var material = new THREE.MeshPhongMaterial( { specular: 0x808080, color:0xCCDDFF, shininess:1000 } );
         this.cube = new THREE.Mesh( geometry, material );
         this.scene.add( this.cube );
+
+        // Torus knot
+        geometry = new THREE.TorusKnotGeometry( 10, 3, 100, 16 );
+        material =  new THREE.MeshPhongMaterial( { specular: 0x808080, color:0xCCDDFF, shininess:1000 } );
+        const torusKnot = new THREE.Mesh( geometry, material );
+        this.scene.add( torusKnot );
+        
+        const startButton = document.getElementById( 'startButton' );
+        startButton.world = this;
+        startButton.addEventListener( 'click', function (){this.world.PlaySound(); });
+
         this.scene.background = new THREE.Color( 0x706050 );
 
         this.frameCnt = 0;
+    }
+
+    PlaySound() {
+        // create an AudioListener and add it to the camera
+        const listener = new THREE.AudioListener();
+        this.camera.add( listener );
+        // create a global audio source
+        const sound = new THREE.Audio( listener );
+        const songElement = document.getElementById( 'song' );
+        sound.setMediaElementSource( songElement );
+        songElement.play();
+        this.scene.add(sound);
+        
+        // // load a sound and set it as the Audio object's buffer
+        // const loader = new THREE.AudioLoader();
+        // // load a resource
+        // loader.load(
+        //     // resource URL
+        //     'audio/ambient_ocean.ogg',
+
+        //     // onLoad callback
+        //     function ( audioBuffer ) {
+        //         // set the audio object buffer to the loaded object
+        //         oceanAmbientSound.setBuffer( audioBuffer );
+
+        //         // play the audio
+        //         oceanAmbientSound.play();
+        //     },
+
+        //     // onProgress callback
+        //     function ( xhr ) {
+        //         console.log( (xhr.loaded / xhr.total * 100) + '% loaded' );
+        //     },
+
+        //     // onError callback
+        //     function ( err ) {
+        //         console.log( 'An error happened' );
+        //     }
+        // );
     }
 
     SetupCamera(){
@@ -33,7 +84,7 @@ class World{
         this.camControl.screenSpacePanning = false;
         this.camera.position.x = 0;  
         this.camera.position.y = 1;  
-        this.camera.position.z = 2;  
+        this.camera.position.z = 2;
     }
 
     SetupLights(showLightPos){
