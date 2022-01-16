@@ -1,7 +1,7 @@
 import * as THREE from './js/three.module.js';
 import { OrbitControls } from './js/OrbitControls.js';
 
-/// unit m
+/// unit is meters
 class World{
     constructor(){
         this.scene = new THREE.Scene();
@@ -17,24 +17,76 @@ class World{
         var geometry = new THREE.BoxGeometry( 1, 1, 1 );
         var material = new THREE.MeshPhongMaterial( { specular: 0x808080, color:0xCCDDFF, shininess:1000 } );
         this.cube = new THREE.Mesh( geometry, material );
+        this.cube.position.y=2;
         this.scene.add( this.cube );
 
         // Torus knot
-        geometry = new THREE.TorusKnotGeometry( 10, 3, 100, 16 );
+        geometry = new THREE.TorusKnotGeometry( 1, 0.2, 50, 16 );
         material =  new THREE.MeshPhongMaterial( { specular: 0x808080, color:0xCCDDFF, shininess:1000 } );
         const torusKnot = new THREE.Mesh( geometry, material );
+        torusKnot.position.y=2;
         this.scene.add( torusKnot );
         
+        this.AddFloor();
+
         const startButton = document.getElementById( 'startButton' );
         startButton.world = this;
-        startButton.addEventListener( 'click', function (){this.world.PlaySound(); });
+        startButton.addEventListener( 'click', function (){this.world.PlayBGM(); });
 
         this.scene.background = new THREE.Color( 0x706050 );
 
         this.frameCnt = 0;
     }
 
-    PlaySound() {
+    AddFloor(){
+        const floorMat = new THREE.MeshStandardMaterial( {
+            roughness: 0.8,
+            color: 0xffffff,
+            metalness: 0.2,
+            bumpScale: 0.0005
+        } );
+        const textureLoader = new THREE.TextureLoader();
+        textureLoader.load( "textures/hardwood2_diffuse.jpg", function ( map ) {
+
+            map.wrapS = THREE.RepeatWrapping;
+            map.wrapT = THREE.RepeatWrapping;
+            map.anisotropy = 4;
+            map.repeat.set( 10, 24 );
+            map.encoding = THREE.sRGBEncoding;
+            floorMat.map = map;
+            floorMat.needsUpdate = true;
+
+        } );
+        textureLoader.load( "textures/hardwood2_bump.jpg", function ( map ) {
+
+            map.wrapS = THREE.RepeatWrapping;
+            map.wrapT = THREE.RepeatWrapping;
+            map.anisotropy = 4;
+            map.repeat.set( 10, 24 );
+            floorMat.bumpMap = map;
+            floorMat.needsUpdate = true;
+
+        } );
+        textureLoader.load( "textures/hardwood2_roughness.jpg", function ( map ) {
+
+            map.wrapS = THREE.RepeatWrapping;
+            map.wrapT = THREE.RepeatWrapping;
+            map.anisotropy = 4;
+            map.repeat.set( 10, 24 );
+            floorMat.roughnessMap = map;
+            floorMat.needsUpdate = true;
+
+        } );
+
+        const floorGeometry = new THREE.PlaneGeometry( 20, 20 );
+        const floorMesh = new THREE.Mesh( floorGeometry, floorMat );
+        floorMesh.receiveShadow = true;
+        floorMesh.rotation.x = - Math.PI / 2.0;
+        this.scene.add( floorMesh );
+        
+    }
+
+    PlayBGM() {
         // create an AudioListener and add it to the camera
         const listener = new THREE.AudioListener();
         this.camera.add( listener );
@@ -44,33 +96,6 @@ class World{
         sound.setMediaElementSource( songElement );
         songElement.play();
         this.scene.add(sound);
-        
-        // // load a sound and set it as the Audio object's buffer
-        // const loader = new THREE.AudioLoader();
-        // // load a resource
-        // loader.load(
-        //     // resource URL
-        //     'audio/ambient_ocean.ogg',
-
-        //     // onLoad callback
-        //     function ( audioBuffer ) {
-        //         // set the audio object buffer to the loaded object
-        //         oceanAmbientSound.setBuffer( audioBuffer );
-
-        //         // play the audio
-        //         oceanAmbientSound.play();
-        //     },
-
-        //     // onProgress callback
-        //     function ( xhr ) {
-        //         console.log( (xhr.loaded / xhr.total * 100) + '% loaded' );
-        //     },
-
-        //     // onError callback
-        //     function ( err ) {
-        //         console.log( 'An error happened' );
-        //     }
-        // );
     }
 
     SetupCamera(){
@@ -83,8 +108,8 @@ class World{
         this.camControl.maxPolarAngle = Math.PI / 2; 
         this.camControl.screenSpacePanning = false;
         this.camera.position.x = 0;  
-        this.camera.position.y = 1;  
-        this.camera.position.z = 2;
+        this.camera.position.y = 2;  
+        this.camera.position.z = 4;
     }
 
     SetupLights(showLightPos){
