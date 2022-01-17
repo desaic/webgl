@@ -1,5 +1,6 @@
 import * as THREE from './js/three.module.js';
 import { OrbitControls } from './js/OrbitControls.js';
+import { RigidBody } from './RigidBody.js';
 
 /// unit is meters
 class World{
@@ -13,16 +14,10 @@ class World{
         this.SetupLights(showLightPos);
         this.SetupCamera();
 
-        // Cube
-        var geometry = new THREE.BoxGeometry( 1, 1, 1 );
-        var material = new THREE.MeshPhongMaterial( { specular: 0x808080, color:0xCCDDFF, shininess:1000 } );
-        this.cube = new THREE.Mesh( geometry, material );
-        this.cube.position.y=2;
-        this.scene.add( this.cube );
 
         // Torus knot
-        geometry = new THREE.TorusKnotGeometry( 1, 0.2, 50, 16 );
-        material =  new THREE.MeshPhongMaterial( { specular: 0x808080, color:0xCCDDFF, shininess:1000 } );
+        var geometry = new THREE.TorusKnotGeometry( 1, 0.2, 50, 16 );
+        var material =  new THREE.MeshPhongMaterial( { specular: 0x808080, color:0xCCDDFF, shininess:1000 } );
         const torusKnot = new THREE.Mesh( geometry, material );
         torusKnot.position.y=2;
         this.scene.add( torusKnot );
@@ -36,13 +31,28 @@ class World{
         this.scene.background = new THREE.Color( 0x706050 );
 
         this.frameCnt = 0;
+
+        //array of rigid bodies
+        this.rb = [];
+        this.AddCube();
+    }
+
+    AddCube(){
+        // Cube
+        var geometry = new THREE.BoxGeometry( 1, 1, 1 );
+        var material = new THREE.MeshPhongMaterial( { specular: 0x808080, color:0xCCDDFF, shininess:1000 } );
+        this.cube = new THREE.Mesh( geometry, material );
+        this.cube.position.y=2;
+        this.scene.add( this.cube );
+        const cubeRb = new RigidBody(this.cube);
+        this.rb.push(cubeRb);
     }
 
     AddFloor(){
         const floorMat = new THREE.MeshStandardMaterial( {
-            roughness: 0.8,
+            roughness: 0.2,
             color: 0xffffff,
-            metalness: 0.2,
+            metalness: 0.5,
             bumpScale: 0.0005
         } );
         const textureLoader = new THREE.TextureLoader();
@@ -58,22 +68,11 @@ class World{
 
         } );
         textureLoader.load( "textures/hardwood2_bump.jpg", function ( map ) {
-
             map.wrapS = THREE.RepeatWrapping;
             map.wrapT = THREE.RepeatWrapping;
             map.anisotropy = 4;
             map.repeat.set( 10, 24 );
             floorMat.bumpMap = map;
-            floorMat.needsUpdate = true;
-
-        } );
-        textureLoader.load( "textures/hardwood2_roughness.jpg", function ( map ) {
-
-            map.wrapS = THREE.RepeatWrapping;
-            map.wrapT = THREE.RepeatWrapping;
-            map.anisotropy = 4;
-            map.repeat.set( 10, 24 );
-            floorMat.roughnessMap = map;
             floorMat.needsUpdate = true;
 
         } );
@@ -107,9 +106,11 @@ class World{
         this.camControl.maxDistance = camZfar;
         this.camControl.maxPolarAngle = Math.PI / 2; 
         this.camControl.screenSpacePanning = false;
+        this.camControl.target.set(0,1,0);
         this.camera.position.x = 0;  
         this.camera.position.y = 2;  
         this.camera.position.z = 4;
+        this.camera.lookAt(0,1,0);
     }
 
     SetupLights(showLightPos){
@@ -143,10 +144,26 @@ class World{
         this.scene.add( this.ambientLight );
     }
 
-    render(){
+    Render(){
         this.frameCnt++;
         this.camControl.update();
         this.renderer.render( this.scene, this.camera );
+    }
+
+    /// step the world by time dt seconds
+    Step(dt){
+    
+      this.StepRb(dt);
+    }
+
+    StepRb(dt){
+        for (var i = 0; i < this.rb.length; i++) {
+            const rb = this.rb[i];
+            rb.x += dt * rb.v;
+            if(rb.y<1){
+
+            }
+        }
     }
 }
 

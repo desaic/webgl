@@ -4,12 +4,17 @@ import {World} from './World.js';
 
 const fps = 60;
 let world;
+let lastUpdateTime;
 function Animate() {
     setTimeout(() => {
         requestAnimationFrame( Animate );
     }, 1000 / fps);
-    if(world != undefined){
-        world.render();
+    const now = Date.now();
+    const dt = now - lastUpdateTime;
+    lastUpdateTime = now;
+    if(world != undefined){        
+        world.Step(dt/1000.0);
+        world.Render();
     }
 }
 
@@ -17,7 +22,9 @@ function InitScene()
 {
     world = new World();
     window.addEventListener( 'resize', onWindowResize, false );
-    Animate();    
+    lastUpdateTime = Date.now();
+    Animate();   
+    console.log(lastUpdateTime);
 }
 
 function onWindowResize() {
