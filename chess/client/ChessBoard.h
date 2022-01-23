@@ -485,5 +485,6 @@ private:
 
   ChecksInfo checksInfo;
 
-  void activateEnPassant();
+  void activateEnPassantBlack();
+  void activateEnPassantWhite();
 };
