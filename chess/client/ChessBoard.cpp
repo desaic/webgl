@@ -11,10 +11,14 @@
 #define f1 5
 #define g1 6
 #define h1 7
+#define a3 16
+#define h3 23
 #define a4 24
 #define h4 31
 #define a5 32
+#define a6 40
 #define h5 39
+#define h6 47
 #define a8 56
 #define b8 57
 #define c8 58
@@ -995,7 +999,7 @@ int ChessBoard::ApplyMove(const Move& m)
     case PIECE_PAWN:
       if (m.src.Row() == 6 && m.dst.Row() == 4) {
         enPassantDst = ChessCoord(m.dst.Col(), 5);
-        activateEnPassant();
+        activateEnPassantBlack();
       }
       if (m.src.Col() != m.dst.Col() && GetPiece(m.dst)->isEmpty()) {
         isEnPassant = true;
@@ -1031,7 +1035,7 @@ int ChessBoard::ApplyMove(const Move& m)
     case PIECE_PAWN:
       if (m.src.Row() == 1 && m.dst.Row() == 3) {
         enPassantDst = ChessCoord(m.dst.Col(), 2);
-        activateEnPassant();
+        activateEnPassantWhite();
       }
       if (m.src.Col() != m.dst.Col() && GetPiece(m.dst)->isEmpty()) {
         isEnPassant = true;
@@ -1171,8 +1175,8 @@ void ChessBoard::Undo(const UndoMove& u)
     }
   }
   else if (u.isEnPassant) {
+    hasEnPassant = true;
     enPassantDst = u.m.dst;
-    activateEnPassant();
 
     ChessCoord captured = enPassantDst;
     if (nextColor == PIECE_BLACK) {
@@ -1383,7 +1387,12 @@ int ChessBoard::FromFen(const std::string& fen)
     c = fen[strIdx];
     uint8_t row = c - '1';
     enPassantDst.Set(col, row);
-    activateEnPassant();
+    if (nextColor == PIECE_WHITE) {
+      activateEnPassantWhite();
+    }
+    else {
+      activateEnPassantBlack();
+    }
   }
  
   strIdx+=2;
@@ -1768,26 +1777,36 @@ ChecksInfo ChessBoard::ComputeChecks()
   return checks;
 }
 
-void ChessBoard::activateEnPassant() {
-  // 0-3, 0-4, 7-3, 7-4
-  //std::vector<uint8_t> badLeft = {
-  //  0 + 3*BOARD_SIZE,
-  //  0 + 4*BOARD_SIZE
-  //};
-  //std::vector<uint8_t> badRight = {
-  //  7 + 3*BOARD_SIZE,
-  //  7 + 4*BOARD_SIZE
-  //};
-
-  if (enPassantDst.coord != a4 && enPassantDst.coord != a5) {
-    if (GetPiece(enPassantDst.coord - 1)->info == PIECE_PAWN) {
+void ChessBoard::activateEnPassantBlack() {
+  if (enPassantDst.coord != a6) {
+    Piece* oppoPiece = GetPiece(enPassantDst.coord - 9);
+    if (oppoPiece->info==WHITE_PAWN) {
       hasEnPassant = true;
       return;
     }
   }
 
-  if (enPassantDst.coord != h4 && enPassantDst.coord != h5) {
-    if (GetPiece(enPassantDst.coord + 1)->info == PIECE_PAWN) {
+  if (enPassantDst.coord != h6) {
+    Piece* oppoPiece = GetPiece(enPassantDst.coord - 7);
+    if (oppoPiece->info == WHITE_PAWN) {
+      hasEnPassant = true;
+      return;
+    }
+  }
+}
+
+void ChessBoard::activateEnPassantWhite() {
+  if (enPassantDst.coord != a3) {
+    Piece* oppoPiece = GetPiece(enPassantDst.coord + 7);
+    if (oppoPiece->info == BLACK_PAWN) {
+      hasEnPassant = true;
+      return;
+    }
+  }
+
+  if (enPassantDst.coord != h3 ) {
+    Piece* oppoPiece = GetPiece(enPassantDst.coord + 9);
+    if (oppoPiece->info == BLACK_PAWN) {
       hasEnPassant = true;
       return;
     }

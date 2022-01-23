@@ -289,10 +289,7 @@ int ChessBot::EvalStep()
 
     cache.board->Undo(arg->undo);
 
-    std::string restoredFen = cache.board->GetFen();
-    //if (cache.board->moveCount != d) {
-    //  std::cout << "debug\n";
-    //}
+    //std::string restoredFen = cache.board->GetFen();
     //if (restoredFen != arg->initFen) {
     //  std::cout << arg->initFen << "\n";
     //  std::cout << restoredFen << "\n";
@@ -318,7 +315,7 @@ int ChessBot::EvalStep()
     moves = &(arg->moves);
 
     //debug
-    //arg->initFen = cache.board->GetFen();
+    arg->initFen = cache.board->GetFen();
   }
 
   if (arg->moveIdx >= moves->size()) {
@@ -337,7 +334,7 @@ int ChessBot::EvalStep()
   arg->undo = cache.board->GetUndoMove(m);
   int ret = cache.board->ApplyMove(m);
   if (ret < 0) {
-    std::cout << "debug\n";
+    std::cout << "apply move error "<<ret << "\n";
   }
   if (d+1 < cache.maxDepth) {
     cache.stack[d + 1].moves = cache.board->GetMoves();

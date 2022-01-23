@@ -25,9 +25,7 @@ extern void TestHash();
 
 int main(int argc, char* argv[])
 { 
-  TestHash();
-  initWSA();
- 
+  initWSA(); 
   ChessClient client;
   client.Init();
 

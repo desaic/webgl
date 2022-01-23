@@ -68,6 +68,12 @@ void TestEvalWithSearch()
   //TestEvalWithSearch(fen4);
 }
 
+void ApplyMove(ChessBoard & board, Move m, std::vector<UndoMove> & undoStack) {
+  UndoMove u = board.GetUndoMove(m);
+  board.ApplyMove(m);
+  undoStack.push_back(u);
+}
+
 void TestHash()
 {
   ChessBoard board;
@@ -84,14 +90,14 @@ void TestHash()
 
   UndoMove u = board.GetUndoMove(m1);
   std::vector<UndoMove> undoStack;
-  board.ApplyMove(m1);
-  board.ApplyMove(m2);
-  board.ApplyMove(m3);
+  ApplyMove(board, m1, undoStack);
+  ApplyMove(board, m2, undoStack);
+  ApplyMove(board, m3, undoStack);
   uint64_t h0 = board.HashVal();
   std::cout << h0 << "\n";
-
-  board.SetStartPos();
-  board.InitHash();
+  board.Undo(undoStack[2]);
+  board.Undo(undoStack[1]);
+  board.Undo(undoStack[0]);
 
   board.ApplyMove(m3);
   board.ApplyMove(m2);
@@ -131,5 +137,15 @@ void TestHash()
   h1 = board.HashVal();
   std::cout << "h0 != h1 " << int(h0 != h1) << " " << h0 << " " << h1 << "\n";
 
-  //test sequence 3
+  //test sequence 
+  m1 = Move("e2", "e3");
+  m2 = Move("a7", "a5");
+  m3 = Move("e3", "e4");
+
+  board.ApplyMove(m1);
+  board.ApplyMove(m2);
+  board.ApplyMove(m3);
+  h0 = board.HashVal();
+
+
 }

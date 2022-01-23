@@ -5,10 +5,14 @@
 
 #include <cstdlib>
 
+#define a3 16
 #define a4 24
+#define a6 40
+#define h3 23
 #define h4 31
 #define a5 32
 #define h5 39
+#define h6 47
 
 uint64_t BoardHash::positionTable[NUM_SQUARES][NUM_PIECES];
 uint64_t BoardHash::castlingTable[CASTLING_OPTIONS];
@@ -45,8 +49,8 @@ void BoardHash::Init() {
 // For initializing a fresh board position
 void BoardHash::Set(const ChessBoard& b) {
 	hash = 0;
-	for (Piece p : b.board) {
-		hash ^= p.info;
+	for (size_t i = 0; i < b.board.size(); i++) {
+		hash ^= positionTable[i][b.GetPiece(i)->info];
 	}
 
 	if (b.hasEnPassant) {
@@ -78,7 +82,7 @@ void BoardHash::Update(const ChessBoard& b, const Move& m) {
 	}
 
 	// castles
-	if (b.GetPiece(m.src.coord)->info == PIECE_KING) {
+	if (b.GetPiece(m.src.coord)->type() == PIECE_KING) {
 		if (b.nextColor == PIECE_BLACK) {
 			if (b.castleBK) hash ^= castlingTable[0];
 			if (b.castleBQ) hash ^= castlingTable[1];
@@ -97,7 +101,7 @@ void BoardHash::Update(const ChessBoard& b, const Move& m) {
 		}
 	}
 
-	if (b.GetPiece(m.src.coord)->info == PIECE_ROOK) {
+	if (b.GetPiece(m.src.coord)->type() == PIECE_ROOK) {
 		if (m.src.Col() == 0) {
 			if (b.nextColor == PIECE_BLACK) {
 				if (b.castleBQ) hash ^= castlingTable[1];
@@ -119,16 +123,16 @@ void BoardHash::Update(const ChessBoard& b, const Move& m) {
 		hash ^= enpassantTable[b.enPassantDst.Col()];
 	}
 
-	if (b.GetPiece(m.src.coord)->info == PIECE_PAWN) {
+	if (b.GetPiece(m.src.coord)->type() == PIECE_PAWN) {
 		if (abs(m.dst.Row() - m.src.Row()) == 2) {
 			bool hasEnpassant = false;
-			if (m.dst.coord != a4 && m.dst.coord != a5) {
-				if (b.GetPiece(m.dst.coord - 1)->info == PIECE_PAWN) {
+			if (m.dst.coord != a4&& m.dst.coord != a5) {
+				if (b.GetPiece(m.dst.coord - 1)->type() == PIECE_PAWN) {
 					hasEnpassant=true;
 				}
 			}
 			else if (m.dst.coord != h4 && m.dst.coord != h5 && !hasEnpassant) {
-				if (b.GetPiece(m.dst.coord + 1)->info == PIECE_PAWN) {
+				if (b.GetPiece(m.dst.coord + 1)->type() == PIECE_PAWN) {
 					hasEnpassant=true;
 				}
 			}
