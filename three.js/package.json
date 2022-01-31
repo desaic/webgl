@@ -1,0 +1,14 @@
+{
+  "name": "cubes",
+  "version": "1.0.0",
+  "description": "playground",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "D",
+  "license": "ISC",
+  "dependencies": {
+    "three": "^0.137.5"
+  }
+}
