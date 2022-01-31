@@ -56,7 +56,7 @@ class World{
             bumpScale: 0.0005
         } );
         const textureLoader = new THREE.TextureLoader();
-        textureLoader.load( "textures/hardwood2_diffuse.jpg", function ( map ) {
+        textureLoader.load( "./textures/hardwood2_diffuse.jpg", function ( map ) {
 
             map.wrapS = THREE.RepeatWrapping;
             map.wrapT = THREE.RepeatWrapping;
@@ -67,7 +67,7 @@ class World{
             floorMat.needsUpdate = true;
 
         } );
-        textureLoader.load( "textures/hardwood2_bump.jpg", function ( map ) {
+        textureLoader.load( "./textures/hardwood2_bump.jpg", function ( map ) {
             map.wrapS = THREE.RepeatWrapping;
             map.wrapT = THREE.RepeatWrapping;
             map.anisotropy = 4;
