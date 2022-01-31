@@ -23,8 +23,7 @@ function InitScene()
     world = new World();
     window.addEventListener( 'resize', onWindowResize, false );
     lastUpdateTime = Date.now();
-    Animate();   
-    console.log(lastUpdateTime);
+    Animate();
 }
 
 function onWindowResize() {

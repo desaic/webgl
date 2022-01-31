@@ -7,9 +7,9 @@ class World{
     constructor(){
         this.scene = new THREE.Scene();
         this.renderer = new THREE.WebGLRenderer();
+        console.log(THREE.REVISION);
         this.renderer.setSize( window.innerWidth, window.innerHeight );
         document.body.appendChild( this.renderer.domElement );
-
         const  showLightPos = true;
         this.SetupLights(showLightPos);
         this.SetupCamera();
@@ -86,6 +86,8 @@ class World{
     }
 
     PlayBGM() {
+        const overlay = document.getElementById( 'startOverlay' );
+        overlay.remove();
         // create an AudioListener and add it to the camera
         const listener = new THREE.AudioListener();
         this.camera.add( listener );
