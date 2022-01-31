@@ -7,21 +7,22 @@
 			body { margin: 0; }
 			canvas { width: 100%; height: 100% }
 		</style>
+		<link type="text/css" rel="stylesheet" href="./main.css">
 	</head>
 	<body>
+		<div id="startOverlay">
+			<button id="startButton">Play</button>
+		</div>
 		<div id="text1" style="position:absolute;width:100;height:100;color:white;top:200px;left:200px">
 			 stuff 
 		</div>
-		<div id="overlay">
-			<button id="startButton">BGM</button>
-		</div>
 		<audio id="song" preload="auto" style="display: none">
-			<source src="./three.js/sounds/358232_j_s_song.ogg" type="audio/ogg">
-			<source src="./three.js/sounds/358232_j_s_song.mp3" type="audio/mpeg">
+			<source src="./sounds/358232_j_s_song.ogg" type="audio/ogg">
+			<source src="./sounds/358232_j_s_song.mp3" type="audio/mpeg">
 		</audio>
 		<script type="module" src="./main.js"></script>
 		<script type="module">			
-			import * as main from "./three.js/main.js";
+			import * as main from "./main.js";
 			main.InitScene();
 		</script>
 	</body>
