@@ -13,7 +13,7 @@ class RigidBody{
     }
     UpdateMesh(){
         this.mesh.position.copy(this.x);
-        this.mesh.rotation.setFromMatrix(this.R);
+        this.mesh.rotation.setFromRotationMatrix(this.R);
     }
 }
 

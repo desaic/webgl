@@ -7,7 +7,7 @@ class World{
     constructor(){
         this.scene = new THREE.Scene();
         this.renderer = new THREE.WebGLRenderer();
-        console.log(THREE.REVISION);
+        console.log("three.js version "+ THREE.REVISION);
         this.renderer.setSize( window.innerWidth, window.innerHeight );
         document.body.appendChild( this.renderer.domElement );
         const  showLightPos = true;
@@ -152,16 +152,24 @@ class World{
     /// step the world by time dt seconds
     Step(dt){
     
-      this.StepRb(dt);
+      this.StepRb(0.01);
     }
 
     StepRb(dt){
         for (var i = 0; i < this.rb.length; i++) {
             const rb = this.rb[i];
-            rb.x += dt * rb.v;
-            if(rb.y<1){
-
+            const g = -1;
+            let x = new THREE.Vector3(0,0,0);
+            x.copy(rb.x);
+            x.addScaledVector(rb.v, dt);
+            if(x.y<0.5 && rb.v.y<0){
+               rb.v.y = -0.8*rb.v.y;
+            }else{
+               rb.v.y += dt * g;
+               rb.x.copy(x);
             }
+            rb.v.multiplyScalar(0.98);
+            rb.UpdateMesh();
         }
     }
 }
