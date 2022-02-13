@@ -50,18 +50,17 @@ class World{
 
     AddFloor(){
         const floorMat = new THREE.MeshStandardMaterial( {
-            roughness: 0.2,
+            roughness: 0.5,
             color: 0xffffff,
-            metalness: 0.5,
-            bumpScale: 0.0005
+            metalness:0.2,
+            bumpScale: 0.01
         } );
         const textureLoader = new THREE.TextureLoader();
         textureLoader.load( "./textures/hardwood2_diffuse.jpg", function ( map ) {
-
             map.wrapS = THREE.RepeatWrapping;
             map.wrapT = THREE.RepeatWrapping;
             map.anisotropy = 4;
-            map.repeat.set( 10, 24 );
+            map.repeat.set( 5, 5 );
             map.encoding = THREE.sRGBEncoding;
             floorMat.map = map;
             floorMat.needsUpdate = true;
@@ -71,7 +70,7 @@ class World{
             map.wrapS = THREE.RepeatWrapping;
             map.wrapT = THREE.RepeatWrapping;
             map.anisotropy = 4;
-            map.repeat.set( 10, 24 );
+            map.repeat.set( 5, 5 );
             floorMat.bumpMap = map;
             floorMat.needsUpdate = true;
 
@@ -117,31 +116,29 @@ class World{
 
     SetupLights(showLightPos){
     
-        this.light = new THREE.PointLight( 0xDDDDDD, 1.0 );
+        this.light = new THREE.PointLight( 0xDDDDDD, 0.5 );
         this.light.position.set( -2,5,-2  );
-        this.light1 = new THREE.PointLight( 0xCCCCCC, 1.0 );
+        this.light1 = new THREE.PointLight( 0xCCCCCC, 0.5 );
         this.light1.position.set(3,2,2  );
-        this.light2 = new THREE.DirectionalLight( 0xCCCCCC, 0.4 );
-        this.light2.position.set(30,20,40  );
-        this.light3 = new THREE.DirectionalLight( 0xCCCCCC, 0.4 );
-        this.light3.position.set(-30,20,-40  );
+        this.light2 = new THREE.DirectionalLight( 0xCCCCCC, 1 );
+        this.light2.position.set(30,100,40  );
 
-        this.ambientLight = new THREE.AmbientLight( 0x202020 );
         const sphereSize = 0.1;
         const pointLightHelper1 = new THREE.PointLightHelper( this.light1, sphereSize );
         const pointLightHelper = new THREE.PointLightHelper( this.light, sphereSize );
         const pointLightHelper2 = new THREE.DirectionalLightHelper( this.light2, sphereSize );
-        const pointLightHelper3 = new THREE.DirectionalLightHelper( this.light3, sphereSize );
-
-        this.scene.add( this.light );
-        this.scene.add( this.light1 );       
+        this.ambientLight = new THREE.HemisphereLight(
+            'white', // bright sky color
+            'darkslategrey', // dim ground color
+            0.5, // intensity
+          );
+        // this.scene.add( this.light );
+        // this.scene.add( this.light1 );       
         this.scene.add( this.light2 );
-        this.scene.add( this.light3 );
         if(showLightPos){
             this.scene.add( pointLightHelper );
             this.scene.add( pointLightHelper1 );
             this.scene.add( pointLightHelper2 );
-            this.scene.add( pointLightHelper3 );    
         }
         this.scene.add( this.ambientLight );
     }
