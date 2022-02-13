@@ -28,7 +28,7 @@ class World{
         startButton.world = this;
         startButton.addEventListener( 'click', function (){this.world.PlayBGM(); });
 
-        this.scene.background = new THREE.Color( 0x706050 );
+        this.scene.background = new THREE.Color( 0x888888 );
 
         this.frameCnt = 0;
 
