@@ -74,6 +74,16 @@ void ApplyMove(ChessBoard & board, Move m, std::vector<UndoMove> & undoStack) {
   undoStack.push_back(u);
 }
 
+void TestMove() {
+  std::string fen = "8/1p4q1/p4pkp/P6Q/3P4/5K2/8/8 b - - 19 54";
+  ChessBoard cb;
+  cb.FromFen(fen);
+  std::vector<Move> moves=cb.GetMoves();
+  for (size_t i = 0; i < moves.size(); i++) {
+    std::cout << moves[i].src.ToString() << " " << moves[i].dst.ToString()<<" ";
+  }
+}
+
 void TestHash()
 {
   ChessBoard board;

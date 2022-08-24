@@ -1549,11 +1549,19 @@ void ChessBoard::Clear()
 void ComputeChecksPawn(ChecksInfo & info, ChessCoord coord, uint8_t color,
   ChessCoord kingCoord)
 {
-  uint8_t offsets[2] = { 7,9 };
+  uint8_t offsetl=7,offsetr=9;
   if (color == PIECE_BLACK) {
-    for (unsigned i = 0; i < 2; i++) {
+    if (coord.Col() > 0) {
       ChessCoord dst = coord;
-      dst.coord -= offsets[i];
+      dst.coord -= offsetl;
+      info.attacked.SetBit(dst.coord);
+      if (dst == kingCoord) {
+        info.attackers.push_back(coord);
+      }
+    }
+    if (coord.Col() < 7) {
+      ChessCoord dst = coord;
+      dst.coord -= offsetr;
       info.attacked.SetBit(dst.coord);
       if (dst == kingCoord) {
         info.attackers.push_back(coord);
@@ -1561,9 +1569,17 @@ void ComputeChecksPawn(ChecksInfo & info, ChessCoord coord, uint8_t color,
     }
   }
   else {
-    for (unsigned i = 0; i < 2; i++) {
+    if(coord.Col()>0){
       ChessCoord dst = coord;
-      dst.coord += offsets[i];
+      dst.coord += offsetl;
+      info.attacked.SetBit(dst.coord);
+      if (dst == kingCoord) {
+        info.attackers.push_back(coord);
+      }
+    }
+    if (coord.Col() < 7) {
+      ChessCoord dst = coord;
+      dst.coord += offsetr;
       info.attacked.SetBit(dst.coord);
       if (dst == kingCoord) {
         info.attackers.push_back(coord);
