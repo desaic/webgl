@@ -22,13 +22,13 @@ int initWSA() {
 }
 
 extern void TestHash();
-
+extern void TestMove();
 int main(int argc, char* argv[])
 { 
   initWSA(); 
   ChessClient client;
   client.Init();
-
+  client.HandleCli("start");
   int pollInterval = 50;  // ms;
   while (1) {
     std::this_thread::sleep_for(std::chrono::milliseconds(pollInterval));

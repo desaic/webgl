@@ -6,6 +6,8 @@
 #include <string>
 #include <thread>
 #include <iomanip>
+#include <cmath>
+#include <sstream>
 #include "mpir.h"
 
 #include "threadsafe_queue.h"
@@ -67,9 +69,14 @@ void TestThreadSafeQueue()
   workerThread.join();
 }
 
+extern int MatProblem();
+extern int dm2();
+
+void TestPerm() {
+  
+}
+
 int main(int argc, char * argv[]) {
-  //TestBigInt();
-  //TestThreadSafeQueue();
-  sp25();
+  dm2();
   return 0;
 }
