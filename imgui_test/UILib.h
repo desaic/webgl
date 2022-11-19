@@ -88,4 +88,5 @@ private:
 
   /// for 3D scene.
   GLRender glRender;
+  bool _running = false;
 };

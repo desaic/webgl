@@ -191,7 +191,7 @@ void UILib::UILoop() {
 
   ImGui_ImplGlfw_InitForOpenGL(_window, true);
   ImGui_ImplOpenGL3_Init(glsl_version);
-  while (!glfwWindowShouldClose(_window)) {
+  while (!glfwWindowShouldClose(_window) && _running) {
     // Poll and handle events (inputs, window resize, etc.)
     // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to
     // tell if dear imgui wants to use your inputs.
@@ -282,11 +282,13 @@ void UILib::UILoop() {
 }
 
 void UILib::Run() {
+  _running = true;
   std::function<void()> loopFun = std::bind(&UILib::UILoop, this);
   _uiThread = std::thread(&UILib::UILoop, this);
 }
 
 void UILib::Shutdown() {
+  _running = false;
   if (_uiThread.joinable()) {
     _uiThread.join();
   }
