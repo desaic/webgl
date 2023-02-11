@@ -19,9 +19,13 @@
 	<button id="btG7_2" type="button">G7_2</button>
 	<button id="btCmaj7" type="button">Cmaj7</button>
 	<button id="btC7" type="button">C7</button>
+	<br>lol
+	<div id="buttonList">
+	
+	</div>
 	<script>
 	var samples = SampleLibrary.load({
-		instruments: ['piano', 'guitar-acoustic', 'guitar-nylon'],
+		instruments: ['piano'],
 		baseUrl: "./samples/"
 	})
 	var currentInst;
@@ -69,10 +73,10 @@
 	  }
 		const synth = new Tone.PolySynth(Tone.AMSynth).toDestination();
 		const now = Tone.now();
-		const interval=0.125;
+		const interval=0.025;
 		let t = 0;
 		for (i = 0; i<chord.length; i++){
-		  currentInst.triggerAttack(chord[i], now + t);
+		  currentInst.triggerAttack(chord[i], now+i*interval,0.5 );
 		  t = t+interval;
 		}
 		currentInst.triggerRelease(chord, now + t + 1);
@@ -85,6 +89,38 @@
 	document.getElementById("btG7_2").onclick=G7_2;
 	document.getElementById("btCmaj7").onclick=Cmaj7;
 	document.getElementById("btC7").onclick=C7;
+	
+	function AddButton(name, notes){
+	  const list = document.getElementById("buttonList");
+	  var button = document.createElement("BUTTON");
+	  var text = document.createTextNode(name);
+	  button.appendChild(text);
+	  button.onclick=async ()=>{await playChord(notes);};
+	  list.appendChild(button);
+	}
+	
+	AddButton("G/B",["B3","D4","G4","A4"]);
+    AddButton("Cmaj7",["C4","E4","G4","B4"]);
+	AddButton("D7",["D4","F#4","A4","C5"]);
+	AddButton("D#m7",["D#4","F#4","A4","C5"]);
+	AddButton("E7",["E4","G4","B4","D5"]);
+	const list = document.getElementById("buttonList");
+	var lineBreak = document.createElement("br");
+	list.appendChild(lineBreak);
+	AddButton("C9",["C2","G2","A2","C3","D3"]);
+	AddButton("Bm7",["B1","F#2","A2","D3"]);
+	AddButton("Em7",["E2","G2","B2","D3"]);
+	AddButton("Am7",["A1","E2","G2","C3"]);
+	AddButton("Cm",["C2","Eb2","G2","C3"]);
+	AddButton("D",["D2","F#2","A2","D3"]);
+	lineBreak = document.createElement("br");
+	list.appendChild(lineBreak);
+	AddButton("G9",["G2","D3","G3","A3"]);
+	AddButton("F#dim",["F#2","A3","C3","D#3"]);
+	AddButton("B7",["B2","D#3","F#3","A3"]);
+	AddButton("Em7",["E2","B2","D3","E3"]);
+	AddButton("Dm7",["D2","A2","D3","F3"]);
+	AddButton("G7",["G2","B2","D3","F3"]);
 	</script>
   </body>
 </html>

@@ -1,6 +1,0 @@
-cmake_minimum_required(VERSION 3.8)
-PROJECT (Websocket )
-include_directories(".")
-FILE(GLOB EXE_SRC "*.cpp" "*.c")
-add_executable(Websocket ${EXE_SRC} )
-target_link_libraries(Websocket ws2_32.lib)
