@@ -5,7 +5,8 @@
 #include <vector>
 
 #include "Vec2.h"
-#include "Vec3.h"
+
+//for color images
 #include "Vec4.h"
 
 /// a minimal class that interprets a 1D vector as
@@ -53,7 +54,7 @@ class Array2D {
   T* DataPtr() { return data.data(); }
   const T* DataPtr() const { return data.data(); }
 
-  bool Empty() { return data.size() == 0; }
+  bool Empty()const { return data.size() == 0; }
 
  private:
   Vec2u size;
@@ -62,11 +63,9 @@ class Array2D {
 
 typedef Array2D<float> Array2Df;
 typedef Array2D<unsigned char> Array2D8u;
-//3 unsigned bytes
-typedef Array2D<Vec3b> Array2D3b;
-typedef Array2D<Vec4b> Array2D4b;
-typedef Array2D<unsigned char> Slice;
 
+typedef Array2D<unsigned char> Slice;
+typedef Array2D<Vec4b>Array2D4b;
 void flipY(Slice& slice);
 
 /// scales the image using nearest neighbor

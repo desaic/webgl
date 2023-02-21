@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Array2D.h"
+#include "Vec4.h"
 #include <cmath>
 
 bool Inbound(const Vec2u& size, int x, int y);

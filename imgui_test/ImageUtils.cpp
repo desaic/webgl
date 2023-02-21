@@ -1,4 +1,5 @@
 #include "ImageUtils.h"
+#include "Vec4.h"
 
 bool Inbound(const Vec2u& size, int x, int y) {
   return x >= 0 && x < size[0] && y >= 0 && y < size[1];

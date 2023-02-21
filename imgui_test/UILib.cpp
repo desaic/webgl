@@ -4,11 +4,15 @@
 #include <iostream>
 #include "imgui.h"
 #include <Windows.h>
+#define GLEW_STATIC
+#include <GL/glew.h>
 #include <GLFW/glfw3.h>  // Will drag system OpenGL headers
+#include <fstream>
 
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "imfilebrowser.h"
+#include "Vec4.h"
 
 static void glfw_error_callback(int error, const char* description) {
   std::cout << "Glfw Error " << error << " " << description << "\n";
@@ -26,23 +30,114 @@ int UILib::AddImage() {
 }
 
 int UILib::AddButton(const std::string& text,
-                     const std::function<void()>& onClick) {
-  std::lock_guard<std::mutex> lock(_buttonsLock);
-  int id = int(_buttons.size());
-  _buttons.push_back(Button());
-  Button& bt = _buttons.back();
-  bt._id = id;
-  bt._text = text;
-  bt._onClick = onClick;
+                     const std::function<void()>& onClick, bool sameLine) {  
+  std::shared_ptr<Button> button = std::make_shared<Button>();
+  button->_text = text;
+  button->_onClick = onClick;
+  button->sameLine_ = sameLine;
+
+  std::lock_guard<std::mutex> lock(_widgetsLock);
+  int id = int(uiWidgets_.size());
+  button->_id = id;
+  uiWidgets_.push_back(button);
+  return id;
+}
+
+int UILib::AddCheckBox(const std::string& label, bool initVal) {
+  std::shared_ptr<CheckBox> box = std::make_shared<CheckBox>(label, initVal);  
+  std::lock_guard<std::mutex> lock(_widgetsLock);
+  int id = int(uiWidgets_.size());
+  uiWidgets_.push_back(box);
   return id;
 }
 
 int UILib::AddLabel(const std::string& text) {
-  std::lock_guard<std::mutex> lock(_labelsLock);
-  int id = int(_labels.size()); 
-  _labels.push_back(Label());
-  _labels.back()._text = text;
+  std::shared_ptr<Label> label = std::make_shared<Label>();
+  label->_text = text;
+
+  std::lock_guard<std::mutex> lock(_widgetsLock);
+  int id = int(uiWidgets_.size());
+  uiWidgets_.push_back(label);  
   return id;
+}
+
+int UILib::AddPlot(float initMin, float initMax, const std::string& title) {
+  std::shared_ptr<PlotWidget> plot =
+      std::make_shared<PlotWidget>(initMin, initMax, 150, 60, title);
+
+  std::lock_guard<std::mutex> lock(_widgetsLock);
+  int id = int(uiWidgets_.size());
+  uiWidgets_.push_back(plot);
+  return id;
+}
+
+int UILib::SetPlotData(int widgetId, const std::vector<float>& data) {
+  std::lock_guard<std::mutex> lock(_widgetsLock);
+  if (widgetId < 0 || widgetId >= uiWidgets_.size()) {
+    return -1;
+  }
+  std::shared_ptr<PlotWidget> plot =
+      std::dynamic_pointer_cast<PlotWidget>(uiWidgets_[size_t(widgetId)]);
+  if (!plot) {
+    return -2;
+  }
+  plot->SetData(data);
+  return 0;
+}
+
+int UILib::SetButtonCallback(int id,
+                             const std::function<void()>& onClick) {
+  std::lock_guard<std::mutex> lock(_widgetsLock);
+  if (id < 0 || id >= uiWidgets_.size()) {
+    return -1;
+  }
+  std::shared_ptr<Button> button =
+      std::dynamic_pointer_cast<Button>(uiWidgets_[size_t(id)]);
+  if (!button) {
+    return -2;
+  }
+  button->_onClick = onClick;
+  return 0;
+}
+
+void UILib::SetLabelText(int id, const std::string& text) {
+  std::lock_guard<std::mutex> lock(_widgetsLock);
+  if (id < 0 || id >= uiWidgets_.size()) {
+    return;
+  }
+  std::shared_ptr<Label> label = std::dynamic_pointer_cast<Label>(uiWidgets_[size_t(id)]);
+  if (!label) {
+    return;
+  }
+  label->_text = text;
+}
+
+
+int UILib::AddFloatingText(const std::string& text, unsigned color)
+{
+  std::lock_guard<std::mutex> lock(floatingTextMutex_);
+  int id = floatingTexts_.size();
+  FloatingText t ;
+  t.text_ = text;
+  t.color_ = color;
+  floatingTexts_.push_back(t);
+  return id;
+}
+
+void UILib::SetFloatingText(int id, const std::string &text) {
+  std::lock_guard<std::mutex> lock(floatingTextMutex_);
+  if (id < 0 || id >= floatingTexts_.size()) {
+    return;
+  }
+  floatingTexts_[id].text_ = text;
+}
+
+void UILib::SetFloatingTextPosition(int id, Vec2f position) {
+  std::lock_guard<std::mutex> lock(floatingTextMutex_);
+  if (id < 0 || id >= floatingTexts_.size()) {
+    return;
+  }
+  floatingTexts_[id].pos_ = position;
 }
 
 int UILib::SetImageData(int imageId, const Array2D8u& image, int numChannels) {
@@ -84,6 +179,21 @@ int UILib::SetImageData(int imageId, const Array2D8u& image, int numChannels) {
   return 0;
 }
 
+bool UILib::GetCheckBoxVal(int id) const {
+  std::lock_guard<std::mutex> lock(_widgetsLock);
+  if (id < 0 || id >= uiWidgets_.size()) {
+    return false;
+  }
+  std::shared_ptr<CheckBox> box =
+      std::dynamic_pointer_cast<CheckBox>(uiWidgets_[size_t(id)]);
+  return box->GetVal();
+}
+
+void UILib::SetImageWindowTitle(const std::string& s) {
+  std::lock_guard<std::mutex> lock(_widgetsLock);
+  imageWindowTitle_ = s;
+}
+
 void Vec4bTo8u(const std::vector<Vec4b>& src, std::vector<uint8_t>& dst) {
   dst.resize(src.size() * 4);
   size_t dsti = 0;
@@ -105,14 +215,23 @@ int UILib::SetImageData(int imageId, const Array2D4b& image) {
   GLTex& d = _images[unsigned(imageId)];
   Vec2u size = image.GetSize();
   d._needAlloc = !(d.HasImage() && d._height == size[1] &&
-                   d._width == size[0] && d._numChan == inputChan);
+                   d._width == size[0] * inputChan && d._numChan == inputChan);
   d._drawHeight = size[1];
   d._drawWidth = size[0];  
   d._numChan = inputChan;
-  d._width = size[0]*4;
+  d._width = size[0] * inputChan;
   d._height = size[1];
   Vec4bTo8u(image.GetData(), d._buf);
   d._needUpdate = true;
+  return 0;
+}
+
+int UILib::SetImageScale(int id, float scale) {
+  std::lock_guard<std::mutex> lock(_imagesLock);
+  if (id < 0 || id >= _images.size()) {
+    return -1;
+  }
+  _images[size_t(id)].renderScale_ = scale;
   return 0;
 }
 
@@ -123,26 +242,50 @@ void UILib::DrawImages() {
       img.UpdateTextureData();
       img._needUpdate = false;
     }
-    ImGui::Image((void*)(intptr_t)img._texId,
-                 ImVec2(float(img._drawWidth), float(img._drawHeight)));
-  }
-}
-
-void UILib::HandleButtons() {
-  for (size_t i = 0; i < _buttons.size(); i++) {
-    const Button& bt = _buttons[i];
-    std::string bString = bt.GetUniqueString();
-    if (ImGui::Button(bString.c_str()) && bt._onClick) {
-      bt._onClick();
+    float scale = img.renderScale_;
+    if (scale > 10) {
+      scale = 10;
     }
+    if (scale < 0.01) {
+      scale = 0.01;
+    }
+    std::string childName = "Image" + std::to_string(i);
+    ImGui::BeginChild(childName.c_str(), ImVec2(0,0),true);
+    ImGui::Image((void*)(intptr_t)img._texId,
+                 ImVec2(float(img._drawWidth)* scale, float(img._drawHeight)*scale));
+    ImGui::EndChild();
   }
 }
 
-void UILib::DrawLabels() {
-  for (size_t i = 0; i < _labels.size(); i++) {
-    ImGui::Text("%s", _labels[i]._text.c_str());
+void UILib::DrawFloatingTexts() {
+  ImGui::BeginChild("Image0");
+  ImDrawList* drawList = ImGui::GetForegroundDrawList();
+  ImVec2 pos = ImGui::GetWindowPos();
+  std::lock_guard<std::mutex> lock(floatingTextMutex_);
+  for (size_t i = 0; i < floatingTexts_.size(); i++) {
+    const auto& t = floatingTexts_[i];
+    if (!t.draw_) {
+      continue;
+    }
+    const char* textBegin = t.text_.c_str();
+    const char* textEnd = textBegin + t.text_.size();
+    drawList->AddText(ImVec2(pos[0] + t.pos_[0], pos[1] + t.pos_[1]),
+                      t.color_,t.text_.c_str());
+  }
+  ImGui::EndChild();
+}
+
+void Button::Draw(){
+  std::string bString = GetUniqueString();
+  if (sameLine_) {
+    ImGui::SameLine();
+  }
+  if (ImGui::Button(bString.c_str()) && _onClick) {
+    _onClick();
   }
 }
+
+void Label::Draw() { ImGui::Text("%s", _text.c_str()); }
 
 int UILib::LoadFonts(ImGuiIO&io) {
   std::string fontFile = _fontsDir + "/AvenirNextLTPro-Regular.otf";
@@ -159,25 +302,66 @@ int UILib::LoadFonts(ImGuiIO&io) {
   return 0;
 }
 
+std::string loadTxtFile(std::string filename) {
+  std::ifstream t(filename);
+  if (!t.good()) {
+    std::cout << "Cannot open " << filename << "\n";
+    return "";
+  }
+  std::string str;
+
+  t.seekg(0, std::ios::end);
+  str.reserve(t.tellg());
+  t.seekg(0, std::ios::beg);
+
+  str.assign((std::istreambuf_iterator<char>(t)),
+             std::istreambuf_iterator<char>());
+  return str;
+}
+
+int UILib::LoadShaders() {
+  std::string vs = loadTxtFile(_shaderDir + "/vs-no-tex.txt");
+  std::string fs = loadTxtFile(_shaderDir + "/fs-no-tex.txt");
+  if (vs.size() == 0 || fs.size() == 0) {
+    std::cout << "could not locate shader file " << vs << "\n";
+    return -1;
+  }
+  int ret = _glRender.Init(vs, fs);
+  if (ret < 0) {
+    std::cout << "failed to compile shaders" << vs << " " << fs << "\n";
+    return ret;
+  }
+  return 0;
+}
+
 void UILib::UILoop() {
   glfwSetErrorCallback(glfw_error_callback);
   if (!glfwInit()) {
     return ;
   }
-
   const char* glsl_version = "#version 330";
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
   // Create window with graphics context
-  _window = glfwCreateWindow(_width, _height, "ImGui example", NULL, NULL);
+  _window = glfwCreateWindow(_width, _height, _title.c_str(), NULL, NULL);
   if (_window == NULL) {
     std::cout << "failed to create glfw window\n";
     return ;
   }
   glfwMakeContextCurrent(_window);
-
-  std::string glInfo = glRender.GLInfo();
-  std::cout << "open gl info: " << glInfo << "\n";
+  int majorv, minorv;
+  glGetIntegerv(GL_MAJOR_VERSION, &majorv);
+  glGetIntegerv(GL_MINOR_VERSION, &minorv);
+  std::cout << "opengl " << majorv << "." << minorv << "\n";
+  unsigned uret = glewInit();
+  if (uret > 0) {
+    std::cout << "init glew error " << uret << "\n";
+  } else {
+    int iret = LoadShaders();
+    if (iret < 0) {
+      std::cout << "failed to load shader. will not draw 3D meshes\n";
+    }
+  }
 
   glfwSwapInterval(1);  // Enable vsync
   // Setup Dear ImGui context
@@ -191,6 +375,7 @@ void UILib::UILoop() {
 
   ImGui_ImplGlfw_InitForOpenGL(_window, true);
   ImGui_ImplOpenGL3_Init(glsl_version);
+  const unsigned RENDER_INTERVAL_MS = 10;
   while (!glfwWindowShouldClose(_window) && _running) {
     // Poll and handle events (inputs, window resize, etc.)
     // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to
@@ -202,34 +387,66 @@ void UILib::UILoop() {
     // keyboard data. Generally you may always pass all inputs to dear imgui,
     // and hide them from your application based on those two flags.
     glfwPollEvents();
-
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glUseProgram(0);
     // Start the Dear ImGui frame
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.8f, 0.8f, 0.8f, 0.5f)); 
+
+    ImGui::SetNextWindowPos(ImVec2(200, 0), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(800, 800), ImGuiCond_FirstUseEver);
+
+    _glRender.Render();
+    size_t numPix = _glRender.Width() * _glRender.Height();
+    std::vector<unsigned> texImage(numPix);
+    unsigned tex = _glRender.TexId();
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, texImage.data());
+    std::cout << int(texImage[0]) << "\n";
+    ImGui::Begin("GL view", 0);
+    ImGui::Image((void*)_glRender.TexId(),
+                 ImVec2(_glRender.Width(), _glRender.Height()));
+    ImGui::End();
 
     //image viewer
-    ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(600, 600), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(1000, 0), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(1000, 800), ImGuiCond_FirstUseEver);
     ImGuiWindowFlags image_window_flags = 0;
-    image_window_flags |= ImGuiWindowFlags_NoBackground;
     image_window_flags |= ImGuiWindowFlags_AlwaysHorizontalScrollbar;
     image_window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus;
-    ImGui::Begin("Image", 0,image_window_flags);
+    std::string imageWinTitle;
+    
+    {
+      std::lock_guard<std::mutex> lock(_widgetsLock);
+      imageWinTitle = imageWindowTitle_;
+    }
+    ImGui::Begin(imageWinTitle.c_str(), 0, image_window_flags);
+    ImVec2 pos = ImGui::GetWindowPos();
+    if (pos.x < 0) {
+      pos.x = 0;
+    }
+    if (pos.y < 0) {
+      pos.y = 0;
+    }
+    ImGui::SetWindowPos(pos);
+    //no padding
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
     {
       std::lock_guard<std::mutex> lock(_imagesLock);
       DrawImages();
     }
+    DrawFloatingTexts();
+    ImGui::PopStyleVar();
     ImGui::End();
-
     //menu and buttons
     ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(0, 0), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(0, 0));
     ImGuiWindowFlags control_window_flags = 0;
-    control_window_flags |= ImGuiWindowFlags_NoBackground;
     control_window_flags |= ImGuiWindowFlags_MenuBar;
     ImGui::Begin("Controls", nullptr, control_window_flags);   
-    ImVec2 pos = ImGui::GetWindowPos();
+    pos = ImGui::GetWindowPos();
     if (pos.x < 0) {
       pos.x= 0;
     }
@@ -237,6 +454,7 @@ void UILib::UILoop() {
       pos.y = 0;    
     }
     ImGui::SetWindowPos(pos);
+    ImGui::PopStyleColor();
     if (ImGui::BeginMenuBar()) {
       if (ImGui::BeginMenu("File")) {
         if (ImGui::MenuItem("Open..", "Ctrl+O")) {
@@ -251,17 +469,13 @@ void UILib::UILoop() {
       }
       ImGui::EndMenuBar();
     }
-    {
-      std::lock_guard<std::mutex> lock(_buttonsLock);
-      HandleButtons();
+    for (size_t i = 0; i < uiWidgets_.size();i++) {
+      uiWidgets_[i]->Draw();
     }
-    {
-      std::lock_guard<std::mutex> lock(_labelsLock);
-      DrawLabels();
-    }
-    _fileBrowser->Display();
+    _fileBrowser->Display();    
     ImGui::End();
     // Rendering
+
     ImGui::Render();
     int display_w, display_h;
     glfwGetFramebufferSize(_window, &display_w, &display_h);
@@ -272,6 +486,7 @@ void UILib::UILoop() {
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
     glfwSwapBuffers(_window);
+    std::this_thread::sleep_for(std::chrono::milliseconds(RENDER_INTERVAL_MS));
   }
   _running = false;
   ImGui_ImplOpenGL3_Shutdown();
@@ -296,3 +511,12 @@ void UILib::Shutdown() {
 }
 
 std::string Button::GetUniqueString()const { return _text + "##" + std::to_string(_id); }
+
+void CheckBox::Draw() { ImGui::Checkbox(label_.c_str(),&b_); }
+
+void PlotWidget::Draw() {
+  std::lock_guard<std::mutex> lock(mtx_);
+ 
+  ImGui::PlotLines("", line_.data(), line_.size(), 0, title_.c_str(), min_, max_,
+                   ImVec2(width_, height_));
+}

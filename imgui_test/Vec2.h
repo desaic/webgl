@@ -19,7 +19,12 @@ public:
     v[1] += v1[1];
     return *this;
   }
-private:
+  Vec2<T>& operator*=(T rhs) {
+    v[0] *= rhs;
+    v[1] *= rhs;
+    return *this;
+  }
+ private:
   T v[2];
 };
 

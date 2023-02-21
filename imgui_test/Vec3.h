@@ -107,6 +107,12 @@ public:
 		  v[2] *= n;
 	  }
   }
+  
+  Vec3<T> normalizedCopy() const {
+    Vec3<T> out = *this;
+    out.normalize();
+    return out;
+  }
 
   void setZero() {
     v[0] = 0.f;

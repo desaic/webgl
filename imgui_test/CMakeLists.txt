@@ -1,26 +1,22 @@
 cmake_minimum_required(VERSION 3.0)
-project(ImguiTest)
-set(BIN ImguiTest)
-set_property(GLOBAL PROPERTY USE_FOLDERS ON)
-file(GLOB SRC "*.cpp" "*.h")
+project(ImguiExample)
+set(BIN ImguiExample)
 
+file(GLOB_RECURSE SRC "*.cpp" "*.h")
+include_directories("extern/imgui")
 include_directories("extern/glfw3.3.8")
-link_directories("extern/glfw3.3.8")
-
 include_directories("extern/glew-2.1.0")
 link_directories("extern/glew-2.1.0")
-
-include_directories("extern/imgui")
 add_subdirectory("extern/imgui")
 include_directories("extern/imgui/backends")
-
+link_directories("extern/glfw3.3.8")
 add_compile_options("/std:c++latest")
 add_executable(${BIN}
   ${SRC}
   resource/icons.rc
   )
 
-target_link_libraries(${BIN} imgui glfw3 glew32s opengl32)
+target_link_libraries(${BIN} imgui glfw3 opengl32 glew32s)
 
 # copy fonts over
 # @todo(mike) more consistent place for all this kind of stuff

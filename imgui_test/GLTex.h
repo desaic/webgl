@@ -16,4 +16,5 @@ struct GLTex{
   bool _needUpdate = false;
   // true if the texture data in GPU needs to be reallocated
   bool _needAlloc = false;
+  float renderScale_ = 1.0f;
 };
