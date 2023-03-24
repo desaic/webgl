@@ -9,7 +9,7 @@
 /// <summary>
 /// Mesh with additional opengl buffers used by shaders.
 /// </summary>
-struct GLMesh {
+struct GLBuf {
   // vertex array object
   unsigned int vao = 0;
   // determined by number of vertex attributes in vertex shader.
@@ -20,7 +20,7 @@ struct GLMesh {
 
   std::shared_ptr<TrigMesh> mesh;
 
-  GLMesh(std::shared_ptr<TrigMesh> m) : mesh(m) {}
+  GLBuf(std::shared_ptr<TrigMesh> m) : mesh(m) {}
 };
 
 class GLRender {
@@ -72,7 +72,7 @@ class GLRender {
   float xRotSpeed = 4e-3f, yRotSpeed = 4e-3f;
 
   std::string _vs_string, _fs_string;
-  std::vector<GLMesh> _meshes;
+  std::vector<GLBuf> _bufs;
   const static unsigned INIT_WIDTH = 800, INIT_HEIGHT = 800;
   unsigned _width = 0, _height = 0;
   bool _initialized = false;

@@ -46,10 +46,10 @@ void GLRender::Resize(unsigned int width, unsigned int height) {
 }
 
 int GLRender::DrawMesh(size_t meshId) {
-  if (meshId >= _meshes.size()) {
+  if (meshId >= _bufs.size()) {
     return -1;
   }
-  const GLMesh& mesh = _meshes[meshId];
+  const GLBuf& mesh = _bufs[meshId];
   if (mesh.b.size() == 0) {
     AllocateMeshBuffer(meshId);
   }
@@ -74,7 +74,7 @@ void GLRender::Render() {
   glEnable(GL_DEPTH_TEST);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glUseProgram(0);
-  for (size_t i = 0; i < _meshes.size(); i++) {
+  for (size_t i = 0; i < _bufs.size(); i++) {
     DrawMesh(i);
   }
 }
@@ -177,26 +177,38 @@ int GLRender::Init(const std::string& vertShader,
 }
 
 int GLRender::AllocateMeshBuffer(size_t meshId) {
-  if ( meshId >= _meshes.size()) {
+  if (meshId >= _bufs.size()) {
     return - 1;
   }
-  GLMesh& mesh = _meshes[meshId];
-  glGenVertexArrays(1, &mesh.vao);
-  glBindVertexArray(mesh.vao);
-  mesh.b.resize(GLMesh::NUM_BUF);
-  glGenBuffers(GLMesh::NUM_BUF, mesh.b.data());
-  mesh.mesh->ComputeTrigNormals();
-  glBindBuffer(GL_ARRAY_BUFFER, mesh.b[0]);
+  GLBuf& buf = _bufs[meshId];
+  glGenVertexArrays(1, &buf.vao);
+  glBindVertexArray(buf.vao);
+  buf.b.resize(GLBuf::NUM_BUF);
+  glGenBuffers(GLBuf::NUM_BUF, buf.b.data());
+  buf.mesh->ComputeTrigNormals();
+  glBindBuffer(GL_ARRAY_BUFFER, buf.b[0]);
   const unsigned DIM = 3;
-  int nFloat = 3 * DIM * (int)m->t.size();
-  glBufferData(GL_ARRAY_BUFFER, nFloat * sizeof(GLfloat), v, GL_DYNAMIC_DRAW);
+  size_t numVerts = 3 * buf.mesh->t.size();
+  size_t numFloats = DIM * numVerts;
+  std::vector<Vec3f> v(numVerts);
+  std::vector<Vec3f> n(numVerts);
+  for (size_t i = 0; i < buf.mesh->t.size(); i++) {
+    Vec3f normal = *(Vec3f*)(buf.mesh->nt.data() + 3 * i);
+    for (int j = 0; j < 3; j++) {
+      unsigned vidx = buf.mesh->t[3 * i + j];
+      v[3 * i + j] = *(Vec3f*)(buf.mesh->v.data() + 3 * vidx);
+      n[3 * i + j] = normal;
+    }
+  }
+  glBufferData(GL_ARRAY_BUFFER, numFloats * sizeof(GLfloat), v.data(),
+               GL_DYNAMIC_DRAW);
   glEnableVertexAttribArray(0);
   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
   return 0;
 }
 
 int GLRender::AddMesh(std::shared_ptr<TrigMesh> mesh) {
-  int meshId = int(_meshes.size());
-  _meshes.push_back(mesh);
+  int meshId = int(_bufs.size());
+  _bufs.push_back(mesh);
   return meshId;
 }
