@@ -1,15 +1,26 @@
 #pragma once
 
 #include <string>
+#include <memory>
 
+#include "TrigMesh.h"
 #include "Scene.h"
 
-struct ShaderBuffer {
+/// <summary>
+/// Mesh with additional opengl buffers used by shaders.
+/// </summary>
+struct GLMesh {
   // vertex array object
   unsigned int vao = 0;
-
+  // determined by number of vertex attributes in vertex shader.
+  static const int NUM_BUF = 4;
   // vertex and color buffer
   std::vector<unsigned int> b;
+  bool _needsUpdate = false;
+
+  std::shared_ptr<TrigMesh> mesh;
+
+  GLMesh(std::shared_ptr<TrigMesh> m) : mesh(m) {}
 };
 
 class GLRender {
@@ -34,8 +45,15 @@ class GLRender {
   unsigned Height() const { return _height; }
   unsigned TexId() const { return _render_tex; }
 
+  int AddMesh(std::shared_ptr<TrigMesh> mesh);
+
+  int AllocateMeshBuffer(size_t meshId);
+
+  int DrawMesh(size_t meshId);
+
  private:
-  unsigned _fbo = 0;
+  
+   unsigned _fbo = 0;
   /// renders to this texture.
   /// because renders from gpu, the cpu buffer in it is unused and empty.
   unsigned _render_tex = 0;
@@ -54,8 +72,7 @@ class GLRender {
   float xRotSpeed = 4e-3f, yRotSpeed = 4e-3f;
 
   std::string _vs_string, _fs_string;
-  std::vector<ShaderBuffer> buffers;
-
+  std::vector<GLMesh> _meshes;
   const static unsigned INIT_WIDTH = 800, INIT_HEIGHT = 800;
   unsigned _width = 0, _height = 0;
   bool _initialized = false;

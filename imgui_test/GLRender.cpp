@@ -45,6 +45,18 @@ void GLRender::Resize(unsigned int width, unsigned int height) {
   _cam.ratio = width / (float)height;
 }
 
+int GLRender::DrawMesh(size_t meshId) {
+  if (meshId >= _meshes.size()) {
+    return -1;
+  }
+  const GLMesh& mesh = _meshes[meshId];
+  if (mesh.b.size() == 0) {
+    AllocateMeshBuffer(meshId);
+  }
+
+  return 0;
+}
+
 /// renders once
 void GLRender::Render() {
   if (!_initialized) {
@@ -52,19 +64,19 @@ void GLRender::Render() {
   }
   GLenum err;
   Matrix4f v, mvp, mvit;
-  while (err = glGetError()) {
-  }
 
   glUseProgram(_program);
   glBindFramebuffer(GL_FRAMEBUFFER, _fbo);
   glViewport(0, 0, _width, _height);
   
-  glClearColor(0.5, 0.5, 0.5, 0.5);
+  glClearColor(208 / 255.0f, 150 / 255.0f, 102 / 255.0f, 0.8);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   glEnable(GL_DEPTH_TEST);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glUseProgram(0);
-
+  for (size_t i = 0; i < _meshes.size(); i++) {
+    DrawMesh(i);
+  }
 }
 
 int checkShaderError(GLuint shader) {
@@ -162,4 +174,29 @@ int GLRender::Init(const std::string& vertShader,
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   _initialized = true;
   return 0;
+}
+
+int GLRender::AllocateMeshBuffer(size_t meshId) {
+  if ( meshId >= _meshes.size()) {
+    return - 1;
+  }
+  GLMesh& mesh = _meshes[meshId];
+  glGenVertexArrays(1, &mesh.vao);
+  glBindVertexArray(mesh.vao);
+  mesh.b.resize(GLMesh::NUM_BUF);
+  glGenBuffers(GLMesh::NUM_BUF, mesh.b.data());
+  mesh.mesh->ComputeTrigNormals();
+  glBindBuffer(GL_ARRAY_BUFFER, mesh.b[0]);
+  const unsigned DIM = 3;
+  int nFloat = 3 * DIM * (int)m->t.size();
+  glBufferData(GL_ARRAY_BUFFER, nFloat * sizeof(GLfloat), v, GL_DYNAMIC_DRAW);
+  glEnableVertexAttribArray(0);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+  return 0;
+}
+
+int GLRender::AddMesh(std::shared_ptr<TrigMesh> mesh) {
+  int meshId = int(_meshes.size());
+  _meshes.push_back(mesh);
+  return meshId;
 }

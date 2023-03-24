@@ -154,7 +154,11 @@ class UILib {
 
   void SetShaderDir(const std::string& dir) { _shaderDir = dir; }
 
+  /// @return mesh index
+  int AddMesh(std::shared_ptr<TrigMesh> mesh);
+
  private:
+
   void DrawImages();
   void DrawFloatingTexts();
   int LoadFonts(ImGuiIO& io);
@@ -183,5 +187,7 @@ class UILib {
   std::string imageWindowTitle_="Images";
   bool _running = false;
 
+
+  std::mutex glLock_;
   GLRender _glRender;
 };

@@ -29,6 +29,12 @@ int UILib::AddImage() {
   return imageId;
 }
 
+int UILib::AddMesh(std::shared_ptr<TrigMesh> mesh) {
+  std::lock_guard<std::mutex> lock(glLock_);
+  int meshId = _glRender.AddMesh(mesh);  
+  return meshId;
+}
+
 int UILib::AddButton(const std::string& text,
                      const std::function<void()>& onClick, bool sameLine) {  
   std::shared_ptr<Button> button = std::make_shared<Button>();
@@ -399,12 +405,6 @@ void UILib::UILoop() {
     ImGui::SetNextWindowSize(ImVec2(800, 800), ImGuiCond_FirstUseEver);
 
     _glRender.Render();
-    size_t numPix = _glRender.Width() * _glRender.Height();
-    std::vector<unsigned> texImage(numPix);
-    unsigned tex = _glRender.TexId();
-    glBindTexture(GL_TEXTURE_2D, tex);
-    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, texImage.data());
-    std::cout << int(texImage[0]) << "\n";
     ImGui::Begin("GL view", 0);
     ImGui::Image((void*)_glRender.TexId(),
                  ImVec2(_glRender.Width(), _glRender.Height()));

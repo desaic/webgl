@@ -73,7 +73,7 @@
 	  }
 		const synth = new Tone.PolySynth(Tone.AMSynth).toDestination();
 		const now = Tone.now();
-		const interval=0.025;
+		const interval=0.25;
 		let t = 0;
 		for (i = 0; i<chord.length; i++){
 		  currentInst.triggerAttack(chord[i], now+i*interval,0.5 );
@@ -107,7 +107,7 @@
 	const list = document.getElementById("buttonList");
 	var lineBreak = document.createElement("br");
 	list.appendChild(lineBreak);
-	AddButton("C9",["C2","G2","A2","C3","D3"]);
+	AddButton("C9",["C2","G2","C3","D3"]);
 	AddButton("Bm7",["B1","F#2","A2","D3"]);
 	AddButton("Em7",["E2","G2","B2","D3"]);
 	AddButton("Am7",["A1","E2","G2","C3"]);
@@ -121,6 +121,47 @@
 	AddButton("Em7",["E2","B2","D3","E3"]);
 	AddButton("Dm7",["D2","A2","D3","F3"]);
 	AddButton("G7",["G2","B2","D3","F3"]);
+	AddButton("C9",["C2","G2","B2","D3"]);
+	AddButton("D7",["D2","A2","C3","D3","#F3"]);	
+	AddButton("G",["G2","B2","D3","G3"]);
+	AddButton("Cm",["C2","Eb2","G2","C3"]);
+	AddButton("D",["D2","F#2","A2","D3"]);
+	lineBreak = document.createElement("br");
+	list.appendChild(lineBreak);
+	AddButton("G9",["G2","D3","G3","A3"]);
+	AddButton("F#dim",["F#2","C3","D#3","A3"]);
+	AddButton("B7",["B2","D#3","F#3","A3"]);
+	AddButton("Em7",["E2","B2","D3","E3"]);
+	AddButton("Dm7",["D2","A2","D3","F3"]);
+	AddButton("G7",["G2","B2","D3","F3"]);
+	AddButton("C9",["C2","G2","B2","D3"]);
+	AddButton("D7",["D2","A2","C3","D3","#F3"]);
+	AddButton("Gsus4",["G2","B2","C3","G3"]);
+	AddButton("G",["G2","B2","D3","G3"]);
+    lineBreak = document.createElement("br");
+	list.appendChild(lineBreak);
+	AddButton("C9",["C2","G2","C3","E3","G3"]);
+	AddButton("D/C",["C2","A2","D3","F#3"]);
+	AddButton("Bm7",["B1","D2","A2","F#3"]);
+	AddButton("Em",["E2","G2","B2","D3","E3"]);
+	AddButton("Am7",["A1","E2","G2","D3"]);
+	AddButton("Bm7",["B1","D2","F#2","D3"]);
+	AddButton("C9",["C2","E2","G2","D3","G3"]);
+	AddButton("C#dim",["C#2","G2","C#3","E3","G3"]);
+	AddButton("D4",["D2","G2","A2","E3","G3"]);
+	AddButton("D7",["D2","A2","C3","D3","A3"]);
+	lineBreak = document.createElement("br");
+	list.appendChild(lineBreak);
+	AddButton("G/B",["B1","G2","A2","D3","G3"]);
+    AddButton("Cmaj7",["C2","G2","A2","D3","A3"]);
+	AddButton("D7",["D2","A2","C3","D3"]);
+	AddButton("D#m7",["D#2","A2","C3","F#3"]);
+	AddButton("E7",["E2","G2","B2","D3"]);
+	lineBreak = document.createElement("br");
+	list.appendChild(lineBreak);
+	AddButton("C9",["C2","G2","C3","D3"]);
+	AddButton("Bm7",["B1","F#2","A2","D3"]);
+	AddButton("Am7",["A1","E2","G2","C3"]);
 	</script>
   </body>
 </html>

@@ -62,6 +62,10 @@ int main(int, char**)
       std::bind(&ShowGLInfo, std::ref(ui), gl_info_id);
   ui.SetButtonCallback(buttonId, showGLInfoFunc);
   ui.AddButton("Show image", btFunc);
+
+  auto mesh=std::make_shared<TrigMesh>();
+  mesh->LoadStl("F:/dolphin/meshes/cube50mm.stl");
+  ui.AddMesh(mesh);
   ui.Run();
   const unsigned PollFreqMs = 100;
   while (ui.IsRunning()) {
