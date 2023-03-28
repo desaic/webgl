@@ -127,7 +127,7 @@ class UILib {
 
   int SetImageScale(int id, float scale);
 
-  unsigned NumImages() const { return _images.size(); }
+  size_t NumImages() const { return _images.size(); }
 
   void SetFontsDir(const std::string& dir) { _fontsDir = dir; }
 
@@ -157,6 +157,7 @@ class UILib {
   /// @return mesh index
   int AddMesh(std::shared_ptr<TrigMesh> mesh);
 
+  void SetWindowSize(unsigned w, unsigned h);
  private:
 
   void DrawImages();

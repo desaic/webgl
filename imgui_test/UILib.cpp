@@ -35,6 +35,11 @@ int UILib::AddMesh(std::shared_ptr<TrigMesh> mesh) {
   return meshId;
 }
 
+void UILib::SetWindowSize(unsigned w, unsigned h) {
+  _width = w;
+  _height = h;
+}
+
 int UILib::AddButton(const std::string& text,
                      const std::function<void()>& onClick, bool sameLine) {  
   std::shared_ptr<Button> button = std::make_shared<Button>();
@@ -122,7 +127,7 @@ void UILib::SetLabelText(int id, const std::string& text) {
 int UILib::AddFloatingText(const std::string& text, unsigned color)
 {
   std::lock_guard<std::mutex> lock(floatingTextMutex_);
-  int id = floatingTexts_.size();
+  int id = int(floatingTexts_.size());
   FloatingText t ;
   t.text_ = text;
   t.color_ = color;
@@ -252,8 +257,8 @@ void UILib::DrawImages() {
     if (scale > 10) {
       scale = 10;
     }
-    if (scale < 0.01) {
-      scale = 0.01;
+    if (scale < 0.01f) {
+      scale = 0.01f;
     }
     std::string childName = "Image" + std::to_string(i);
     ImGui::BeginChild(childName.c_str(), ImVec2(0,0),true);
@@ -378,7 +383,7 @@ void UILib::UILoop() {
   (void)io;
   LoadFonts(io);
   ImGui::StyleColorsLight();
-
+  io.ConfigWindowsMoveFromTitleBarOnly = true;
   ImGui_ImplGlfw_InitForOpenGL(_window, true);
   ImGui_ImplOpenGL3_Init(glsl_version);
   const unsigned RENDER_INTERVAL_MS = 10;
@@ -401,18 +406,18 @@ void UILib::UILoop() {
     ImGui::NewFrame();
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.8f, 0.8f, 0.8f, 0.5f)); 
 
-    ImGui::SetNextWindowPos(ImVec2(200, 0), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(20, 0), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(800, 800), ImGuiCond_FirstUseEver);
 
     _glRender.Render();
-    ImGui::Begin("GL view", 0);
-    ImGui::Image((void*)_glRender.TexId(),
-                 ImVec2(_glRender.Width(), _glRender.Height()));
+    ImGui::Begin("GL view", 0, ImGuiWindowFlags_NoBringToFrontOnFocus);
+    ImGui::Image((ImTextureID)(size_t(_glRender.TexId())),
+                 ImVec2(float(_glRender.Width()), float(_glRender.Height())));
     ImGui::End();
 
     //image viewer
-    ImGui::SetNextWindowPos(ImVec2(1000, 0), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(1000, 800), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(820, 0), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(300, 300), ImGuiCond_FirstUseEver);
     ImGuiWindowFlags image_window_flags = 0;
     image_window_flags |= ImGuiWindowFlags_AlwaysHorizontalScrollbar;
     image_window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus;
@@ -517,6 +522,6 @@ void CheckBox::Draw() { ImGui::Checkbox(label_.c_str(),&b_); }
 void PlotWidget::Draw() {
   std::lock_guard<std::mutex> lock(mtx_);
  
-  ImGui::PlotLines("", line_.data(), line_.size(), 0, title_.c_str(), min_, max_,
-                   ImVec2(width_, height_));
+  ImGui::PlotLines("", line_.data(), int(line_.size()), 0, title_.c_str(), min_, max_,
+                   ImVec2(float(width_), float(height_)));
 }
