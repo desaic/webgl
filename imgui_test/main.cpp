@@ -50,12 +50,55 @@ void ShowGLInfo(UILib& ui, int label_id) {
   ui.SetLabelText(label_id, info);
 }
 
+
+
+void SaveObjFromWebgl() {
+  std::string vfile = "F:/octave/vxy.txt";
+  std::string tfile = "F:/octave/txy.txt";
+  std::string objFile = "F:/octave/mother.obj";
+  std::ifstream vin(vfile);
+  std::ifstream tin(tfile);
+  std::vector<unsigned> t;
+  std::vector<float> v;
+  while (!tin.eof()) {
+    std::string tok;
+    unsigned idx;
+    tin >> tok >> idx;
+    tin >> tok;
+    t.push_back(idx);
+  }
+  tin.close();
+
+  while (!vin.eof()) {
+    float fval = 0;
+    std::string tok;
+    vin >> fval >> tok;
+    v.push_back(fval);
+  }
+
+  size_t numTrig = t.size() / 3;
+  size_t numVert = v.size() / 3;
+  std::ofstream out(objFile);
+  for (size_t i = 0; i < numVert; i++) {
+    out << "v " << v[3 * i] << " " << v[3 * i + 1] << " " << v[3 * i + 2]
+        << "\n";
+  }
+  for (size_t i = 0; i < numTrig; i++) {
+    out << "f";
+    for (size_t j = 0; j < 3; j++) {
+      out <<" " << (t[3 * i+j]+1);
+    }
+    out << "\n";
+  }
+}
+
 int main(int, char**)
 {
+  //SaveObjFromWebgl();
   UILib ui;
   ui.SetFontsDir("./fonts");
   std::function<void()> btFunc = std::bind(&TestImageDisplay, std::ref(ui));  
-
+  ui.SetWindowSize(1280, 800);
   int buttonId = ui.AddButton("GLInfo", {});
   int gl_info_id = ui.AddLabel(" ");
   std::function<void()> showGLInfoFunc =

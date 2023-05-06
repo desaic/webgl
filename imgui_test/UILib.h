@@ -157,6 +157,7 @@ class UILib {
   /// @return mesh index
   int AddMesh(std::shared_ptr<TrigMesh> mesh);
 
+  void SetWindowSize(int width, int height);
  private:
 
   void DrawImages();

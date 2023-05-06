@@ -340,6 +340,11 @@ int UILib::LoadShaders() {
   return 0;
 }
 
+void UILib::SetWindowSize(int width, int height) {
+  _width = width;
+  _height = height;
+}
+
 void UILib::UILoop() {
   glfwSetErrorCallback(glfw_error_callback);
   if (!glfwInit()) {
