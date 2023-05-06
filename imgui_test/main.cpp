@@ -24,7 +24,7 @@ void TestPngLoading(const Array2D8u& image, int numChan) {
 }
 
 void TestImageDisplay(UILib& ui) {
-  const std::string testImageFile = "F:/github/imgui_example/resource/test.png";
+  const std::string testImageFile = "./resource/test.png";
   Array2D8u image;
   int ret = LoadPngColor(testImageFile, image);
   if (ret < 0) {
@@ -109,6 +109,7 @@ int main(int, char**)
   auto mesh=std::make_shared<TrigMesh>();
   mesh->LoadStl("F:/dolphin/meshes/cube50mm.stl");
   ui.AddMesh(mesh);
+  ui.SetWindowSize(1280, 800);
   ui.Run();
   const unsigned PollFreqMs = 100;
   while (ui.IsRunning()) {

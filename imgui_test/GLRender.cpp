@@ -192,12 +192,13 @@ int GLRender::AllocateMeshBuffer(size_t meshId) {
   size_t numFloats = DIM * numVerts;
   std::vector<Vec3f> v(numVerts);
   std::vector<Vec3f> n(numVerts);
-  for (size_t i = 0; i < buf.mesh->t.size(); i++) {
-    Vec3f normal = *(Vec3f*)(buf.mesh->nt.data() + 3 * i);
+  for (size_t i = 0; i < buf.mesh->t.size(); i+=3) {
+    Vec3f normal = *(Vec3f*)(buf.mesh->nt.data() + i);
     for (int j = 0; j < 3; j++) {
-      unsigned vidx = buf.mesh->t[3 * i + j];
-      v[3 * i + j] = *(Vec3f*)(buf.mesh->v.data() + 3 * vidx);
-      n[3 * i + j] = normal;
+      unsigned vidx = buf.mesh->t[i + j];
+      unsigned dstV = i + j;
+      v[3 * dstV] = *(Vec3f*)(buf.mesh->v.data() + 3 * vidx);
+      n[3 * dstV] = normal;
     }
   }
   glBufferData(GL_ARRAY_BUFFER, numFloats * sizeof(GLfloat), v.data(),
