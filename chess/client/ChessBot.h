@@ -50,9 +50,6 @@ struct EvalCache
 class ChessBot
 {
 public:
-  static const int MAX_SCORE;
-  static const int CASTLE_SCORE;
-  std::vector<int> materialScore;
 
   ChessBot();
   ~ChessBot();
@@ -81,10 +78,7 @@ public:
   /// initialize evaluation.
   void InitEval();
   
-  /// run evaluation for 1 step whatever that means.
-  ///@return -1 if no more positions to search, which can happen
-  ///when not many moves are available.
-  int EvalStep();
+  int SearchMoves();
   
   /// get best move even if search is not finished.
   Move CurrentBestMove();
