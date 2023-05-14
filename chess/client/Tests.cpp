@@ -37,17 +37,9 @@ void TestEvalWithSearch(std::string fen)
   bot.SetBoard(board);
   bot.SetMaxDepth(5);
   bot.InitEval();
-
-  size_t numSteps = 10000000;
-  for (size_t s = 0; s < numSteps; s++) {
-    int ret = bot.EvalStep();
-    if (ret < 0) {
-      break;
-    }
-  }
+  bot.SearchMoves();
   Move bestMove = bot.CurrentBestMove();
   std::cout << bestMove.ToString() << " \n";
-
 }
 
 void TestEvalWithSearch()

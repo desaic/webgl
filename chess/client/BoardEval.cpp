@@ -1,8 +1,8 @@
 #include "BoardEval.h"
 
-const int CHESS_MAX_SCORE = 100000;
+const int BoardEval::MAX_SCORE = 100000;
 
-const int CHESS_CASTLE_SCORE = 10;
+const int BoardEval::CASTLE_SCORE = 10;
 
 //position score heuristics from white perspective
 int pawnpos[64] =

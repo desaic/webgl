@@ -14,37 +14,14 @@ struct MoveScore
   MoveScore() :score(0), depth(0) {}
 };
 
-struct SearchArg
-{
-public:
-  int alpha, beta;
-  std::vector<Move> moves;
-  ///for debug
-  std::string initFen;
-  size_t moveIdx;
-  UndoMove undo;
-  int score;
-  bool fullSearch;
-  SearchArg();
-  SearchArg(float alpha, float beta);
+struct SearchConf {
+  unsigned maxDepth = 6;
+  ChessBoard board;
 };
 
-///dump intermediate evaluation related 
-/// stuff here
-struct EvalCache
-{
-  //current depth = argStack.size()
-  //depth = 0 at the beginning of a new search.
-  std::vector<SearchArg> stack;
-  int depth;
+struct SearchState {
   Move bestMove;
-  int bestScore;
-  int maxDepth;
-  void Init();
-  ChessBoard* board;
-  ///debugging
-  std::string initFen;
-  EvalCache();
+  int score;
 };
 
 class ChessBot
@@ -73,11 +50,13 @@ public:
   void Stop();
   void WorkerLoop();
 
-  void SetMaxDepth(int d) { cache.maxDepth = d; }
+  void SetMaxDepth(unsigned d) { conf.maxDepth = d; }
   
   /// initialize evaluation.
   void InitEval();
   
+  int pvs(ChessBoard& board, unsigned detph, int alpha, int beta);
+
   int SearchMoves();
   
   /// get best move even if search is not finished.
@@ -88,9 +67,9 @@ public:
   ///used whenever current position updates.
   std::mutex boardMutex;
   ChessBoard board;
-  ///board used by search
-  ChessBoard workingBoard;
-  std::mutex cacheMutex;
-  EvalCache cache;
   bool boardChanged;
+
+  SearchConf conf;
+  mutable std::mutex stateMutex;
+  SearchState state;
 };

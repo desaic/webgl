@@ -13,7 +13,7 @@ static void SleepMs(int ms)
 ChessBot::ChessBot():running(false),
 boardChanged(false)
 {
-  cache.board = &workingBoard;
+  conf.board = board;
 }
 
 ChessBot::~ChessBot()
@@ -57,39 +57,32 @@ std::vector<MoveScore> ChessBot::BestMoves(const ChessBoard& b)
   return moves;
 }
 
-EvalCache::EvalCache() :maxDepth(5)
-{
-
-}
-
-void EvalCache::Init()
-{
-  stack.clear();
-  bestScore = 0;
-  depth = 0;
-}
-
 void ChessBot::InitEval() 
 {
-  cache.Init();
-  workingBoard = board;
-  // create stack and moves for root node 
-  cache.stack.push_back(SearchArg());
-  cache.stack[0].moves = cache.board->GetMoves();
-  cache.initFen = cache.board->GetFen();
+  conf.board = board;
 }
 
-///https://en.wikipedia.org/wiki/Principal_variation_search
+/// https://en.wikipedia.org/wiki/Principal_variation_search
+int ChessBot::pvs(ChessBoard& board, unsigned depth, int alpha, int beta) {
+  if(depth == 0){
+
+  }
+
+  return 0;
+}
+
 int ChessBot::SearchMoves()
 {
-  
+  int alpha = -2*BoardEval::MAX_SCORE;
+  int beta = 2 * BoardEval::MAX_SCORE;
+  int score = pvs(conf.board, conf.maxDepth, alpha, beta);
   return 0;
 }
 
 Move ChessBot::CurrentBestMove()
 {
-  std::lock_guard<std::mutex> lock(cacheMutex);
-  return cache.bestMove;
+  std::lock_guard<std::mutex> lock(stateMutex);
+  return state.bestMove;
 }
 
 void ChessBot::WorkerLoop()
@@ -125,6 +118,7 @@ void ChessBot::WorkerLoop()
       boardMutex.unlock();
       pollTimer.start();
     }
+    SearchMoves();
     SleepMs(pollIntervalMs);
   }
 }
@@ -147,16 +141,3 @@ void ChessBot::Stop()
     searchThread.join();
   }
 }
-
-SearchArg::SearchArg(): alpha(-2 * BoardEval::MAX_SCORE),
-      beta(2 * BoardEval::MAX_SCORE),
-  moveIdx(0),
-  score(0)
-{
-}
-
-SearchArg::SearchArg(float a, float b) :
-  alpha(a), beta(b),
-  moveIdx(0), score(0),
-  fullSearch(false)
-{}
