@@ -13,6 +13,11 @@ struct MoveScore
 
   MoveScore() :score(0), depth(0) {}
 };
+struct BoardScore {
+  uint8_t hash[8];
+  uint8_t depth;
+  int score;
+};
 
 struct SearchConf {
   unsigned maxDepth = 6;
