@@ -64,11 +64,35 @@ void ChessBot::InitEval()
 
 /// https://en.wikipedia.org/wiki/Principal_variation_search
 int ChessBot::pvs(ChessBoard& board, unsigned depth, int alpha, int beta) {
-  if(depth == 0){
-
+  if (depth == 0){
+    return EvalDirect(board);
   }
 
-  return 0;
+  std::vector<Move> moves = board.GetMoves();
+  
+  if (moves.empty()) return EvalDirect(board);
+
+  int score;
+  for (int i = 0; i < moves.size(); ++i) {
+    board.ApplyMove(moves[i]);
+
+    if (i == 0) {
+      score = -pvs(board, depth - 1, -beta, -alpha);
+    }
+    else {
+      score = -pvs(board, depth - 1, -alpha - 1, -alpha);
+      if (alpha < score && score < beta) {
+        score = -pvs(board, depth - 1, -beta, -score);
+      }
+    }
+
+    board.Undo(board.GetUndoMove(moves[i]));
+    
+    alpha = std::max(alpha, score);
+    if (alpha >= beta) break;
+  }
+
+  return alpha;
 }
 
 int ChessBot::SearchMoves()
