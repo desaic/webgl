@@ -64,8 +64,7 @@ void ChessBot::InitEval()
 
 /// https://en.wikipedia.org/wiki/Principal_variation_search
 int ChessBot::pvs(ChessBoard& board, unsigned depth, int alpha, int beta) {
-  
-  if(
+ 
   
   std::vector<Move> moves = conf.board.GetMoves();
   if (moves.size() == 0) {

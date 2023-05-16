@@ -107,22 +107,31 @@ void ChessClient::HandleCmd(const std::string& cmd) {
 
 void ChessClient::HandleCli(const std::string& cmd)
 {
-  if (cmd == "start") {
+  std::stringstream ss(cmd);
+  std::string commandName;
+  ss >> commandName;
+  if (commandName == "start") {
     board.SetStartPos();
     undoStack.clear();
     SendBoard();
-  }
-  else if (cmd == "fen") {
-    std::string fen = board.GetFen();
-    std::cout << fen << "\n";
-  }
-  else if (cmd == "debug") {
+  } else if (commandName == "fen") {
+    std::string boardStr = cmd.substr(4);
+    if (boardStr.size() > 8) {
+      //send fen
+      board.FromFen(boardStr);
+      undoStack.clear();
+      SendBoard();
+    } else {
+      //show fen
+      std::string fen = board.GetFen();
+      std::cout << fen << "\n";
+    }
+  } else if (commandName == "debug") {
     std::string fen = "8/1p1q4/p4pkp/P1Q5/3P4/5K2/8/8 b - - 19 54";
     board.FromFen(fen);
     undoStack.clear();
     SendBoard();
-  }
-  else if (cmd == "undo") {
+  } else if (commandName == "undo") {
     if (undoStack.size() > 0) {
       UndoMove u = undoStack.back();
       undoStack.pop_back();
