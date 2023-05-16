@@ -196,7 +196,15 @@ struct Move
   bool operator==(const Move& b) {
     return src == b.src && dst == b.dst && promo == b.promo;
   }
-
+  bool operator<(const Move& b) const {
+    if (src != b.src) {
+      return src.coord < b.src.coord;
+    }
+    if (dst != b.dst) {
+      return dst.coord < b.dst.coord;
+    }
+    return promo.info < b.promo.info;
+  }
   std::string ToString() {
     std::string s = src.ToString() + " " + dst.ToString();
     if (!promo.isEmpty()) {

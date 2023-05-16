@@ -64,8 +64,20 @@ void ChessBot::InitEval()
 
 /// https://en.wikipedia.org/wiki/Principal_variation_search
 int ChessBot::pvs(ChessBoard& board, unsigned depth, int alpha, int beta) {
-  if(depth == 0){
+  
+  if(
+  
+  std::vector<Move> moves = conf.board.GetMoves();
+  if (moves.size() == 0) {
+    if (board.IsInCheck()) {
+      return -BoardEval::MAX_SCORE;
+    } else {
+      return 0;
+    }
+  }
 
+  if(depth == 0){
+    return BoardEval::Eval(board);
   }
 
   return 0;
@@ -75,8 +87,11 @@ int ChessBot::SearchMoves()
 {
   int alpha = -2*BoardEval::MAX_SCORE;
   int beta = 2 * BoardEval::MAX_SCORE;
-  int score = pvs(conf.board, conf.maxDepth, alpha, beta);
-  return 0;
+  int score = 0;
+  for (int depth = 1; depth < conf.maxDepth; depth++) {
+    score = pvs(conf.board, conf.maxDepth, alpha, beta);
+  }
+  return score;
 }
 
 Move ChessBot::CurrentBestMove()

@@ -11,12 +11,21 @@ struct MoveScore
   //depth the score is based on.
   unsigned depth;
 
+  bool operator<(const MoveScore& other) const {
+    if (score != other.score) {
+      return score < other.score;
+    }
+    return move < other.move;
+  }
+
   MoveScore() :score(0), depth(0) {}
 };
+
+//depth 0 for uninitialized scores.
 struct BoardScore {
   uint8_t hash[8];
-  uint8_t depth;
-  int score;
+  uint8_t depth=0;
+  int score=0;
 };
 
 struct SearchConf {
@@ -24,9 +33,39 @@ struct SearchConf {
   ChessBoard board;
 };
 
+// transposition table.
+// hash table with eviction only for 
+// conflicts.
+struct TransTable{
+  std::vector<BoardScore> v;
+  TransTable() { Allocate(20); }
+  void Allocate(size_t numBits) {
+    if (numBits > 32) {
+      numBits = 32;
+    }
+    size_t size = 1ull << numBits;
+    hashMask = (~1ull) >> (64 - numBits);
+    v.resize(size);
+  }
+
+  const BoardScore& Get(size_t hash) const { size_t idx = hash & hashMask;
+    return v[hash];
+  }
+
+  void Set(size_t hash, const BoardScore& score) {
+    size_t idx = hash & hashMask;
+    v[idx] = score;
+  }
+
+  BoardScore empty;
+  size_t numBits=10;
+  size_t hashMask = 0x3ff;
+};
+
 struct SearchState {
   Move bestMove;
   int score;
+  TransTable tt;
 };
 
 class ChessBot
