@@ -72,6 +72,7 @@ server.on('connection',function(socket){
 		recvBuf = recvBuf.slice(endIdx+2);
 		console.log(cmd);
 		if(wsconnection != null){
+			console.log("send websocket msg "+cmd);
 		  wsconnection.sendUTF(cmd);				
 		}
 		
