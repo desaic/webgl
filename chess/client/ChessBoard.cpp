@@ -1164,13 +1164,9 @@ void ChessBoard::Undo(const UndoMove& u)
   if (isCastle) {
     //castling either direction is available again
     if (nextColor == PIECE_BLACK) {
-      castleBQ = true;
-      castleBK = true;
       hasCastled[PIECE_BLACK] = false;
     }
     else {
-      castleWQ = true;
-      castleWK = true;
       hasCastled[PIECE_WHITE] = false;
     }
   }

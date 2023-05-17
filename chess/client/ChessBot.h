@@ -64,7 +64,7 @@ struct TransTable{
 
 struct SearchState {
   Move bestMove;
-  int score;
+  int score=0;
   TransTable tt;
 };
 

@@ -91,7 +91,7 @@ struct ChessCoord
     return coord != b;
   }
 
-  std::string ToString() {
+  std::string ToString() const{
     std::string s;
     s.resize(2);
     s[0] = Col() + 'a';
@@ -442,8 +442,9 @@ public:
   /// popped by Undo()
   std::vector<uint64_t> hashHistory;
   BoardHash hash;
+  ChecksInfo ComputeChecks();
 
-private:
+ private:
   std::vector<ChessCoord>* GetPieceList(uint8_t color);
 
   void GetEvasions(std::vector<Move>& moves);
@@ -489,7 +490,6 @@ private:
     ChessCoord kingCoord);
   void ComputeChecksRay(ChecksInfo& checks, ChessCoord coord, uint8_t color,
     ChessCoord kingCoord, char dx, char dy);
-  ChecksInfo ComputeChecks();
 
   ChecksInfo checksInfo;
 

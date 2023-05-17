@@ -60,36 +60,60 @@ std::vector<MoveScore> ChessBot::BestMoves(const ChessBoard& b)
 void ChessBot::InitEval() 
 {
   conf.board = board;
+  std::string fen = board.GetFen();
+  std::cout << "bot fen " << fen << "\n";
 }
 
 /// https://en.wikipedia.org/wiki/Principal_variation_search
 int ChessBot::pvs(ChessBoard& board, unsigned depth, int alpha, int beta) {
- 
-  
-  std::vector<Move> moves = conf.board.GetMoves();
-  if (moves.size() == 0) {
+  if (depth == 0) {
+    return EvalDirect(board);
+  }
+
+  std::vector<Move> moves = board.GetMoves();
+  if (moves.empty()) {
     if (board.IsInCheck()) {
       return -BoardEval::MAX_SCORE;
     } else {
       return 0;
     }
   }
+  int score = -BoardEval::MAX_SCORE;
+  for (int i = 0; i < moves.size(); ++i) {
+    UndoMove u = board.GetUndoMove(moves[i]);
+    board.ApplyMove(moves[i]);
 
-  if(depth == 0){
-    return BoardEval::Eval(board);
+    if (i == 0) {
+      score = -pvs(board, depth - 1, -beta, -alpha);
+    } else {
+      score = -pvs(board, depth - 1, -alpha - 1, -alpha);
+      if (alpha < score && score < beta) {
+        score = -pvs(board, depth - 1, -beta, -score);
+      }
+    }
+
+    board.Undo(u);
+
+    if (alpha < score) {
+      alpha = score;
+      if (depth == conf.maxDepth) {
+        state.bestMove = moves[i];
+        std::cout << state.bestMove.ToString()<<"\n";
+      }
+    }
+    if (alpha >= beta) break;
   }
 
-  return 0;
+  return alpha;
 }
 
 int ChessBot::SearchMoves()
 {
-  int alpha = -2*BoardEval::MAX_SCORE;
+  int alpha = -2 * BoardEval::MAX_SCORE;
   int beta = 2 * BoardEval::MAX_SCORE;
   int score = 0;
-  for (int depth = 1; depth < conf.maxDepth; depth++) {
-    score = pvs(conf.board, conf.maxDepth, alpha, beta);
-  }
+  //int score = pvs(conf.board, conf.maxDepth, alpha, beta);
+  //std::cout << score << " " << state.bestMove.ToString() << "\n";
   return score;
 }
 

@@ -114,8 +114,11 @@ void ChessClient::HandleCli(const std::string& cmd)
     board.SetStartPos();
     undoStack.clear();
     SendBoard();
-  } else if (commandName == "fen") {
-    std::string boardStr = cmd.substr(4);
+  } else if (commandName == "fen") {    
+    std::string boardStr = "";
+    if (cmd.size() > 5) {
+      boardStr = cmd.substr(4);
+    }
     if (boardStr.size() > 8) {
       //send fen
       board.FromFen(boardStr);

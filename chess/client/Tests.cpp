@@ -2,7 +2,7 @@
 #include "ChessBot.h"
 #include "ChessClient.h"
 #include <iostream>
-
+#include <map>
 void TestFEN()
 {
   ChessBoard board;
@@ -73,6 +73,77 @@ void TestMove() {
   std::vector<Move> moves=cb.GetMoves();
   for (size_t i = 0; i < moves.size(); i++) {
     std::cout << moves[i].src.ToString() << " " << moves[i].dst.ToString()<<" ";
+  }
+}
+
+struct MoveCounts {
+  size_t moves = 0;
+  size_t captures = 0;
+  size_t castles = 0;
+  size_t checks = 0;
+  size_t mates = 0;
+  std::string ToString() {
+    std::stringstream oss;
+    oss << "moves " << moves << ", caps " << captures << ", castles " << castles << ", checks "
+        << checks<<", mates "<<mates;
+    return oss.str();
+  }
+};
+
+std::string MoveToString(const ChessBoard& b, const Move& m) {
+  Piece p = b.board[m.src.coord];
+  std::string s;
+  std::string name = "";
+  std::string PieceName[PIECE_NUM_TYPES] = {"", "", "R", "N", "B", "Q", "K"};
+  name = PieceName[p.type()];
+  std::string dst = m.dst.ToString();
+  return name+dst;
+}
+
+void EnumerateMoves(ChessBoard& board, int depth, std::vector<MoveCounts> & moveStats)
+{
+  if (depth == 0) {
+    return;
+  }
+  std::vector<Move> moves = board.GetMoves();
+  if (board.IsInCheck()) {
+    moveStats[depth-1].checks++;
+  }
+  moveStats[depth - 1].moves += moves.size();
+  if (moves.size() == 0) {
+    if (board.IsInCheck()) {
+      moveStats[depth - 1].mates++;
+    }
+  }
+  for (size_t i = 0; i < moves.size(); i++) {
+    UndoMove u = board.GetUndoMove(moves[i]);
+    const Move& m = moves[i];
+    Piece p = board.board[moves[i].dst.coord];
+    bool isEnpassant = false;
+    Piece srcp = board.board[moves[i].src.coord];
+    if (srcp.type() == PIECE_PAWN && p.isEmpty() && 
+      m.src.Col() != m.dst.Col()) {
+      isEnpassant = true;
+    }
+    if ((!p.isEmpty())||isEnpassant) {
+      moveStats[depth - 1].captures++;
+    }
+    board.ApplyMove(moves[i]);
+    EnumerateMoves(board, depth - 1, moveStats);
+    board.Undo(u);
+  }
+}
+
+void TestMovePerft() { 
+  ChessBoard b;
+  b.SetStartPos();
+  b.FromFen("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -");
+  
+  int depth = 5;
+  std::vector<MoveCounts>moveStats(depth);
+  EnumerateMoves(b, depth, moveStats);
+  for (size_t i = 0; i < moveStats.size(); i++) {
+    std::cout << "depth " << (i + 1) << " " << moveStats[i].ToString() << "\n";
   }
 }
 

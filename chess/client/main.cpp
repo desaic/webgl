@@ -9,6 +9,8 @@
 #include <string>
 #include <sstream>
 
+extern void TestMovePerft();
+
 int initWSA() {
   WSADATA wsaData;
   int iResult;
@@ -25,6 +27,7 @@ extern void TestHash();
 extern void TestMove();
 int main(int argc, char* argv[])
 { 
+  TestMovePerft();
   std::cout << sizeof(ChessBoard) << "\n";
   std::cout << sizeof(Move) << "\n";
   initWSA(); 
