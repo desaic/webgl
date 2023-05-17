@@ -495,4 +495,16 @@ public:
 
   void activateEnPassantBlack();
   void activateEnPassantWhite();
+
+  void GetDstRow(ChessCoord src,
+                                    std::vector<ChessCoord>& coords);
+
+  void GetDstCol(ChessCoord src,
+                                    std::vector<ChessCoord>& coords);
+
+  void GetDstUpRight(ChessCoord src,
+                                        std::vector<ChessCoord>& coords);
+
+  void GetDstUpLeft(ChessCoord src,
+                                       std::vector<ChessCoord>& coords);
 };

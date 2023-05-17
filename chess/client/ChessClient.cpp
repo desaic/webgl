@@ -130,7 +130,7 @@ void ChessClient::HandleCli(const std::string& cmd)
       std::cout << fen << "\n";
     }
   } else if (commandName == "debug") {
-    std::string fen = "8/1p1q4/p4pkp/P1Q5/3P4/5K2/8/8 b - - 19 54";
+    std::string fen = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -";
     board.FromFen(fen);
     undoStack.clear();
     SendBoard();

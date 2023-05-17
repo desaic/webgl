@@ -67,10 +67,19 @@ void ApplyMove(ChessBoard & board, Move m, std::vector<UndoMove> & undoStack) {
 }
 
 void TestMove() {
-  std::string fen = "8/1p4q1/p4pkp/P6Q/3P4/5K2/8/8 b - - 19 54";
   ChessBoard cb;
+  std::string fen0 =
+      "r3k2r/p1ppqp2/bn2pnpb/3PN3/1p2P3/2N2Q1p/PPPBBPPP/2KR3R w kq - 2 1";
+  cb.FromFen(fen0);
+  Move m;
+  std::vector<Move> moves = cb.GetMoves();
+
+  m.src.coord = 11;
+  m.dst.coord = 20;
+  cb.ApplyMove(m);
+  std::string fen = "8/1p4q1/p4pkp/P6Q/3P4/5K2/8/8 b - - 19 54";
   cb.FromFen(fen);
-  std::vector<Move> moves=cb.GetMoves();
+moves=cb.GetMoves();
   for (size_t i = 0; i < moves.size(); i++) {
     std::cout << moves[i].src.ToString() << " " << moves[i].dst.ToString()<<" ";
   }
@@ -133,12 +142,45 @@ void EnumerateMoves(ChessBoard& board, int depth, std::vector<MoveCounts> & move
     board.Undo(u);
   }
 }
+#include <fstream>
+void PrintMoveCounts() {
+  ChessBoard b;
+  b.FromFen("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -");
+  std::vector<Move> moves = b.GetMoves();
+  std::map<std::string, size_t> moveCount;
+  for (const auto& m : moves) {
+    UndoMove um;
+    um = b.GetUndoMove(m);
+    b.ApplyMove(m);
+    std::vector<Move> childMoves=b.GetMoves();
+    std::string moveName = m.src.ToString()+m.dst.ToString();
+    for (const auto& cm : childMoves) {
+      UndoMove chum;
+      std::string childMoveName = cm.src.ToString() + cm.dst.ToString();
+      std::string moveSeq = moveName + " " + childMoveName;
+      chum=b.GetUndoMove(cm);
+      b.ApplyMove(cm);
+      std::vector<Move> grandChildMoves = b.GetMoves();
+      moveCount[moveSeq] = grandChildMoves.size();
+      b.Undo(chum);
+    }
+    b.Undo(um);
+  }
+  std::ofstream out("moveCount.txt");
+
+  for (const auto it : moveCount) {
+    out << it.first << " " << it.second << "\n";
+  }
+  out.close();
+}
 
 void TestMovePerft() { 
   ChessBoard b;
   b.SetStartPos();
   b.FromFen("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -");
-  
+  PrintMoveCounts();
+
+
   int depth = 5;
   std::vector<MoveCounts>moveStats(depth);
   EnumerateMoves(b, depth, moveStats);

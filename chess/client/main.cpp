@@ -25,8 +25,8 @@ int initWSA() {
 
 extern void TestHash();
 extern void TestMove();
-int main(int argc, char* argv[])
-{ 
+int main(int argc, char* argv[]) {
+  //TestMove();
   TestMovePerft();
   std::cout << sizeof(ChessBoard) << "\n";
   std::cout << sizeof(Move) << "\n";
