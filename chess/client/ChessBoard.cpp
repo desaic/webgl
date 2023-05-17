@@ -645,6 +645,7 @@ void ChessBoard::AddBlackPawnCaptures(ChessCoord src, ChessCoord dst, std::vecto
   if (pinned) {
     pinner = checksInfo.pinners[src.coord];
   }
+  //TODO can still en passant if pinner is on the same diagonal as dst and src
   if (pinned && dst != pinner) {
     return;
   }
@@ -654,6 +655,7 @@ void ChessBoard::AddBlackPawnCaptures(ChessCoord src, ChessCoord dst, std::vecto
     && (dstPiece->isWhite());
   if (hasWhitePiece || 
     (src.Row() == 3 && enPassantDst == dst) ) {
+    //TODO cannot en Passant if the captured pawn is blocking a check.
     Move m(src, dst);
     if (src.Row() == 1) {
       AddBlackPromos(m, moves);
