@@ -606,7 +606,6 @@ void ChessBoard::GetCaptures(std::vector<Move>& moves)
 {
   std::vector<ChessCoord>* list = GetPieceList(nextColor);
   for (ChessCoord c : (*list) ){
-    ///@TODO
     //if pinned have to take the pinner
     std::vector<ChessCoord> dsts;
     GetCaptures(moves, c);
