@@ -174,12 +174,39 @@ void PrintMoveCounts() {
   out.close();
 }
 
+void CountMoves(ChessBoard& p, int depth, const std::string& path,
+                std::map<std::string, size_t>& moveCount) {
+  if (depth == 0) {
+    std::vector<Move> legalMoves = p.GetMoves();
+    size_t count = legalMoves.size();
+    moveCount[path] = count;
+    return;
+  } else {
+    std::vector<Move> legalMoves = p.GetMoves();
+    for (const auto& m : legalMoves) {
+      UndoMove stateInfo = p.GetUndoMove(m);
+      p.ApplyMove(m);
+      std::string childPath = path + m.src.ToString() + m.dst.ToString();
+      CountMoves(p, depth - 1, childPath, moveCount);
+      p.Undo(stateInfo);
+    }
+  }
+}
+
 void TestMovePerft() { 
   ChessBoard b;
   b.SetStartPos();
-  b.FromFen("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -");
-  PrintMoveCounts();
-
+ // b.FromFen("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -");
+ // PrintMoveCounts();
+  std::map<std::string, size_t> moveCount;
+  CountMoves(b, 4, "", moveCount);
+  std::ofstream out("moveCount.txt");
+  size_t total = 0;
+  for (const auto it : moveCount) {
+    out << it.first << " " << it.second << "\n";
+    total += it.second;
+  }
+  out.close();
 
   int depth = 5;
   std::vector<MoveCounts>moveStats(depth);

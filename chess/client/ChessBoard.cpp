@@ -33,12 +33,18 @@
 #define BLACK_KNIGHT (3)
 #define BLACK_BISHOP (4)
 #define BLACK_QUEEN (5)
+#define BLACK_KING (6)
 #define WHITE_PAWN (9)
 #define WHITE_ROOK (10)
 #define WHITE_KNIGHT (11)
 #define WHITE_BISHOP (12)
 #define WHITE_QUEEN (13)
+#define WHITE_KING (14)
 
+// row where black pawn can en passant.
+// 0 based indexing
+#define BLACK_ENP_ROW (3)
+#define WHITE_ENP_ROW (4)
 enum CastleMove {
   CASTLE_NONE=0,
   CASTLE_BQ,
@@ -644,22 +650,87 @@ void ChessBoard::AddBlackPawnCaptures(ChessCoord src, ChessCoord dst, std::vecto
   if (pinned) {
     pinner = checksInfo.pinners[src.coord];
   }
-  //TODO can still en passant if pinner is on the same diagonal as dst and src
+  // if pinned and making a capture move, 
+  // cannot capture unless capturing the pinner or 
+  // enpassant in the direction of the pin.
   if (pinned && dst != pinner) {
-    return;
+    bool isEnpassant = (src.Row() == BLACK_ENP_ROW && enPassantDst == dst);
+    if (!isEnpassant) {
+      return;
+    } else {
+      //if has enpassant, cannot be pinned horizontally because theres
+      // the opposite color pawn.      
+      // if pinned vertical or horizontally, cannot enpassant
+      if (pinner.Col() == src.Col()) {
+        return;
+      }
+      char pawnDx = dst.Col() - src.Col();
+      char pawnDy = dst.Row() - src.Row();
+      char pinDx = pinner.Col() - src.Col();
+      char pinDy = pinner.Row() - src.Row();
+      bool pawnUpRight = (pawnDx == pawnDy);
+      bool pinUpRight = (pinDx == pinDy);
+      // pinned on the opposite diagonal.
+      if (pawnUpRight != pinUpRight) {
+        return;
+      }
+    }
   }
 
   Piece* dstPiece = GetPiece(dst);
   bool hasWhitePiece = (!dstPiece->isEmpty()) 
     && (dstPiece->isWhite());
-  if (hasWhitePiece || 
-    (src.Row() == 3 && enPassantDst == dst) ) {
-    //TODO cannot en Passant if the captured pawn is blocking a check.
+  if (hasWhitePiece) {
     Move m(src, dst);
     if (src.Row() == 1) {
       AddBlackPromos(m, moves);
     }
     else {
+      moves.push_back(m);
+    }
+  } else if (src.Row() == BLACK_ENP_ROW && enPassantDst == dst) {
+    //not pinned here
+    //but may enpassant into a check where a rook or queen is checking
+    // the king on the same row.
+    // look left and right see if hit my king and enemy queen or rook
+    char col0 = src.Col();
+    char col1 = dst.Col();
+    if (col0 > col1) {
+      char tmp = col0;
+      col0 = col1;
+      col1 = tmp;
+    }
+    bool hasKing = false;
+    bool hasRookOrQueen = false;    
+    
+    for (char x = col0-1; x >= 0; x--) {
+      ChessCoord coord(x, 3);
+      const Piece & p = board[coord.coord];
+      if (p.isEmpty()) {
+        continue;
+      }
+      if (p.info == BLACK_KING) {
+        hasKing = true;
+      } else if (p.info == WHITE_QUEEN || p.info == WHITE_ROOK){
+        hasRookOrQueen = true;
+      }
+      break;
+    }
+    for (char x = col1 + 1; x < BOARD_SIZE; x++) {
+      ChessCoord coord(x, BLACK_ENP_ROW);
+      const Piece& p = board[coord.coord];
+      if (p.isEmpty()) {
+        continue;
+      }
+      if (p.info == BLACK_KING) {
+        hasKing = true;
+      } else if (p.info == WHITE_QUEEN || p.info == WHITE_ROOK) {
+        hasRookOrQueen = true;
+      }
+      break;
+    }
+    if (!(hasKing && hasRookOrQueen)) {
+      Move m(src, dst);
       moves.push_back(m);
     }
   }
@@ -672,21 +743,89 @@ void ChessBoard::AddWhitePawnCaptures(ChessCoord src, ChessCoord dst, std::vecto
   if (pinned) {
     pinner = checksInfo.pinners[src.coord];
   }
+  // if pinned and making a capture move, 
+  // cannot capture unless capturing the pinner or 
+  // enpassant in the direction of the pin.
   if (pinned && dst != pinner) {
-    return;
+    bool isEnpassant = (src.Row() == WHITE_ENP_ROW && enPassantDst == dst);
+    if (!isEnpassant) {
+      return;
+    } else {
+      //if has enpassant, cannot be pinned horizontally because theres
+      // the opposite color pawn.      
+      // if pinned vertical or horizontally, cannot enpassant
+      if (pinner.Col() == src.Col()) {
+        return;
+      }
+      char pawnDx = dst.Col() - src.Col();
+      char pawnDy = dst.Row() - src.Row();
+      char pinDx = pinner.Col() - src.Col();
+      char pinDy = pinner.Row() - src.Row();
+      bool pawnUpRight = (pawnDx == pawnDy);
+      bool pinUpRight = (pinDx == pinDy);
+      // pinned on the opposite diagonal.
+      if (pawnUpRight != pinUpRight) {
+        return;
+      }
+    }
   }
 
   Piece* dstPiece = GetPiece(dst);
   bool hasBlackPiece = (!dstPiece->isEmpty())
     && (dstPiece->isBlack());
 
-  if (hasBlackPiece ||
-    (src.Row() == 4 && enPassantDst == dst)) {
+  if (hasBlackPiece) {
     Move m(src, dst);
     if (src.Row() == 6) {
       AddWhitePromos(m, moves);
     }
     else {
+      moves.push_back(m);
+    }
+  } else if (src.Row() == WHITE_ENP_ROW && enPassantDst == dst) {
+    // not pinned here
+    // but may enpassant into a check where a rook or queen is checking
+    //  the king on the same row.
+    // like this  K - p P - - - r
+    //  look left and right see if hit my king and enemy queen or rook
+    char col0 = src.Col();
+    char col1 = dst.Col();
+    if (col0 > col1) {
+      char tmp = col0;
+      col0 = col1;
+      col1 = tmp;
+    }
+    bool hasKing = false;
+    bool hasRookOrQueen = false;
+
+    for (char x = col0 - 1; x >= 0; x--) {
+      ChessCoord coord(x, 3);
+      const Piece& p = board[coord.coord];
+      if (p.isEmpty()) {
+        continue;
+      }
+      if (p.info == WHITE_KING) {
+        hasKing = true;
+      } else if (p.info == BLACK_QUEEN || p.info == BLACK_ROOK) {
+        hasRookOrQueen = true;
+      }
+      break;
+    }
+    for (char x = col1 + 1; x < BOARD_SIZE; x++) {
+      ChessCoord coord(x, WHITE_ENP_ROW);
+      const Piece& p = board[coord.coord];
+      if (p.isEmpty()) {
+        continue;
+      }
+      if (p.info == WHITE_KING) {
+        hasKing = true;
+      } else if (p.info == BLACK_QUEEN || p.info == BLACK_ROOK) {
+        hasRookOrQueen = true;
+      }
+      break;
+    }
+    if (!(hasKing && hasRookOrQueen)) {
+      Move m(src, dst);
       moves.push_back(m);
     }
   }
@@ -1723,11 +1862,12 @@ void ChessBoard::Clear()
 void ComputeChecksPawn(ChecksInfo & info, ChessCoord coord, uint8_t color,
   ChessCoord kingCoord)
 {
-  uint8_t offsetl=7,offsetr=9;
+  const uint8_t offsetlWhite=7,offsetrWhite=9;
+  const uint8_t offsetlBlack = 9, offsetrBlack = 7;
   if (color == PIECE_BLACK) {
     if (coord.Col() > 0) {
       ChessCoord dst = coord;
-      dst.coord -= offsetl;
+      dst.coord -= offsetlBlack;
       info.attacked.SetBit(dst.coord);
       if (dst == kingCoord) {
         info.attackers.push_back(coord);
@@ -1735,7 +1875,7 @@ void ComputeChecksPawn(ChecksInfo & info, ChessCoord coord, uint8_t color,
     }
     if (coord.Col() < 7) {
       ChessCoord dst = coord;
-      dst.coord -= offsetr;
+      dst.coord -= offsetrBlack;
       info.attacked.SetBit(dst.coord);
       if (dst == kingCoord) {
         info.attackers.push_back(coord);
@@ -1745,7 +1885,7 @@ void ComputeChecksPawn(ChecksInfo & info, ChessCoord coord, uint8_t color,
   else {
     if(coord.Col()>0){
       ChessCoord dst = coord;
-      dst.coord += offsetl;
+      dst.coord += offsetlWhite;
       info.attacked.SetBit(dst.coord);
       if (dst == kingCoord) {
         info.attackers.push_back(coord);
@@ -1753,7 +1893,7 @@ void ComputeChecksPawn(ChecksInfo & info, ChessCoord coord, uint8_t color,
     }
     if (coord.Col() < 7) {
       ChessCoord dst = coord;
-      dst.coord += offsetr;
+      dst.coord += offsetrWhite;
       info.attacked.SetBit(dst.coord);
       if (dst == kingCoord) {
         info.attackers.push_back(coord);
