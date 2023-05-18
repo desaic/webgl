@@ -193,11 +193,12 @@ void ChessBoard::GetBlockingMoves(std::vector<Move>& moves)
       //dx and dy can't both be 0
       numSteps = yDist / dy - 1;
     }
-
+    char tcol = col;
+    char trow = row;
     for (char step = 0; step < numSteps; step++) {
-      col += dx;
-      row += dy;
-      ChessCoord dst=ChessCoord(uint8_t(col), uint8_t(row));
+      tcol += dx;
+      trow += dy;
+      ChessCoord dst=ChessCoord(uint8_t(tcol), uint8_t(trow));
       targetSquares.SetBit(dst);
     }
   }
@@ -222,10 +223,10 @@ void ChessBoard::GetBlockingMoves(std::vector<Move>& moves)
       for (ChessCoord dst : dstCoords) {
         if (targetSquares.GetBit(dst)) {
           Move m(c, dst);
-          if (nextColor == PIECE_BLACK && row==1) {
+          if (nextColor == PIECE_BLACK && dst.Row() == 0) {
             AddBlackPromos(m, moves);
           }
-          else if (nextColor == PIECE_WHITE && row == 6) {
+          else if (nextColor == PIECE_WHITE && dst.Row() == 7) {
             AddWhitePromos(m, moves);
           }
           else {
@@ -704,7 +705,7 @@ void ChessBoard::AddBlackPawnCaptures(ChessCoord src, ChessCoord dst, std::vecto
     bool hasRookOrQueen = false;    
     
     for (char x = col0-1; x >= 0; x--) {
-      ChessCoord coord(x, 3);
+      ChessCoord coord(x, BLACK_ENP_ROW);
       const Piece & p = board[coord.coord];
       if (p.isEmpty()) {
         continue;
@@ -799,7 +800,7 @@ void ChessBoard::AddWhitePawnCaptures(ChessCoord src, ChessCoord dst, std::vecto
     bool hasRookOrQueen = false;
 
     for (char x = col0 - 1; x >= 0; x--) {
-      ChessCoord coord(x, 3);
+      ChessCoord coord(x, WHITE_ENP_ROW);
       const Piece& p = board[coord.coord];
       if (p.isEmpty()) {
         continue;

@@ -193,13 +193,14 @@ void CountMoves(ChessBoard& p, int depth, const std::string& path,
   }
 }
 
-void TestMovePerft() { 
+void SaveMoveCounts(std::string fen, int depth) {
   ChessBoard b;
   b.SetStartPos();
- // b.FromFen("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -");
- // PrintMoveCounts();
+  b.FromFen(fen);
+  // b.FromFen("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq
+  // -"); PrintMoveCounts();
   std::map<std::string, size_t> moveCount;
-  CountMoves(b, 4, "", moveCount);
+  CountMoves(b, depth, "", moveCount);
   std::ofstream out("moveCount.txt");
   size_t total = 0;
   for (const auto it : moveCount) {
@@ -207,8 +208,16 @@ void TestMovePerft() {
     total += it.second;
   }
   out.close();
+}
 
-  int depth = 5;
+void TestMovePerft() { 
+  ChessBoard b;
+  b.SetStartPos();
+  //b.FromFen("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -");
+  b.FromFen("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - -");
+ // PrintMoveCounts();
+ // SaveMoveCounts("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - -", 5);
+  int depth = 7;
   std::vector<MoveCounts>moveStats(depth);
   EnumerateMoves(b, depth, moveStats);
   for (size_t i = 0; i < moveStats.size(); i++) {
