@@ -1337,10 +1337,10 @@ int ChessBoard::ApplyMove(const Move& m)
       castleBQ = false;
       break;
     case PIECE_ROOK:
-      if (m.src.Col() == 0) {
+      if (m.src.coord == a8) {
         castleBQ = false;
       }
-      else if (m.src.Col() == 7) {
+      else if (m.src.coord == h8) {
         castleBK = false;
       }
       break;
@@ -1373,10 +1373,10 @@ int ChessBoard::ApplyMove(const Move& m)
       castleWQ = false;
       break;
     case PIECE_ROOK:
-      if (m.src.Col() == 0) {
+      if (m.src.coord == a1) {
         castleWQ = false;
       }
-      else if (m.src.Col() == 7) {
+      else if (m.src.coord == h1) {
         castleWK = false;
       }
       break;
