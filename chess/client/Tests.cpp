@@ -176,6 +176,7 @@ void PrintMoveCounts() {
 
 void CountMoves(ChessBoard& p, int depth, const std::string& path,
                 std::map<std::string, size_t>& moveCount) {
+  const char* promoChar = " prnbqk";
   if (depth == 0) {
     std::vector<Move> legalMoves = p.GetMoves();
     size_t count = legalMoves.size();
@@ -186,7 +187,13 @@ void CountMoves(ChessBoard& p, int depth, const std::string& path,
     for (const auto& m : legalMoves) {
       UndoMove stateInfo = p.GetUndoMove(m);
       p.ApplyMove(m);
-      std::string childPath = path + m.src.ToString() + m.dst.ToString();
+      std::string moveName = m.src.ToString() + m.dst.ToString();
+      
+      if (!m.promo.isEmpty()) {
+        char promoType = promoChar[m.promo.type()];
+        moveName.push_back(promoType);
+      }
+      std::string childPath = path + moveName;
       CountMoves(p, depth - 1, childPath, moveCount);
       p.Undo(stateInfo);
     }
@@ -216,7 +223,7 @@ void TestMovePerft() {
   //b.FromFen("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -");
   b.FromFen("r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1");
  // PrintMoveCounts();
- // SaveMoveCounts("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - -", 5);
+  SaveMoveCounts("r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1", 5);
   int depth =6 ;
   std::vector<MoveCounts>moveStats(depth);
   EnumerateMoves(b, depth, moveStats);

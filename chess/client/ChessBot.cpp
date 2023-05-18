@@ -62,6 +62,8 @@ void ChessBot::InitEval()
   conf.board = board;
   std::string fen = board.GetFen();
   std::cout << "bot fen " << fen << "\n";
+  std::vector<Move> moves = board.GetMoves();
+  std::cout << "move count " << moves.size() << "\n";
 }
 
 /// https://en.wikipedia.org/wiki/Principal_variation_search
