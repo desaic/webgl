@@ -100,7 +100,7 @@ int ChessBot::pvs(ChessBoard& board, unsigned depth, int alpha, int beta) {
       alpha = score;
       if (depth == conf.maxDepth) {
         state.bestMove = moves[i];
-        std::cout << state.bestMove.ToString()<<"\n";
+        //std::cout << state.bestMove.ToString()<<"\n";
       }
     }
     if (alpha >= beta) break;
@@ -114,8 +114,8 @@ int ChessBot::SearchMoves()
   int alpha = -2 * BoardEval::MAX_SCORE;
   int beta = 2 * BoardEval::MAX_SCORE;
   int score = 0;
-  //int score = pvs(conf.board, conf.maxDepth, alpha, beta);
-  //std::cout << score << " " << state.bestMove.ToString() << "\n";
+  score = pvs(conf.board, conf.maxDepth, alpha, beta);
+  std::cout << score << " " << state.bestMove.ToString() << "\n";
   return score;
 }
 
