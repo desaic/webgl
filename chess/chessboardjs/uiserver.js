@@ -16,6 +16,26 @@ server.on('close',function(){
   console.log('Server closed !');
 });
 var client = null;
+
+function ReadLines(str){
+	var lines = [];
+	var i = 0;
+	var j = 0;
+	var remainder = "";	
+	while(i<str.length){
+		j = str.indexOf("\r\n", i);
+		if(j < str.length){
+		  var line = str.substring(i, str.indexOf("\r\n", i));
+		  lines.push(line);			
+		}else{
+			remainder = str.substring(i);
+			break;
+		}
+        i = str.indexOf('\n', i) + 1;
+	}
+    return {'lines':lines, 'remainder':remainder};
+}
+
 // emitted when new client connects
 server.on('connection',function(socket){
 //this property shows the number of characters currently buffered to be written. (Number of characters is approximately equal to the number of bytes to be written, but the buffer may contain strings, and the strings are lazily encoded, so the exact number of bytes is not known.)
@@ -54,23 +74,22 @@ server.on('connection',function(socket){
 	socket.on('data',function(data){
 		console.log("recv: " + data.toString());
 		recvBuf += data.toString('latin1');
-		var startIdx = recvBuf.indexOf(">");
-		//if no proper header found discard other data.
-		if(startIdx<0){
-			recvBuf = "";
-			return;
-		}
-		var endIdx = recvBuf.indexOf("\n");
-		console.log("end idx " + endIdx);
-		if(endIdx<0 || endIdx>startIdx + 256){
-			recvBuf = "";
-			console.log("invalid header. expect \\r\\n.");
-			return;
-		}
-		cmd = recvBuf.slice(startIdx+1, endIdx+2);
-		//delete what's been parsed already.
-		recvBuf = recvBuf.slice(endIdx+2);
-		console.log(cmd);
+		let {lines, remainder} = ReadLines(recvBuf);
+		recvBuf = remainder;
+		for(var i = 0;i<lines.length;i++){
+			const line = lines[i];
+			var startIdx = line.indexOf(">");
+			//if no proper header found discard other data.
+			if(startIdx<0){
+				continue;
+			}
+			endIdx = line.indexOf("\r\n");
+			if(endIdx >= line.length){
+				endIdx = line.length;
+			}
+			cmd = line.slice(startIdx+1, endIdx);
+			console.log("recv command: "+cmd);
+		}		
 		if(wsconnection != null){
 			console.log("send websocket msg "+cmd);
 		  wsconnection.sendUTF(cmd);				

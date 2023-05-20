@@ -39,6 +39,7 @@
     <div id="left">
       <div id="myBoard" style="width: 400px"></div>
       <button id="Play">Play</button>
+	  <button id="Pull" onclick="pull()">Pull Board</button>
     </div>
     <div id="right">
       <div id="editBoard" style="width: 400px"></div>
@@ -55,16 +56,21 @@
   <script src="./js/chessui.js"></script>
   <script>
   const ws = new WebSocket('ws://localhost:9000/')
+  function pull(){
+    if(ws){
+      ws.send('fen');
+    }
+  }
   ws.onopen = function(){
 	console.log('websocket Client connect');
 	ws.send('websocket client');
+  pull();
   };
   
   ws.onmessage = function(e){
 	console.log("Received '" + e.data + "'");
 	processBoardCommand(e.data);
   };
-  
   </script>
 </body>
 </html>
