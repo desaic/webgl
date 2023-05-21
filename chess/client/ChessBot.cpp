@@ -3,6 +3,7 @@
 #include "BoardEval.h"
 
 #include "Timer.h"
+#include <algorithm>
 #include <chrono>
 
 static void SleepMs(int ms)
@@ -13,7 +14,7 @@ static void SleepMs(int ms)
 ChessBot::ChessBot():running(false),
 boardChanged(false)
 {
-  conf.board = board;
+  conf.board = board_;
 }
 
 ChessBot::~ChessBot()
@@ -31,7 +32,7 @@ int ChessBot::EvalDirect(const ChessBoard& b)
 void ChessBot::SetBoard(ChessBoard& b)
 {
   std::lock_guard<std::mutex> lock(boardMutex);
-  board = b;
+  board_ = b;
   boardChanged = true;
 }
 
@@ -59,10 +60,11 @@ std::vector<MoveScore> ChessBot::BestMoves(const ChessBoard& b)
 
 void ChessBot::InitEval() 
 {
-  conf.board = board;
-  std::string fen = board.GetFen();
+  conf.board = board_;
+  conf.board.InitHash();
+  std::string fen = board_.GetFen();
   std::cout << "bot fen " << fen << "\n";
-  std::vector<Move> moves = board.GetMoves();
+  std::vector<Move> moves = board_.GetMoves();
   std::cout << "move count " << moves.size() << "\n";
 }
 
@@ -85,23 +87,18 @@ int ChessBot::pvs(ChessBoard& board, unsigned depth, int alpha, int beta) {
     UndoMove u = board.GetUndoMove(moves[i]);
     board.ApplyMove(moves[i]);
 
-    if (i == 0) {
-      score = -pvs(board, depth - 1, -beta, -alpha);
-    } else {
-      score = -pvs(board, depth - 1, -alpha - 1, -alpha);
-      if (alpha < score && score < beta) {
-        score = -pvs(board, depth - 1, -beta, -score);
+      if (i == 0) {
+        score = -pvs(board, depth - 1, -beta, -alpha);
+      } else {
+        score = -pvs(board, depth - 1, -alpha - 1, -alpha);
+        if (score>alpha && score < beta) {
+          score = -pvs(board, depth - 1, -beta, -score);
+        }
       }
-    }
-
+     
     board.Undo(u);
-
     if (alpha < score) {
       alpha = score;
-      if (depth == conf.maxDepth) {
-        state.bestMove = moves[i];
-        //std::cout << state.bestMove.ToString()<<"\n";
-      }
     }
     if (alpha >= beta) break;
   }
@@ -111,12 +108,61 @@ int ChessBot::pvs(ChessBoard& board, unsigned depth, int alpha, int beta) {
 
 int ChessBot::SearchMoves()
 {
-  int alpha = -2 * BoardEval::MAX_SCORE;
-  int beta = 2 * BoardEval::MAX_SCORE;
-  int score = 0;
-  score = pvs(conf.board, conf.maxDepth, alpha, beta);
-  std::cout << score << " " << state.bestMove.ToString() << "\n";
-  return score;
+  unsigned depth = conf.maxDepth;
+  ChessBoard board = conf.board;
+  //basically a copy of normal search  
+  if (depth == 0) {
+    // invalid configuration.
+    return EvalDirect(board);
+  }
+  std::vector<Move> moves = board.GetMoves();
+  if (moves.empty()) {
+    if (board.IsInCheck()) {
+      return -BoardEval::MAX_SCORE;
+    } else {
+      return 0;
+    }
+  }
+
+  std::vector<MoveScore> moveScore(moves.size());
+  for (size_t i = 0; i < moves.size(); i++) {
+    moveScore[i].move = moves[i];
+  }
+  int bestScore = 0;
+  for (depth = 5; depth <= conf.maxDepth; depth++) {
+    //iterative deepening
+    int alpha = -2 * BoardEval::MAX_SCORE;
+    int beta = 2 * BoardEval::MAX_SCORE;
+    int score = 0;
+    for (size_t i = 0; i < moveScore.size(); ++i) {
+      const Move & move = moveScore[i].move;
+      UndoMove u = board.GetUndoMove(move);
+      board.ApplyMove(move);
+      if (i == 0) {
+        score = -pvs(board, depth - 1, -beta, -alpha);
+      } else {
+        score = -pvs(board, depth - 1, -alpha - 1, -alpha);
+        if (alpha < score && score < beta) {
+          score = -pvs(board, depth - 1, -beta, -score);
+        }
+      }
+     
+      board.Undo(u);
+      if (alpha < score) {
+        alpha = score;
+        bestScore = score;
+        state.bestMove = move;
+      }
+      moveScore[i].score = score;
+    }
+    std::sort(moveScore.begin(), moveScore.end());
+    std::reverse(moveScore.begin(), moveScore.end());
+  }
+
+  std::cout << moveScore[0].move.ToString() << " " << moveScore[0].score
+            << ", ";
+  std::cout << bestScore << " " << state.bestMove.ToString() << "\n";
+  return bestScore;
 }
 
 Move ChessBot::CurrentBestMove()

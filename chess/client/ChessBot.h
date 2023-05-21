@@ -7,9 +7,7 @@
 struct MoveScore
 {
   Move move;
-  int score;
-  //depth the score is based on.
-  unsigned depth;
+  int score=0;
 
   bool operator<(const MoveScore& other) const {
     if (score != other.score) {
@@ -17,19 +15,18 @@ struct MoveScore
     }
     return move < other.move;
   }
-
-  MoveScore() :score(0), depth(0) {}
 };
 
 //depth 0 for uninitialized scores.
 struct BoardScore {
-  uint8_t hash[8];
-  uint8_t depth=0;
-  int score=0;
+  uint8_t depth = 0;
+  int score = 0;
+  uint64_t hash=0;
+  //std::string fen;
 };
 
 struct SearchConf {
-  unsigned maxDepth = 6;
+  unsigned maxDepth = 7;
   ChessBoard board;
 };
 
@@ -49,7 +46,7 @@ struct TransTable{
   }
 
   const BoardScore& Get(size_t hash) const { size_t idx = hash & hashMask;
-    return v[hash];
+    return v[idx];
   }
 
   void Set(size_t hash, const BoardScore& score) {
@@ -110,7 +107,7 @@ public:
   
   ///used whenever current position updates.
   std::mutex boardMutex;
-  ChessBoard board;
+  ChessBoard board_;
   bool boardChanged;
 
   SearchConf conf;
