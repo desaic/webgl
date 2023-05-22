@@ -152,8 +152,10 @@ int ChessBot::SearchMoves()
         alpha = score;
         bestScore = score;
         state.bestMove = move;
+        moveScore[i].score = score;
+      } else {
+        moveScore[i].score = score - 1;
       }
-      moveScore[i].score = score;
     }
     std::sort(moveScore.begin(), moveScore.end());
     std::reverse(moveScore.begin(), moveScore.end());
