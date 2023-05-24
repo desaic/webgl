@@ -71,6 +71,7 @@ void ChessBot::InitEval()
 /// https://en.wikipedia.org/wiki/Principal_variation_search
 int ChessBot::pvs(ChessBoard& board, unsigned depth, int alpha, int beta) {
   if (depth == 0) {
+    state.leafCount++;
     return EvalDirect(board);
   }
 
@@ -83,26 +84,59 @@ int ChessBot::pvs(ChessBoard& board, unsigned depth, int alpha, int beta) {
     }
   }
   int score = -BoardEval::MAX_SCORE;
+  HashType hashType = HashType::ALPHA;
+  uint64_t hash0 = board.HashVal();
+  const auto& entry = state.tt.Get(hash0);
+  if (entry.hash == hash0) {
+    if (entry.depth >= depth) {
+      if (entry.type == uint8_t(HashType::EXACT)) {
+        return entry.score;
+      }
+      if (entry.type == uint8_t(HashType::ALPHA)) {
+        if (entry.score < alpha) {
+          return alpha;
+        }
+      }
+      if (entry.type == uint8_t(HashType::BETA)) {
+        if (entry.score >= beta) {
+          return entry.score;
+        }
+      }
+    }
+  }
   for (int i = 0; i < moves.size(); ++i) {
     UndoMove u = board.GetUndoMove(moves[i]);
     board.ApplyMove(moves[i]);
 
-      if (i == 0) {
-        score = -pvs(board, depth - 1, -beta, -alpha);
-      } else {
-        score = -pvs(board, depth - 1, -alpha - 1, -alpha);
-        if (score>alpha && score < beta) {
-          score = -pvs(board, depth - 1, -beta, -score);
-        }
+    if (i == 0) {
+      score = -pvs(board, depth - 1, -beta, -alpha);
+    } else {
+      score = -pvs(board, depth - 1, -alpha - 1, -alpha);
+      if (score>alpha && score < beta) {
+        score = -pvs(board, depth - 1, -beta, -score);
       }
-     
+    }     
     board.Undo(u);
     if (alpha < score) {
       alpha = score;
+      hashType = HashType::EXACT;
     }
-    if (alpha >= beta) break;
+    if (alpha >= beta) {
+      hashType = HashType::BETA;
+      break;
+    }
   }
-
+  uint64_t hash1 = board.HashVal();
+  if (hash0 != hash1) {
+    std::cout << "hash fucked\n";
+  }
+  BoardScore newScore(uint8_t(depth), uint8_t(hashType), alpha, board.HashVal());
+  
+  if (newScore.depth > entry.depth ||
+      (newScore.depth == entry.depth &&
+       entry.type != uint8_t(HashType::EXACT))) {
+    state.tt.Set(hash1, newScore);
+  }
   return alpha;
 }
 
@@ -123,7 +157,7 @@ int ChessBot::SearchMoves()
       return 0;
     }
   }
-
+  state.leafCount = 0;
   std::vector<MoveScore> moveScore(moves.size());
   for (size_t i = 0; i < moves.size(); i++) {
     moveScore[i].move = moves[i];
@@ -160,10 +194,8 @@ int ChessBot::SearchMoves()
     std::sort(moveScore.begin(), moveScore.end());
     std::reverse(moveScore.begin(), moveScore.end());
   }
-
-  std::cout << moveScore[0].move.ToString() << " " << moveScore[0].score
-            << ", ";
   std::cout << bestScore << " " << state.bestMove.ToString() << "\n";
+  std::cout << "checked " << state.leafCount << " leaves\n";
   return bestScore;
 }
 

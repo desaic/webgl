@@ -18,10 +18,22 @@ struct MoveScore
 };
 
 //depth 0 for uninitialized scores.
+enum class HashType { 
+  // between alpha beta
+  EXACT = 0, 
+  // below alpha
+  ALPHA = 1, 
+  // above beta
+  BETA = 2 };
+
 struct BoardScore {
   uint8_t depth = 0;
+  uint8_t type = 0;
   int score = 0;
   uint64_t hash=0;
+  BoardScore() {}
+  BoardScore(uint8_t d, uint8_t t, int s, uint64_t h)
+      : depth(d), type(t), score(s), hash(h) {}
   //std::string fen;
 };
 
@@ -63,6 +75,7 @@ struct SearchState {
   Move bestMove;
   int score=0;
   TransTable tt;
+  size_t leafCount = 0;
 };
 
 class ChessBot
