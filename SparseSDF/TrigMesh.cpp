@@ -231,6 +231,10 @@ Vec3f TrigMesh::GetTriangleVertex(unsigned tIdx, unsigned jIdx) const {
   return GetVertex(GetIndex(tIdx, jIdx));
 }
 
+Vec3f TrigMesh::GetTrigNormal(unsigned tIdx) const {
+  return Vec3f(nt[3 * tIdx], nt[3 * tIdx + 1], nt[3 * tIdx + 2]);
+}
+
 void TrigMesh::scale(float s) {
   for (size_t i = 0; i < v.size(); i++) {
     for (unsigned d = 0; d < 3; d++) {

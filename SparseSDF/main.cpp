@@ -493,9 +493,6 @@ class AdapSDF {
   /// <returns>-1 if too many voxels are requested</returns>
   int Allocate(unsigned sx, unsigned sy, unsigned sz);
 
-  /// grid origin is mesh origin - band * voxSize.
-  void SetMeshOrigin(Vec3f O) { origin = O - float(band) * voxSize; }
-
   /// 2 bils.
   static const size_t MAX_NUM_VOX = 1u << 31;
 
@@ -528,10 +525,6 @@ class AdapSDF {
 };
 
 int AdapSDF::Allocate(unsigned sx, unsigned sy, unsigned sz) {
-  band = std::min(band, MAX_BAND); 
-  sx += 2 * band;
-  sy += 2 * band;
-  sz += 2 * band;
   size_t numVox = sx * sy * size_t(sz);
   if (numVox > MAX_NUM_VOX) {
     return -1;
@@ -560,23 +553,28 @@ int BuildSDF(const TrigMesh& mesh, AdapSDF& sdf) {
 
 struct SimpleVoxCb : public VoxCallback {
   virtual void operator()(unsigned x, unsigned y, unsigned z,
-                          size_t trigIdx) const {
+                          size_t trigIdx) {
     (*grid)(x, y, z) = 1;
   }
   Array3D8u* grid = nullptr;
 };
 
 struct SDFVoxCb : public VoxCallback {
+  
   virtual void operator()(unsigned x, unsigned y, unsigned z,
-                          size_t trigIdx) const {
+                          size_t trigIdx) {
     (*grid)(x, y, z) = 1;
+    Vec3u coarseIdx(x/4,y/4,z/4);
+
   }
+
   Array3D8u* grid = nullptr;
+  AdapSDF* sdf = nullptr;
 };
 
 void TestSDF() {
-  //std::string fileName = "F:/dolphin/meshes/fish/salmon.stl";
-  std::string fileName = "F:/dolphin/meshes/lattice_big/MeshLattice.stl";
+  std::string fileName = "F:/dolphin/meshes/fish/salmon.stl";
+  //std::string fileName = "F:/dolphin/meshes/lattice_big/MeshLattice.stl";
 
   TrigMesh mesh;
   mesh.LoadStl(fileName);
@@ -587,13 +585,20 @@ void TestSDF() {
 
   BBox box;
   ComputeBBox(mesh.v, box);
-  size_t num_verts = mesh.v.size() / 3;
 
   conf.unit = Vec3f(0.4, 0.4, 0.4);
+
+  // add margin for narrow band sdf
+  sdf.band = std::min(sdf.band, AdapSDF::MAX_BAND);
+  box.vmin = box.vmin - float(sdf.band) * conf.unit;
+  box.vmax = box.vmax + float(sdf.band) * conf.unit;
+
+  size_t num_verts = mesh.v.size() / 3;
+
   conf.origin = box.vmin;
   sdf.voxSize = conf.unit;
-  sdf.SetMeshOrigin(box.vmin);
-  
+  sdf.origin = box.vmin;
+
   Vec3f count = (box.vmax - box.vmin) / conf.unit;
   conf.gridSize = Vec3u(count[0], count[1], count[2]);
   sdf.Allocate(count[0], count[1], count[2]);
@@ -603,9 +608,10 @@ void TestSDF() {
   count[2]++;
   Utils::Stopwatch timer;
   timer.Start();
-  SimpleVoxCb cb;
+  SDFVoxCb cb;
   grid.Allocate(conf.gridSize, 0);
   cb.grid = &grid;
+  cb.sdf = &sdf;
   cpu_voxelize_mesh(conf, &mesh, cb);
   float ms = timer.ElapsedMS();
   std::cout << "vox time " << ms << "\n";

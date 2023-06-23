@@ -11,7 +11,7 @@ Vec3f clamp(const Vec3f& v, const Vec3f& lb, const Vec3f& ub) {
 
 // Mesh voxelization method
 void cpu_voxelize_mesh(voxconf conf, const TrigMesh* mesh,
-                       const VoxCallback& cb) {
+                       VoxCallback& cb) {
   // Common variables used in the voxelization process
   size_t n_triangles = mesh->t.size() / 3;
   Vec3f delta_p = conf.unit;
@@ -32,8 +32,7 @@ void cpu_voxelize_mesh(voxconf conf, const TrigMesh* mesh,
     Vec3f e1 = v2 - v1;
     Vec3f e2 = v0 - v2;
     // Normal vector pointing up from the triangle
-    Vec3f n = e0.cross(e1);
-    n.normalize();
+    Vec3f n = mesh->GetTrigNormal(i);
 
     // COMPUTE TRIANGLE BBOX IN GRID
     // Triangle bounding box in world coordinates is min(v0,v1,v2) and

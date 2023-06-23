@@ -73,7 +73,8 @@ class TrigMesh {
   unsigned GetIndex(unsigned tIdx, unsigned jIdx) const;
   Vec3f GetVertex(unsigned vIdx) const;
   Vec3f GetTriangleVertex(unsigned tIdx, unsigned jIdx) const;
-
+  Vec3f GetTrigNormal(unsigned tIdx)const;
+  
   void scale(float s);
   void translate(float dx, float dy, float dz);
   void append(const TrigMesh& m);
