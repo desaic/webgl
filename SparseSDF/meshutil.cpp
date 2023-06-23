@@ -232,13 +232,16 @@ void save_obj(const QuadMesh & m, const std::string & filename) {
 }
 
 void SaveVolAsObjMesh(std::string outfile, const Array3D8u& vol, float* voxRes,
-                      int mat) {
+                      float* origin, int mat) {
   QuadMesh mout;
   // convert zres to mm.
   Vec3f dx = {voxRes[0], voxRes[1], voxRes[2]};
   const int N_FACE = 6;
   for (int f = 0; f < N_FACE; f++) {
     addFaces(mout, f, vol, mat, dx);
+  }
+  for (size_t i = 0; i < mout.v.size(); i ++) {
+    mout.v[i] += Vec3f(origin[0],origin[1],origin[2]);
   }
   save_obj(mout, outfile.c_str());
 }

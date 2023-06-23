@@ -493,13 +493,22 @@ class AdapSDF {
   /// <returns>-1 if too many voxels are requested</returns>
   int Allocate(unsigned sx, unsigned sy, unsigned sz);
 
+  /// grid origin is mesh origin - band * voxSize.
+  void SetMeshOrigin(Vec3f O) { origin = O - float(band) * voxSize; }
+
   /// 2 bils.
   static const size_t MAX_NUM_VOX = 1u << 31;
-  /// band causes furthur expansion of the grid.   
-  static const unsigned MAX_BAND= 8;
+
+  /// band causes furthur expansion of the grid.
+  static const unsigned MAX_BAND = 8;
+
+  // max value of uint8_t
+  static const unsigned MAX_DIST = 255;
 
   // distance values are stored on grid vertices.
   // vertex grid size is voxel grid size +1.
+  // stores only 8-bit ints to save memory.
+  // physical distance = dist * distUnit.
   Array3D8u dist;
 
   // coarse grid contains index into list of refined cells.
@@ -523,21 +532,25 @@ int AdapSDF::Allocate(unsigned sx, unsigned sy, unsigned sz) {
   sx += 2 * band;
   sy += 2 * band;
   sz += 2 * band;
-  origin = origin - float(band) * voxSize;
   size_t numVox = sx * sy * size_t(sz);
   if (numVox > MAX_NUM_VOX) {
     return -1;
   }
+  dist.Allocate(sx + 1, sy + 1, sz + 1);
+  dist.Fill(MAX_DIST);
 
+  Vec3u coarseSize(sx / 4, sy / 4, sz / 4);
+  coarseSize[0] += (sx % 4 > 0);
+  coarseSize[1] += (sy % 4 > 0);
+  coarseSize[2] += (sz % 4 > 0);
+
+  coarseGrid.Allocate(coarseSize[0], coarseSize[1], coarseSize[2]);
   return 0;
 }
 
 int BuildSDF(const TrigMesh& mesh, AdapSDF& sdf) {
   // compute distance values for vertices of voxels that intersect
   // triangles.
-
-  // temporary coarse grid storing triangle indices intersecting this cell
-  Array3D<SparseNode4<std::vector<size_t>>> idxGrid;
 
   // refine cells that intersect triangles
 
@@ -562,7 +575,9 @@ struct SDFVoxCb : public VoxCallback {
 };
 
 void TestSDF() {
+  //std::string fileName = "F:/dolphin/meshes/fish/salmon.stl";
   std::string fileName = "F:/dolphin/meshes/lattice_big/MeshLattice.stl";
+
   TrigMesh mesh;
   mesh.LoadStl(fileName);
 
@@ -576,8 +591,13 @@ void TestSDF() {
 
   conf.unit = Vec3f(0.4, 0.4, 0.4);
   conf.origin = box.vmin;
+  sdf.voxSize = conf.unit;
+  sdf.SetMeshOrigin(box.vmin);
+  
   Vec3f count = (box.vmax - box.vmin) / conf.unit;
   conf.gridSize = Vec3u(count[0], count[1], count[2]);
+  sdf.Allocate(count[0], count[1], count[2]);
+
   count[0]++;
   count[1]++;
   count[2]++;
@@ -589,7 +609,8 @@ void TestSDF() {
   cpu_voxelize_mesh(conf, &mesh, cb);
   float ms = timer.ElapsedMS();
   std::cout << "vox time " << ms << "\n";
-  //SaveVolAsObjMesh("voxels.obj", grid, (float*)(&conf.unit), 1);
+  SaveVolAsObjMesh("voxels.obj", grid, (float*)(&conf.unit),
+                   (float*)(&box.vmin), 1);
 }
 
 int main(int argc, char* argv[]) {
@@ -601,7 +622,9 @@ int main(int argc, char* argv[]) {
   LoadImageSequence(imageDir, maxIndex, eyeVol);
   for (int id = 1; id < 4; id++) {
     float voxRes[3] = {0.064, 0.0635, 0.05};
-    SaveVolAsObjMesh("eye_" + std::to_string(id) + ".obj", eyeVol, voxRes, id);
+    float origin[3] = {.0f,.0f,.0f};
+    SaveVolAsObjMesh("eye_" + std::to_string(id) + ".obj", eyeVol, voxRes,
+                     origin, id);
   }
 
   int id = 5481;

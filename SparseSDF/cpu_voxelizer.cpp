@@ -13,7 +13,7 @@ Vec3f clamp(const Vec3f& v, const Vec3f& lb, const Vec3f& ub) {
 void cpu_voxelize_mesh(voxconf conf, const TrigMesh* mesh,
                        const VoxCallback& cb) {
   // Common variables used in the voxelization process
-  size_t n_triangles = mesh->v.size() / 3;
+  size_t n_triangles = mesh->t.size() / 3;
   Vec3f delta_p = conf.unit;
   Vec3f grid_max(
       conf.gridSize[0] - 1, conf.gridSize[1] - 1,
