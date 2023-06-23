@@ -2,14 +2,21 @@
 #define CPU_VOXELIZER_H
 
 #include "TrigMesh.h"
-#include "Array3D.h"
 
 struct voxconf {
-	Vec3f origin;
-	Vec3f unit;
-	Vec3u gridSize;
+  Vec3f origin;
+  Vec3f unit;
+  Vec3u gridSize;
 };
 
-void cpu_voxelize_mesh(voxconf conf, const TrigMesh* mesh, Array3D8u & grid);
+struct VoxCallback {
+  virtual void operator()(unsigned x, unsigned y, unsigned z,
+                          size_t trigIdx) const {}
+};
+
+// ignores voxels with negative indices.
+// mesh should be placed above conf.origin.
+void cpu_voxelize_mesh(voxconf conf, const TrigMesh* mesh,
+                       const VoxCallback& cb);
 
 #endif

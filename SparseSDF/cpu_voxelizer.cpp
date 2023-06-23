@@ -10,30 +10,22 @@ Vec3f clamp(const Vec3f& v, const Vec3f& lb, const Vec3f& ub) {
 }
 
 // Mesh voxelization method
-void cpu_voxelize_mesh(voxconf conf, const TrigMesh* mesh, Array3D8u& grid) {
-  //// Common variables used in the voxelization process
-  // Vec3f delta_p(info.unit[0], info.unit[1], info.unit[2]);
-  // Vec3f c(0.0f, 0.0f, 0.0f); // critical point
-  // Vec3f grid_max(info.gridsize[0] - 1, info.gridsize[1] - 1, info.gridsize[2]
-  // - 1); // grid max (grid runs from 0 to gridsize-1)
-
-  // PREPASS
+void cpu_voxelize_mesh(voxconf conf, const TrigMesh* mesh,
+                       const VoxCallback& cb) {
+  // Common variables used in the voxelization process
   size_t n_triangles = mesh->v.size() / 3;
-  grid.Allocate(conf.gridSize, 0);
+  Vec3f delta_p = conf.unit;
+  Vec3f grid_max(
+      conf.gridSize[0] - 1, conf.gridSize[1] - 1,
+      conf.gridSize[2] - 1);  // grid max (grid runs from 0 to gridsize-1)
 
-  for (int64_t i = 0; i < n_triangles; i++) {
-    // Common variables used in the voxelization process
-    Vec3f delta_p = conf.unit;
+  for (size_t i = 0; i < n_triangles; i++) {
     Vec3f c(0.0f, 0.0f, 0.0f);  // critical point
-    Vec3f grid_max(
-        conf.gridSize[0] - 1, conf.gridSize[1] - 1,
-        conf.gridSize[2] - 1);  // grid max (grid runs from 0 to gridsize-1)
-
     // COMPUTE COMMON TRIANGLE PROPERTIES
     // Move vertices to origin using bbox
-    Vec3f v0 = mesh->GetTriangleVertex(i, 0);
-    Vec3f v1 = mesh->GetTriangleVertex(i, 1);
-    Vec3f v2 = mesh->GetTriangleVertex(i, 2);
+    Vec3f v0 = mesh->GetTriangleVertex(i, 0) - conf.origin;
+    Vec3f v1 = mesh->GetTriangleVertex(i, 1) - conf.origin;
+    Vec3f v2 = mesh->GetTriangleVertex(i, 2) - conf.origin;
 
     // Edge vectors
     Vec3f e0 = v1 - v0;
@@ -53,11 +45,10 @@ void cpu_voxelize_mesh(voxconf conf, const TrigMesh* mesh, Array3D8u& grid) {
     IntBox t_bbox_grid;
     Vec3f gridvec =
         clamp(t_bbox_world.vmin / conf.unit, Vec3f(0.0f, 0.0f, 0.0f), grid_max);
-    t_bbox_grid.min = Vec3i(gridvec[0], gridvec[1],gridvec[2]);
+    t_bbox_grid.min = Vec3i(gridvec[0], gridvec[1], gridvec[2]);
     gridvec =
         clamp(t_bbox_world.vmax / conf.unit, Vec3f(0.0f, 0.0f, 0.0f), grid_max);
     t_bbox_grid.max = Vec3i(gridvec[0], gridvec[1], gridvec[2]);
-        
 
     // PREPARE PLANE TEST PROPERTIES
     if (n[0] > 0.0f) {
@@ -132,10 +123,6 @@ void cpu_voxelize_mesh(voxconf conf, const TrigMesh* mesh, Array3D8u& grid) {
     for (int z = t_bbox_grid.min[2]; z <= t_bbox_grid.max[2]; z++) {
       for (int y = t_bbox_grid.min[1]; y <= t_bbox_grid.max[1]; y++) {
         for (int x = t_bbox_grid.min[0]; x <= t_bbox_grid.max[0]; x++) {
-          // size_t location = x + (y*info.gridsize) +
-          // (z*info.gridsize*info.gridsize); if (checkBit(voxel_table,
-          // location)){ continue; }
-
           // TRIANGLE PLANE THROUGH BOX TEST
           Vec3f p(x * conf.unit[0], y * conf.unit[1], z * conf.unit[2]);
           float nDOTp = n.dot(p);
@@ -179,8 +166,7 @@ void cpu_voxelize_mesh(voxconf conf, const TrigMesh* mesh, Array3D8u& grid) {
           if ((n_zx_e2.dot(p_zx) + d_xz_e2) < 0.0f) {
             continue;
           }
-          grid(x,y,z)=1;
-          continue;
+          cb(x, y, z, i);
         }
       }
     }

@@ -1,22 +1,21 @@
-#include "TrigMesh.h"
-#include "meshutil.h"
-#include "Vec3.h"
-#include "MarchingCubes.h"
-#include "lodepng.h"
-#include "Array2D.h"
-#include "Array3D.h"
-
-#include <iostream>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <iostream>
 #include <sstream>
+
+#include "Array2D.h"
+#include "Array3D.h"
+#include "MarchingCubes.h"
+#include "TrigMesh.h"
+#include "Vec3.h"
+#include "lodepng.h"
+#include "meshutil.h"
 
 void MirrorCubicStructure(const Array3D8u& s_in, Array3D8u& s_out);
 void MarchingCubes(const Array3D8u& grid, float level, TrigMesh* surf);
 
-void loadBinaryStructure(const std::string& filename, Array3D8u& s)
-{
+void loadBinaryStructure(const std::string& filename, Array3D8u& s) {
   int dim = 3;
   std::ifstream in(filename, std::ios::in | std::ios::binary);
   if (!in.good()) {
@@ -24,26 +23,26 @@ void loadBinaryStructure(const std::string& filename, Array3D8u& s)
     in.close();
     return;
   }
-  unsigned int gridSize[3];  
+  unsigned int gridSize[3];
   for (int i = 0; i < dim; i++) {
-    in.read((char*)(&gridSize[i]), sizeof(int));    
+    in.read((char*)(&gridSize[i]), sizeof(int));
   }
 
   s.Allocate(gridSize[0], gridSize[1], gridSize[2]);
 
   std::vector<uint8_t>& vox = s.GetData();
-  for (size_t i = 0; i < vox.size();i+=8) {
+  for (size_t i = 0; i < vox.size(); i += 8) {
     unsigned char aggr;
     in.read((char*)&aggr, sizeof(unsigned char));
-    //1 bit per voxel.
+    // 1 bit per voxel.
     size_t j = 0;
     for (unsigned char mask = 1; mask > 0; mask <<= 1, j++)
-      vox[i+j] = (aggr & mask) > 0;
+      vox[i + j] = (aggr & mask) > 0;
   }
   in.close();
 }
 
-void Upsample2x(const Array3D8u&gridIn, Array3D8u& gridOut) {
+void Upsample2x(const Array3D8u& gridIn, Array3D8u& gridOut) {
   Vec3u oldSize = gridIn.GetSize();
   gridOut.Allocate(oldSize[0] * 2, oldSize[1] * 2, oldSize[2] * 2);
   Vec3u newSize = gridOut.GetSize();
@@ -92,7 +91,7 @@ void PadGrid(const Array3D8u& grid, Array3D8u& padded) {
       }
     }
   }
-  //pad x
+  // pad x
   for (unsigned y = 0; y < newSize[1]; y++) {
     unsigned srcy = y - 1;
     if (y == 0) {
@@ -100,36 +99,33 @@ void PadGrid(const Array3D8u& grid, Array3D8u& padded) {
     } else if (y == newSize[1] - 1) {
       srcy = oldSize[1] - 1;
     }
-    
+
     for (unsigned z = 0; z < newSize[2]; z++) {
       unsigned srcz = z - 1;
       if (z == 0) {
         srcz = 0;
-      }
-      else if (z == newSize[2] - 1) {
+      } else if (z == newSize[2] - 1) {
         srcz = oldSize[2] - 1;
       }
       padded(0, y, z) = grid(0, srcy, srcz);
-      padded(newSize[0]-1, y, z) = grid(oldSize[0]-1, srcy, srcz);
+      padded(newSize[0] - 1, y, z) = grid(oldSize[0] - 1, srcy, srcz);
     }
   }
 
-  //pad y
-  for (unsigned x = 0; x < newSize[0];x++) {
+  // pad y
+  for (unsigned x = 0; x < newSize[0]; x++) {
     unsigned srcx = x - 1;
     if (x == 0) {
       srcx = 0;
-    }
-    else if (x == newSize[0] - 1) {
+    } else if (x == newSize[0] - 1) {
       srcx = oldSize[0] - 1;
     }
 
-    for (unsigned z = 0; z < newSize[2]; z++) {        
+    for (unsigned z = 0; z < newSize[2]; z++) {
       unsigned srcz = z - 1;
       if (z == 0) {
         srcz = 0;
-      }
-      else if (z == newSize[2] - 1) {
+      } else if (z == newSize[2] - 1) {
         srcz = oldSize[2] - 1;
       }
       padded(x, 0, z) = grid(srcx, 0, srcz);
@@ -137,10 +133,10 @@ void PadGrid(const Array3D8u& grid, Array3D8u& padded) {
     }
   }
 
-  for (unsigned x = 1; x < newSize[0]-1; x++) {
-    for (unsigned y = 1; y < newSize[1] - 1;y++) {
-      padded(x, y, 0) = grid(x-1, y-1, 0);
-      padded(x, y, newSize[2]-1) = grid(x - 1, y-1, oldSize[2]-1);
+  for (unsigned x = 1; x < newSize[0] - 1; x++) {
+    for (unsigned y = 1; y < newSize[1] - 1; y++) {
+      padded(x, y, 0) = grid(x - 1, y - 1, 0);
+      padded(x, y, newSize[2] - 1) = grid(x - 1, y - 1, oldSize[2] - 1);
     }
   }
 }
@@ -159,7 +155,7 @@ void PadGridConst(const Array3D8u& grid, Array3D8u& padded, uint8_t val) {
   }
 }
 
-void ExpandCellToVerts(const Array3D8u& grid, Array3D8u&verts) {
+void ExpandCellToVerts(const Array3D8u& grid, Array3D8u& verts) {
   Vec3u oldSize = grid.GetSize();
   verts.Allocate(oldSize[0] + 1, oldSize[1] + 1, oldSize[2] + 1);
   Vec3u newSize = verts.GetSize();
@@ -172,24 +168,24 @@ void ExpandCellToVerts(const Array3D8u& grid, Array3D8u&verts) {
     for (unsigned j = 0; j < newSize[1]; j++) {
       for (unsigned k = 0; k < newSize[2]; k++) {
         uint8_t val = padded(i, j, k);
-        val = padded(i, j+1, k);
-        val = padded(i+1, j, k);
-        val = padded(i+1, j+1, k);
+        val = padded(i, j + 1, k);
+        val = padded(i + 1, j, k);
+        val = padded(i + 1, j + 1, k);
 
-        val = padded(i, j, k+1);
-        val = padded(i, j+1, k+1);
-        val = padded(i+1, j, k+1);
-        val = padded(i+1, j+1, k+1);
+        val = padded(i, j, k + 1);
+        val = padded(i, j + 1, k + 1);
+        val = padded(i + 1, j, k + 1);
+        val = padded(i + 1, j + 1, k + 1);
         verts(i, j, k) = val;
       }
     }
   }
 }
 
-void Scale(Array3D8u& grid, float scale ) {
+void Scale(Array3D8u& grid, float scale) {
   std::vector<uint8_t>& data = grid.GetData();
   for (size_t i = 0; i < data.size(); i++) {
-    data[i] = uint8_t(scale*data[i]);
+    data[i] = uint8_t(scale * data[i]);
   }
 }
 
@@ -198,8 +194,7 @@ void Thresh(Array3D8u& grid, float t) {
   for (size_t i = 0; i < data.size(); i++) {
     if (data[i] > t) {
       data[i] = 1;
-    }
-    else {
+    } else {
       data[i] = 0;
     }
   }
@@ -251,12 +246,11 @@ int GaussianFilter1D(float sigma, unsigned rad, std::vector<float>& filter) {
   return 0;
 }
 
-//with mirror boundary condition
-void FilterVec(uint8_t* v, size_t len, const std::vector<float>& kern)
-{
+// with mirror boundary condition
+void FilterVec(uint8_t* v, size_t len, const std::vector<float>& kern) {
   size_t halfKern = kern.size() / 2;
 
-  std::vector<uint8_t> padded(len+2*halfKern);
+  std::vector<uint8_t> padded(len + 2 * halfKern);
   for (size_t i = 0; i < halfKern; i++) {
     padded[i] = v[halfKern - i];
     padded[len - i] = v[len - halfKern + i];
@@ -264,27 +258,26 @@ void FilterVec(uint8_t* v, size_t len, const std::vector<float>& kern)
   for (size_t i = 0; i < len; i++) {
     padded[i + halfKern] = v[i];
   }
-  
+
   for (size_t i = 0; i < len; i++) {
     float sum = 0;
-    for (size_t j = 0; j<kern.size(); j++) {
+    for (size_t j = 0; j < kern.size(); j++) {
       sum += kern[j] * padded[i + j];
     }
     v[i] = uint8_t(sum);
   }
 }
 
-void FilterDecomp(Array3D8u& grid, const std::vector<float>& kern)
-{
+void FilterDecomp(Array3D8u& grid, const std::vector<float>& kern) {
   Vec3u gsize = grid.GetSize();
-  //z
-  for (unsigned i = 0; i < gsize[0];i++) {
+  // z
+  for (unsigned i = 0; i < gsize[0]; i++) {
     for (unsigned j = 0; j < gsize[1]; j++) {
       uint8_t* vec = &grid(i, j, 0);
       FilterVec(vec, gsize[2], kern);
     }
   }
-  //y
+  // y
   for (unsigned i = 0; i < gsize[0]; i++) {
     for (unsigned k = 0; k < gsize[2]; k++) {
       std::vector<uint8_t> v(gsize[1]);
@@ -296,8 +289,8 @@ void FilterDecomp(Array3D8u& grid, const std::vector<float>& kern)
         grid(i, j, k) = v[j];
       }
     }
-  }  
-  //x
+  }
+  // x
   for (unsigned j = 0; j < gsize[1]; j++) {
     for (unsigned k = 0; k < gsize[2]; k++) {
       std::vector<uint8_t> v(gsize[0]);
@@ -350,7 +343,7 @@ int LoadPngGrey(const std::string& filename, Array2D8u& arr) {
   arr.SetSize(w, h);
   return 0;
 }
-void SaveSlices(const std::string &prefix, const Array3D8u&vol) {
+void SaveSlices(const std::string& prefix, const Array3D8u& vol) {
   Vec3u size = vol.GetSize();
   Array2D8u slice(size[0], size[1]);
   for (unsigned z = 0; z < size[2]; z++) {
@@ -361,7 +354,7 @@ void SaveSlices(const std::string &prefix, const Array3D8u&vol) {
     }
     std::stringstream ss;
     ss << prefix;
-    ss << std::setw(4) << std::setfill('0')<< z << ".png";
+    ss << std::setw(4) << std::setfill('0') << z << ".png";
     std::string outFile = ss.str();
     SavePng(outFile, slice);
   }
@@ -373,11 +366,13 @@ void LoadImageSequence(const std::string& dir, int maxIndex, Array3D8u& vol) {
     std::string imageFile = dir + "/" + std::to_string(i) + ".png";
     std::filesystem::path imagePath(imageFile);
     if (!std::filesystem::exists(imagePath)) {
-      //give up after 10 missing images.
-      if (i - lasti > 10) { break; }
+      // give up after 10 missing images.
+      if (i - lasti > 10) {
+        break;
+      }
       continue;
     }
-    lasti=i;
+    lasti = i;
 
     Array2D8u image;
     LoadPngGrey(imageFile, image);
@@ -396,112 +391,208 @@ void LoadImageSequence(const std::string& dir, int maxIndex, Array3D8u& vol) {
 }
 
 #include <intrin.h>
+
+#include <memory>
+
+#include "BBox.h"
+#include "Stopwatch.h"
+#include "cpu_voxelizer.h"
 /// Return the number of on bits in the given 64-bit value.
-unsigned CountOn(uint64_t v)
-{
+unsigned CountOn(uint64_t v) {
   v = __popcnt64(v);
   // Software Implementation
-  //v = v - ((v >> 1) & UINT64_C(0x5555555555555555));
-  //v = (v & UINT64_C(0x3333333333333333)) + ((v >> 2) & UINT64_C(0x3333333333333333));
-  //v = (((v + (v >> 4)) & UINT64_C(0xF0F0F0F0F0F0F0F)) * UINT64_C(0x101010101010101)) >> 56;
+  // v = v - ((v >> 1) & UINT64_C(0x5555555555555555));
+  // v = (v & UINT64_C(0x3333333333333333)) + ((v >> 2) &
+  // UINT64_C(0x3333333333333333)); v = (((v + (v >> 4)) &
+  // UINT64_C(0xF0F0F0F0F0F0F0F)) * UINT64_C(0x101010101010101)) >> 56;
   return static_cast<unsigned>(v);
 }
 
-//cell with a polynomial shape function
+// cell with a polynomial shape function
 struct PolyCell {};
 
-//cell with point samples for improving accuracy.
+// cell with point samples for improving accuracy.
 struct PointCell {};
 
 // sparse node for a 4x4x4 block
-#define COARSE_NODE_SIZE 4
 template <typename T>
 struct SparseNode4 {
-  ~SparseNode4() { if (children != nullptr) { delete[]children; } }
+  static const unsigned NUM_CHILDREN = 64;
+  static const unsigned GRID_SIZE = 4;
+  SparseNode4() {}
+
+  /// do not use after compression. assumes all 64 children are allocated.
+  /// does not create new child if child is already allocated.
+  /// @return address of child
+  T* AddChild(unsigned x, unsigned y, unsigned z) {
+    if (!HasChildren) {
+      AllocateChildren();
+    }
+    unsigned linearIdx = LinearIdx(x, y, z);
+    uint64_t childMask = (1ull << linearIdx);
+    bool hasChild = mask & childMask;
+    if (!hasChild) {
+      mask |= childMask;
+    }
+    return &children[childIdx];
+  }
+
+  // done with adding children. AddChild no longer works.
+  // only allows GetChild.
+  void Compress() {
+    unsigned childCount = CountOn(mask);
+    T* newChildren = new T[childCount];
+    unsigned count = 0;
+    for (unsigned i = 0; i < NUM_CHILDREN; i++) {
+      uint64_t childMask = (1ull << i);
+      bool hasChild = mask & childMask;
+      if (hasChild) {
+        newChildren[count] = children[i];
+        count++;
+      }
+    }
+    delete[] children;
+    children = newChildren;
+  }
+
+  void AllocateChildren() { children = new T[NUM_CHILDREN]; }
+  unsigned LinearIdx(unsigned x, unsigned y, unsigned z) {
+    unsigned i = (z * GRID_SIZE + y) * GRID_SIZE + x;
+    return i;
+  }
+  bool HasChildren() { return children != nullptr; }
+
+  ~SparseNode4() {
+    if (children != nullptr) {
+      delete[] children;
+    }
+  }
 
   uint64_t mask = 0;
-  //array of child cells.
-  T * children = nullptr;
+  // array of child cells.
+  T* children = nullptr;
+  // does not work before compression.
   T* GetChild(unsigned x, unsigned y, unsigned z) {
-    unsigned linearIdx = (z * COARSE_NODE_SIZE + y) * COARSE_NODE_SIZE + x;
+    unsigned linearIdx = LinearIdx(x, y, z);
     bool hasChild = mask & (1ull << linearIdx);
     if (!hasChild) {
       return nullptr;
-    }    
+    }
     unsigned childIdx = CountOn(mask & ((1ull << linearIdx) - 1));
-    return children[childIdx];
+    return &children[childIdx];
   }
 };
 
 class AdapSDF {
-public:
-  // distance values are stored on grid vertices.
-  Array3D8u vert;
-  Array3D<SparseNode4<PolyCell>*> coarseGrid;
+ public:
+  /// <summary>
+  /// inputs are voxel grid size. vertex grid size would be allocated
+  /// to be +1 of voxel grid size.
+  /// coarse grid will be ceil(voxel grid size/4).
+  /// </summary>
+  /// <returns>-1 if too many voxels are requested</returns>
+  int Allocate(unsigned sx, unsigned sy, unsigned sz);
 
-  //mm
+  /// 2 bils.
+  static const size_t MAX_NUM_VOX = 1u << 31;
+  /// band causes furthur expansion of the grid.   
+  static const unsigned MAX_BAND= 8;
+
+  // distance values are stored on grid vertices.
+  // vertex grid size is voxel grid size +1.
+  Array3D8u dist;
+
+  // coarse grid contains index into list of refined cells.
+  // only a sparse subset of voxels have refined cells.
+  // sparse nodes are stored at 1/4 resolution of the full grid.
+  Array3D<SparseNode4<unsigned>> coarseGrid;
+
+  // mm
   float distUnit = 0.01;
 
-  Vec3f origin = { 0.0f, 0.0f, 0.0f };
+  Vec3f origin = {0.0f, 0.0f, 0.0f};
 
-  //in mm
+  // in mm
   Vec3f voxSize;
 
-  int band=5;
+  unsigned band = 5;
 };
 
-int BuildSDF(const TrigMesh&mesh, AdapSDF&sdf) {
+int AdapSDF::Allocate(unsigned sx, unsigned sy, unsigned sz) {
+  band = std::min(band, MAX_BAND); 
+  sx += 2 * band;
+  sy += 2 * band;
+  sz += 2 * band;
+  origin = origin - float(band) * voxSize;
+  size_t numVox = sx * sy * size_t(sz);
+  if (numVox > MAX_NUM_VOX) {
+    return -1;
+  }
+
+  return 0;
+}
+
+int BuildSDF(const TrigMesh& mesh, AdapSDF& sdf) {
   // compute distance values for vertices of voxels that intersect
   // triangles.
 
   // temporary coarse grid storing triangle indices intersecting this cell
   Array3D<SparseNode4<std::vector<size_t>>> idxGrid;
 
-  //refine cells that intersect triangles
+  // refine cells that intersect triangles
 
-  //expand coarse cell.
+  // expand coarse cell.
+  return 0;
 }
-#include <memory>
-#include "cpu_voxelizer.h"
-#include "Stopwatch.h"
-#include "BBox.h"
+
+struct SimpleVoxCb : public VoxCallback {
+  virtual void operator()(unsigned x, unsigned y, unsigned z,
+                          size_t trigIdx) const {
+    (*grid)(x, y, z) = 1;
+  }
+  Array3D8u* grid = nullptr;
+};
+
+struct SDFVoxCb : public VoxCallback {
+  virtual void operator()(unsigned x, unsigned y, unsigned z,
+                          size_t trigIdx) const {
+    (*grid)(x, y, z) = 1;
+  }
+  Array3D8u* grid = nullptr;
+};
 
 void TestSDF() {
-  std::cout << sizeof(std::shared_ptr<AdapSDF>) << "\n";
   std::string fileName = "F:/dolphin/meshes/lattice_big/MeshLattice.stl";
   TrigMesh mesh;
   mesh.LoadStl(fileName);
+
+  AdapSDF sdf;
   Array3D8u grid;
   voxconf conf;
+
   BBox box;
   ComputeBBox(mesh.v, box);
   size_t num_verts = mesh.v.size() / 3;
-  for (size_t i = 0; i < mesh.v.size(); i += 3) {
-    mesh.v[i] -= box.vmin[0];
-    mesh.v[i + 1] -= box.vmin[1];
-    mesh.v[i + 2] -= box.vmin[2];
-  }
-  box.vmax = box.vmax - box.vmin;
-  box.vmin = Vec3f(0,0,0);
+
   conf.unit = Vec3f(0.4, 0.4, 0.4);
-  conf.origin=Vec3f(0,0,0);
-  Vec3f count = box.vmax / conf.unit;
+  conf.origin = box.vmin;
+  Vec3f count = (box.vmax - box.vmin) / conf.unit;
   conf.gridSize = Vec3u(count[0], count[1], count[2]);
   count[0]++;
   count[1]++;
   count[2]++;
   Utils::Stopwatch timer;
   timer.Start();
-  cpu_voxelize_mesh(conf, &mesh, grid);  
+  SimpleVoxCb cb;
+  grid.Allocate(conf.gridSize, 0);
+  cb.grid = &grid;
+  cpu_voxelize_mesh(conf, &mesh, cb);
   float ms = timer.ElapsedMS();
   std::cout << "vox time " << ms << "\n";
-  SaveVolAsObjMesh("voxelize.obj", grid, (float*)(&conf.unit), 1);
-
-  AdapSDF sdf;
+  //SaveVolAsObjMesh("voxels.obj", grid, (float*)(&conf.unit), 1);
 }
 
-int main(int argc, char* argv[])
-{
+int main(int argc, char* argv[]) {
   TestSDF();
 
   Array3D8u eyeVol;
@@ -509,29 +600,30 @@ int main(int argc, char* argv[])
   int maxIndex = 760;
   LoadImageSequence(imageDir, maxIndex, eyeVol);
   for (int id = 1; id < 4; id++) {
-    float voxRes[3] = {0.064,0.0635,0.05};
-    SaveVolAsObjMesh("eye_"+ std::to_string(id) + ".obj", eyeVol, voxRes, id);
+    float voxRes[3] = {0.064, 0.0635, 0.05};
+    SaveVolAsObjMesh("eye_" + std::to_string(id) + ".obj", eyeVol, voxRes, id);
   }
 
   int id = 5481;
   std::vector<float> kern;
   GaussianFilter1D(1, 3, kern);
 
-  std::string structFile = "F:/dolphin/meshes/3DCubic64_Data/bin/" + std::to_string(id) + ".bin";
+  std::string structFile =
+      "F:/dolphin/meshes/3DCubic64_Data/bin/" + std::to_string(id) + ".bin";
   Array3D8u s, mirrored;
-  float voxRes[3] = { 1,1,1 };
+  float voxRes[3] = {1, 1, 1};
   loadBinaryStructure(structFile, s);
   Array3D8u s2, s4;
   Scale(s, 255);
-    SaveSlices("s_", s);
+  SaveSlices("s_", s);
 
   Upsample2x(s, s2);
 
-  //Upsample2x(s2, s4);
+  // Upsample2x(s2, s4);
   FilterDecomp(s2, kern);
   Downsample2x(s2, s);
 
-  Array3D8u v4,v8;
+  Array3D8u v4, v8;
   ExpandCellToVerts(s, v4);
 
   SaveSlices("v4_", v4);
@@ -539,7 +631,7 @@ int main(int argc, char* argv[])
   MirrorCubicStructure(v4, mirrored);
   MirrorCubicStructure(mirrored, v8);
   MirrorCubicStructure(v8, mirrored);
-  PadGridConst(mirrored, v8,0);
+  PadGridConst(mirrored, v8, 0);
   InvertVal(v8);
 
   MarchingCubes(v8, 220, &surf);
@@ -547,8 +639,8 @@ int main(int argc, char* argv[])
   std::string objFile = std::to_string(id) + "_smooth.obj";
   surf.SaveObj(objFile.c_str());
 
-  //Thresh(mirrored, 125);
-  //saveObjRect(std::to_string(id) + "_smooth.obj", mirrored, voxRes, 1);
+  // Thresh(mirrored, 125);
+  // saveObjRect(std::to_string(id) + "_smooth.obj", mirrored, voxRes, 1);
 
   return 0;
 }
@@ -596,12 +688,10 @@ void MirrorCubicStructure(const Array3D8u& s_in, Array3D8u& s_out) {
   s_out = st;
 }
 
-
-void MarchOneCube(unsigned x, unsigned y, unsigned z,
-  const Array3D8u & grid, float level, TrigMesh* surf)
-{
+void MarchOneCube(unsigned x, unsigned y, unsigned z, const Array3D8u& grid,
+                  float level, TrigMesh* surf) {
   GridCell cell;
-  cell.p[0]=Vec3f(0,0,0);
+  cell.p[0] = Vec3f(0, 0, 0);
   float h = 0.25f;
   cell.p[0][0] += x * h;
   cell.p[0][1] += y * h;
@@ -629,9 +719,9 @@ void MarchOneCube(unsigned x, unsigned y, unsigned z,
   cell.p[7][0] += h;
   cell.p[7][2] += h;
 
-  cell.val[0] = grid(x,y,z);
+  cell.val[0] = grid(x, y, z);
   cell.val[1] = grid(x, y + 1, z);
-  cell.val[2] = grid(x+1, y + 1, z);
+  cell.val[2] = grid(x + 1, y + 1, z);
   cell.val[3] = grid(x + 1, y, z);
   cell.val[4] = grid(x, y, z + 1);
   cell.val[5] = grid(x, y + 1, z + 1);
@@ -641,8 +731,7 @@ void MarchOneCube(unsigned x, unsigned y, unsigned z,
   MarchCube(cell, level, surf);
 }
 
-void MarchingCubes(const Array3D8u & grid, float level, TrigMesh* surf)
-{
+void MarchingCubes(const Array3D8u& grid, float level, TrigMesh* surf) {
   Vec3u s = grid.GetSize();
   const unsigned zAxis = 2;
   for (unsigned x = 0; x < s[0] - 1; x++) {
