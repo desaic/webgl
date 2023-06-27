@@ -2,16 +2,12 @@
 #define CPU_VOXELIZER_H
 
 #include "TrigMesh.h"
+#include "VoxCallback.h"
 
 struct voxconf {
   Vec3f origin;
   Vec3f unit;
   Vec3u gridSize;
-};
-
-struct VoxCallback {
-  virtual void operator()(unsigned x, unsigned y, unsigned z,
-                          size_t trigIdx) {}
 };
 
 // ignores voxels with negative indices.

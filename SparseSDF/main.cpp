@@ -397,6 +397,8 @@ void LoadImageSequence(const std::string& dir, int maxIndex, Array3D8u& vol) {
 #include "BBox.h"
 #include "Stopwatch.h"
 #include "cpu_voxelizer.h"
+#include "VoxCallback.h"
+
 /// Return the number of on bits in the given 64-bit value.
 unsigned CountOn(uint64_t v) {
   v = __popcnt64(v);
@@ -499,22 +501,23 @@ class AdapSDF {
   /// band causes furthur expansion of the grid.
   static const unsigned MAX_BAND = 8;
 
-  // max value of uint8_t
-  static const unsigned MAX_DIST = 255;
+  // max positive value of short int
+  static const short MAX_DIST = 0x8fff;
 
   // distance values are stored on grid vertices.
   // vertex grid size is voxel grid size +1.
-  // stores only 8-bit ints to save memory.
+  // stores only 16-bit ints to save memory.
+  // distance values won't be too large because of band.
   // physical distance = dist * distUnit.
-  Array3D8u dist;
+  Array3D<short> dist;
 
   // coarse grid contains index into list of refined cells.
   // only a sparse subset of voxels have refined cells.
   // sparse nodes are stored at 1/4 resolution of the full grid.
   Array3D<SparseNode4<unsigned>> coarseGrid;
 
-  // mm
-  float distUnit = 0.01;
+  // mm. default is 1um.
+  float distUnit = 0.001f;
 
   Vec3f origin = {0.0f, 0.0f, 0.0f};
 
@@ -551,56 +554,51 @@ int BuildSDF(const TrigMesh& mesh, AdapSDF& sdf) {
   return 0;
 }
 
-struct SimpleVoxCb : public VoxCallback {
-  virtual void operator()(unsigned x, unsigned y, unsigned z,
-                          size_t trigIdx) {
-    (*grid)(x, y, z) = 1;
-  }
-  Array3D8u* grid = nullptr;
-};
-
 struct SDFVoxCb : public VoxCallback {
   
   virtual void operator()(unsigned x, unsigned y, unsigned z,
                           size_t trigIdx) {
-    (*grid)(x, y, z) = 1;
+    (*grid)(x, y, z) = matId;
     Vec3u coarseIdx(x/4,y/4,z/4);
+    //update distances of 8 vertices in the sdf->dist array
+    Vec3f v0 = m->GetTriangleVertex(trigIdx, 0);
+    Vec3f v1 = m->GetTriangleVertex(trigIdx, 1);
+    Vec3f v2 = m->GetTriangleVertex(trigIdx, 2);
 
   }
-
+  TrigMesh* m = nullptr;
   Array3D8u* grid = nullptr;
   AdapSDF* sdf = nullptr;
+  unsigned matId = 1;
 };
 
 void TestSDF() {
-  std::string fileName = "F:/dolphin/meshes/fish/salmon.stl";
+  std::string fileName1 = "F:/dolphin/meshes/fish/salmon.stl";
   //std::string fileName = "F:/dolphin/meshes/lattice_big/MeshLattice.stl";
-
-  TrigMesh mesh;
-  mesh.LoadStl(fileName);
+  TrigMesh mesh1;
+  mesh1.LoadStl(fileName1);
 
   AdapSDF sdf;
   Array3D8u grid;
   voxconf conf;
 
   BBox box;
-  ComputeBBox(mesh.v, box);
+  ComputeBBox(mesh1.v, box);
 
-  conf.unit = Vec3f(0.4, 0.4, 0.4);
+  conf.unit = Vec3f(0.032, 0.032, 0.032);
 
   // add margin for narrow band sdf
-  sdf.band = std::min(sdf.band, AdapSDF::MAX_BAND);
-  box.vmin = box.vmin - float(sdf.band) * conf.unit;
-  box.vmax = box.vmax + float(sdf.band) * conf.unit;
-
-  size_t num_verts = mesh.v.size() / 3;
-
+  //sdf.band = std::min(sdf.band, AdapSDF::MAX_BAND);
+  //box.vmin = box.vmin - float(sdf.band) * conf.unit;
+  //box.vmax = box.vmax + float(sdf.band) * conf.unit;
+  box.vmin[0] -= 0.3;
+  box.vmax[0] += 0.3;
   conf.origin = box.vmin;
   sdf.voxSize = conf.unit;
   sdf.origin = box.vmin;
 
   Vec3f count = (box.vmax - box.vmin) / conf.unit;
-  conf.gridSize = Vec3u(count[0], count[1], count[2]);
+  conf.gridSize = Vec3u(count[0]+1, count[1]+1, count[2]+1);
   sdf.Allocate(count[0], count[1], count[2]);
 
   count[0]++;
@@ -612,11 +610,13 @@ void TestSDF() {
   grid.Allocate(conf.gridSize, 0);
   cb.grid = &grid;
   cb.sdf = &sdf;
-  cpu_voxelize_mesh(conf, &mesh, cb);
+  cb.m = &mesh1;
+  cpu_voxelize_mesh(conf, &mesh1, cb);
   float ms = timer.ElapsedMS();
   std::cout << "vox time " << ms << "\n";
   SaveVolAsObjMesh("voxels.obj", grid, (float*)(&conf.unit),
                    (float*)(&box.vmin), 1);
+
 }
 
 int main(int argc, char* argv[]) {
