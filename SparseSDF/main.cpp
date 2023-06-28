@@ -390,187 +390,36 @@ void LoadImageSequence(const std::string& dir, int maxIndex, Array3D8u& vol) {
   }
 }
 
-#include <intrin.h>
-
 #include <memory>
 
 #include "BBox.h"
 #include "Stopwatch.h"
 #include "cpu_voxelizer.h"
+#include "SDFVoxCb.h"
 #include "VoxCallback.h"
+#include "AdapSDF.h"
 
-/// Return the number of on bits in the given 64-bit value.
-unsigned CountOn(uint64_t v) {
-  v = __popcnt64(v);
-  // Software Implementation
-  // v = v - ((v >> 1) & UINT64_C(0x5555555555555555));
-  // v = (v & UINT64_C(0x3333333333333333)) + ((v >> 2) &
-  // UINT64_C(0x3333333333333333)); v = (((v + (v >> 4)) &
-  // UINT64_C(0xF0F0F0F0F0F0F0F)) * UINT64_C(0x101010101010101)) >> 56;
-  return static_cast<unsigned>(v);
+void GetSlice8u(const Array3D<short>& sdf, Array2D8u & slice, unsigned z)
+{
+  Vec3u gridSize = sdf.GetSize();
+  slice.Allocate(gridSize[0], gridSize[1]);
+  const short* srcPtr = sdf.DataPtr() + z * gridSize[0] * gridSize[1];
+  uint8_t* dstPtr = slice.DataPtr();
+  size_t numPix = gridSize[0] * gridSize[1];
+  for (size_t i = 0; i < numPix; i++) {
+    dstPtr[i] = srcPtr[i]/10;
+  }
 }
 
-// cell with a polynomial shape function
-struct PolyCell {};
-
-// cell with point samples for improving accuracy.
-struct PointCell {};
-
-// sparse node for a 4x4x4 block
-template <typename T>
-struct SparseNode4 {
-  static const unsigned NUM_CHILDREN = 64;
-  static const unsigned GRID_SIZE = 4;
-  SparseNode4() {}
-
-  /// do not use after compression. assumes all 64 children are allocated.
-  /// does not create new child if child is already allocated.
-  /// @return address of child
-  T* AddChild(unsigned x, unsigned y, unsigned z) {
-    if (!HasChildren) {
-      AllocateChildren();
-    }
-    unsigned linearIdx = LinearIdx(x, y, z);
-    uint64_t childMask = (1ull << linearIdx);
-    bool hasChild = mask & childMask;
-    if (!hasChild) {
-      mask |= childMask;
-    }
-    return &children[childIdx];
+void SaveSDFImages(const std::string & prefix, const Array3D<short> &sdf) {
+  Vec3u gridSize = sdf.GetSize();
+  for (unsigned z = 0; z < gridSize[2]; z++) {
+    Array2D8u slice;
+    GetSlice8u(sdf, slice, z);
+    std::string filename = prefix + std::to_string(z) + ".png";
+    SavePng(filename, slice);
   }
-
-  // done with adding children. AddChild no longer works.
-  // only allows GetChild.
-  void Compress() {
-    unsigned childCount = CountOn(mask);
-    T* newChildren = new T[childCount];
-    unsigned count = 0;
-    for (unsigned i = 0; i < NUM_CHILDREN; i++) {
-      uint64_t childMask = (1ull << i);
-      bool hasChild = mask & childMask;
-      if (hasChild) {
-        newChildren[count] = children[i];
-        count++;
-      }
-    }
-    delete[] children;
-    children = newChildren;
-  }
-
-  void AllocateChildren() { children = new T[NUM_CHILDREN]; }
-  unsigned LinearIdx(unsigned x, unsigned y, unsigned z) {
-    unsigned i = (z * GRID_SIZE + y) * GRID_SIZE + x;
-    return i;
-  }
-  bool HasChildren() { return children != nullptr; }
-
-  ~SparseNode4() {
-    if (children != nullptr) {
-      delete[] children;
-    }
-  }
-
-  uint64_t mask = 0;
-  // array of child cells.
-  T* children = nullptr;
-  // does not work before compression.
-  T* GetChild(unsigned x, unsigned y, unsigned z) {
-    unsigned linearIdx = LinearIdx(x, y, z);
-    bool hasChild = mask & (1ull << linearIdx);
-    if (!hasChild) {
-      return nullptr;
-    }
-    unsigned childIdx = CountOn(mask & ((1ull << linearIdx) - 1));
-    return &children[childIdx];
-  }
-};
-
-class AdapSDF {
- public:
-  /// <summary>
-  /// inputs are voxel grid size. vertex grid size would be allocated
-  /// to be +1 of voxel grid size.
-  /// coarse grid will be ceil(voxel grid size/4).
-  /// </summary>
-  /// <returns>-1 if too many voxels are requested</returns>
-  int Allocate(unsigned sx, unsigned sy, unsigned sz);
-
-  /// 2 bils.
-  static const size_t MAX_NUM_VOX = 1u << 31;
-
-  /// band causes furthur expansion of the grid.
-  static const unsigned MAX_BAND = 8;
-
-  // max positive value of short int
-  static const short MAX_DIST = 0x8fff;
-
-  // distance values are stored on grid vertices.
-  // vertex grid size is voxel grid size +1.
-  // stores only 16-bit ints to save memory.
-  // distance values won't be too large because of band.
-  // physical distance = dist * distUnit.
-  Array3D<short> dist;
-
-  // coarse grid contains index into list of refined cells.
-  // only a sparse subset of voxels have refined cells.
-  // sparse nodes are stored at 1/4 resolution of the full grid.
-  Array3D<SparseNode4<unsigned>> coarseGrid;
-
-  // mm. default is 1um.
-  float distUnit = 0.001f;
-
-  Vec3f origin = {0.0f, 0.0f, 0.0f};
-
-  // in mm
-  Vec3f voxSize;
-
-  unsigned band = 5;
-};
-
-int AdapSDF::Allocate(unsigned sx, unsigned sy, unsigned sz) {
-  size_t numVox = sx * sy * size_t(sz);
-  if (numVox > MAX_NUM_VOX) {
-    return -1;
-  }
-  dist.Allocate(sx + 1, sy + 1, sz + 1);
-  dist.Fill(MAX_DIST);
-
-  Vec3u coarseSize(sx / 4, sy / 4, sz / 4);
-  coarseSize[0] += (sx % 4 > 0);
-  coarseSize[1] += (sy % 4 > 0);
-  coarseSize[2] += (sz % 4 > 0);
-
-  coarseGrid.Allocate(coarseSize[0], coarseSize[1], coarseSize[2]);
-  return 0;
 }
-
-int BuildSDF(const TrigMesh& mesh, AdapSDF& sdf) {
-  // compute distance values for vertices of voxels that intersect
-  // triangles.
-
-  // refine cells that intersect triangles
-
-  // expand coarse cell.
-  return 0;
-}
-
-struct SDFVoxCb : public VoxCallback {
-  
-  virtual void operator()(unsigned x, unsigned y, unsigned z,
-                          size_t trigIdx) {
-    (*grid)(x, y, z) = matId;
-    Vec3u coarseIdx(x/4,y/4,z/4);
-    //update distances of 8 vertices in the sdf->dist array
-    Vec3f v0 = m->GetTriangleVertex(trigIdx, 0);
-    Vec3f v1 = m->GetTriangleVertex(trigIdx, 1);
-    Vec3f v2 = m->GetTriangleVertex(trigIdx, 2);
-
-  }
-  TrigMesh* m = nullptr;
-  Array3D8u* grid = nullptr;
-  AdapSDF* sdf = nullptr;
-  unsigned matId = 1;
-};
 
 void TestSDF() {
   std::string fileName1 = "F:/dolphin/meshes/fish/salmon.stl";
@@ -585,14 +434,12 @@ void TestSDF() {
   BBox box;
   ComputeBBox(mesh1.v, box);
 
-  conf.unit = Vec3f(0.032, 0.032, 0.032);
+  conf.unit = Vec3f(0.4, 0.4, 0.4);
 
   // add margin for narrow band sdf
-  //sdf.band = std::min(sdf.band, AdapSDF::MAX_BAND);
-  //box.vmin = box.vmin - float(sdf.band) * conf.unit;
-  //box.vmax = box.vmax + float(sdf.band) * conf.unit;
-  box.vmin[0] -= 0.3;
-  box.vmax[0] += 0.3;
+  sdf.band = std::min(sdf.band, AdapSDF::MAX_BAND);
+  box.vmin = box.vmin - float(sdf.band) * conf.unit;
+  box.vmax = box.vmax + float(sdf.band) * conf.unit;
   conf.origin = box.vmin;
   sdf.voxSize = conf.unit;
   sdf.origin = box.vmin;
@@ -614,9 +461,9 @@ void TestSDF() {
   cpu_voxelize_mesh(conf, &mesh1, cb);
   float ms = timer.ElapsedMS();
   std::cout << "vox time " << ms << "\n";
-  SaveVolAsObjMesh("voxels.obj", grid, (float*)(&conf.unit),
-                   (float*)(&box.vmin), 1);
-
+  //SaveVolAsObjMesh("voxels.obj", grid, (float*)(&conf.unit),
+  //                 (float*)(&box.vmin), 1);
+  SaveSDFImages("sdf_", sdf.dist);
 }
 
 int main(int argc, char* argv[]) {

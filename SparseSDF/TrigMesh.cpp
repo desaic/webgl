@@ -219,19 +219,27 @@ void TrigMesh::ComputeTrigNormals() {
   }
 }
 
-unsigned TrigMesh::GetIndex(unsigned tIdx, unsigned jIdx) const {
+unsigned TrigMesh::GetIndex(size_t tIdx, unsigned jIdx) const {
   return t[3 * tIdx + jIdx];
 }
 
-Vec3f TrigMesh::GetVertex(unsigned vIdx) const {
+Vec3f TrigMesh::GetVertex(size_t vIdx) const {
   return Vec3f(v[3 * vIdx], v[3 * vIdx + 1], v[3 * vIdx + 2]);
 }
 
-Vec3f TrigMesh::GetTriangleVertex(unsigned tIdx, unsigned jIdx) const {
+Vec3f TrigMesh::GetTriangleVertex(size_t tIdx, unsigned jIdx) const {
   return GetVertex(GetIndex(tIdx, jIdx));
 }
 
-Vec3f TrigMesh::GetTrigNormal(unsigned tIdx) const {
+Triangle TrigMesh::GetTriangleVerts(size_t tIdx) const {
+  Triangle trig;
+  trig.v[0] = *(Vec3f*)(&v[3 * t[3 * tIdx]]);
+  trig.v[1] = *(Vec3f*)(&v[3 * t[3 * tIdx + 1]]);
+  trig.v[2] = *(Vec3f*)(&v[3 * t[3 * tIdx + 2]]);
+  return trig;
+}
+
+Vec3f TrigMesh::GetTrigNormal(size_t tIdx) const {
   return Vec3f(nt[3 * tIdx], nt[3 * tIdx + 1], nt[3 * tIdx + 2]);
 }
 

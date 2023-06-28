@@ -26,6 +26,10 @@ struct Edge {
   }
 };
 
+struct Triangle {
+  Vec3f v[3];
+};
+
 class TrigMesh {
  public:
   TrigMesh() = default;
@@ -70,10 +74,11 @@ class TrigMesh {
   void ComputePseudoNormals();
   void ComputeTrigEdges();
 
-  unsigned GetIndex(unsigned tIdx, unsigned jIdx) const;
-  Vec3f GetVertex(unsigned vIdx) const;
-  Vec3f GetTriangleVertex(unsigned tIdx, unsigned jIdx) const;
-  Vec3f GetTrigNormal(unsigned tIdx)const;
+  unsigned GetIndex(size_t tIdx, unsigned jIdx) const;
+  Vec3f GetVertex(size_t vIdx) const;
+  Vec3f GetTriangleVertex(size_t tIdx, unsigned jIdx) const;
+  Triangle GetTriangleVerts(size_t tIdx) const;
+  Vec3f GetTrigNormal(size_t tIdx) const;
   
   void scale(float s);
   void translate(float dx, float dy, float dz);
