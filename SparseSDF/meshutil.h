@@ -5,6 +5,7 @@
 #include <vector>
 #include <array>
 #include "Array3D.h"
+#include "SurfacePoint.h"
 #include "TrigMesh.h"
 
 //save calibration points to obj file for debugging.
@@ -19,5 +20,11 @@ void SaveVolAsObjMesh(std::string outfile, const Array3D8u& vol, float* voxRes,
                       float* origin, int mat);
 
 TrigMesh MarchCubes(std::vector<uint8_t>& vol, std::array<unsigned, 3>& gsize);
+
+void SamplePointsOneTrig(unsigned tIdx, const TrigMesh& m,
+                         std::vector<SurfacePoint>& points, float spacing);
+
+void SamplePoints(const TrigMesh& m, std::vector<SurfacePoint>& points,
+                  float spacing);
 
 #endif  // MESHUTIL_H

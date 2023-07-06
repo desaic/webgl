@@ -421,12 +421,72 @@ void SaveSDFImages(const std::string & prefix, const Array3D<short> &sdf) {
   }
 }
 
-void TestSDF() {
+void GetSDFSlice(const AdapSDF& sdf, Array2D8u &slice, Vec3f sliceRes, float z) {
+  Vec2u sliceSize = slice.GetSize();
+  for (unsigned row = 0; row < sliceSize[1]; row++) {
+    for (unsigned col = 0; col < sliceSize[0]; col++) {
+      Vec3f x((col +0.5f)* sliceRes[0], (row+0.5f)*sliceRes[1], z);
+      float dist = sdf.GetCoarseDist(x+sdf.origin);
+      if (dist < 0.58&&dist>-0.58) {
+        slice(col, row) = uint8_t(dist * 200+127);
+      }
+    }
+  }
+}
+
+void TestPointSample() {
   std::string fileName1 = "F:/dolphin/meshes/fish/salmon.stl";
-  //std::string fileName = "F:/dolphin/meshes/lattice_big/MeshLattice.stl";
   TrigMesh mesh1;
   mesh1.LoadStl(fileName1);
+  std::vector<SurfacePoint> points;
+  SamplePointsOneTrig(0, mesh1, points, 0.1f);
+  std::ofstream out("pointSample.obj");
+  Triangle trig = mesh1.GetTriangleVerts(0);
+  for (size_t i = 0; i < 3; i++) {
+    out << "v " << trig.v[i][0] << " " << trig.v[i][1] << " " << trig.v[i][2]
+        << "\n";
+  }
+  for (size_t i = 0; i < points.size(); i++) {
+    out << "v " << points[i].v[0] << " " << points[i].v[1] << " "
+        << points[i].v[2] << "\n";
+  }
+  out << "f 1 2 3\n";
+}
 
+void SavePseudoNormals(const TrigMesh & mesh, const std::string & outFile ) {
+  size_t numTrig = mesh.t.size() / 3;
+  size_t numEdges = mesh.ne.size();
+  std::ofstream out(outFile);
+  std::vector<bool> visited(numEdges, false);
+  size_t vertCount = 1;
+  for (size_t t = 0; t < numTrig; t++) {
+    Triangle trig = mesh.GetTriangleVerts(t);
+    for (unsigned ei = 0; ei < 3; ei++) {
+      size_t eIdx = mesh.te[3 * t + ei];
+      if (visited[eIdx]) {
+        continue;
+      }
+      Vec3f edgeCenter = 0.5f*(trig.v[ei]+trig.v[(ei+1)%3]);
+      Vec3f normalTop = mesh.ne[eIdx];
+      out << "v " << edgeCenter[0] << " " << edgeCenter[1] << " "
+          << edgeCenter[2] << "\n";
+      normalTop = normalTop + edgeCenter;
+      out << "v " << normalTop[0] << " " << normalTop[1] << " " << normalTop[2]
+          << "\n";
+      out << "l " << vertCount << " " << (vertCount + 1) << "\n";
+      vertCount += 2;
+    }
+  }
+}
+
+void TestSDF() {
+  std::string fileName = "F:/dolphin/meshes/fish/salmon.stl";
+  //std::string fileName = "F:/dolphin/meshes/lattice_big/MeshLattice.stl";
+  TrigMesh mesh1;
+  mesh1.LoadStl(fileName);
+  mesh1.ComputePseudoNormals();
+  
+  //SavePseudoNormals(mesh1,"psnormal.obj");
   AdapSDF sdf;
   Array3D8u grid;
   voxconf conf;
@@ -434,7 +494,7 @@ void TestSDF() {
   BBox box;
   ComputeBBox(mesh1.v, box);
 
-  conf.unit = Vec3f(0.4, 0.4, 0.4);
+  conf.unit = Vec3f(0.1, 0.1, 0.1);
 
   // add margin for narrow band sdf
   sdf.band = std::min(sdf.band, AdapSDF::MAX_BAND);
@@ -461,9 +521,27 @@ void TestSDF() {
   cpu_voxelize_mesh(conf, &mesh1, cb);
   float ms = timer.ElapsedMS();
   std::cout << "vox time " << ms << "\n";
+  sdf.Compress();
+  std::cout << "sdf #points " << sdf.totalPoints << "\n";
   //SaveVolAsObjMesh("voxels.obj", grid, (float*)(&conf.unit),
   //                 (float*)(&box.vmin), 1);
-  SaveSDFImages("sdf_", sdf.dist);
+  //SaveSDFImages("sdf_", sdf.dist);
+
+  Array2D8u slice;
+  Vec3u sdfSize=  sdf.dist.GetSize();
+  slice.Allocate(10*sdfSize[0],10*sdfSize[1]);
+  float z = 3.5;
+  GetSDFSlice(sdf, slice, Vec3f(0.01f,0.01f,0.01f),z);
+  std::string sliceFile = "slice" + std::to_string(int(z / 0.001)) + ".png";
+  SavePng(sliceFile, slice);
+
+  //std::ofstream out("samplePoints.obj");
+  //for (size_t i = 1; i < sdf.sparseData.size();i++) {
+  //  const PointSet& p = sdf.sparseData[i];
+  //  for (size_t j = 0; j < p.p.size(); j++) {
+  //    out << "v " << p.p[j][0] << " " << p.p[j][1] << " " << p.p[j][2] << "\n";
+  //  }
+  //}
 }
 
 int main(int argc, char* argv[]) {

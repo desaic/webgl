@@ -10,26 +10,35 @@ struct SparseNode4 {
   static const unsigned GRID_SIZE = 4;
   SparseNode4() {}
 
+  void AddChildrenDense(T initVal) {
+    if (!HasChildren()) {
+      AllocateChildren();
+    }
+    for (unsigned i = 0; i < NUM_CHILDREN; i++) {
+      children[i] = initVal;
+    }
+  }
+
   /// do not use after compression. assumes all 64 children are allocated.
   /// does not create new child if child is already allocated.
   /// @return address of child
-  T* AddChild(unsigned x, unsigned y, unsigned z) {
-    if (!HasChildren) {
-      AllocateChildren();
-    }
+  T* AddChildDense(unsigned x, unsigned y, unsigned z) {
     unsigned linearIdx = LinearIdx(x, y, z);
     uint64_t childMask = (1ull << linearIdx);
     bool hasChild = mask & childMask;
     if (!hasChild) {
       mask |= childMask;
     }
-    return &children[childIdx];
+    return &children[linearIdx];
   }
 
   // done with adding children. AddChild no longer works.
   // only allows GetChild.
   void Compress() {
     unsigned childCount = CountOn(mask);
+    if (childCount == 0) {
+      return;
+    }
     T* newChildren = new T[childCount];
     unsigned count = 0;
     for (unsigned i = 0; i < NUM_CHILDREN; i++) {
@@ -45,21 +54,37 @@ struct SparseNode4 {
   }
 
   void AllocateChildren() { children = new T[NUM_CHILDREN]; }
-  unsigned LinearIdx(unsigned x, unsigned y, unsigned z) {
+  unsigned LinearIdx(unsigned x, unsigned y, unsigned z) const {
     unsigned i = (z * GRID_SIZE + y) * GRID_SIZE + x;
     return i;
   }
-  bool HasChildren() { return children != nullptr; }
+  bool HasChildren() const { return children != nullptr; }
 
   ~SparseNode4() {
     if (children != nullptr) {
       delete[] children;
     }
   }
+  bool HasChild(unsigned x, unsigned y, unsigned z) const {
+    if (children == nullptr) {
+      return false;
+    }
+    unsigned linearIdx = LinearIdx(x, y, z);
+    return mask & (1ull << linearIdx);    
+  }
+  
+  // does not work before compression.
+  const T* GetChild(unsigned x, unsigned y, unsigned z) const {
+    
+    unsigned linearIdx = LinearIdx(x, y, z);
+    bool hasChild = mask & (1ull << linearIdx);
+    if (!hasChild) {
+      return nullptr;
+    }
+    unsigned childIdx = CountOn(mask & ((1ull << linearIdx) - 1));
+    return &children[childIdx];
+  }
 
-  uint64_t mask = 0;
-  // array of child cells.
-  T* children = nullptr;
   // does not work before compression.
   T* GetChild(unsigned x, unsigned y, unsigned z) {
     unsigned linearIdx = LinearIdx(x, y, z);
@@ -70,5 +95,9 @@ struct SparseNode4 {
     unsigned childIdx = CountOn(mask & ((1ull << linearIdx) - 1));
     return &children[childIdx];
   }
+
+  uint64_t mask = 0;
+  // array of child cells.
+  T* children = nullptr;
 };
 #endif

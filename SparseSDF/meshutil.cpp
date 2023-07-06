@@ -302,3 +302,77 @@ TrigMesh MarchCubes(std::vector<uint8_t>& vol, std::array<unsigned, 3>& gsize) {
     }
     return m;
 }
+
+
+void SamplePointsOneTrig(unsigned tIdx, const TrigMesh& m,
+                         std::vector<SurfacePoint>& points, float spacing) {
+    Vec3f v0 = m.GetTriangleVertex(tIdx, 0);
+    Vec3f v1 = m.GetTriangleVertex(tIdx, 1);
+    Vec3f v2 = m.GetTriangleVertex(tIdx, 2);
+    Vec3f e1 = v1 - v0;
+    Vec3f e2 = v2 - v0;
+    Vec3f cross = e1.cross(e2);
+    float norm = cross.norm();
+    float area = 0.5f * norm;
+    Vec3f n;
+
+    if (norm > 0) {
+      n = (1.0f / norm) * cross;
+    } else {
+      // degenerate triangle.
+      return;
+    }
+
+    // same within a triangle.
+    const float oneThird = 1.0f / 3.0f;
+    SurfacePoint sp;
+    sp.v = oneThird * (v0 + v1 + v2);
+    sp.l = Vec2f(0.5, 0.5);
+    points.push_back(sp);
+    if (area < spacing * spacing) {
+      // small triangle. one center point is enough.
+      return;
+    }
+
+    float e1Len = e1.norm();
+    Vec3f x = (1.0f / e1Len) * e1;
+    float e2Len = e2.norm();
+    Vec3f y = (1.0f / e2Len) * e2;
+
+    Vec3f e3 = v2 - v1;
+
+    Vec3f e3mid = 0.5f * (v1 + v2);
+    Vec3f centerLine = v0 - e3mid;
+    float e3len = e3.norm();
+    Vec3f e3Unit = (1.0f / e3len) * e3;
+    Vec3f projection = centerLine.dot(e3Unit) * e3Unit;
+    Vec3f hVec = centerLine - projection;
+    float h = hVec.norm();
+    int numHSteps = h / spacing + 1;
+    for (int hi = 0; hi < numHSteps; hi++) {
+      // between 0 to 1
+      float y = (hi + 0.5f) / numHSteps;
+      float xlen = y * e3len;
+      int numXSteps = int(xlen / spacing);
+      if (numXSteps == 0) {
+        // very narrow area, nothing to sample.
+        continue;
+      }
+      for (int xi = 0; xi < numXSteps; xi++) {
+        float x = (xi + 0.5f) / numXSteps;
+        Vec3f point = v0 + (1 - y) * (x * e1 + (1 - x) * e2);
+        SurfacePoint sp;
+        sp.v = point;
+        sp.l = Vec2f((1 - y) * x , (1 - y) * (1 - x));
+        points.push_back(sp);
+      }
+    }
+}
+
+void SamplePoints(const TrigMesh& m, std::vector<SurfacePoint>& points,
+                  float spacing) {
+    size_t numTrigs = m.t.size() / 3;
+    for (size_t ti = 0; ti < numTrigs; ti++) {
+      SamplePointsOneTrig(ti, m, points, spacing);
+    }
+}

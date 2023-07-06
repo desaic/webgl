@@ -40,6 +40,8 @@ class TrigMesh {
 
   // these are all needed just for SDF
   /// triangle edges
+  /// Triangle edges are stored in order so that
+  /// each edge ei starts with vertex vi
   std::vector<TIndex> te;
 
   /// normal of each triangle

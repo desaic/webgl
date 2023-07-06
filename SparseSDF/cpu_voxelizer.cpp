@@ -33,7 +33,7 @@ void cpu_voxelize_mesh(voxconf conf, const TrigMesh* mesh,
     Vec3f e2 = v0 - v2;
     // Normal vector pointing up from the triangle
     Vec3f n = mesh->GetTrigNormal(i);
-
+    cb.BeginTrig(i);
     // COMPUTE TRIANGLE BBOX IN GRID
     // Triangle bounding box in world coordinates is min(v0,v1,v2) and
     // max(v0,v1,v2)
@@ -169,6 +169,7 @@ void cpu_voxelize_mesh(voxconf conf, const TrigMesh* mesh,
         }
       }
     }
+    cb.EndTrig(i);
   }
 }
 
