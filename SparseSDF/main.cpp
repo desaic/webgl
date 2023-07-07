@@ -395,6 +395,7 @@ void LoadImageSequence(const std::string& dir, int maxIndex, Array3D8u& vol) {
 #include "BBox.h"
 #include "Stopwatch.h"
 #include "cpu_voxelizer.h"
+#include "FastSweep.h"
 #include "SDFVoxCb.h"
 #include "VoxCallback.h"
 #include "AdapSDF.h"
