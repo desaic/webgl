@@ -1,12 +1,15 @@
 #include "FastSweep.h"
 
-void FastSweep3D(Array3D<short>& dist, const Array3D<uint8_t>& frozenCells,
+void FastSweep3D(Array3D<short>& dist,
                  Vec3f unit, float band) {
-
+  Vec3u gridSize = dist.GetSize();
+  Array3D<uint8_t> frozenCells;
+  // initialize values < infinity as frozen initial values.
+  frozenCells.Allocate(gridSize, 0);
   const unsigned NSweeps = 8;
   const int DIRS[NSweeps][3] = {{-1, -1, 1}, {1, -1, 1}, {1, 1, 1}, {-1, 1, 1},
                                 {-1, -1, -1}, {1, -1, -1}, {1, 1, -1}, {-1, 1, -1}};
-  Vec3u gridSize = dist.GetSize();
+  
   for (unsigned s = 0; s < NSweeps; s++) {
     for (unsigned k = 0; k < gridSize[2]; k++) {
       unsigned iz = DIRS[s][2] > 0 ? k : (gridSize[2] - k - 1);
