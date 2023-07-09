@@ -38,7 +38,7 @@ void FastSweep(Array3D<short>& dist, float voxSize, float unit, float band)
                                 {-1, -1, -1}, {1, -1, -1}, {1, 1, -1}, {-1, 1, -1}};
   // adjacent values.
   float adjVal[3];
-  float h = voxSize;
+  float h = voxSize/unit;
   for (unsigned s = 0; s < NSweeps; s++) {
     for (unsigned k = 0; k < gridSize[2]; k++) {
       unsigned iz = DIRS[s][2] > 0 ? k : (gridSize[2] - k - 1);
@@ -77,35 +77,38 @@ void FastSweep(Array3D<short>& dist, float voxSize, float unit, float band)
           Sort3f(adjVal);
 
 
-          double d_curr = aa[0] + h;
-          double d_new;
-          if (d_curr <= (aa[1] + eps)) {
+          float d_curr = adjVal[0] + h;
+          float d_new;
+          if (d_curr <= (adjVal[1])) {
             d_new = d_curr;  // accept the solution
           } else {
             // quadratic equation with coefficients involving 2 neighbor values
             // aa
             double a = 2.0;
-            double b = -2.0 * (aa[0] + aa[1]);
-            double c = aa[0] * aa[0] + aa[1] * aa[1] - h * h;
+            double b = -2.0 * (adjVal[0] + adjVal[1]);
+            double c = adjVal[0] * adjVal[0] + adjVal[1] * adjVal[1] - h * h;
             double D = sqrt(b * b - 4.0 * a * c);
             // choose the minimal root
             d_curr = ((-b + D) > (-b - D) ? (-b + D) : (-b - D)) / (2.0 * a);
 
-            if (d_curr <= (aa[2] + eps))
+            if (d_curr <= (adjVal[2]))
               d_new = d_curr;  // accept the solution
             else {
               // quadratic equation with coefficients involving all 3 neighbor
               // values aa
               a = 3.0;
-              b = -2.0 * (aa[0] + aa[1] + aa[2]);
-              c = aa[0] * aa[0] + aa[1] * aa[1] + aa[2] * aa[2] - h * h;
+              b = -2.0 * (adjVal[0] + adjVal[1] + adjVal[2]);
+              c = adjVal[0] * adjVal[0] + adjVal[1] * adjVal[1] +
+                  adjVal[2] * adjVal[2] -
+                  h * h;
               D = sqrt(b * b - 4.0 * a * c);
               // choose the minimal root
               d_new = ((-b + D) > (-b - D) ? (-b + D) : (-b - D)) / (2.0 * a);
             }
           }
           // update if d_new is smaller
-          grid[gridPos] = grid[gridPos] < d_new ? grid[gridPos] : d_new;
+          dist(ix, iy, iz) =
+              dist(ix, iy, iz) < d_new ? dist(ix, iy, iz) : d_new;
 
         }//i
       }//j
