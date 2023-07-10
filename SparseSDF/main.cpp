@@ -494,15 +494,14 @@ void TestSDF() {
 
   BBox box;
   ComputeBBox(mesh1.v, box);
-
-  conf.unit = Vec3f(0.1, 0.1, 0.1);
+  sdf.voxSize = 0.1f;
+  conf.unit = Vec3f(sdf.voxSize, sdf.voxSize, sdf.voxSize);
 
   // add margin for narrow band sdf
   sdf.band = std::min(sdf.band, AdapSDF::MAX_BAND);
   box.vmin = box.vmin - float(sdf.band) * conf.unit;
   box.vmax = box.vmax + float(sdf.band) * conf.unit;
-  conf.origin = box.vmin;
-  sdf.voxSize = conf.unit;
+  conf.origin = box.vmin;  
   sdf.origin = box.vmin;
 
   Vec3f count = (box.vmax - box.vmin) / conf.unit;
@@ -523,6 +522,7 @@ void TestSDF() {
   float ms = timer.ElapsedMS();
   std::cout << "vox time " << ms << "\n";
   sdf.Compress();
+  FastSweep(sdf.dist, sdf.voxSize, sdf.distUnit, sdf.band);
   std::cout << "sdf #points " << sdf.totalPoints << "\n";
   //SaveVolAsObjMesh("voxels.obj", grid, (float*)(&conf.unit),
   //                 (float*)(&box.vmin), 1);

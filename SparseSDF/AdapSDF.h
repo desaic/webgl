@@ -86,8 +86,8 @@ class AdapSDF {
 
   Vec3f origin = {0.0f, 0.0f, 0.0f};
 
-  // in mm
-  Vec3f voxSize;
+  // in mm. square voxels only.
+  float voxSize;
   // 1/4 of voxSize by default.
   float pointSpacing = 0.1f;
   unsigned band = 5;

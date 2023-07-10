@@ -20,19 +20,17 @@ void SDFVoxCb::operator()(unsigned x, unsigned y, unsigned z, size_t trigIdx) {
       {0, 0, 0}, {1, 0, 0}, {0, 1, 0}, {1, 1, 0},
       {0, 0, 1}, {1, 0, 1}, {0, 1, 1}, {1, 1, 1}};
 
-  Vec3f voxelMin(x * sdf->voxSize[0],
-                 y * sdf->voxSize[1],
-                 z * sdf->voxSize[2]);
-  voxelMin = voxelMin + sdf->origin;
-  Vec3f voxelMax = voxelMin + sdf->voxSize;
+  Vec3f voxelMin(x, y, z);
+  voxelMin = sdf->voxSize * voxelMin + sdf->origin;
+  Vec3f voxelMax = voxelMin + Vec3f(sdf->voxSize);
   Vec3u gridIdx(x, y, z);
   for (unsigned ci = 0; ci < NUM_CUBE_VERTS; ci++) {
     unsigned vx = x + CUBE_VERTS[ci][0];
     unsigned vy = y + CUBE_VERTS[ci][1];
     unsigned vz = z + CUBE_VERTS[ci][2];
-    Vec3f vertCoord(vx * sdf->voxSize[0] + sdf->origin[0],
-                    vy * sdf->voxSize[1] + sdf->origin[1],
-                    vz * sdf->voxSize[2] + sdf->origin[2]);
+    Vec3f vertCoord(vx * sdf->voxSize + sdf->origin[0],
+                    vy * sdf->voxSize + sdf->origin[1],
+                    vz * sdf->voxSize + sdf->origin[2]);
     TrigDistInfo distInfo = PointTrigDist(vertCoord, (float*)(&trig));
     Vec3f normal = m->GetNormal(trigIdx, distInfo.bary);
     //vector from closest point to voxel point.
