@@ -13,7 +13,6 @@
 #include "meshutil.h"
 
 void MirrorCubicStructure(const Array3D8u& s_in, Array3D8u& s_out);
-void MarchingCubes(const Array3D8u& grid, float level, TrigMesh* surf);
 
 void loadBinaryStructure(const std::string& filename, Array3D8u& s) {
   int dim = 3;
@@ -426,10 +425,39 @@ void GetSDFSlice(const AdapSDF& sdf, Array2D8u &slice, Vec3f sliceRes, float z) 
   Vec2u sliceSize = slice.GetSize();
   for (unsigned row = 0; row < sliceSize[1]; row++) {
     for (unsigned col = 0; col < sliceSize[0]; col++) {
+      if (col == 2346 && row == 718) {
+        std::cout << "debug\n";
+      }
       Vec3f x((col +0.5f)* sliceRes[0], (row+0.5f)*sliceRes[1], z);
       float dist = sdf.GetCoarseDist(x+sdf.origin);
       if (dist < 0.58&&dist>-0.58) {
         slice(col, row) = uint8_t(dist * 200+127);
+      }
+      if (dist >= 0.58) {
+        slice(col, row) = 255;
+      }
+      if (dist <= -0.58) {
+        slice(col, row) = 0;
+      }
+    }
+  }
+}
+
+void GetSDFFineSlice(const AdapSDF& sdf, Array2D8u& slice, Vec3f sliceRes,
+                 float z) {
+  Vec2u sliceSize = slice.GetSize();
+  for (unsigned row = 0; row < sliceSize[1]; row++) {
+    for (unsigned col = 0; col < sliceSize[0]; col++) {
+      Vec3f x((col + 0.5f) * sliceRes[0], (row + 0.5f) * sliceRes[1], z);
+      float dist = sdf.GetFineDist(x + sdf.origin);
+      if (dist < 0.58 && dist > -0.58) {
+        slice(col, row) = uint8_t(dist * 200 + 127);
+      }
+      if (dist >= 0.58) {
+        slice(col, row) = 255;
+      }
+      if (dist <= -0.58) {
+        slice(col, row) = 0;
       }
     }
   }
@@ -481,10 +509,15 @@ void SavePseudoNormals(const TrigMesh & mesh, const std::string & outFile ) {
 }
 
 void TestSDF() {
-  std::string fileName = "F:/dolphin/meshes/fish/salmon.stl";
-  //std::string fileName = "F:/dolphin/meshes/lattice_big/MeshLattice.stl";
   TrigMesh mesh1;
-  mesh1.LoadStl(fileName);
+  
+  //std::string fileName = "F:/dolphin/meshes/fish/salmon.stl";
+  //std::string fileName = "F:/dolphin/meshes/lattice_big/MeshLattice.stl";
+  // mesh1.LoadStl(fileName);
+  
+  std::string fileName = "F:/dolphin/meshes/sdfTest/soleRigid1.obj";
+  mesh1.LoadObj(fileName);
+  
   mesh1.ComputePseudoNormals();
   
   //SavePseudoNormals(mesh1,"psnormal.obj");
@@ -494,7 +527,7 @@ void TestSDF() {
 
   BBox box;
   ComputeBBox(mesh1.v, box);
-  sdf.voxSize = 0.1f;
+  sdf.voxSize = 0.4f;
   conf.unit = Vec3f(sdf.voxSize, sdf.voxSize, sdf.voxSize);
 
   // add margin for narrow band sdf
@@ -522,27 +555,51 @@ void TestSDF() {
   float ms = timer.ElapsedMS();
   std::cout << "vox time " << ms << "\n";
   sdf.Compress();
+
+  timer.Start();
+  SDFFineVoxCb finecb;
+  finecb.grid = &grid;
+  finecb.sdf = &sdf;
+  finecb.m = &mesh1;
+  count = (box.vmax - box.vmin) / conf.unit;
+  const unsigned N = FixedGrid5::N;
+  conf.unit = Vec3f(sdf.voxSize / (N - 1), sdf.voxSize / (N - 1),
+                    sdf.voxSize / (N - 1));
+  count = (box.vmax - box.vmin) / conf.unit;
+  conf.gridSize = Vec3u(count[0] + 1, count[1] + 1, count[2] + 1);
+  //cpu_voxelize_mesh(conf, &mesh1, finecb);
+  ms = timer.ElapsedMS();
+  std::cout << "fine vox time " << ms << "\n";
+
+  timer.Start();
   FastSweep(sdf.dist, sdf.voxSize, sdf.distUnit, sdf.band);
-  std::cout << "sdf #points " << sdf.totalPoints << "\n";
+  ms = timer.ElapsedMS();
+  std::cout << "sweep time " << ms << "\n";
   //SaveVolAsObjMesh("voxels.obj", grid, (float*)(&conf.unit),
   //                 (float*)(&box.vmin), 1);
   //SaveSDFImages("sdf_", sdf.dist);
 
+  //TrigMesh surf;
+  //short level = 0.2 / sdf.distUnit;
+  //MarchingCubes(sdf.dist, level, &surf, sdf.voxSize);
+  //for (size_t i = 0; i < surf.v.size(); i += 3) {
+  //  surf.v[i] = surf.v[i] + sdf.origin[0];
+  //  surf.v[i+1] = surf.v[i+1]+ sdf.origin[1];
+  //  surf.v[i+2] = surf.v[i+2] + sdf.origin[2];
+  //}
+
+  //surf.SaveObj("march"+std::to_string(int(level))+".obj");
   Array2D8u slice;
-  Vec3u sdfSize=  sdf.dist.GetSize();
-  slice.Allocate(10*sdfSize[0],10*sdfSize[1]);
-  float z = 3.5;
+  Vec3u sdfSize = sdf.dist.GetSize();
+  slice.Allocate(40*sdfSize[0],40*sdfSize[1]);
+  float z = 13;
+  timer.Start();
   GetSDFSlice(sdf, slice, Vec3f(0.01f,0.01f,0.01f),z);
+  ms = timer.ElapsedMS();
+  std::cout << "slice time " << ms << "\n";
   std::string sliceFile = "slice" + std::to_string(int(z / 0.001)) + ".png";
   SavePng(sliceFile, slice);
 
-  //std::ofstream out("samplePoints.obj");
-  //for (size_t i = 1; i < sdf.sparseData.size();i++) {
-  //  const PointSet& p = sdf.sparseData[i];
-  //  for (size_t j = 0; j < p.p.size(); j++) {
-  //    out << "v " << p.p[j][0] << " " << p.p[j][1] << " " << p.p[j][2] << "\n";
-  //  }
-  //}
 }
 
 int main(int argc, char* argv[]) {
@@ -589,7 +646,7 @@ int main(int argc, char* argv[]) {
   PadGridConst(mirrored, v8, 0);
   InvertVal(v8);
 
-  MarchingCubes(v8, 220, &surf);
+  MarchingCubes(v8, 220, &surf, 1);
 
   std::string objFile = std::to_string(id) + "_smooth.obj";
   surf.SaveObj(objFile.c_str());
@@ -641,59 +698,4 @@ void MirrorCubicStructure(const Array3D8u& s_in, Array3D8u& s_out) {
     }
   }
   s_out = st;
-}
-
-void MarchOneCube(unsigned x, unsigned y, unsigned z, const Array3D8u& grid,
-                  float level, TrigMesh* surf) {
-  GridCell cell;
-  cell.p[0] = Vec3f(0, 0, 0);
-  float h = 0.25f;
-  cell.p[0][0] += x * h;
-  cell.p[0][1] += y * h;
-  cell.p[0][2] += z * h;
-
-  for (unsigned i = 1; i < GridCell::NUM_PT; i++) {
-    cell.p[i] = cell.p[0];
-  }
-  cell.p[1][1] += h;
-
-  cell.p[2][0] += h;
-  cell.p[2][1] += h;
-
-  cell.p[3][0] += h;
-
-  cell.p[4][2] += h;
-
-  cell.p[5][1] += h;
-  cell.p[5][2] += h;
-
-  cell.p[6][0] += h;
-  cell.p[6][1] += h;
-  cell.p[6][2] += h;
-
-  cell.p[7][0] += h;
-  cell.p[7][2] += h;
-
-  cell.val[0] = grid(x, y, z);
-  cell.val[1] = grid(x, y + 1, z);
-  cell.val[2] = grid(x + 1, y + 1, z);
-  cell.val[3] = grid(x + 1, y, z);
-  cell.val[4] = grid(x, y, z + 1);
-  cell.val[5] = grid(x, y + 1, z + 1);
-  cell.val[6] = grid(x + 1, y + 1, z + 1);
-  cell.val[7] = grid(x + 1, y, z + 1);
-
-  MarchCube(cell, level, surf);
-}
-
-void MarchingCubes(const Array3D8u& grid, float level, TrigMesh* surf) {
-  Vec3u s = grid.GetSize();
-  const unsigned zAxis = 2;
-  for (unsigned x = 0; x < s[0] - 1; x++) {
-    for (unsigned y = 0; y < s[1] - 1; y++) {
-      for (unsigned z = 0; z < s[2] - 1; z++) {
-        MarchOneCube(x, y, z, grid, level, surf);
-      }
-    }
-  }
 }

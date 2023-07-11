@@ -3,10 +3,29 @@
 
 #include "Array3D.h"
 #include "SparseNode4.h"
-// a grid cell containing sample points.
-struct PointSet {
-  std::vector<Vec3f> p;
+
+// a fixed 5x5x5 grid.
+struct FixedGrid5 {
+  static const unsigned N = 5;
+  static const unsigned LEN = 128;
+
+  // extra bytes for padding
+  short val[LEN];
+
+  short operator()(unsigned x, unsigned y, unsigned z) const {
+    return val[x + y * N + z * N*N];
+  }
+  short& operator()(unsigned x, unsigned y, unsigned z) {
+    return val[x + y * N + z * N*N];
+  }
+
+  void Fill(short v) {
+    for (unsigned i = 0; i < LEN; i++) {
+      val[i] = v;
+    }
+  }
 };
+
 /// <summary>
 /// stores a dense coarse distance grid
 /// and a sparse grid of surface point samples.
@@ -23,18 +42,9 @@ class AdapSDF {
   /// <returns>-1 if too many voxels are requested</returns>
   int Allocate(unsigned sx, unsigned sy, unsigned sz);
 
-  /// <summary>
-  ///
-  /// </summary>
-  /// <param name="point">input is in mesh space. Added point is in local 
-  /// grid space.</param>
-  /// <returns>0 if point added successfully. negative if point is outside of
-  /// coarse grid
-  /// or too close to existing sample points</returns>
-  int AddPoint(Vec3f point, const Vec3u& gridIdx);
-
-  PointSet& AddSparseCell(const Vec3u& gridIdx);
-
+  FixedGrid5& AddSparseCell(const Vec3u& gridIdx);
+  bool HasCellDense(const Vec3u& gridIdx) const;
+  bool HasCellSparse(const Vec3u& gridIdx) const;
   /// <summary>
   /// After adding points, compress to save memory.
   /// Dense operations no longer valid after this point.
@@ -73,13 +83,14 @@ class AdapSDF {
   Array3D<short> dist;
 
   // coarse grid contains index into list of refined cells.
+  // 
   // only a sparse subset of voxels have refined cells.
   // sparse nodes are stored at 1/4 resolution of the full grid.
   Array3D<SparseNode4<unsigned>> sparseGrid;
 
   // flat list of sparse cell data indexed by sparseGrid.
-  // index is reserved for empty cells.
-  std::vector<PointSet> sparseData;
+  // index 0 is reserved for empty cells.
+  std::vector<FixedGrid5> sparseData;
 
   // mm. default is 1um.
   float distUnit = 0.001f;
@@ -92,7 +103,6 @@ class AdapSDF {
   float pointSpacing = 0.1f;
   unsigned band = 5;
 
-  size_t totalPoints = 0;
 };
 
 #endif

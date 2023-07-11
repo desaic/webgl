@@ -32,6 +32,11 @@ struct SparseNode4 {
     return &children[linearIdx];
   }
 
+  const T* GetChildDense(unsigned x, unsigned y, unsigned z) const {
+    unsigned linearIdx = LinearIdx(x, y, z);
+    return &children[linearIdx];
+  }
+
   // done with adding children. AddChild no longer works.
   // only allows GetChild.
   void Compress() {

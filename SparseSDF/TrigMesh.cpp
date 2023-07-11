@@ -114,7 +114,8 @@ void TrigMesh::ComputeVertNormals() {
   size_t numVerts = v.size() / 3;
   // std::vector<float> weight(numVerts, 0.0f);
   nv.resize(numVerts, Vec3f(0.0f));
-  const float eps = 1e-10;
+  const float eps = 1e-12;
+  float epsAngle = 1e-5;
   for (size_t tIdx = 0; tIdx < t.size(); tIdx += 3) {
     Vec3f vert[3];
     for (unsigned vi = 0; vi < 3; vi++) {
@@ -133,7 +134,15 @@ void TrigMesh::ComputeVertNormals() {
       float angle = 0.0f;
       if (denom > eps) {
         float dot = e1.dot(e2);
-        angle = std::acos(dot / std::sqrt(denom));
+        float sd = std::sqrt(denom);
+        if (sd > std::abs(dot)) {
+          angle = std::acos(dot / sd);
+        } else {
+          angle = epsAngle;
+        }
+        if (std::isnan(angle)) {
+          std::cout << "debug\n";
+        }
       }
       size_t vIdx = t[tIdx + v0];
       //  weight[vIdx] += angle;

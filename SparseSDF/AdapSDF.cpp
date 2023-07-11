@@ -20,19 +20,7 @@ int AdapSDF::Allocate(unsigned sx, unsigned sy, unsigned sz) {
   return 0;
 }
 
-int AdapSDF::AddPoint(Vec3f point, const Vec3u &gridIdx) { 
-  point = point - origin;
-  Vec3u gridSize = sparseGrid.GetSize();
-  if (gridIdx[0] >= gridSize[0] * 4 || gridIdx[1] >= gridSize[1] * 4 ||
-      gridIdx[2] >= gridSize[2] * 4) {
-    return -1;
-  }
-  PointSet& cell = AddSparseCell(gridIdx);
-  cell.p.push_back(point);
-  return 0; 
-}
-
-PointSet& AdapSDF::AddSparseCell(const Vec3u& gridIdx) {
+FixedGrid5& AdapSDF::AddSparseCell(const Vec3u& gridIdx) {
   SparseNode4<unsigned>& node =
       GetSparseNode4(gridIdx[0], gridIdx[1], gridIdx[2]);
 
@@ -47,18 +35,33 @@ PointSet& AdapSDF::AddSparseCell(const Vec3u& gridIdx) {
     // uninitialized cell
     cellIdx = unsigned(sparseData.size());
     *cellIdxPtr = cellIdx;
-    sparseData.push_back(PointSet());
+    sparseData.push_back(FixedGrid5());
   }
   return sparseData[cellIdx];
 }
 
-void MergeClosePoints(PointSet& points,float eps) { std::vector<size_t> idx;
-  MergeClosePoints(points.p, idx, eps);
-  std::vector<Vec3f> v (idx.size());
-  for (size_t i = 0; i < idx.size();i++) {
-    v[i] = points.p[idx[i]];
+bool AdapSDF::HasCellDense(const Vec3u& gridIdx) const {
+  const SparseNode4<unsigned>& node =
+      GetSparseNode4(gridIdx[0], gridIdx[1], gridIdx[2]);
+
+  if (!node.HasChildren()) {
+    return false;
   }
-  points.p = v;
+
+  Vec3u fineIdx(gridIdx[0] & 3, gridIdx[1] & 3, gridIdx[2] & 3);
+  const unsigned* cellIdxPtr = node.GetChildDense(fineIdx[0], fineIdx[1], fineIdx[2]);
+  unsigned cellIdx = *cellIdxPtr;
+  return cellIdx>0;
+}
+
+bool AdapSDF::HasCellSparse(const Vec3u& gridIdx) const {
+  const SparseNode4<unsigned>& node =
+      GetSparseNode4(gridIdx[0], gridIdx[1], gridIdx[2]);
+
+  if (!node.HasChildren()) {
+    return false;
+  }
+  return node.HasChild(gridIdx[0] & 3, gridIdx[1] & 3, gridIdx[2] & 3);
 }
 
 void AdapSDF::Compress() { auto&data = sparseGrid.GetData();
@@ -66,11 +69,6 @@ void AdapSDF::Compress() { auto&data = sparseGrid.GetData();
     node.Compress();
   }
   float eps = distUnit;
-  totalPoints = 0;
-  for (auto& cell : sparseData) {
-    MergeClosePoints(cell,eps);
-    totalPoints += cell.p.size();
-  }
 }
 
 /// <summary>
@@ -123,14 +121,32 @@ float AdapSDF::GetFineDist(const Vec3f& x) const {
   if (!node.HasChild(ix & 3, iy & 3, iz & 3)) {
     return coarseDist;
   }
-  unsigned pointSetIdx = *(node.GetChild(ix & 3, iy & 3, iz & 3));
-  float minDist = MAX_DIST;
-  const PointSet &points = sparseData[pointSetIdx];
-  for (size_t i = 0; i < points.p.size(); i++) {
-    Vec3f diff = local - points.p[i];
-    minDist = std::min(minDist, diff.norm2());
+  unsigned nodeIdx = *(node.GetChild(ix & 3, iy & 3, iz & 3));
+  float fineDist = MAX_DIST;
+  const FixedGrid5& fGrid = sparseData[nodeIdx];
+
+  Vec3f fineCoord = local - voxSize * Vec3f(ix, iy, iz);
+  const unsigned N = FixedGrid5::N;
+  float fine_h = voxSize / (N - 1);
+  Vec3f fineIdx = (1.0f / fine_h) * fineCoord;
+  unsigned fx = unsigned(fineIdx[0]);
+  unsigned fy = unsigned(fineIdx[1]);
+  unsigned fz = unsigned(fineIdx[2]);
+  if (fx>N-2 || fy>N-2||fz>N-2) {
+    return coarseDist;
   }
-  return std::min(std::sqrt(minDist), coarseDist);
+  float a = (fx + 1) - fineIdx[0];
+  float b = (fy + 1) - fineIdx[1];
+  float c = (fz + 1) - fineIdx[2];
+  float v00 = a * fGrid(fx, fy, fz) + (1 - a) * fGrid(fx + 1, fy, fz);
+  float v10 = a * fGrid(fx, fy + 1, fz) + (1 - a) * fGrid(fx + 1, fy + 1, fz);
+  float v01 = a * fGrid(fx, fy, fz + 1) + (1 - a) * fGrid(fx + 1, fy, fz + 1);
+  float v11 =
+      a * fGrid(fx, fy + 1, fz + 1) + (1 - a) * fGrid(fx + 1, fy + 1, fz + 1);
+  float v0 = b * v00 + (1 - b) * v10;
+  float v1 = b * v01 + (1 - b) * v11;
+  float v = c * v0 + (1 - c) * v1;
+  return std::min(v * distUnit, coarseDist);
 }
 
 SparseNode4<unsigned>& AdapSDF::GetSparseNode4(unsigned x, unsigned y,
