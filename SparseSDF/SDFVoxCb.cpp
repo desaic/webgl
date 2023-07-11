@@ -129,9 +129,9 @@ void SDFFineVoxCb::operator()(unsigned x, unsigned y, unsigned z, size_t trigIdx
     short oldDist = std::abs(grid(subx, suby, subz));
     if (oldDist > shortd) {
       if (normal.dot(trigPt) < 0) {
-        sdf->dist(subx, suby, subz) = -shortd;
+        grid(subx, suby, subz) = -shortd;
       } else {
-        sdf->dist(subx, suby, subz) = shortd;
+        grid(subx, suby, subz) = shortd;
       }
     }
   }

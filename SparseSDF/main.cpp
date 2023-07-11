@@ -564,7 +564,7 @@ void TestSDF() {
                     sdf.voxSize / (N - 1));
   count = (box.vmax - box.vmin) / conf.unit;
   conf.gridSize = Vec3u(count[0] + 1, count[1] + 1, count[2] + 1);
-  //cpu_voxelize_mesh(conf, &mesh1, finecb);
+  cpu_voxelize_mesh(conf, &mesh1, finecb);
   ms = timer.ElapsedMS();
   std::cout << "fine vox time " << ms << "\n";
 
@@ -576,22 +576,22 @@ void TestSDF() {
   //                 (float*)(&box.vmin), 1);
   //SaveSDFImages("sdf_", sdf.dist);
 
-  TrigMesh surf;
-  short level = 0.2 / sdf.distUnit;
-  MarchingCubes(sdf.dist, level, &surf, sdf.voxSize);
-  for (size_t i = 0; i < surf.v.size(); i += 3) {
-    surf.v[i] = surf.v[i] + sdf.origin[0];
-    surf.v[i+1] = surf.v[i+1]+ sdf.origin[1];
-    surf.v[i+2] = surf.v[i+2] + sdf.origin[2];
-  }
+  //TrigMesh surf;
+  //short level = 0.2 / sdf.distUnit;
+  //MarchingCubes(sdf.dist, level, &surf, sdf.voxSize);
+  //for (size_t i = 0; i < surf.v.size(); i += 3) {
+  //  surf.v[i] = surf.v[i] + sdf.origin[0];
+  //  surf.v[i+1] = surf.v[i+1]+ sdf.origin[1];
+  //  surf.v[i+2] = surf.v[i+2] + sdf.origin[2];
+  //}
+  //surf.SaveObj("march"+std::to_string(int(level))+".obj");
 
-  surf.SaveObj("march"+std::to_string(int(level))+".obj");
   Array2D8u slice;
   Vec3u sdfSize = sdf.dist.GetSize();
-  slice.Allocate(40*sdfSize[0],40*sdfSize[1]);
-  float z = 13;
+  slice.Allocate(10*sdfSize[0],10*sdfSize[1]);
+  float z = 5;
   timer.Start();
-  GetSDFSlice(sdf, slice, Vec3f(0.01f,0.01f,0.01f),z);
+  GetSDFFineSlice(sdf, slice, Vec3f(0.04f,0.04f,0.04f),z);
   ms = timer.ElapsedMS();
   std::cout << "slice time " << ms << "\n";
   std::string sliceFile = "slice" + std::to_string(int(z / 0.001)) + ".png";
