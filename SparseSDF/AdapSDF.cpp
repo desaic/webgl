@@ -146,7 +146,14 @@ float AdapSDF::GetFineDist(const Vec3f& x) const {
   float v0 = b * v00 + (1 - b) * v10;
   float v1 = b * v01 + (1 - b) * v11;
   float v = c * v0 + (1 - c) * v1;
-  return std::min(v * distUnit, coarseDist);
+  v *= distUnit;
+  if (std::abs(v)<std::abs(coarseDist)) {
+    if (coarseDist < 0) {
+      return -v;
+    }
+    return v;
+  }
+  return coarseDist;
 }
 
 SparseNode4<unsigned>& AdapSDF::GetSparseNode4(unsigned x, unsigned y,

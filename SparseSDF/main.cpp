@@ -567,11 +567,20 @@ void TestSDF() {
   cpu_voxelize_mesh(conf, &mesh1, finecb);
   ms = timer.ElapsedMS();
   std::cout << "fine vox time " << ms << "\n";
+  float h = sdf.voxSize / sdf.distUnit;
+  float bandUnit = sdf.band * h;
+  short far = bandUnit * 2;
+
+  // close mesh so no negative value leaks out
+  CloseExterior(sdf.dist, far);
 
   timer.Start();
   FastSweep(sdf.dist, sdf.voxSize, sdf.distUnit, sdf.band);
   ms = timer.ElapsedMS();
   std::cout << "sweep time " << ms << "\n";
+  for (size_t i = 0; i < sdf.sparseData.size(); i++) {
+    FastSweep(sdf.sparseData[i].val,sdf.sparseData[i].N, sdf.voxSize/4, sdf.distUnit, sdf.band);
+  }
   //SaveVolAsObjMesh("voxels.obj", grid, (float*)(&conf.unit),
   //                 (float*)(&box.vmin), 1);
   //SaveSDFImages("sdf_", sdf.dist);

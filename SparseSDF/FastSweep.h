@@ -2,6 +2,8 @@
 #define FAST_SWEEP_H
 #include "Array3D.h"
 
+void CloseExterior(Array3D<short>& dist, short far);
+
 /// <summary>
 /// 
 /// </summary>
@@ -10,5 +12,5 @@
 /// <param name="unit">unit for values stored in distance grid in mm</param>
 /// <param name="band">narrow band in number of voxels</param>
 void FastSweep(Array3D<short>& dist, float voxSize, float unit, float band);
-
+void FastSweep(short* vals, unsigned N, float voxSize, float unit, float band);
 #endif

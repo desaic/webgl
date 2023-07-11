@@ -115,9 +115,6 @@ void SDFFineVoxCb::operator()(unsigned x, unsigned y, unsigned z, size_t trigIdx
     Vec3f vertCoord(vx * h + sdf->origin[0], vy * h + sdf->origin[1],
                     vz * h + sdf->origin[2]);
     TrigDistInfo distInfo = PointTrigDist(vertCoord, (float*)(&trig));
-    Vec3f normal = m->GetNormal(trigIdx, distInfo.bary);
-    // vector from closest point to voxel point.
-    Vec3f trigPt = vertCoord - distInfo.closest;
     float d = std::sqrt(distInfo.sqrDist);
     d = d / sdf->distUnit;
     short shortd = short(d);
@@ -126,13 +123,9 @@ void SDFFineVoxCb::operator()(unsigned x, unsigned y, unsigned z, size_t trigIdx
     unsigned suby = fineY + CUBE_VERTS[ci][1];
     unsigned subz = fineZ + CUBE_VERTS[ci][2];
 
-    short oldDist = std::abs(grid(subx, suby, subz));
+    short oldDist =grid(subx, suby, subz);
     if (oldDist > shortd) {
-      if (normal.dot(trigPt) < 0) {
-        grid(subx, suby, subz) = -shortd;
-      } else {
         grid(subx, suby, subz) = shortd;
-      }
     }
   }
 

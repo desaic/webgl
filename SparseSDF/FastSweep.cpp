@@ -108,6 +108,20 @@ void CloseExterior(Array3D<short>& dist, short far) {
   }
 }
 
+
+void FastSweep(short* vals,unsigned N, float voxSize, float unit, float band)
+{
+  Array3D<short> arr(N, N, N);
+  std::vector<short>& data = arr.GetData();
+  for (size_t i = 0; i < data.size(); i++) {
+    data[i] = vals[i];
+  }
+  FastSweep(arr, voxSize, unit, band);
+  for (size_t i = 0; i < data.size(); i++) {
+    vals[i] = data[i];
+  }
+}
+
 void FastSweep(Array3D<short>& dist, float voxSize, float unit, float band)
 {
   Vec3u gridSize = dist.GetSize();
@@ -127,9 +141,6 @@ void FastSweep(Array3D<short>& dist, float voxSize, float unit, float band)
       dst[i] = true;
     }
   } 
-
-  //close mesh so no negative value leaks out
-  CloseExterior(dist, far);
 
   const unsigned NSweeps = 8;
   const int DIRS[NSweeps][3] = {{-1, -1, 1}, {1, -1, 1}, {1, 1, 1}, {-1, 1, 1},
