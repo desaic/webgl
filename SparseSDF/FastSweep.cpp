@@ -21,9 +21,95 @@ void Sort3f(float * arr) {
   }
 }
 
+void CloseExterior(Array3D<short>& dist, short far) {
+  Vec3u gridSize = dist.GetSize();
+  for (unsigned k = 0; k < gridSize[2]; k++) {
+    for (unsigned j = 0; j < gridSize[1]; j++) {
+      for (unsigned i = 0; i < gridSize[0]; i++) {
+        short d = dist(i, j, k);
+        if (d >= 0 && d < far) {
+          // found a positive value enclosing this row
+          break;
+        }
+        if (d < 0) {
+          dist(i, j, k) = -d;
+          break;
+        }
+      }
+      for (unsigned i = 0; i < gridSize[0]; i++) {
+        unsigned ix = gridSize[0] - i - 1;
+        short d = dist(ix, j, k);
+        if (d >= 0 && d < far) {
+          // found a positive value enclosing this row
+          break;
+        }
+        if (d < 0) {
+          dist(ix, j, k) = -d;
+          break;
+        }
+      }
+    }
+  }
+  // along y
+  for (unsigned k = 0; k < gridSize[2]; k++){
+    for (unsigned i = 0; i < gridSize[0]; i++) {
+      for (unsigned j = 0; j < gridSize[1]; j++) {
+        short d = dist(i, j, k);
+        if (d >= 0 && d < far) {
+          // found a positive value enclosing this row
+          break;
+        }
+        if (d < 0) {
+          dist(i, j, k) = -d;
+          break;
+        }
+      }
+      for (unsigned j = 0; j < gridSize[1]; j++) {
+        unsigned iy = gridSize[1] - j - 1;
+        short d = dist(i, iy, k);
+        if (d >= 0 && d < far) {
+          // found a positive value enclosing this row
+          break;
+        }
+        if (d < 0) {
+          dist(i, iy, k) = -d;
+          break;
+        }
+      }
+    }
+  }
+
+  for (unsigned j = 0; j < gridSize[1]; j++) {
+    for (unsigned i = 0; i < gridSize[0]; i++) {
+      for (unsigned k = 0; k < gridSize[2]; k++) {
+        short d = dist(i, j, k);
+        if (d >= 0 && d < far) {
+          // found a positive value enclosing this row
+          break;
+        }
+        if (d < 0) {
+          dist(i, j, k) = -d;
+          break;
+        }
+      }
+      for (unsigned k = 0; k < gridSize[2]; k++) {
+        unsigned iz = gridSize[2] - k - 1;
+        short d = dist(i, j, iz);
+        if (d >= 0 && d < far) {
+          // found a positive value enclosing this row
+          break;
+        }
+        if (d < 0) {
+          dist(i, j, iz) = -d;
+          break;
+        }
+      }
+    }
+  }
+}
+
 void FastSweep(Array3D<short>& dist, float voxSize, float unit, float band)
 {
-  
   Vec3u gridSize = dist.GetSize();
   if (gridSize[0] == 0 || gridSize[1] == 0 || gridSize[2] == 0) {
     return;
@@ -40,7 +126,11 @@ void FastSweep(Array3D<short>& dist, float voxSize, float unit, float band)
     if (src[i] < far) {
       dst[i] = true;
     }
-  }
+  } 
+
+  //close mesh so no negative value leaks out
+  CloseExterior(dist, far);
+
   const unsigned NSweeps = 8;
   const int DIRS[NSweeps][3] = {{-1, -1, 1}, {1, -1, 1}, {1, 1, 1}, {-1, 1, 1},
                                 {-1, -1, -1}, {1, -1, -1}, {1, 1, -1}, {-1, 1, -1}};
@@ -143,23 +233,5 @@ void FastSweep(Array3D<short>& dist, float voxSize, float unit, float band)
         }//i
       }//j
     }//k    
-        unsigned i0 = 58;
-    unsigned j0 = 13;
-    unsigned k0 = 32;
-    for (unsigned j = j0; j < j0 + 3; j++) {
-      for (unsigned i = i0; i < i0 + 3; i++) {
-        cout << dist(i, j, k0) << " ";
-      }
-      cout << "\n";
-    }
-    cout << "\n";
-
-    for (unsigned j = j0; j < j0 + 3; j++) {
-      for (unsigned i = i0; i < i0 + 3; i++) {
-        cout << int(frozen(i, j, k0)) << " ";
-      }
-      cout << "\n";
-    }
-    cout << "\n";  
   }//s
 }

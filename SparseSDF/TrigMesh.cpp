@@ -67,6 +67,13 @@ Vec3f TrigMesh::GetNormal(unsigned tIdx, const Vec3f& bary) {
     n[1] = nt[i0 + 1];
     n[2] = nt[i0 + 2];
   }
+
+  //size_t i0 = 3 * size_t(tIdx);
+
+  //Vec3f n0 = nv[t[i0]];
+  //Vec3f n1 = nv[t[i0+1]];
+  //Vec3f n2 = nv[t[i0+2]];
+  //n = bary[0] * n0 + bary[1] * n1 + bary[2] * n2;
   return n;
 }
 
@@ -139,9 +146,6 @@ void TrigMesh::ComputeVertNormals() {
           angle = std::acos(dot / sd);
         } else {
           angle = epsAngle;
-        }
-        if (std::isnan(angle)) {
-          std::cout << "debug\n";
         }
       }
       size_t vIdx = t[tIdx + v0];

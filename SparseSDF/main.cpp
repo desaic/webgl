@@ -425,9 +425,6 @@ void GetSDFSlice(const AdapSDF& sdf, Array2D8u &slice, Vec3f sliceRes, float z) 
   Vec2u sliceSize = slice.GetSize();
   for (unsigned row = 0; row < sliceSize[1]; row++) {
     for (unsigned col = 0; col < sliceSize[0]; col++) {
-      if (col == 2346 && row == 718) {
-        std::cout << "debug\n";
-      }
       Vec3f x((col +0.5f)* sliceRes[0], (row+0.5f)*sliceRes[1], z);
       float dist = sdf.GetCoarseDist(x+sdf.origin);
       if (dist < 0.58&&dist>-0.58) {
@@ -513,7 +510,7 @@ void TestSDF() {
   
   //std::string fileName = "F:/dolphin/meshes/fish/salmon.stl";
   //std::string fileName = "F:/dolphin/meshes/lattice_big/MeshLattice.stl";
-  // mesh1.LoadStl(fileName);
+   //mesh1.LoadStl(fileName);
   
   std::string fileName = "F:/dolphin/meshes/sdfTest/soleRigid1.obj";
   mesh1.LoadObj(fileName);
@@ -579,16 +576,16 @@ void TestSDF() {
   //                 (float*)(&box.vmin), 1);
   //SaveSDFImages("sdf_", sdf.dist);
 
-  //TrigMesh surf;
-  //short level = 0.2 / sdf.distUnit;
-  //MarchingCubes(sdf.dist, level, &surf, sdf.voxSize);
-  //for (size_t i = 0; i < surf.v.size(); i += 3) {
-  //  surf.v[i] = surf.v[i] + sdf.origin[0];
-  //  surf.v[i+1] = surf.v[i+1]+ sdf.origin[1];
-  //  surf.v[i+2] = surf.v[i+2] + sdf.origin[2];
-  //}
+  TrigMesh surf;
+  short level = 0.2 / sdf.distUnit;
+  MarchingCubes(sdf.dist, level, &surf, sdf.voxSize);
+  for (size_t i = 0; i < surf.v.size(); i += 3) {
+    surf.v[i] = surf.v[i] + sdf.origin[0];
+    surf.v[i+1] = surf.v[i+1]+ sdf.origin[1];
+    surf.v[i+2] = surf.v[i+2] + sdf.origin[2];
+  }
 
-  //surf.SaveObj("march"+std::to_string(int(level))+".obj");
+  surf.SaveObj("march"+std::to_string(int(level))+".obj");
   Array2D8u slice;
   Vec3u sdfSize = sdf.dist.GetSize();
   slice.Allocate(40*sdfSize[0],40*sdfSize[1]);

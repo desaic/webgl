@@ -27,16 +27,12 @@ void SDFVoxCb::operator()(unsigned x, unsigned y, unsigned z, size_t trigIdx) {
     unsigned vx = x + CUBE_VERTS[ci][0];
     unsigned vy = y + CUBE_VERTS[ci][1];
     unsigned vz = z + CUBE_VERTS[ci][2];
-    if (vx == 59 && vy == 13 && vz == 32) {
-     std::cout << "debug\n";
-      std::cout << m->nv[20101][0] << "\n";
-     std::cout << m->nv[20102][0] << "\n";
-    }
 
     Vec3f vertCoord(vx * h + sdf->origin[0], vy * h + sdf->origin[1],
                     vz * h + sdf->origin[2]);
     TrigDistInfo distInfo = PointTrigDist(vertCoord, (float*)(&trig));
     Vec3f normal = m->GetNormal(trigIdx, distInfo.bary);
+
     //vector from closest point to voxel point.
     Vec3f trigPt = vertCoord - distInfo.closest;
     float d = std::sqrt(distInfo.sqrDist);
