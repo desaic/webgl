@@ -664,6 +664,30 @@ void TestTrigDist() {
     std::cout << frame.v1x << " " << frame.v2x << " " << frame.v2y << "\n";
     std::cout << "\n";   
   }
+
+  tIdx = 1;
+  Array2D8u image;
+  image.Allocate(200, 200, 0);
+  Array2D8u typeImage(200,200);
+  float dx = 0.01;
+  float x0 = -0.5;
+  Vec2u imageSize = image.GetSize();
+  Triangle trig = mesh.GetTriangleVerts(tIdx);
+  Vec3f n = mesh.GetTrigNormal(tIdx);
+  ComputeTrigFrame((const float*)(trig.v),n, frame);
+  for (unsigned row = 0; row < imageSize[1];row++) {
+    for (unsigned col = 0; col < imageSize[0];col++) {
+      float px = x0 + col*dx;
+      float py = x0 + row * dx;
+      
+      TrigDistInfo info = PointTrigDist2D( px, py, frame.v1x, frame.v2x, frame.v2y);
+      float dist2 = info.sqrDist;
+      image(col,row) = uint8_t(std::sqrt(dist2) * 100);
+      typeImage(col, row) = int(info.type) * 30;
+    }
+  }
+  SavePng("trigDist.png", image);
+  SavePng("trigDistType.png", typeImage);
 }
 
 int main(int argc, char* argv[]) {
