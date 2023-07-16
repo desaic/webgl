@@ -1,19 +1,14 @@
 #ifndef SDF_VOX_CB
 #define SDF_VOX_CB
 
-#include "VoxCallback.h"
-#include "AdapSDF.h"
-#include "TrigMesh.h"
-
 #include <unordered_map>
 
-struct TrigInfo {
-  // triangle frame
-  Vec3f x, y, z;
-};
+#include "AdapSDF.h"
+#include "TrigMesh.h"
+#include "VoxCallback.h"
+#include "PointTrigDist.h"
 
 struct SDFVoxCb : public VoxCallback {
-  
   virtual void operator()(unsigned x, unsigned y, unsigned z,
                           size_t trigIdx) override;
   virtual void BeginTrig(size_t trigIdx);
@@ -23,10 +18,10 @@ struct SDFVoxCb : public VoxCallback {
   Array3D8u* grid = nullptr;
   AdapSDF* sdf = nullptr;
 
-  std::unordered_map<size_t, TrigInfo> trigInfo;
+  std::unordered_map<size_t, TrigFrame> trigInfo;
 };
 
-//computes values at the fine grid
+// computes values at the fine grid
 struct SDFFineVoxCb : public VoxCallback {
   virtual void operator()(unsigned x, unsigned y, unsigned z,
                           size_t trigIdx) override;

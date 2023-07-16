@@ -158,20 +158,33 @@ inline void GetMinInterior(const Vec2f& p0, float h0, const Vec2f& p1, float h1,
   p = ((float)1 - z) * p0 + z * p1;
 }
 
-void TriangleFrame(const float* trig, const Vec3f& n, Vec3f& x, Vec3f& y,
-                   Vec3f& z) {
-  x = Vec3f(trig[3] - trig[0], trig[4] - trig[1], trig[5] - trig[2]);
-  float xlen = x.norm();
+void ComputeTrigFrame(const float* trig, const Vec3f& n, TrigFrame& frame)
+{
+  frame.x = Vec3f(trig[3] - trig[0], trig[4] - trig[1], trig[5] - trig[2]);
+  float xlen = frame.x.norm();
   if (xlen > 0) {
-    x = (1.0f / xlen)*x;
+    frame.x = (1.0f / xlen)*frame.x;
   } 
-  z = n;
-  y = z.cross(x);
+  frame.z = n;
+  frame.y = frame.z.cross(frame.x);
+
+  frame.v1x = xlen;
+  Vec3f v2 = Vec3f(trig[6] - trig[0], trig[7] - trig[1], trig[8] - trig[2]);
+  frame.v2x = v2.dot(frame.x);
+  frame.v2y = v2.dot(frame.y);
 }
 
 TrigDistInfo PointTrigDist2D(float px, float py, float t1x, float t2x,
                              float t2y)
 {
-  TrigDistInfo info;
+  TrigDistInfo info;  
+  if (py <= 0) {
+    //V0, V1, or E01
+    if (px<0) {
+      info.type = TrigPointType::V0;
+      info.sqrDist = px * px + py * py;
+      return info;
+    }
+  }
   return info;
 }

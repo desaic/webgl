@@ -650,18 +650,19 @@ void TestSDF() {
 void TestTrigDist() {
   TrigMesh mesh;
   mesh.LoadObj("F:/dolphin/meshes/cube_simp.obj");
-  TrigInfo info;
+  TrigFrame frame;
   unsigned tIdx = 0;
   size_t numTrigs = mesh.t.size() / 3;
   for (; tIdx < numTrigs; tIdx++) {
     Triangle trig = mesh.GetTriangleVerts(tIdx);
     mesh.ComputeTrigNormals();
     Vec3f n = mesh.GetTrigNormal(tIdx);
-    TriangleFrame((const float*)(trig.v), n, info.x, info.y, info.z);
-    std::cout << info.x[0] << " " << info.x[1] << " " << info.x[2] << "\n";
-    std::cout << info.y[0] << " " << info.y[1] << " " << info.y[2] << "\n";
-    std::cout << info.z[0] << " " << info.z[1] << " " << info.z[2] << "\n";
-    std::cout << "\n";
+    ComputeTrigFrame((const float*)(trig.v), n, frame);
+    std::cout << frame.x[0] << " " << frame.x[1] << " " << frame.x[2] << "\n";
+    std::cout << frame.y[0] << " " << frame.y[1] << " " << frame.y[2] << "\n";
+    std::cout << frame.z[0] << " " << frame.z[1] << " " << frame.z[2] << "\n";
+    std::cout << frame.v1x << " " << frame.v2x << " " << frame.v2y << "\n";
+    std::cout << "\n";   
   }
 }
 

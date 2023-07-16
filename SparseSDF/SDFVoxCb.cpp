@@ -29,7 +29,7 @@ void SDFVoxCb::operator()(unsigned x, unsigned y, unsigned z, size_t trigIdx) {
     //something very wrong
     return;
   }
-  const TrigInfo& info = it->second;
+  const TrigFrame& frame = it->second;
 
   for (unsigned ci = 0; ci < NUM_CUBE_VERTS; ci++) {
     unsigned vx = x + CUBE_VERTS[ci][0];
@@ -74,9 +74,10 @@ void SDFVoxCb::BeginTrig(size_t trigIdx) {
   Vec3f x, y, z;
   Triangle trig = m->GetTriangleVerts(trigIdx);
   Vec3f n = m->GetTrigNormal(trigIdx);
-  TriangleFrame((float*)(trig.v),n, x, y, z);
-  TrigInfo info;
-  trigInfo[trigIdx]=info;
+  TrigFrame frame;
+  ComputeTrigFrame((float*)(trig.v),n, frame);
+  
+  trigInfo[trigIdx]=frame;
 }
 
 /// free any triangle specific data.
