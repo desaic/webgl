@@ -18,13 +18,13 @@ struct TrigDistInfo
 	Vec3f closest;
 };
 
-void GetMinEdge02(float & a11, float & b1, Vec2f& p);
-
-void GetMinEdge12(float a01, float a11, float b1,
-	float f10, float f01, Vec2f & p);
-
-void GetMinInterior(const Vec2f& p0, float h0,
-	const Vec2f& p1, float h1, Vec2f& p);
-
 //computes squared point triangle distance.
 TrigDistInfo PointTrigDist(const Vec3f& pt, float* trig);
+
+// v0 v1 is x axis. v0 is origin.
+// v1y = 0.
+// normal is z
+void TriangleFrame(const float* trig, const Vec3f& n, Vec3f& x, Vec3f& y,
+                   Vec3f& z);
+
+TrigDistInfo PointTrigDist2D(float px, float py, float t1x, float t2x,float t2y);

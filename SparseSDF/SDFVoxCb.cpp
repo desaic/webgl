@@ -23,6 +23,14 @@ void SDFVoxCb::operator()(unsigned x, unsigned y, unsigned z, size_t trigIdx) {
   float h = sdf->voxSize;
   voxelMin = h * voxelMin + sdf->origin;
   Vec3f voxelMax = voxelMin + Vec3f(h);
+
+  const auto it = trigInfo.find(trigIdx);
+  if (it == trigInfo.end()) {
+    //something very wrong
+    return;
+  }
+  const TrigInfo& info = it->second;
+
   for (unsigned ci = 0; ci < NUM_CUBE_VERTS; ci++) {
     unsigned vx = x + CUBE_VERTS[ci][0];
     unsigned vy = y + CUBE_VERTS[ci][1];
@@ -62,13 +70,22 @@ void SDFVoxCb::operator()(unsigned x, unsigned y, unsigned z, size_t trigIdx) {
   }
 }
 
-
 void SDFVoxCb::BeginTrig(size_t trigIdx) {
+  Vec3f x, y, z;
+  Triangle trig = m->GetTriangleVerts(trigIdx);
+  Vec3f n = m->GetTrigNormal(trigIdx);
+  TriangleFrame((float*)(trig.v),n, x, y, z);
+  TrigInfo info;
+  trigInfo[trigIdx]=info;
 }
 
 /// free any triangle specific data.
-void SDFVoxCb::EndTrig(size_t trigIdx) {}
-
+void SDFVoxCb::EndTrig(size_t trigIdx) {
+  auto it =trigInfo.find(trigIdx); 
+  if (it != trigInfo.end()) {
+    trigInfo.erase(it);
+  }  
+}
 
 void SDFFineVoxCb::operator()(unsigned x, unsigned y, unsigned z, size_t trigIdx) {
   // update distances of 8 vertices in the sdf->dist array

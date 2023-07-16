@@ -5,6 +5,13 @@
 #include "AdapSDF.h"
 #include "TrigMesh.h"
 
+#include <unordered_map>
+
+struct TrigInfo {
+  // triangle frame
+  Vec3f x, y, z;
+};
+
 struct SDFVoxCb : public VoxCallback {
   
   virtual void operator()(unsigned x, unsigned y, unsigned z,
@@ -15,6 +22,8 @@ struct SDFVoxCb : public VoxCallback {
   TrigMesh* m = nullptr;
   Array3D8u* grid = nullptr;
   AdapSDF* sdf = nullptr;
+
+  std::unordered_map<size_t, TrigInfo> trigInfo;
 };
 
 //computes values at the fine grid

@@ -10,6 +10,12 @@ struct SparseNode4 {
   static const unsigned GRID_SIZE = 4;
   SparseNode4() {}
 
+  ~SparseNode4() {
+    if (children != nullptr) {
+      delete[] children;
+    }
+  }
+
   void AddChildrenDense(T initVal) {
     if (!HasChildren()) {
       AllocateChildren();
@@ -65,11 +71,6 @@ struct SparseNode4 {
   }
   bool HasChildren() const { return children != nullptr; }
 
-  ~SparseNode4() {
-    if (children != nullptr) {
-      delete[] children;
-    }
-  }
   bool HasChild(unsigned x, unsigned y, unsigned z) const {
     if (children == nullptr) {
       return false;
