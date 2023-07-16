@@ -3,7 +3,7 @@
 
 #include "Array3D.h"
 #include "SparseNode4.h"
-
+#include "Sparse3DMap.h"
 // a fixed 5x5x5 grid.
 struct FixedGrid5 {
   static const unsigned N = 5;
@@ -66,6 +66,7 @@ class AdapSDF {
   SparseNode4<unsigned>& GetSparseNode4(unsigned x, unsigned y, unsigned z);
   const SparseNode4<unsigned>& GetSparseNode4(unsigned x, unsigned y,
                                               unsigned z) const;
+  unsigned GetSparseCellIdx(unsigned x, unsigned y, unsigned z) const;
   /// 2 bils.
   static const size_t MAX_NUM_VOX = 1u << 31;
 
@@ -87,6 +88,9 @@ class AdapSDF {
   // only a sparse subset of voxels have refined cells.
   // sparse nodes are stored at 1/4 resolution of the full grid.
   Array3D<SparseNode4<unsigned>> sparseGrid;
+
+  // temporary list of triangles for each coarse voxel.
+  Array3D<SparseNode4<unsigned>> trigList; 
 
   // flat list of sparse cell data indexed by sparseGrid.
   // index 0 is reserved for empty cells.

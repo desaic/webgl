@@ -1,6 +1,6 @@
 #include "AdapSDF.h"
 #include "MergeClosePoints.h"
-
+#include <iostream>
 AdapSDF::AdapSDF() { sparseData.resize(1); }
 
 int AdapSDF::Allocate(unsigned sx, unsigned sy, unsigned sz) {
@@ -128,10 +128,12 @@ float AdapSDF::GetFineDist(const Vec3f& x) const {
   Vec3f fineCoord = local - voxSize * Vec3f(ix, iy, iz);
   const unsigned N = FixedGrid5::N;
   float fine_h = voxSize / (N - 1);
+  //handle case where point is on right wall etc.
+  float indexEps = 1e-3;
   Vec3f fineIdx = (1.0f / fine_h) * fineCoord;
-  unsigned fx = unsigned(fineIdx[0]);
-  unsigned fy = unsigned(fineIdx[1]);
-  unsigned fz = unsigned(fineIdx[2]);
+  unsigned fx = unsigned(fineIdx[0] - indexEps);
+  unsigned fy = unsigned(fineIdx[1] - indexEps);
+  unsigned fz = unsigned(fineIdx[2] - indexEps);
   if (fx>N-2 || fy>N-2||fz>N-2) {
     return coarseDist;
   }
@@ -147,13 +149,7 @@ float AdapSDF::GetFineDist(const Vec3f& x) const {
   float v1 = b * v01 + (1 - b) * v11;
   float v = c * v0 + (1 - c) * v1;
   v *= distUnit;
-  if (std::abs(v)<std::abs(coarseDist)) {
-    if (coarseDist < 0) {
-      return -v;
-    }
-    return v;
-  }
-  return coarseDist;
+  return v;
 }
 
 SparseNode4<unsigned>& AdapSDF::GetSparseNode4(unsigned x, unsigned y,
@@ -165,4 +161,12 @@ SparseNode4<unsigned>& AdapSDF::GetSparseNode4(unsigned x, unsigned y,
 const SparseNode4<unsigned>& AdapSDF::GetSparseNode4(unsigned x, unsigned y,
                                                unsigned z)const {
   return sparseGrid(x / 4, y / 4, z / 4);
+}
+unsigned AdapSDF::GetSparseCellIdx(unsigned x, unsigned y, unsigned z) const {
+  const SparseNode4<unsigned>& node = GetSparseNode4(x, y, z);
+  if (!node.HasChild(x & 3, y & 3, z & 3)) {
+    return 0;
+  }
+  unsigned nodeIdx = *(node.GetChild(x & 3, y & 3, z & 3));
+  return nodeIdx;
 }

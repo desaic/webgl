@@ -11,6 +11,7 @@
 #include "Vec3.h"
 #include "lodepng.h"
 #include "meshutil.h"
+#include "PointTrigDist.h"
 
 void MirrorCubicStructure(const Array3D8u& s_in, Array3D8u& s_out);
 
@@ -427,15 +428,18 @@ void GetSDFSlice(const AdapSDF& sdf, Array2D8u &slice, Vec3f sliceRes, float z) 
     for (unsigned col = 0; col < sliceSize[0]; col++) {
       Vec3f x((col +0.5f)* sliceRes[0], (row+0.5f)*sliceRes[1], z);
       float dist = sdf.GetCoarseDist(x+sdf.origin);
-      if (dist < 0.58&&dist>-0.58) {
+      if (dist < 0.6&&dist>-0.6) {
         slice(col, row) = uint8_t(dist * 200+127);
       }
-      if (dist >= 0.58) {
+      if (dist >= 0.6) {
         slice(col, row) = 255;
       }
-      if (dist <= -0.58) {
+      if (dist <= -0.6) {
         slice(col, row) = 0;
       }
+      //if (dist > -0.05 && dist < 0.05) {
+      //  slice(col, row) = 255;
+      //}
     }
   }
 }
@@ -446,15 +450,21 @@ void GetSDFFineSlice(const AdapSDF& sdf, Array2D8u& slice, Vec3f sliceRes,
   for (unsigned row = 0; row < sliceSize[1]; row++) {
     for (unsigned col = 0; col < sliceSize[0]; col++) {
       Vec3f x((col + 0.5f) * sliceRes[0], (row + 0.5f) * sliceRes[1], z);
+      //if (row == 200 && col == 1239) {
+      //  std::cout << "debug\n";
+      //}
       float dist = sdf.GetFineDist(x + sdf.origin);
-      if (dist < 0.58 && dist > -0.58) {
+      if (dist < 0.6 && dist > -0.6) {
         slice(col, row) = uint8_t(dist * 200 + 127);
       }
-      if (dist >= 0.58) {
+      if (dist >= 0.6) {
         slice(col, row) = 255;
       }
-      if (dist <= -0.58) {
+      if (dist <= -0.6) {
         slice(col, row) = 0;
+      }
+      if (dist > -0.05 && dist < 0.05) {
+        slice(col, row) = 255;
       }
     }
   }
@@ -578,9 +588,38 @@ void TestSDF() {
   FastSweep(sdf.dist, sdf.voxSize, sdf.distUnit, sdf.band);
   ms = timer.ElapsedMS();
   std::cout << "sweep time " << ms << "\n";
+  timer.Start();
+  
+  Vec3u gridSize = sdf.dist.GetSize();
+  for (unsigned z = 0; z < gridSize[2] - 1; z++) {
+    for (unsigned y = 0; y < gridSize[1] - 1 ; y++) {
+      for (unsigned x = 0; x < gridSize[0]-1; x++) {
+        if (!sdf.HasCellSparse(Vec3u(x, y, z))) {
+          continue;
+        }
+        unsigned sparseIdx = sdf.GetSparseCellIdx(x, y, z);
+        if (sparseIdx == 0) {
+          //0 reserved for empty cell
+          continue;
+        }
+        FixedGrid5& fineGrid = sdf.sparseData[sparseIdx];
+        fineGrid(0, 0, 0) = sdf.dist(x, y, z);
+        fineGrid(4, 0, 0) = sdf.dist(x+1, y, z);
+        fineGrid(0, 4, 0) = sdf.dist(x, y + 1, z);
+        fineGrid(4, 4, 0) = sdf.dist(x + 1, y + 1, z);
+        fineGrid(0, 0, 4) = sdf.dist(x, y, z + 1);
+        fineGrid(4, 0, 4) = sdf.dist(x + 1, y, z + 1);
+        fineGrid(0, 4, 4) = sdf.dist(x, y + 1, z + 1);
+        fineGrid(4, 4, 4) = sdf.dist(x + 1, y + 1, z + 1);
+      }
+    }
+  }
   for (size_t i = 0; i < sdf.sparseData.size(); i++) {
     FastSweep(sdf.sparseData[i].val,sdf.sparseData[i].N, sdf.voxSize/4, sdf.distUnit, sdf.band);
   }
+  ms = timer.ElapsedMS();
+  std::cout << "fine sweep time " << ms << "\n";
+  
   //SaveVolAsObjMesh("voxels.obj", grid, (float*)(&conf.unit),
   //                 (float*)(&box.vmin), 1);
   //SaveSDFImages("sdf_", sdf.dist);
@@ -597,10 +636,10 @@ void TestSDF() {
 
   Array2D8u slice;
   Vec3u sdfSize = sdf.dist.GetSize();
-  slice.Allocate(10*sdfSize[0],10*sdfSize[1]);
-  float z = 5;
+  slice.Allocate(20*sdfSize[0],20*sdfSize[1]);
+  float z = 15;
   timer.Start();
-  GetSDFFineSlice(sdf, slice, Vec3f(0.04f,0.04f,0.04f),z);
+  GetSDFFineSlice(sdf, slice, Vec3f(0.02f, 0.02f, 0.02f), z);
   ms = timer.ElapsedMS();
   std::cout << "slice time " << ms << "\n";
   std::string sliceFile = "slice" + std::to_string(int(z / 0.001)) + ".png";
@@ -608,9 +647,28 @@ void TestSDF() {
 
 }
 
-int main(int argc, char* argv[]) {
-  TestSDF();
+void TestTrigDist() {
+  TrigMesh mesh;
+  mesh.LoadObj("F:/dolphin/meshes/cube_simp.obj");
+  TrigInfo info;
+  unsigned tIdx = 0;
+  size_t numTrigs = mesh.t.size() / 3;
+  for (; tIdx < numTrigs; tIdx++) {
+    Triangle trig = mesh.GetTriangleVerts(tIdx);
+    mesh.ComputeTrigNormals();
+    Vec3f n = mesh.GetTrigNormal(tIdx);
+    TriangleFrame((const float*)(trig.v), n, info.x, info.y, info.z);
+    std::cout << info.x[0] << " " << info.x[1] << " " << info.x[2] << "\n";
+    std::cout << info.y[0] << " " << info.y[1] << " " << info.y[2] << "\n";
+    std::cout << info.z[0] << " " << info.z[1] << " " << info.z[2] << "\n";
+    std::cout << "\n";
+  }
+}
 
+int main(int argc, char* argv[]) {
+  TestTrigDist();
+  TestSDF();
+  return 0;
   Array3D8u eyeVol;
   std::string imageDir = "F:/dolphin/meshes/eye0531/slices/";
   int maxIndex = 760;
