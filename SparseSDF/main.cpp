@@ -668,7 +668,6 @@ void TestTrigDist() {
   tIdx = 1;
   Array2D8u image;
   image.Allocate(200, 200, 0);
-  Array2D8u typeImage(200,200);
   float dx = 0.01;
   float x0 = -0.5;
   Vec2u imageSize = image.GetSize();
@@ -680,14 +679,14 @@ void TestTrigDist() {
       float px = x0 + col*dx;
       float py = x0 + row * dx;
       
-      TrigDistInfo info = PointTrigDist2D( px, py, frame.v1x, frame.v2x, frame.v2y);
+      TrigDistInfo info = PointTrigDist2D(px, py, frame.v1x, frame.v2x,
+                                          frame.v2y, frame.e2Len, frame.e3Len);
       float dist2 = info.sqrDist;
-      image(col,row) = uint8_t(std::sqrt(dist2) * 100);
-      typeImage(col, row) = int(info.type) * 30;
+      image(col,row) = uint8_t(info.bary[2] * 100);
+
     }
   }
-  SavePng("trigDist.png", image);
-  SavePng("trigDistType.png", typeImage);
+  SavePng("bary2.png", image);
 }
 
 int main(int argc, char* argv[]) {

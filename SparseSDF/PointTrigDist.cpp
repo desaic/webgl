@@ -172,26 +172,34 @@ void ComputeTrigFrame(const float* trig, const Vec3f& n, TrigFrame& frame)
   Vec3f v2 = Vec3f(trig[6] - trig[0], trig[7] - trig[1], trig[8] - trig[2]);
   frame.v2x = v2.dot(frame.x);
   frame.v2y = v2.dot(frame.y);
+  Vec3f e2 = Vec3f(trig[6] - trig[3], trig[7] - trig[4], trig[8] - trig[5]);
+  frame.e2Len = e2.norm();
+  frame.e3Len = v2.norm();
 }
 
 TrigDistInfo PointTrigDist2D(float px, float py, float t1x, float t2x,
-                             float t2y)
+                             float t2y,float e2Len, float e3Len)
 {
+  float eps = 1e-12;
   TrigDistInfo info;  
   if (py <= 0) {
     //V0, V1, or E01
     if (px<=0) {
       info.type = TrigPointType::V0;
       info.sqrDist = px * px + py * py;
+      info.bary = Vec3f(1, 0, 0);
       return info;
     }
     if (px > t1x) {
       info.type = TrigPointType::V1;
       info.sqrDist = (px - t1x) * (px - t1x) + py * py;
+      info.bary = Vec3f(0, 1, 0);
       return info;
     }
     info.type = TrigPointType::E01;
     info.sqrDist = py * py;
+    float l1 = px/(eps+t1x);
+    info.bary = Vec3f(1-l1, l1, 0);
     return info;
   }
 
@@ -201,20 +209,24 @@ TrigDistInfo PointTrigDist2D(float px, float py, float t1x, float t2x,
   Vec2f pv2(px - t2x, py-t2y);
   Vec2f e12(t2x - t1x, t2y);
   float edgeDist = pv1.dot(n12);
-  float eps = 1e-12;
+  
   if (edgeDist >= 0) {
     if (pv1.dot(e12)<=0) {
       info.type = TrigPointType::V1;
       info.sqrDist = (px - t1x) * (px - t1x) + py * py;
+      info.bary = Vec3f(0, 1, 0);
       return info;
     }
     if (pv2.dot(e12) >= 0) {
       info.type = TrigPointType::V2;
       info.sqrDist = pv2.norm2();
+      info.bary = Vec3f(0, 0, 1);
       return info;
     }
     info.type = TrigPointType::E12;   
     info.sqrDist = edgeDist * edgeDist / (eps+n12.norm2());
+    float l2 = pv1.dot(e12) / (eps+e2Len);
+    info.bary = Vec3f(0, 1 - l2, l2);
     return info;
   }
   //testE02
@@ -224,19 +236,26 @@ TrigDistInfo PointTrigDist2D(float px, float py, float t1x, float t2x,
     if (pv2.dot(Vec2f(t2x, t2y))>=0) {
       info.type = TrigPointType::V2;
       info.sqrDist = pv2.norm2();
+      info.bary = Vec3f(0, 0, 1);
       return info;
     }
     if (px*t2x+ py*t2y <= 0) {
       info.type = TrigPointType::V0;
       info.sqrDist = px*px+py*py;
+      info.bary = Vec3f(1, 0, 0);
       return info;
     }
     info.type = TrigPointType::E02;
     info.sqrDist = edgeDist * edgeDist / (eps + n20.norm2());
+    float l2 = (px * t2x+py*t2y) / (eps+e3Len);
+    info.bary = Vec3f( 1 - l2,0, l2);
     return info;
   }
   //interior
   info.type = TrigPointType::FACE;
   info.sqrDist = 0;
+  float l2 = py / (eps + t2y);
+  float l1 = (px - (l2 * t2x)) / (eps + t1x);
+  info.bary = Vec3f(1 - l1 - l2, l1, l2);
   return info;
 }
