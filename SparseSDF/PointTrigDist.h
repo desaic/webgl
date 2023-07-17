@@ -28,9 +28,6 @@ struct TrigFrame {
   float v1x = 0;
   float v2x = 0;
   float v2y = 0;
-
-  float e2Len = 0;
-  float e3Len = 0;
 };
 
 // computes squared point triangle distance.
@@ -42,4 +39,4 @@ TrigDistInfo PointTrigDist(const Vec3f& pt, float* trig);
 void ComputeTrigFrame(const float* trig, const Vec3f& n, TrigFrame & frame);
 
 TrigDistInfo PointTrigDist2D(float px, float py, float t1x, float t2x,
-                             float t2y, float e2Len, float e3Len);
+                             float t2y);

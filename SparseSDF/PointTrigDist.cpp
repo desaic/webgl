@@ -172,13 +172,10 @@ void ComputeTrigFrame(const float* trig, const Vec3f& n, TrigFrame& frame)
   Vec3f v2 = Vec3f(trig[6] - trig[0], trig[7] - trig[1], trig[8] - trig[2]);
   frame.v2x = v2.dot(frame.x);
   frame.v2y = v2.dot(frame.y);
-  Vec3f e2 = Vec3f(trig[6] - trig[3], trig[7] - trig[4], trig[8] - trig[5]);
-  frame.e2Len = e2.norm();
-  frame.e3Len = v2.norm();
 }
 
 TrigDistInfo PointTrigDist2D(float px, float py, float t1x, float t2x,
-                             float t2y,float e2Len, float e3Len)
+                             float t2y)
 {
   float eps = 1e-12;
   TrigDistInfo info;  
@@ -225,7 +222,7 @@ TrigDistInfo PointTrigDist2D(float px, float py, float t1x, float t2x,
     }
     info.type = TrigPointType::E12;   
     info.sqrDist = edgeDist * edgeDist / (eps+n12.norm2());
-    float l2 = pv1.dot(e12) / (eps+e2Len);
+    float l2 = pv1.dot(e12) / (eps+n12.norm2());
     info.bary = Vec3f(0, 1 - l2, l2);
     return info;
   }
@@ -247,7 +244,8 @@ TrigDistInfo PointTrigDist2D(float px, float py, float t1x, float t2x,
     }
     info.type = TrigPointType::E02;
     info.sqrDist = edgeDist * edgeDist / (eps + n20.norm2());
-    float l2 = (px * t2x+py*t2y) / (eps+e3Len);
+    //abuse of local variable. n20.norm2() = e20.norm2()=t2x^2+t2y^2.
+    float l2 = (px * t2x+py*t2y) / (eps + n20.norm2());
     info.bary = Vec3f( 1 - l2,0, l2);
     return info;
   }

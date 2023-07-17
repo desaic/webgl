@@ -38,15 +38,21 @@ void SDFVoxCb::operator()(unsigned x, unsigned y, unsigned z, size_t trigIdx) {
 
     Vec3f vertCoord(vx * h + sdf->origin[0], vy * h + sdf->origin[1],
                     vz * h + sdf->origin[2]);
-    TrigDistInfo distInfo = PointTrigDist(vertCoord, (float*)(&trig));
-    Vec3f normal = m->GetNormal(trigIdx, distInfo.bary);
     Vec3f pv0 = vertCoord - trig.v[0];
-    float px = vertCoord.dot(frame.x);
-    float py = vertCoord.dot(frame.y);
-    distInfo = PointTrigDist2D(px, py, frame.v1x, frame.v2x, frame.v2y,frame.e2Len, frame.e3Len);
-    //vector from closest point to voxel point.
-    Vec3f trigPt = vertCoord - distInfo.closest;
-    float d = std::sqrt(distInfo.sqrDist);
+    float px = pv0.dot(frame.x);
+    float py = pv0.dot(frame.y);
+    TrigDistInfo distInfo = PointTrigDist2D(
+        px, py, frame.v1x, frame.v2x, frame.v2y);
+    Vec3f normal = m->GetNormal(trigIdx, distInfo.bary);
+    Vec3f closest = distInfo.bary[0] * trig.v[0] +
+                    distInfo.bary[1] * trig.v[1] + distInfo.bary[2] * trig.v[2];
+    float trigz = pv0.dot(frame.z);
+    // vector from closest point to voxel point.
+    Vec3f trigPt = vertCoord - closest;
+    float d = std::sqrt(distInfo.sqrDist+trigz*trigz);
+    if (std::abs(trigPt.norm() -d)>0.1 ) {
+      std::cout << "debug\n";
+    }
     d = d / sdf->distUnit;
     short shortd = short(d);
     short oldDist = std::abs(sdf->dist(vx, vy, vz));
@@ -56,7 +62,7 @@ void SDFVoxCb::operator()(unsigned x, unsigned y, unsigned z, size_t trigIdx) {
       } else {
         sdf->dist(vx, vy, vz) = shortd;
       }
-    }    
+    }
   }
 
   //allocate  fine grid.
