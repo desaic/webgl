@@ -11,6 +11,17 @@ bool PtInBox(const Vec3f& pt, const Vec3f& boxMin, Vec3f& boxMax) {
   return true;
 }
 
+Vec3f GetPseudoNormal(const TrigMesh& mesh, size_t trigIdx,
+                      TrigPointType distType) {
+  Vec3f normal;
+  switch (distType) { 
+  case TrigPointType::V0:
+      return normal;
+  default:
+      return mesh.GetTrigNormal(trigIdx);
+  }
+}
+
 void SDFVoxCb::operator()(unsigned x, unsigned y, unsigned z, size_t trigIdx) {
   // update distances of 8 vertices in the sdf->dist array
   Triangle trig = m->GetTriangleVerts(trigIdx);
@@ -50,9 +61,7 @@ void SDFVoxCb::operator()(unsigned x, unsigned y, unsigned z, size_t trigIdx) {
     // vector from closest point to voxel point.
     Vec3f trigPt = vertCoord - closest;
     float d = std::sqrt(distInfo.sqrDist+trigz*trigz);
-    if (std::abs(trigPt.norm() -d)>0.1 ) {
-      std::cout << "debug\n";
-    }
+
     d = d / sdf->distUnit;
     short shortd = short(d);
     short oldDist = std::abs(sdf->dist(vx, vy, vz));
@@ -134,16 +143,33 @@ void SDFFineVoxCb::operator()(unsigned x, unsigned y, unsigned z, size_t trigIdx
   unsigned fineX = x % (N - 1);
   unsigned fineY = y % (N - 1);
   unsigned fineZ = z % (N - 1);
-
+  const auto it = trigInfo.find(trigIdx);
+  if (it == trigInfo.end()) {
+    // something very wrong
+    return;
+  }
+  const TrigFrame& frame = it->second;
+  
   for (unsigned ci = 0; ci < NUM_CUBE_VERTS; ci++) {
     unsigned vx = x + CUBE_VERTS[ci][0];
     unsigned vy = y + CUBE_VERTS[ci][1];
     unsigned vz = z + CUBE_VERTS[ci][2];
     Vec3f vertCoord(vx * h + sdf->origin[0], vy * h + sdf->origin[1],
                     vz * h + sdf->origin[2]);
-    TrigDistInfo distInfo = PointTrigDist(vertCoord, (float*)(&trig));
-    float d = std::sqrt(distInfo.sqrDist);
-    d = d / sdf->distUnit;
+    Vec3f pv0 = vertCoord - trig.v[0];
+    float px = pv0.dot(frame.x);
+    float py = pv0.dot(frame.y);
+    TrigDistInfo distInfo =
+        PointTrigDist2D(px, py, frame.v1x, frame.v2x, frame.v2y);
+    Vec3f normal = m->GetNormal(trigIdx, distInfo.bary);
+    Vec3f closest = distInfo.bary[0] * trig.v[0] +
+                    distInfo.bary[1] * trig.v[1] + distInfo.bary[2] * trig.v[2];
+    float trigz = pv0.dot(frame.z);
+    // vector from closest point to voxel point.
+    Vec3f trigPt = vertCoord - closest;
+    float d = std::sqrt(distInfo.sqrDist + trigz * trigz);
+
+
     short shortd = short(d);
     
     unsigned subx = fineX + CUBE_VERTS[ci][0];
@@ -156,4 +182,21 @@ void SDFFineVoxCb::operator()(unsigned x, unsigned y, unsigned z, size_t trigIdx
     }
   }
 
+}
+
+void SDFFineVoxCb::BeginTrig(size_t trigIdx) {
+  Vec3f x, y, z;
+  Triangle trig = m->GetTriangleVerts(trigIdx);
+  Vec3f n = m->GetTrigNormal(trigIdx);
+  TrigFrame frame;
+  ComputeTrigFrame((float*)(trig.v), n, frame);
+  trigInfo[trigIdx] = frame;
+}
+
+/// free any triangle specific data.
+void SDFFineVoxCb::EndTrig(size_t trigIdx) {
+  auto it = trigInfo.find(trigIdx);
+  if (it != trigInfo.end()) {
+    trigInfo.erase(it);
+  }
 }

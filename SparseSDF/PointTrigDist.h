@@ -1,10 +1,3 @@
-// David Eberly, Geometric Tools, Redmond WA 98052
-// Copyright (c) 1998-2021
-// Distributed under the Boost Software License, Version 1.0.
-// https://www.boost.org/LICENSE_1_0.txt
-// https://www.geometrictools.com/License/Boost/LICENSE_1_0.txt
-// Version: 4.0.2019.08.13
-
 #pragma once
 
 #include "Vec2.h"
@@ -29,9 +22,6 @@ struct TrigFrame {
   float v2x = 0;
   float v2y = 0;
 };
-
-// computes squared point triangle distance.
-TrigDistInfo PointTrigDist(const Vec3f& pt, float* trig);
 
 // v0 v1 is x axis. v0 is origin.
 // v1y = 0.
