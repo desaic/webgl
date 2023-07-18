@@ -529,7 +529,6 @@ void TestSDF() {
   
   //SavePseudoNormals(mesh1,"psnormal.obj");
   AdapSDF sdf;
-  Array3D8u grid;
   voxconf conf;
 
   BBox box;
@@ -555,8 +554,6 @@ void TestSDF() {
   Utils::Stopwatch timer;
   timer.Start();
   SDFVoxCb cb;
-  grid.Allocate(conf.gridSize, 0);
-  cb.grid = &grid;
   cb.sdf = &sdf;
   cb.m = &mesh1;
   cpu_voxelize_mesh(conf, &mesh1, cb);
@@ -566,7 +563,6 @@ void TestSDF() {
 
   timer.Start();
   SDFFineVoxCb finecb;
-  finecb.grid = &grid;
   finecb.sdf = &sdf;
   finecb.m = &mesh1;
   count = (box.vmax - box.vmin) / conf.unit;

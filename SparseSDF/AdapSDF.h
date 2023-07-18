@@ -92,8 +92,9 @@ class AdapSDF {
   // flat list of sparse cell data indexed by sparseGrid.
   // index 0 is reserved for empty cells.
   std::vector<FixedGrid5> sparseData;
-  //temporary lists of triangles intersecting each coarse cell.
-  //not used during distance computation.
+  //temporary lists of triangles intersecting coarse voxels around.
+  // coarse vertices.
+  //not used during distance interpolation.
   std::vector<std::vector<size_t> > trigList;
   // mm. default is 1um.
   float distUnit = 0.001f;
