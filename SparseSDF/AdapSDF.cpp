@@ -1,6 +1,7 @@
 #include "AdapSDF.h"
 #include "MergeClosePoints.h"
 #include <iostream>
+
 AdapSDF::AdapSDF() { sparseData.resize(1); }
 
 int AdapSDF::Allocate(unsigned sx, unsigned sy, unsigned sz) {
@@ -21,55 +22,20 @@ int AdapSDF::Allocate(unsigned sx, unsigned sy, unsigned sz) {
 }
 
 FixedGrid5& AdapSDF::AddSparseCell(const Vec3u& gridIdx) {
-  SparseNode4<unsigned>& node =
-      GetSparseNode4(gridIdx[0], gridIdx[1], gridIdx[2]);
-
-  if (!node.HasChildren()) {
-    node.AddChildrenDense(0);
-  }
-
-  Vec3u fineIdx(gridIdx[0] & 3, gridIdx[1] & 3, gridIdx[2] & 3);
-  unsigned* cellIdxPtr = node.AddChildDense(fineIdx[0], fineIdx[1], fineIdx[2]);
-  unsigned cellIdx = *cellIdxPtr;
-  if (cellIdx == 0) {
-    // uninitialized cell
-    cellIdx = unsigned(sparseData.size());
-    *cellIdxPtr = cellIdx;
-    sparseData.push_back(FixedGrid5());
-  }
+  unsigned cellIdx = sparseGrid.AddDense(gridIdx[0],gridIdx[1],gridIdx[2]);
+  sparseData.push_back(FixedGrid5());
   return sparseData[cellIdx];
 }
 
 bool AdapSDF::HasCellDense(const Vec3u& gridIdx) const {
-  const SparseNode4<unsigned>& node =
-      GetSparseNode4(gridIdx[0], gridIdx[1], gridIdx[2]);
-
-  if (!node.HasChildren()) {
-    return false;
-  }
-
-  Vec3u fineIdx(gridIdx[0] & 3, gridIdx[1] & 3, gridIdx[2] & 3);
-  const unsigned* cellIdxPtr = node.GetChildDense(fineIdx[0], fineIdx[1], fineIdx[2]);
-  unsigned cellIdx = *cellIdxPtr;
-  return cellIdx>0;
+  return sparseGrid.HasDense(gridIdx[0], gridIdx[1], gridIdx[2]);
 }
 
 bool AdapSDF::HasCellSparse(const Vec3u& gridIdx) const {
-  const SparseNode4<unsigned>& node =
-      GetSparseNode4(gridIdx[0], gridIdx[1], gridIdx[2]);
-
-  if (!node.HasChildren()) {
-    return false;
-  }
-  return node.HasChild(gridIdx[0] & 3, gridIdx[1] & 3, gridIdx[2] & 3);
+  return sparseGrid.HasSparse(gridIdx[0], gridIdx[1], gridIdx[2]);
 }
 
-void AdapSDF::Compress() { auto&data = sparseGrid.GetData();
-  for (auto& node: data) {
-    node.Compress();
-  }
-  float eps = distUnit;
-}
+void AdapSDF::Compress() { sparseGrid.Compress(); }
 
 /// <summary>
 /// Triliearly interpolates the vertex distance grid.
@@ -155,12 +121,12 @@ float AdapSDF::GetFineDist(const Vec3f& x) const {
 SparseNode4<unsigned>& AdapSDF::GetSparseNode4(unsigned x, unsigned y,
                                                unsigned z)
 {
-  return sparseGrid(x / 4, y / 4, z / 4);
+  return sparseGrid.GetSparseNode4(x, y, z);
 }
 
 const SparseNode4<unsigned>& AdapSDF::GetSparseNode4(unsigned x, unsigned y,
                                                unsigned z)const {
-  return sparseGrid(x / 4, y / 4, z / 4);
+  return sparseGrid.GetSparseNode4(x, y, z);
 }
 unsigned AdapSDF::GetSparseCellIdx(unsigned x, unsigned y, unsigned z) const {
   const SparseNode4<unsigned>& node = GetSparseNode4(x, y, z);

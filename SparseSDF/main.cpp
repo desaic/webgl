@@ -541,7 +541,8 @@ void TestSDF() {
   box.vmin = box.vmin - float(sdf.band) * conf.unit;
   box.vmax = box.vmax + float(sdf.band) * conf.unit;
   //voxels for triangle grid are centered around vertices of sdf.
-  conf.origin = box.vmin - (0.5f * sdf.voxSize) * Vec3f(1, 1, 1);  
+  conf.origin = box.vmin;
+  //-(0.5f * sdf.voxSize) * Vec3f(1, 1, 1);  
   sdf.origin = box.vmin;
 
   Vec3f count = (box.vmax - box.vmin) / conf.unit;

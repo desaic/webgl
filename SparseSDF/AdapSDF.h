@@ -87,7 +87,7 @@ class AdapSDF {
   // 
   // only a sparse subset of voxels have refined cells.
   // sparse nodes are stored at 1/4 resolution of the full grid.
-  Array3D<SparseNode4<unsigned>> sparseGrid;
+  Sparse3DMap<unsigned> sparseGrid;
 
   // flat list of sparse cell data indexed by sparseGrid.
   // index 0 is reserved for empty cells.
@@ -102,7 +102,7 @@ class AdapSDF {
   Vec3f origin = {0.0f, 0.0f, 0.0f};
 
   // in mm. square voxels only.
-  float voxSize;
+  float voxSize=0.4;
   // 1/4 of voxSize by default.
   float pointSpacing = 0.1f;
   unsigned band = 5;

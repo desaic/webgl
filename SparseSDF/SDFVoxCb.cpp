@@ -205,12 +205,3 @@ void TrigListVoxCb::operator()(unsigned x, unsigned y, unsigned z,
                                size_t trigIdx) {
 
 }
-
-void TrigListVoxCb::BeginTrig(size_t trigIdx) {
-
-}
-
-/// free any triangle specific data.
-void TrigListVoxCb::EndTrig(size_t trigIdx) {
-
-}
