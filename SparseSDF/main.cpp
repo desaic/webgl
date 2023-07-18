@@ -541,7 +541,8 @@ void TestSDF() {
   sdf.band = std::min(sdf.band, AdapSDF::MAX_BAND);
   box.vmin = box.vmin - float(sdf.band) * conf.unit;
   box.vmax = box.vmax + float(sdf.band) * conf.unit;
-  conf.origin = box.vmin;  
+  //voxels for triangle grid are centered around vertices of sdf.
+  conf.origin = box.vmin - (0.5f * sdf.voxSize) * Vec3f(1, 1, 1);  
   sdf.origin = box.vmin;
 
   Vec3f count = (box.vmax - box.vmin) / conf.unit;
@@ -590,33 +591,33 @@ void TestSDF() {
   std::cout << "sweep time " << ms << "\n";
   timer.Start();
   
-  //Vec3u gridSize = sdf.dist.GetSize();
-  //for (unsigned z = 0; z < gridSize[2] - 1; z++) {
-  //  for (unsigned y = 0; y < gridSize[1] - 1 ; y++) {
-  //    for (unsigned x = 0; x < gridSize[0]-1; x++) {
-  //      if (!sdf.HasCellSparse(Vec3u(x, y, z))) {
-  //        continue;
-  //      }
-  //      unsigned sparseIdx = sdf.GetSparseCellIdx(x, y, z);
-  //      if (sparseIdx == 0) {
-  //        //0 reserved for empty cell
-  //        continue;
-  //      }
-  //      FixedGrid5& fineGrid = sdf.sparseData[sparseIdx];
-  //      fineGrid(0, 0, 0) = sdf.dist(x, y, z);
-  //      fineGrid(4, 0, 0) = sdf.dist(x+1, y, z);
-  //      fineGrid(0, 4, 0) = sdf.dist(x, y + 1, z);
-  //      fineGrid(4, 4, 0) = sdf.dist(x + 1, y + 1, z);
-  //      fineGrid(0, 0, 4) = sdf.dist(x, y, z + 1);
-  //      fineGrid(4, 0, 4) = sdf.dist(x + 1, y, z + 1);
-  //      fineGrid(0, 4, 4) = sdf.dist(x, y + 1, z + 1);
-  //      fineGrid(4, 4, 4) = sdf.dist(x + 1, y + 1, z + 1);
-  //    }
-  //  }
-  //}
-  //for (size_t i = 0; i < sdf.sparseData.size(); i++) {
-  //  FastSweep(sdf.sparseData[i].val,sdf.sparseData[i].N, sdf.voxSize/4, sdf.distUnit, sdf.band);
-  //}
+  Vec3u gridSize = sdf.dist.GetSize();
+  for (unsigned z = 0; z < gridSize[2] - 1; z++) {
+    for (unsigned y = 0; y < gridSize[1] - 1 ; y++) {
+      for (unsigned x = 0; x < gridSize[0]-1; x++) {
+        if (!sdf.HasCellSparse(Vec3u(x, y, z))) {
+          continue;
+        }
+        unsigned sparseIdx = sdf.GetSparseCellIdx(x, y, z);
+        if (sparseIdx == 0) {
+          //0 reserved for empty cell
+          continue;
+        }
+        FixedGrid5& fineGrid = sdf.sparseData[sparseIdx];
+        fineGrid(0, 0, 0) = sdf.dist(x, y, z);
+        fineGrid(4, 0, 0) = sdf.dist(x+1, y, z);
+        fineGrid(0, 4, 0) = sdf.dist(x, y + 1, z);
+        fineGrid(4, 4, 0) = sdf.dist(x + 1, y + 1, z);
+        fineGrid(0, 0, 4) = sdf.dist(x, y, z + 1);
+        fineGrid(4, 0, 4) = sdf.dist(x + 1, y, z + 1);
+        fineGrid(0, 4, 4) = sdf.dist(x, y + 1, z + 1);
+        fineGrid(4, 4, 4) = sdf.dist(x + 1, y + 1, z + 1);
+      }
+    }
+  }
+  for (size_t i = 0; i < sdf.sparseData.size(); i++) {
+    FastSweep(sdf.sparseData[i].val,sdf.sparseData[i].N, sdf.voxSize/4, sdf.distUnit, sdf.band);
+  }
   ms = timer.ElapsedMS();
   std::cout << "fine sweep time " << ms << "\n";
   

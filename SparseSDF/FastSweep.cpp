@@ -108,7 +108,6 @@ void CloseExterior(Array3D<short>& dist, short far) {
   }
 }
 
-
 void FastSweep(short* vals,unsigned N, float voxSize, float unit, float band)
 {
   Array3D<short> arr(N, N, N);

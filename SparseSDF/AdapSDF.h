@@ -89,13 +89,12 @@ class AdapSDF {
   // sparse nodes are stored at 1/4 resolution of the full grid.
   Array3D<SparseNode4<unsigned>> sparseGrid;
 
-  // temporary list of triangles for each coarse voxel.
-  Array3D<SparseNode4<unsigned>> trigList; 
-
   // flat list of sparse cell data indexed by sparseGrid.
   // index 0 is reserved for empty cells.
   std::vector<FixedGrid5> sparseData;
-
+  //temporary lists of triangles intersecting each coarse cell.
+  //not used during distance computation.
+  std::vector<std::vector<size_t> > trigList;
   // mm. default is 1um.
   float distUnit = 0.001f;
 
