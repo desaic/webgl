@@ -1,5 +1,10 @@
 #include "AdapSDF.h"
+#include "BBox.h"
+#include "cpu_voxelizer.h"
 #include "MergeClosePoints.h"
+#include "TrigMesh.h"
+#include "SDFVoxCb.h"
+#include "Stopwatch.h"
 #include <iostream>
 
 AdapSDF::AdapSDF() { sparseData.resize(1); }
@@ -9,7 +14,8 @@ int AdapSDF::Allocate(unsigned sx, unsigned sy, unsigned sz) {
   if (numVox > MAX_NUM_VOX) {
     return -1;
   }
-  dist.Allocate(sx + 1, sy + 1, sz + 1);
+  // 1 more vertex than voxels.
+  dist.Allocate(sx+1, sy+1, sz+1);
   dist.Fill(MAX_DIST);
 
   Vec3u coarseSize(sx / 4, sy / 4, sz / 4);
@@ -18,13 +24,44 @@ int AdapSDF::Allocate(unsigned sx, unsigned sy, unsigned sz) {
   coarseSize[2] += (sz % 4 > 0);
 
   sparseGrid.Allocate(coarseSize[0], coarseSize[1], coarseSize[2]);
+
+  trigList.resize(1);
+  debugIndex.resize(1);
   return 0;
 }
 
-FixedGrid5& AdapSDF::AddSparseCell(const Vec3u& gridIdx) {
+unsigned AdapSDF::AddDenseCell(const Vec3u& gridIdx) {
   unsigned cellIdx = sparseGrid.AddDense(gridIdx[0],gridIdx[1],gridIdx[2]);
-  sparseData.push_back(FixedGrid5());
-  return sparseData[cellIdx];
+  return cellIdx;
+}
+
+void AdapSDF::BuildTrigList(TrigMesh* mesh) { 
+  mesh->ComputePseudoNormals(); 
+  voxconf conf;
+  conf.unit = Vec3f(voxSize, voxSize, voxSize);
+
+  BBox box;
+  ComputeBBox(mesh->v, box);
+  // add margin for narrow band sdf
+  band = std::min(band, AdapSDF::MAX_BAND);
+  box.vmin = box.vmin - float(band) * conf.unit;
+  box.vmax = box.vmax + float(band) * conf.unit;
+  origin = box.vmin;
+  conf.origin = origin;
+  
+  Vec3f count = (box.vmax - box.vmin) / conf.unit;
+  conf.gridSize = Vec3u(count[0] + 1, count[1] + 1, count[2] + 1);
+  Allocate(count[0], count[1], count[2]);
+
+  TrigListVoxCb cb;
+  cb.sdf = this;
+  cb.m = mesh;
+  Utils::Stopwatch timer;
+  timer.Start();
+  cpu_voxelize_mesh(conf, mesh, cb);
+  float ms = timer.ElapsedMS();
+  std::cout << "AdapSDF::BuildTrigList trig grid time " << ms << "\n";
+
 }
 
 bool AdapSDF::HasCellDense(const Vec3u& gridIdx) const {

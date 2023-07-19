@@ -74,17 +74,10 @@ void SDFVoxCb::operator()(unsigned x, unsigned y, unsigned z, size_t trigIdx) {
     }
   }
 
-  //allocate  fine grid.
+  //allocate fine grid and triangle list.
   Vec3u gridIdx(x, y, z);
-  bool hasCell = sdf->HasCellDense(gridIdx);
-  if (!hasCell) {
-    sdf->AddSparseCell(gridIdx);
-  }
-  SparseNode4 < unsigned>& node = sdf->GetSparseNode4(x, y, z);
-  unsigned cellIdx = *node.GetChildDense(x & 3, y & 3, z & 3);
-  FixedGrid5& grid = sdf->sparseData[cellIdx];
-  if (!hasCell) {
-    grid.Fill(AdapSDF::MAX_DIST);
+  if (!sdf->HasCellDense(gridIdx)) {
+    unsigned cellIdx = sdf->AddDenseCell(gridIdx);
   }
 }
 
@@ -203,5 +196,25 @@ void SDFFineVoxCb::EndTrig(size_t trigIdx) {
 
 void TrigListVoxCb::operator()(unsigned x, unsigned y, unsigned z,
                                size_t trigIdx) {
+  Vec3u gridIdx(x, y, z);
+  unsigned cellIdx = sdf->AddDenseCell(gridIdx);  
+  std::vector<std::vector<size_t> >& trigList = sdf->trigList;
+  if (cellIdx == trigList.size()) {
+    trigList.push_back(std::vector<size_t>());
+  } else if (cellIdx > trigList.size()) {
+    std::cout << "bug TrigListVoxCb::operator()\n";
+  }
+  trigList[cellIdx].push_back(trigIdx);
 
+  std::vector<Vec3u> &debugIndex=sdf->debugIndex;
+  if (cellIdx == debugIndex.size()) {
+    debugIndex.push_back(Vec3u(x,y,z));
+  } else if (cellIdx > trigList.size()) {
+    std::cout << "bug debugIndex TrigListVoxCb::operator()\n";
+  }
+
+  Vec3u idx = debugIndex[cellIdx];
+  if(! (idx  == Vec3u(x,y,z))){
+    std::cout << "bug index mapping\n";
+  }
 }

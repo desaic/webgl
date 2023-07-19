@@ -6,6 +6,8 @@
 
 #include "Array2D.h"
 #include "Array3D.h"
+#include "cpu_voxelizer.h"
+
 #include "MarchingCubes.h"
 #include "TrigMesh.h"
 #include "Vec3.h"
@@ -529,120 +531,17 @@ void TestSDF() {
   
   //SavePseudoNormals(mesh1,"psnormal.obj");
   AdapSDF sdf;
-  voxconf conf;
-
-  BBox box;
-  ComputeBBox(mesh1.v, box);
-  sdf.voxSize = 0.4f;
-  conf.unit = Vec3f(sdf.voxSize, sdf.voxSize, sdf.voxSize);
-
-  // add margin for narrow band sdf
-  sdf.band = std::min(sdf.band, AdapSDF::MAX_BAND);
-  box.vmin = box.vmin - float(sdf.band) * conf.unit;
-  box.vmax = box.vmax + float(sdf.band) * conf.unit;
-  //voxels for triangle grid are centered around vertices of sdf.
-  conf.origin = box.vmin;
-  //-(0.5f * sdf.voxSize) * Vec3f(1, 1, 1);  
-  sdf.origin = box.vmin;
-
-  Vec3f count = (box.vmax - box.vmin) / conf.unit;
-  conf.gridSize = Vec3u(count[0]+1, count[1]+1, count[2]+1);
-  sdf.Allocate(count[0], count[1], count[2]);
-
-  count[0]++;
-  count[1]++;
-  count[2]++;
-  Utils::Stopwatch timer;
-  timer.Start();
-  SDFVoxCb cb;
-  cb.sdf = &sdf;
-  cb.m = &mesh1;
-  cpu_voxelize_mesh(conf, &mesh1, cb);
-  float ms = timer.ElapsedMS();
-  std::cout << "vox time " << ms << "\n";
-  sdf.Compress();
-
-  timer.Start();
-  SDFFineVoxCb finecb;
-  finecb.sdf = &sdf;
-  finecb.m = &mesh1;
-  count = (box.vmax - box.vmin) / conf.unit;
-  const unsigned N = FixedGrid5::N;
-  conf.unit = Vec3f(sdf.voxSize / (N - 1), sdf.voxSize / (N - 1),
-                    sdf.voxSize / (N - 1));
-  count = (box.vmax - box.vmin) / conf.unit;
-  conf.gridSize = Vec3u(count[0] + 1, count[1] + 1, count[2] + 1);
-  //cpu_voxelize_mesh(conf, &mesh1, finecb);
-  ms = timer.ElapsedMS();
-  std::cout << "fine vox time " << ms << "\n";
-  float h = sdf.voxSize / sdf.distUnit;
-  float bandUnit = sdf.band * h;
-  short far = bandUnit * 2;
-
-  // close mesh so no negative value leaks out
-  CloseExterior(sdf.dist, far);
-
-  timer.Start();
-  FastSweep(sdf.dist, sdf.voxSize, sdf.distUnit, sdf.band);
-  ms = timer.ElapsedMS();
-  std::cout << "sweep time " << ms << "\n";
-  timer.Start();
   
-  Vec3u gridSize = sdf.dist.GetSize();
-  for (unsigned z = 0; z < gridSize[2] - 1; z++) {
-    for (unsigned y = 0; y < gridSize[1] - 1 ; y++) {
-      for (unsigned x = 0; x < gridSize[0]-1; x++) {
-        if (!sdf.HasCellSparse(Vec3u(x, y, z))) {
-          continue;
-        }
-        unsigned sparseIdx = sdf.GetSparseCellIdx(x, y, z);
-        if (sparseIdx == 0) {
-          //0 reserved for empty cell
-          continue;
-        }
-        FixedGrid5& fineGrid = sdf.sparseData[sparseIdx];
-        fineGrid(0, 0, 0) = sdf.dist(x, y, z);
-        fineGrid(4, 0, 0) = sdf.dist(x+1, y, z);
-        fineGrid(0, 4, 0) = sdf.dist(x, y + 1, z);
-        fineGrid(4, 4, 0) = sdf.dist(x + 1, y + 1, z);
-        fineGrid(0, 0, 4) = sdf.dist(x, y, z + 1);
-        fineGrid(4, 0, 4) = sdf.dist(x + 1, y, z + 1);
-        fineGrid(0, 4, 4) = sdf.dist(x, y + 1, z + 1);
-        fineGrid(4, 4, 4) = sdf.dist(x + 1, y + 1, z + 1);
-      }
-    }
+  sdf.BuildTrigList(&mesh1);
+  Array3D8u debugGrid;
+  Vec3u coarseSize = sdf.sparseGrid.CoarseGridSize();
+  debugGrid.Allocate(4 * coarseSize[0], 4 * coarseSize[1], 4 * coarseSize[2]);
+  float voxRes[3] = {sdf.voxSize, sdf.voxSize, sdf.voxSize};
+  for (size_t i = 1; i < sdf.debugIndex.size(); i++) {
+    Vec3u idx = sdf.debugIndex[i];
+    debugGrid(idx[0], idx[1],idx[2]) = 1;
   }
-  for (size_t i = 0; i < sdf.sparseData.size(); i++) {
-    FastSweep(sdf.sparseData[i].val,sdf.sparseData[i].N, sdf.voxSize/4, sdf.distUnit, sdf.band);
-  }
-  ms = timer.ElapsedMS();
-  std::cout << "fine sweep time " << ms << "\n";
-  
-  //SaveVolAsObjMesh("voxels.obj", grid, (float*)(&conf.unit),
-  //                 (float*)(&box.vmin), 1);
-  //SaveSDFImages("sdf_", sdf.dist);
-
-  //TrigMesh surf;
-  //short level = 0.2 / sdf.distUnit;
-  //MarchingCubes(sdf.dist, level, &surf, sdf.voxSize);
-  //for (size_t i = 0; i < surf.v.size(); i += 3) {
-  //  surf.v[i] = surf.v[i] + sdf.origin[0];
-  //  surf.v[i+1] = surf.v[i+1]+ sdf.origin[1];
-  //  surf.v[i+2] = surf.v[i+2] + sdf.origin[2];
-  //}
-  //surf.SaveObj("march"+std::to_string(int(level))+".obj");
-
-  Array2D8u slice;
-  Vec3u sdfSize = sdf.dist.GetSize();
-  slice.Allocate(20*sdfSize[0],20*sdfSize[1]);
-  float z = 15;
-  timer.Start();
-  GetSDFSlice(sdf, slice, Vec3f(0.02f, 0.02f, 0.02f), z);
-  ms = timer.ElapsedMS();
-  std::cout << "slice time " << ms << "\n";
-  std::string sliceFile = "slice" + std::to_string(int(z / 0.001)) + ".png";
-  SavePng(sliceFile, slice);
-
+  SaveVolAsObjMesh("vox.obj", debugGrid, voxRes, (float*)(&sdf.origin), 1);
 }
 
 void TestTrigDist() {

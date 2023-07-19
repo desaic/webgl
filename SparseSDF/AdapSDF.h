@@ -4,6 +4,7 @@
 #include "Array3D.h"
 #include "SparseNode4.h"
 #include "Sparse3DMap.h"
+class TrigMesh;
 // a fixed 5x5x5 grid.
 struct FixedGrid5 {
   static const unsigned N = 5;
@@ -42,7 +43,10 @@ class AdapSDF {
   /// <returns>-1 if too many voxels are requested</returns>
   int Allocate(unsigned sx, unsigned sy, unsigned sz);
 
-  FixedGrid5& AddSparseCell(const Vec3u& gridIdx);
+  unsigned AddDenseCell(const Vec3u& gridIdx);
+
+  void BuildTrigList(TrigMesh* mesh);
+
   bool HasCellDense(const Vec3u& gridIdx) const;
   bool HasCellSparse(const Vec3u& gridIdx) const;
   /// <summary>
@@ -92,10 +96,11 @@ class AdapSDF {
   // flat list of sparse cell data indexed by sparseGrid.
   // index 0 is reserved for empty cells.
   std::vector<FixedGrid5> sparseData;
-  //temporary lists of triangles intersecting coarse voxels around.
-  // coarse vertices.
+  //temporary lists of triangles intersecting coarse voxels
   //not used during distance interpolation.
   std::vector<std::vector<size_t> > trigList;
+  //debugging variable mapping linear cell index back to 3D voxel index.
+  std::vector<Vec3u> debugIndex;
   // mm. default is 1um.
   float distUnit = 0.001f;
 

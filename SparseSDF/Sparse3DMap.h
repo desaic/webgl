@@ -30,6 +30,7 @@ class Sparse3DMap {
   bool HasDense(unsigned x, unsigned y, unsigned z) const;
   bool HasSparse(unsigned x, unsigned y, unsigned z)const;
 
+  Vec3u CoarseGridSize() const { return grid_.GetSize(); }
  private:
   // sparse map from 3D index to linear index.
   Array3D<SparseNode4<TIndex> > grid_;
