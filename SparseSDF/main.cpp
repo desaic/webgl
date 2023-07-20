@@ -533,15 +533,7 @@ void TestSDF() {
   AdapSDF sdf;
   
   sdf.BuildTrigList(&mesh1);
-  Array3D8u debugGrid;
-  Vec3u coarseSize = sdf.sparseGrid.CoarseGridSize();
-  debugGrid.Allocate(4 * coarseSize[0], 4 * coarseSize[1], 4 * coarseSize[2]);
-  float voxRes[3] = {sdf.voxSize, sdf.voxSize, sdf.voxSize};
-  for (size_t i = 1; i < sdf.debugIndex.size(); i++) {
-    Vec3u idx = sdf.debugIndex[i];
-    debugGrid(idx[0], idx[1],idx[2]) = 1;
-  }
-  SaveVolAsObjMesh("vox.obj", debugGrid, voxRes, (float*)(&sdf.origin), 1);
+  sdf.ComputeCoarseDist();
 }
 
 void TestTrigDist() {

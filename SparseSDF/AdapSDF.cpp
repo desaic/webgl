@@ -64,6 +64,10 @@ void AdapSDF::BuildTrigList(TrigMesh* mesh) {
 
 }
 
+void AdapSDF::ComputeCoarseDist() {
+
+}
+
 bool AdapSDF::HasCellDense(const Vec3u& gridIdx) const {
   return sparseGrid.HasDense(gridIdx[0], gridIdx[1], gridIdx[2]);
 }

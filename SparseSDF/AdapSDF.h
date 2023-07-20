@@ -46,7 +46,9 @@ class AdapSDF {
   unsigned AddDenseCell(const Vec3u& gridIdx);
 
   void BuildTrigList(TrigMesh* mesh);
-
+  //uses triangle list.
+  void ComputeCoarseDist();
+  
   bool HasCellDense(const Vec3u& gridIdx) const;
   bool HasCellSparse(const Vec3u& gridIdx) const;
   /// <summary>
