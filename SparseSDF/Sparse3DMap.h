@@ -25,6 +25,11 @@ class Sparse3DMap {
   /// <returns>0 if child does not exist</returns>
   TIndex Get(unsigned x, unsigned y, unsigned z) const;
   
+  Vec3u GetCoarseSize() const { return grid_.GetSize(); }
+  Vec3u GetFineSize() const {
+    return SparseNode4<TIndex>::GRID_SIZE * grid_.GetSize();
+  }
+  ///gets the sparse internal parent node containing the child voxel x,y,z
   SparseNode4<TIndex>& GetSparseNode4(unsigned x, unsigned y, unsigned z);
   const SparseNode4<TIndex>& GetSparseNode4(unsigned x, unsigned y, unsigned z)const;
   bool HasDense(unsigned x, unsigned y, unsigned z) const;

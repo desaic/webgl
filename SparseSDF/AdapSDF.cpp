@@ -65,7 +65,18 @@ void AdapSDF::BuildTrigList(TrigMesh* mesh) {
 }
 
 void AdapSDF::ComputeCoarseDist() {
-
+  Vec3u gridSize = sparseGrid.GetFineSize();
+  for (unsigned z = 0; z < gridSize[2]; z++) {
+    for (unsigned y = 0; y < gridSize[1]; y++) {
+      for (unsigned x = 0; x < gridSize[0]; x++) {
+        const SparseNode4<unsigned> & node = sparseGrid.GetSparseNode4(x,y,z);
+        if (!node.HasChildren()) {
+          continue;
+        }
+        std::cout << x << " " << y << " " << z << "\n";
+      }
+    }
+  }
 }
 
 bool AdapSDF::HasCellDense(const Vec3u& gridIdx) const {
