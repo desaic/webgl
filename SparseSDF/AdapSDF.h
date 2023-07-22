@@ -2,6 +2,7 @@
 #define ADAP_SDF_H
 
 #include "Array3D.h"
+#include "PointTrigDist.h"
 #include "SparseNode4.h"
 #include "Sparse3DMap.h"
 class TrigMesh;
@@ -33,7 +34,6 @@ struct FixedGrid5 {
 /// </summary>
 class AdapSDF {
  public:
-
   AdapSDF();
   /// <summary>
   /// inputs are voxel grid size. vertex grid size would be allocated
@@ -46,9 +46,11 @@ class AdapSDF {
   unsigned AddDenseCell(const Vec3u& gridIdx);
 
   void BuildTrigList(TrigMesh* mesh);
-  //uses triangle list.
+  // uses triangle list.
   void ComputeCoarseDist();
-  
+  void ComputeCoarseDist(unsigned x, unsigned y, unsigned z);
+  void GatherTrigs(unsigned x, unsigned y, unsigned z,
+                   std::vector<size_t>& trigs);
   bool HasCellDense(const Vec3u& gridIdx) const;
   bool HasCellSparse(const Vec3u& gridIdx) const;
   /// <summary>
@@ -89,6 +91,7 @@ class AdapSDF {
   // physical distance = dist * distUnit.
   Array3D<short> dist;
 
+  TrigMesh* mesh_ = nullptr;
   // coarse grid contains index into list of refined cells.
   // 
   // only a sparse subset of voxels have refined cells.
@@ -101,6 +104,8 @@ class AdapSDF {
   //temporary lists of triangles intersecting coarse voxels
   //not used during distance interpolation.
   std::vector<std::vector<size_t> > trigList;
+  //temporary additional triangle information
+  std::vector<TrigFrame> trigFrames;
   //debugging variable mapping linear cell index back to 3D voxel index.
   std::vector<Vec3u> debugIndex;
   // mm. default is 1um.

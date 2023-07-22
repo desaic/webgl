@@ -531,9 +531,31 @@ void TestSDF() {
   
   //SavePseudoNormals(mesh1,"psnormal.obj");
   AdapSDF sdf;
+  Utils::Stopwatch timer;
   
   sdf.BuildTrigList(&mesh1);
+  sdf.Compress();
+  timer.Start();
   sdf.ComputeCoarseDist();
+  CloseExterior(sdf.dist, sdf.MAX_DIST);
+  float ms = timer.ElapsedMS();
+  std::cout << "coarse dist time " << ms << "\n";
+
+  timer.Start();
+  FastSweep(sdf.dist, sdf.voxSize, sdf.distUnit, sdf.band);
+  ms = timer.ElapsedMS();
+  std::cout << "sweep time " << ms << "\n";
+
+  Array2D8u slice;
+  Vec3u sdfSize = sdf.dist.GetSize();
+  slice.Allocate(20 * sdfSize[0], 20 * sdfSize[1]);
+  float z = 15;
+  timer.Start();
+  GetSDFSlice(sdf, slice, Vec3f(0.02f, 0.02f, 0.02f), z);
+   ms = timer.ElapsedMS();
+  std::cout << "slice time " << ms << "\n";
+  std::string sliceFile = "slice" + std::to_string(int(z / 0.001)) + ".png";
+  SavePng(sliceFile, slice);
 }
 
 void TestTrigDist() {

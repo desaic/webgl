@@ -1,7 +1,7 @@
 #include "cpu_voxelizer.h"
 
 #include <algorithm>
-
+#include <iostream>
 #include "BBox.h"
 
 Vec3f clamp(const Vec3f& v, const Vec3f& lb, const Vec3f& ub) {

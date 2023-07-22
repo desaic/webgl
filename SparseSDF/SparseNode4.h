@@ -79,6 +79,13 @@ struct SparseNode4 {
     return mask & (1ull << linearIdx);    
   }
   
+  bool HasChild(unsigned linearIdx) const {
+    if (children == nullptr) {
+      return false;
+    }
+    return mask & (1ull << linearIdx);
+  }
+  
   // does not work before compression.
   const T* GetChild(unsigned x, unsigned y, unsigned z) const {
     

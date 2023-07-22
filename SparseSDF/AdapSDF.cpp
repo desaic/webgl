@@ -36,7 +36,9 @@ unsigned AdapSDF::AddDenseCell(const Vec3u& gridIdx) {
 }
 
 void AdapSDF::BuildTrigList(TrigMesh* mesh) { 
+
   mesh->ComputePseudoNormals(); 
+  mesh_ = mesh;
   voxconf conf;
   conf.unit = Vec3f(voxSize, voxSize, voxSize);
 
@@ -61,25 +63,95 @@ void AdapSDF::BuildTrigList(TrigMesh* mesh) {
   cpu_voxelize_mesh(conf, mesh, cb);
   float ms = timer.ElapsedMS();
   std::cout << "AdapSDF::BuildTrigList trig grid time " << ms << "\n";
-
 }
 
 void AdapSDF::ComputeCoarseDist() {
-  Vec3u gridSize = sparseGrid.GetFineSize();
-  for (unsigned z = 0; z < gridSize[2]; z++) {
-    for (unsigned y = 0; y < gridSize[1]; y++) {
-      for (unsigned x = 0; x < gridSize[0]; x++) {
-        const SparseNode4<unsigned> & node = sparseGrid.GetSparseNode4(x,y,z);
-        if (!node.HasChildren()) {
-          continue;
-        }
-        std::cout << x << " " << y << " " << z << "\n";
+  if (mesh_ == nullptr) {
+    return; 
+  }
+  size_t numTrigs = mesh_->t.size() / 3;
+  trigFrames.resize(numTrigs);
+  for (size_t i = 0; i < numTrigs; i++) {
+    Triangle trig = mesh_->GetTriangleVerts(i);
+    Vec3f n = mesh_->GetTrigNormal(i);
+    ComputeTrigFrame((const float*)(&trig.v),n, trigFrames[i]);
+  }
+
+  //loop through coarse vertices 
+  Vec3u size = dist.GetSize();
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      for (unsigned x = 0; x < size[0]; x++) {
+        ComputeCoarseDist(x, y, z);
       }
     }
   }
+
+  trigFrames.clear();
 }
 
-bool AdapSDF::HasCellDense(const Vec3u& gridIdx) const {
+void AdapSDF::GatherTrigs(unsigned x, unsigned y, unsigned z,
+                          std::vector<size_t>& trigs) {
+  Vec3u size = sparseGrid.GetFineSize();
+  if (x >= size[0] || y >= size[1] || z >= size[2]) {
+    return;
+  }
+  unsigned idx = GetSparseCellIdx(x, y, z);
+  if (idx == 0) {
+    //special index empty cell
+    return;
+  }
+  const std::vector<size_t>& cell = trigList[idx];
+  trigs.insert(trigs.end(), cell.begin(), cell.end());
+}
+
+void AdapSDF::ComputeCoarseDist(unsigned x, unsigned y, unsigned z) {
+  //gather triangles adjacent to this vertex.
+  std::vector<size_t> trigs;
+  GatherTrigs(x - 1, y - 1, z - 1, trigs);
+  GatherTrigs(x, y - 1, z - 1, trigs);
+  GatherTrigs(x - 1, y, z - 1, trigs);
+  GatherTrigs(x, y, z - 1, trigs);
+  GatherTrigs(x - 1, y - 1, z, trigs);
+  GatherTrigs(x, y - 1, z, trigs);
+  GatherTrigs(x - 1, y, z, trigs);
+  GatherTrigs(x, y, z, trigs);
+  if (trigs.size() == 0) {
+    return;
+  }
+  float minDist = 1e20;
+  for (size_t i = 0; i < trigs.size(); i++) {
+    float px, py;
+    size_t tIdx = trigs[i];
+    const TrigFrame &frame = trigFrames[tIdx];
+    Triangle trig = mesh_->GetTriangleVerts(tIdx);
+    Vec3f point = voxSize * Vec3f(x, y, z) + origin;
+    Vec3f pv0 = point - trig.v[0];
+    px = pv0.dot(frame.x);
+    py = pv0.dot(frame.y);
+    TrigDistInfo info =
+        PointTrigDist2D(px, py, frame.v1x, frame.v2x, frame.v2y);
+
+    Vec3f normal = mesh_->GetNormal(tIdx, info.bary);
+    Vec3f closest = info.bary[0] * trig.v[0] + info.bary[1] * trig.v[1] +
+                    info.bary[2] * trig.v[2];
+
+    float trigz = pv0.dot(frame.z);
+    // vector from closest point to voxel point.
+    Vec3f trigPt = point - closest;
+    float d = std::sqrt(info.sqrDist + trigz * trigz);
+    if (std::abs(minDist) > d) {
+      if (normal.dot(trigPt) < 0) {
+        minDist = -d;
+      } else {
+        minDist = d;
+      }
+    }
+  }
+  dist(x, y, z) = short(minDist / distUnit);
+}
+
+  bool AdapSDF::HasCellDense(const Vec3u& gridIdx) const {
   return sparseGrid.HasDense(gridIdx[0], gridIdx[1], gridIdx[2]);
 }
 
@@ -180,6 +252,7 @@ const SparseNode4<unsigned>& AdapSDF::GetSparseNode4(unsigned x, unsigned y,
                                                unsigned z)const {
   return sparseGrid.GetSparseNode4(x, y, z);
 }
+
 unsigned AdapSDF::GetSparseCellIdx(unsigned x, unsigned y, unsigned z) const {
   const SparseNode4<unsigned>& node = GetSparseNode4(x, y, z);
   if (!node.HasChild(x & 3, y & 3, z & 3)) {
