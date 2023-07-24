@@ -107,6 +107,7 @@ void AdapSDF::GatherTrigs(unsigned x, unsigned y, unsigned z,
 
 void AdapSDF::ComputeCoarseDist(unsigned x, unsigned y, unsigned z) {
   //gather triangles adjacent to this vertex.
+  //using set or unordered_set is slower due to overhead.
   std::vector<size_t> trigs;
   GatherTrigs(x - 1, y - 1, z - 1, trigs);
   GatherTrigs(x, y - 1, z - 1, trigs);
@@ -119,6 +120,7 @@ void AdapSDF::ComputeCoarseDist(unsigned x, unsigned y, unsigned z) {
   if (trigs.size() == 0) {
     return;
   }
+  
   float minDist = 1e20;
   for (size_t i = 0; i < trigs.size(); i++) {
     float px, py;
@@ -148,6 +150,7 @@ void AdapSDF::ComputeCoarseDist(unsigned x, unsigned y, unsigned z) {
       }
     }
   }
+
   dist(x, y, z) = short(minDist / distUnit);
 }
 

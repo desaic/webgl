@@ -5,6 +5,7 @@
 #include "PointTrigDist.h"
 #include "SparseNode4.h"
 #include "Sparse3DMap.h"
+
 class TrigMesh;
 // a fixed 5x5x5 grid.
 struct FixedGrid5 {

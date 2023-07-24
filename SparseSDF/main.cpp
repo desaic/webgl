@@ -517,6 +517,35 @@ void SavePseudoNormals(const TrigMesh & mesh, const std::string & outFile ) {
   }
 }
 
+void CheckCornerCase(const AdapSDF &sdf) { Vec3u size = sdf.dist.GetSize();
+  float voxSize = sdf.voxSize;
+  int nbr[6][3] = {{-1, 0, 0}, {1, 0, 0},  {0, -1, 0},
+                   {0, 1, 0},  {0, 0, -1}, {0, 0, 1}};
+  for (unsigned z = 1; z < size[2]-1; z++) {
+    for (unsigned y = 1; y < size[1] - 1; y++) {
+      for (unsigned x = 1; x < size[0] - 1; x++) {
+        float absDist = std::abs(sdf.dist(x, y, z)) * sdf.distUnit;
+        if (absDist > 2 * voxSize || absDist < voxSize) {
+          continue;
+        }
+        //check neighbors.
+        for (unsigned n = 0; n < 6; n++) {
+          int nx = int(x) + nbr[n][0];
+          int ny = int(y) + nbr[n][1];
+          int nz = int(z) + nbr[n][2];
+          short nDist = sdf.dist(nx, ny, nz);
+          float nAbs = std::abs(nDist) * sdf.distUnit;
+          if (nAbs + voxSize < absDist) {
+            std::cout << x<<" "<<y<<" "<<z<<" corner case ";
+            std::cout << nx << " " << ny << " " << nz << " ";
+            std::cout << absDist << " " << nAbs << "\n";
+          }
+        }
+      }
+    }
+  }
+}
+
 void TestSDF() {
   TrigMesh mesh1;
   
@@ -537,6 +566,7 @@ void TestSDF() {
   sdf.Compress();
   timer.Start();
   sdf.ComputeCoarseDist();
+  //CheckCornerCase(sdf);
   CloseExterior(sdf.dist, sdf.MAX_DIST);
   float ms = timer.ElapsedMS();
   std::cout << "coarse dist time " << ms << "\n";
@@ -556,6 +586,10 @@ void TestSDF() {
   std::cout << "slice time " << ms << "\n";
   std::string sliceFile = "slice" + std::to_string(int(z / 0.001)) + ".png";
   SavePng(sliceFile, slice);
+  std::vector<uint8_t> dist(sdf.dist.GetData().size());
+  TrigMesh marchMesh;
+  MarchingCubes(sdf.dist, 50, &marchMesh, sdf.voxSize*sdf.distUnit);
+  marchMesh.SaveObj("marchCubes.obj");
 }
 
 void TestTrigDist() {

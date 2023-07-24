@@ -136,7 +136,7 @@ void FastSweep(Array3D<short>& dist, float voxSize, float unit, float band)
   float bandUnit = band * h;
   short far = bandUnit * 2;
   for (size_t i = 0; i < src.size(); i++) {
-    if (src[i] < far) {
+    if (std::abs(src[i]) <= h) {
       dst[i] = true;
     }
   } 
