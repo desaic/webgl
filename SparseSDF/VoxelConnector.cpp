@@ -111,11 +111,50 @@ void FloodFillSlices(Array3D8u& arr, uint8_t id) {
   }
 }
 
+void Downsample2x(Array3D8u& grid) {
+  Vec3u size = grid.GetSize();
+  Array3D8u out(size[0]/2, size[1]/2, size[2]/2);
+  Vec3u outSize = out.GetSize();
+  const unsigned NUM_FINE = 8;
+  const unsigned FINE_IDX[NUM_FINE][3] = {{0, 0, 0}, {1, 0, 0}, {0, 1, 0},
+                                          {1, 1, 0}, {0, 0, 1}, {1, 0, 1},
+                                          {0, 1, 1}, {1, 1, 1}};
+  const unsigned NUM_MAT = 4;
+  for (unsigned z = 0; z < outSize[2]; z++) {
+    for (unsigned y = 0; y < outSize[1]; y++) {
+      for (unsigned x = 0; x < outSize[0]; x++) {
+        int count[NUM_MAT] = {};
+        for (unsigned n = 0; n < NUM_FINE; n++) {
+          unsigned finx = 2*x + FINE_IDX[n][0];
+          unsigned finy = 2 * y + FINE_IDX[n][1];
+          unsigned finz = 2 * z + FINE_IDX[n][2];
+          uint8_t fineMat = grid(finx, finy, finz);
+          count[fineMat]++;
+        }
+        unsigned maxMat = 0;
+        unsigned maxCount = count[0];
+        for (unsigned m = 1; m < NUM_MAT; m++){
+          if (count[m] > maxCount) {
+            maxCount = count[m];
+            maxMat = m;
+          }
+        }
+        if (count[0] >= 2) {
+         //maintain big margin.
+          maxMat = 0;
+        }
+        out(x, y, z) = maxMat;
+      }
+    }
+  }
+  grid = out;
+}
+
 void VoxelConnector() {
   // std::string fileName = "F:/dolphin/meshes/fish/salmon.stl";
   // std::string fileName = "F:/dolphin/meshes/lattice_big/MeshLattice.stl";
-  std::string fileName1 = "F:/dolphin/meshes/shoeInsole/conn/Hook80umWax.STL";
-  std::string fileName2 = "F:/dolphin/meshes/shoeInsole/conn/HookInternal.STL";
+  std::string fileName1 = "F:/dolphin/meshes/peeltest/Diamond-Mat1.STL";
+  std::string fileName2 = "F:/dolphin/meshes/peeltest/Diamond-Mat2.STL";
   TrigMesh mesh1;
   mesh1.LoadStl(fileName1);
   TrigMesh mesh2;
@@ -127,14 +166,14 @@ void VoxelConnector() {
   BBox box;
   ComputeBBox(mesh1.v, box);
 
-  conf.unit = Vec3f(0.032, 0.032, 0.032);
+  conf.unit = Vec3f(0.016, 0.016, 0.016);
 
   // add margin for narrow band sdf
   // sdf.band = std::min(sdf.band, AdapSDF::MAX_BAND);
   // box.vmin = box.vmin - float(sdf.band) * conf.unit;
   // box.vmax = box.vmax + float(sdf.band) * conf.unit;
-  box.vmin[0] -= 0.3;
-  box.vmax[0] += 0.3;
+  //box.vmin[0] -= 0.3;
+  //box.vmax[0] += 0.3;
   conf.origin = box.vmin;
 
   Vec3f count = (box.vmax - box.vmin) / conf.unit;
@@ -155,10 +194,17 @@ void VoxelConnector() {
 
   cpu_voxelize_mesh(conf, &mesh2, cb);
   FloodFillSlices(grid, 2);
+
+  Downsample2x(grid);
+
   float ms = timer.ElapsedMS();
   std::cout << "vox time " << ms << "\n";
   SaveVolAsObjMesh("voxels.obj", grid, (float*)(&conf.unit),
                    (float*)(&box.vmin), 1);
-  std::string txtFile = "hookGrid.txt";
+  std::string txtFile = "diamond.txt";
+  std::vector<uint8_t>& data = grid.GetData();
+  for (size_t i = 0; i < data.size(); i++) {
+    data[i]++;
+  }
   PrintVol(grid, txtFile);
 }
