@@ -634,10 +634,11 @@ void TestTrigDist() {
   SavePng("bary2.png", image);
 }
 
-extern void VoxelConnector();
+extern void VoxelConnector(int argc, char* argv[]);
 
 int main(int argc, char* argv[]) {
-  VoxelConnector();
+  VoxelConnector(argc, argv);
+  return 0;
   //TestTrigDist();
   TestSDF();
   return 0;

@@ -150,24 +150,30 @@ void Downsample2x(Array3D8u& grid) {
   grid = out;
 }
 
-void VoxelConnector() {
-  // std::string fileName = "F:/dolphin/meshes/fish/salmon.stl";
-  // std::string fileName = "F:/dolphin/meshes/lattice_big/MeshLattice.stl";
-  std::string fileName1 = "F:/dolphin/meshes/peeltest/Diamond-Mat1.STL";
-  std::string fileName2 = "F:/dolphin/meshes/peeltest/Diamond-Mat2.STL";
-  TrigMesh mesh1;
-  mesh1.LoadStl(fileName1);
-  TrigMesh mesh2;
-  mesh2.LoadStl(fileName2);
+void VoxelConnector(int argc, char* argv[]) {
+  if (argc < 2) {
+    std::cout << "Usage: " << argv[0] << " some_mesh.stl\n";
+    return;
+  }
+  int numMeshes = argc - 1;
 
-  Array3D8u grid;
   voxconf conf;
-
   BBox box;
-  ComputeBBox(mesh1.v, box);
-
+  std::vector<TrigMesh> mesh;
+  Array3D8u grid;
   conf.unit = Vec3f(0.016, 0.016, 0.016);
-
+  mesh.resize(numMeshes);
+  for (int m = 0; m < numMeshes; m++) {
+    std::string fileName(argv[m+1]);
+    mesh[m].LoadStl(fileName);
+    if (m == 0) {
+      ComputeBBox(mesh[0].v, box);
+    } else {
+      UpdateBBox(mesh[m].v, box);
+    }      
+  }
+ 
+  
   // add margin for narrow band sdf
   // sdf.band = std::min(sdf.band, AdapSDF::MAX_BAND);
   // box.vmin = box.vmin - float(sdf.band) * conf.unit;
@@ -187,21 +193,19 @@ void VoxelConnector() {
   SimpleVoxCb cb;
   grid.Allocate(conf.gridSize, 0);
   cb.grid = &grid;
-
-  cpu_voxelize_mesh(conf, &mesh1, cb);
-  FloodFillSlices(grid, 1);
-  cb.matId = 2;
-
-  cpu_voxelize_mesh(conf, &mesh2, cb);
-  FloodFillSlices(grid, 2);
+  for (int m = 0; m < numMeshes; m++) {
+    cb.matId = m + 1;
+    cpu_voxelize_mesh(conf, &mesh[m], cb);
+    FloodFillSlices(grid, cb.matId);    
+  }
 
   Downsample2x(grid);
 
   float ms = timer.ElapsedMS();
   std::cout << "vox time " << ms << "\n";
-  SaveVolAsObjMesh("voxels.obj", grid, (float*)(&conf.unit),
-                   (float*)(&box.vmin), 1);
-  std::string txtFile = "diamond.txt";
+  //SaveVolAsObjMesh("voxels.obj", grid, (float*)(&conf.unit),
+  //                 (float*)(&box.vmin), 1);
+  std::string txtFile = "grid.txt";
   std::vector<uint8_t>& data = grid.GetData();
   for (size_t i = 0; i < data.size(); i++) {
     data[i]++;
