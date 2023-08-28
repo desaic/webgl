@@ -52,8 +52,8 @@ void SDFVoxCb::operator()(unsigned x, unsigned y, unsigned z, size_t trigIdx) {
     Vec3f pv0 = vertCoord - trig.v[0];
     float px = pv0.dot(frame.x);
     float py = pv0.dot(frame.y);
-    TrigDistInfo distInfo = PointTrigDist2D(
-        px, py, frame.v1x, frame.v2x, frame.v2y);
+    TrigDistInfo distInfo =
+        PointTrigDist2D(px, py, frame.v1x, frame.v2x, frame.v2y);
     Vec3f normal = m->GetNormal(trigIdx, distInfo.bary);
     Vec3f closest = distInfo.bary[0] * trig.v[0] +
                     distInfo.bary[1] * trig.v[1] + distInfo.bary[2] * trig.v[2];
@@ -131,7 +131,7 @@ void SDFFineVoxCb::operator()(unsigned x, unsigned y, unsigned z, size_t trigIdx
     return;
   }
   unsigned cellIdx = *child;
-  FixedGrid5& grid = sdf->sparseData[cellIdx];
+  FixedGrid5& grid = sdf->fineGrid[cellIdx];
 
   unsigned fineX = x % (N - 1);
   unsigned fineY = y % (N - 1);

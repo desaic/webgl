@@ -7,7 +7,7 @@
 #include "Stopwatch.h"
 #include <iostream>
 
-AdapSDF::AdapSDF() { sparseData.resize(1); }
+AdapSDF::AdapSDF() { fineGrid.resize(1); }
 
 int AdapSDF::Allocate(unsigned sx, unsigned sy, unsigned sz) {
   size_t numVox = sx * sy * size_t(sz);
@@ -88,6 +88,33 @@ void AdapSDF::ComputeCoarseDist() {
   }
 
   trigFrames.clear();
+}
+
+void AdapSDF::ComputeFineDistBrute() {
+  //allocate fine cells.
+  std::cout<<trigList.size()<<"\n";
+  fineGrid.resize(trigList.size());
+  Vec3u dsize = dist.GetSize();
+  //loop through fine cells.
+  //number of cells is 1 - number of vertices and dist is stored on vertices.
+  for (unsigned z = 0; z < dsize[2] - 1; z++) {
+    for (unsigned y = 0; y < dsize[1] - 1; y++) {
+      for (unsigned x = 0; x < dsize[0] - 1; x++) {
+        unsigned sparseIdx = GetSparseCellIdx(x, y, z);
+        FixedGrid5& fine = fineGrid[sparseIdx];
+        //corner vertices
+        fine(0, 0, 0) = dist(x, y, z);
+        fine(4, 0, 0) = dist(x + 1, y, z);
+        fine(0, 4, 0) = dist(x, y + 1, z);
+        fine(4, 4, 0) = dist(x + 1, y + 1, z);
+        fine(0, 0, 4) = dist(x, y, z + 1);
+        fine(4, 0, 4) = dist(x + 1, y, z + 1);
+        fine(0, 4, 4) = dist(x, y + 1, z + 1);
+        fine(4, 4, 4) = dist(x + 1, y + 1, z + 1);
+
+      }
+    }
+  }
 }
 
 void AdapSDF::GatherTrigs(unsigned x, unsigned y, unsigned z,
@@ -216,7 +243,7 @@ float AdapSDF::GetFineDist(const Vec3f& x) const {
   }
   unsigned nodeIdx = *(node.GetChild(ix & 3, iy & 3, iz & 3));
   float fineDist = MAX_DIST;
-  const FixedGrid5& fGrid = sparseData[nodeIdx];
+  const FixedGrid5& fGrid = fineGrid[nodeIdx];
 
   Vec3f fineCoord = local - voxSize * Vec3f(ix, iy, iz);
   const unsigned N = FixedGrid5::N;

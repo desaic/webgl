@@ -50,6 +50,11 @@ class AdapSDF {
   // uses triangle list.
   void ComputeCoarseDist();
   void ComputeCoarseDist(unsigned x, unsigned y, unsigned z);
+  /// <summary>
+  /// Goes through every fine vertex and compute its distance within voxSize.
+  /// Uses the triangle frames and trigList which are computed while ComputeCoarseDist().
+  /// </summary>
+  void ComputeFineDistBrute();
   void GatherTrigs(unsigned x, unsigned y, unsigned z,
                    std::vector<size_t>& trigs);
   bool HasCellDense(const Vec3u& gridIdx) const;
@@ -99,9 +104,9 @@ class AdapSDF {
   // sparse nodes are stored at 1/4 resolution of the full grid.
   Sparse3DMap<unsigned> sparseGrid;
 
-  // flat list of sparse cell data indexed by sparseGrid.
+  // flat list of fine cells indexed by sparseGrid.
   // index 0 is reserved for empty cells.
-  std::vector<FixedGrid5> sparseData;
+  std::vector<FixedGrid5> fineGrid;
   //temporary lists of triangles intersecting coarse voxels
   //not used during distance interpolation.
   std::vector<std::vector<size_t> > trigList;

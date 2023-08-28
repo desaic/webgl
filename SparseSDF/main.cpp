@@ -551,11 +551,10 @@ void TestSDF() {
   
   //std::string fileName = "F:/dolphin/meshes/fish/salmon.stl";
   //std::string fileName = "F:/dolphin/meshes/lattice_big/MeshLattice.stl";
-   //mesh1.LoadStl(fileName);
+  //mesh1.LoadStl(fileName);
   
   std::string fileName = "F:/dolphin/meshes/sdfTest/soleRigid1.obj";
   mesh1.LoadObj(fileName);
-  
   mesh1.ComputePseudoNormals();
   
   //SavePseudoNormals(mesh1,"psnormal.obj");
@@ -570,11 +569,12 @@ void TestSDF() {
   CloseExterior(sdf.dist, sdf.MAX_DIST);
   float ms = timer.ElapsedMS();
   std::cout << "coarse dist time " << ms << "\n";
-
   timer.Start();
   FastSweep(sdf.dist, sdf.voxSize, sdf.distUnit, sdf.band);
   ms = timer.ElapsedMS();
   std::cout << "sweep time " << ms << "\n";
+
+  sdf.ComputeFineDistBrute();
 
   Array2D8u slice;
   Vec3u sdfSize = sdf.dist.GetSize();
@@ -587,6 +587,7 @@ void TestSDF() {
   std::string sliceFile = "slice" + std::to_string(int(z / 0.001)) + ".png";
   SavePng(sliceFile, slice);
   std::vector<uint8_t> dist(sdf.dist.GetData().size());
+
   TrigMesh marchMesh;
   MarchingCubes(sdf.dist, 50, &marchMesh, sdf.voxSize*sdf.distUnit);
   marchMesh.SaveObj("marchCubes.obj");
@@ -637,8 +638,8 @@ void TestTrigDist() {
 extern void VoxelConnector(int argc, char* argv[]);
 
 int main(int argc, char* argv[]) {
-  VoxelConnector(argc, argv);
-  return 0;
+  //VoxelConnector(argc, argv);
+  //return 0;
   //TestTrigDist();
   TestSDF();
   return 0;
