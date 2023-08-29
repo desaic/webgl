@@ -36,7 +36,7 @@ int TrigMesh::LoadObj(const std::string& meshFile) {
   return 0;
 }
 
-Vec3f TrigMesh::GetNormal(unsigned tIdx, const Vec3f& bary) {
+Vec3f TrigMesh::GetNormal(unsigned tIdx, const Vec3f& bary) const {
   Vec3f n;
   float eps = 1e-5;
   unsigned zeroCount = 0;

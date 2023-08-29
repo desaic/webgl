@@ -11,6 +11,8 @@ void CloseExterior(Array3D<short>& dist, short far);
 /// <param name="voxSize">voxel size in mm</param>
 /// <param name="unit">unit for values stored in distance grid in mm</param>
 /// <param name="band">narrow band in number of voxels</param>
-void FastSweep(Array3D<short>& dist, float voxSize, float unit, float band);
-void FastSweep(short* vals, unsigned N, float voxSize, float unit, float band);
+void FastSweep(Array3D<short>& dist, float voxSize, float unit, float band,
+               Array3D<uint8_t>& frozen);
+void FastSweep(short* vals, unsigned N, float voxSize, float unit, float band,
+               Array3D<uint8_t>& frozen);
 #endif

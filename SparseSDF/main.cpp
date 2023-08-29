@@ -570,7 +570,8 @@ void TestSDF() {
   float ms = timer.ElapsedMS();
   std::cout << "coarse dist time " << ms << "\n";
   timer.Start();
-  FastSweep(sdf.dist, sdf.voxSize, sdf.distUnit, sdf.band);
+  Array3D8u frozen;
+  FastSweep(sdf.dist, sdf.voxSize, sdf.distUnit, sdf.band, frozen);
   ms = timer.ElapsedMS();
   std::cout << "sweep time " << ms << "\n";
 
@@ -581,10 +582,10 @@ void TestSDF() {
   slice.Allocate(20 * sdfSize[0], 20 * sdfSize[1]);
   float z = 15;
   timer.Start();
-  GetSDFSlice(sdf, slice, Vec3f(0.02f, 0.02f, 0.02f), z);
+  GetSDFFineSlice(sdf, slice, Vec3f(0.02f, 0.02f, 0.02f), z);
    ms = timer.ElapsedMS();
   std::cout << "slice time " << ms << "\n";
-  std::string sliceFile = "slice" + std::to_string(int(z / 0.001)) + ".png";
+  std::string sliceFile = "slicefine" + std::to_string(int(z / 0.001)) + ".png";
   SavePng(sliceFile, slice);
   std::vector<uint8_t> dist(sdf.dist.GetData().size());
 

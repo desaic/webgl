@@ -55,6 +55,8 @@ class AdapSDF {
   /// Uses the triangle frames and trigList which are computed while ComputeCoarseDist().
   /// </summary>
   void ComputeFineDistBrute();
+  void ComputeDistGrid5(Vec3f x0, FixedGrid5& fine,
+                        const std::vector<size_t>& trigs);
   void GatherTrigs(unsigned x, unsigned y, unsigned z,
                    std::vector<size_t>& trigs);
   bool HasCellDense(const Vec3u& gridIdx) const;

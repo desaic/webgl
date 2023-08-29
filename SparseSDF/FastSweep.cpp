@@ -108,27 +108,28 @@ void CloseExterior(Array3D<short>& dist, short far) {
   }
 }
 
-void FastSweep(short* vals,unsigned N, float voxSize, float unit, float band)
-{
+void FastSweep(short* vals, unsigned N, float voxSize, float unit, float band,
+               Array3D<uint8_t>& frozen) {
   Array3D<short> arr(N, N, N);
   std::vector<short>& data = arr.GetData();
   for (size_t i = 0; i < data.size(); i++) {
     data[i] = vals[i];
   }
-  FastSweep(arr, voxSize, unit, band);
+  FastSweep(arr, voxSize, unit, band, frozen);
   for (size_t i = 0; i < data.size(); i++) {
     vals[i] = data[i];
   }
 }
 
-void FastSweep(Array3D<short>& dist, float voxSize, float unit, float band)
-{
+void FastSweep(Array3D<short>& dist, float voxSize, float unit, float band,
+               Array3D<uint8_t> &frozen) {
   Vec3u gridSize = dist.GetSize();
   if (gridSize[0] == 0 || gridSize[1] == 0 || gridSize[2] == 0) {
     return;
   }
-  Array3D<uint8_t> frozen;
-  frozen.Allocate(gridSize, 0);
+  if (frozen.Empty()) {
+    frozen.Allocate(gridSize, 0); 
+  }
   //cells initialized with dist < MAX_DIST are frozen
   const std::vector<short>& src = dist.GetData();
   std::vector<uint8_t>& dst = frozen.GetData();

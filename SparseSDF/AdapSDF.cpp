@@ -2,10 +2,15 @@
 #include "BBox.h"
 #include "cpu_voxelizer.h"
 #include "MergeClosePoints.h"
+#include "FastSweep.h"
 #include "TrigMesh.h"
 #include "SDFVoxCb.h"
 #include "Stopwatch.h"
 #include <iostream>
+
+float MinDist(const std::vector<size_t>& trigs,
+              const std::vector<TrigFrame>& trigFrames, const Vec3f& query,
+              const TrigMesh* mesh);
 
 AdapSDF::AdapSDF() { fineGrid.resize(1); }
 
@@ -90,17 +95,46 @@ void AdapSDF::ComputeCoarseDist() {
   trigFrames.clear();
 }
 
+bool IsCorner(unsigned x, unsigned y, unsigned z, unsigned N) {
+  return (x==0||x==N-1) && (y==0||y==N-1) && (z==0||z==N-1);
+}
+
+void AdapSDF::ComputeDistGrid5(Vec3f x0, FixedGrid5& fine,
+                               const std::vector<size_t>& trigs) {
+  const unsigned N = fine.N;
+  //fine voxel size
+  float h = voxSize / float(N-1);
+  for (unsigned z = 0; z < N; z++) {
+    for (unsigned y = 0; y < N; y++) {
+      for (unsigned x = 0; x < N; x++) {
+        if (IsCorner(x, y, z, N)) {
+          //already computed and frozen.
+          continue;
+        }
+        Vec3f point = x0 + h * Vec3f(x, y, z);
+        float d = MinDist(trigs, trigFrames, point, mesh_);
+        fine(x, y, z) = short(d / distUnit);
+      }
+    }
+  }
+}
+
 void AdapSDF::ComputeFineDistBrute() {
   //allocate fine cells.
   std::cout<<trigList.size()<<"\n";
   fineGrid.resize(trigList.size());
   Vec3u dsize = dist.GetSize();
+  const unsigned N = FixedGrid5::N;
   //loop through fine cells.
   //number of cells is 1 - number of vertices and dist is stored on vertices.
   for (unsigned z = 0; z < dsize[2] - 1; z++) {
     for (unsigned y = 0; y < dsize[1] - 1; y++) {
       for (unsigned x = 0; x < dsize[0] - 1; x++) {
         unsigned sparseIdx = GetSparseCellIdx(x, y, z);
+        // index 0 reserved for emtpy cells.
+        if (sparseIdx == 0) {
+          continue;
+        }
         FixedGrid5& fine = fineGrid[sparseIdx];
         //corner vertices
         fine(0, 0, 0) = dist(x, y, z);
@@ -112,6 +146,196 @@ void AdapSDF::ComputeFineDistBrute() {
         fine(0, 4, 4) = dist(x, y + 1, z + 1);
         fine(4, 4, 4) = dist(x + 1, y + 1, z + 1);
 
+        //find closest distance within the coarse cell
+        const std::vector<size_t>& trigs = trigList[sparseIdx];
+        if (trigs.size() == 0) {
+          continue;
+        }
+        Vec3f x0 = voxSize * Vec3f(x, y, z) + origin;
+        ComputeDistGrid5(x0, fine, trigs);
+      }
+    }
+  }
+
+  //take min of edge vertices from diagonal neighbors, 
+  //if a neighbor cell has no fine grid, skip it.
+  //x
+  for (unsigned z = 0; z < dsize[2] - 2; z++) {
+    for (unsigned y = 0; y < dsize[1] - 2; y++) {
+      for (unsigned x = 0; x < dsize[0] - 1; x++) {
+        unsigned sparseIdx1 = GetSparseCellIdx(x, y, z);
+        unsigned sparseIdx2 = GetSparseCellIdx(x, y + 1, z + 1);
+        //compute min only if both adjace cells are present.
+        if (sparseIdx1 == 0 || sparseIdx2 == 0) {
+          continue;
+        }
+        FixedGrid5& fine1 = fineGrid[sparseIdx1];
+        FixedGrid5& fine2 = fineGrid[sparseIdx2];
+        for (unsigned finex = 1; finex < N - 1; finex++) {
+          short val1 = fine1(finex, N - 1, N - 1);
+          short val2 = fine2(finex, 0, 0);
+          if (std::abs(val1) > std::abs(val2)) {
+            fine1(finex, N - 1, N - 1) = val2;
+          } else {
+            fine2(finex, 0, 0) = val1;
+          }
+        }
+      }
+    }
+  }
+  //y
+  for (unsigned z = 0; z < dsize[2] - 2; z++) {
+    for (unsigned y = 0; y < dsize[1] - 1; y++) {
+      for (unsigned x = 0; x < dsize[0] -2; x++) {
+        unsigned sparseIdx1 = GetSparseCellIdx(x, y, z);
+        unsigned sparseIdx2 = GetSparseCellIdx(x+1, y, z + 1);
+        // compute min only if both adjace cells are present.
+        if (sparseIdx1 == 0 || sparseIdx2 == 0) {
+          continue;
+        }
+        FixedGrid5& fine1 = fineGrid[sparseIdx1];
+        FixedGrid5& fine2 = fineGrid[sparseIdx2];
+        for (unsigned finey = 1; finey < N - 1; finey++) {
+          short val1 = fine1(N - 1,finey, N - 1);
+          short val2 = fine2(0,finey, 0);
+          if (std::abs(val1) > std::abs(val2)) {
+            fine1(N - 1, finey, N - 1) = val2;
+          } else {
+            fine2(0, finey, 0) = val1;
+          }
+        }
+      }
+    }
+  }
+  //z
+  for (unsigned z = 0; z < dsize[2] - 1; z++) {
+    for (unsigned y = 0; y < dsize[1] - 2; y++) {
+      for (unsigned x = 0; x < dsize[0] - 2; x++) {
+        unsigned sparseIdx1 = GetSparseCellIdx(x, y, z);
+        unsigned sparseIdx2 = GetSparseCellIdx(x+1, y + 1, z);
+        // compute min only if both adjace cells are present.
+        if (sparseIdx1 == 0 || sparseIdx2 == 0) {
+          continue;
+        }
+        FixedGrid5& fine1 = fineGrid[sparseIdx1];
+        FixedGrid5& fine2 = fineGrid[sparseIdx2];
+        for (unsigned finez = 1; finez < N - 1; finez++) {
+          short val1 = fine1(N - 1, N - 1, finez);
+          short val2 = fine2(0, 0, finez);
+          if (std::abs(val1) > std::abs(val2)) {
+            fine1(N - 1, N - 1, finez) = val2;
+          } else {
+            fine2(0, 0, finez) = val1;
+          }
+        }
+      }
+    }
+  }
+
+  //take min of face vertices
+  //yz
+  for (unsigned z = 0; z < dsize[2] - 1; z++) {
+    for (unsigned y = 0; y < dsize[1] - 1; y++) {
+      for (unsigned x = 0; x < dsize[0] - 2; x++) {
+        unsigned sparseIdx1 = GetSparseCellIdx(x, y, z);
+        unsigned sparseIdx2 = GetSparseCellIdx(x + 1, y, z);
+        // compute min only if both adjace cells are present.
+        if (sparseIdx1 == 0 || sparseIdx2 == 0) {
+          continue;
+        }
+        FixedGrid5& fine1 = fineGrid[sparseIdx1];
+        FixedGrid5& fine2 = fineGrid[sparseIdx2];
+        for (unsigned finez = 0; finez < N; finez++) {
+          for (unsigned finey = 0; finey < N; finey++) {
+            short val1 = fine1(N - 1, finey, finez);
+            short val2 = fine2(0, finey, finez);
+            if (std::abs(val1) > std::abs(val2)) {
+              fine1(N - 1, finey, finez) = val2;
+            } else {
+              fine2(0, finey, finez) = val1;
+            }
+          }
+        }
+      }
+    }
+  }
+  //xz
+  for (unsigned z = 0; z < dsize[2] - 1; z++) {
+    for (unsigned y = 0; y < dsize[1] - 2; y++) {
+      for (unsigned x = 0; x < dsize[0] - 1; x++) {
+        unsigned sparseIdx1 = GetSparseCellIdx(x, y, z);
+        unsigned sparseIdx2 = GetSparseCellIdx(x, y+1, z);
+        // compute min only if both adjace cells are present.
+        if (sparseIdx1 == 0 || sparseIdx2 == 0) {
+          continue;
+        }
+        FixedGrid5& fine1 = fineGrid[sparseIdx1];
+        FixedGrid5& fine2 = fineGrid[sparseIdx2];
+        for (unsigned finez = 0; finez < N; finez++) {
+          for (unsigned finex = 0; finex < N; finex++) {
+            short val1 = fine1(finex, N - 1, finez);
+            short val2 = fine2(finex, 0, finez);
+            if (std::abs(val1) > std::abs(val2)) {
+              fine1(finex, N - 1, finez) = val2;
+            } else {
+              fine2(finex, 0, finez) = val1;
+            }
+          }
+        }
+      }
+    }
+  }
+  //xy
+  for (unsigned z = 0; z < dsize[2] - 2; z++) {
+    for (unsigned y = 0; y < dsize[1] - 1; y++) {
+      for (unsigned x = 0; x < dsize[0] - 1; x++) {
+        unsigned sparseIdx1 = GetSparseCellIdx(x, y, z);
+        unsigned sparseIdx2 = GetSparseCellIdx(x, y, z+1);
+        // compute min only if both adjace cells are present.
+        if (sparseIdx1 == 0 || sparseIdx2 == 0) {
+          continue;
+        }
+        FixedGrid5& fine1 = fineGrid[sparseIdx1];
+        FixedGrid5& fine2 = fineGrid[sparseIdx2];
+        
+        for (unsigned finey = 0; finey < N; finey++) {
+          for (unsigned finex = 0; finex < N; finex++) {
+            short val1 = fine1(finex, finey, N-1);
+            short val2 = fine2(finex, finey, 0);
+            if (std::abs(val1) > std::abs(val2)) {
+              fine1(finex, finey, N - 1) = val2;
+            } else {
+              fine2(finex, finey, 0) = val1;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  //fast sweep, freeze corner cells and cells within h_fine.
+  
+  float h_fine = voxSize / (N - 1);
+  for (unsigned z = 0; z < dsize[2] - 1; z++) {
+    for (unsigned y = 0; y < dsize[1] - 1; y++) {
+      for (unsigned x = 0; x < dsize[0] - 1; x++) {
+        unsigned sparseIdx = GetSparseCellIdx(x, y, z);
+        // index 0 reserved for emtpy cells.
+        if (sparseIdx == 0) {
+          continue;
+        }
+        FixedGrid5& fine = fineGrid[sparseIdx];
+        Array3D8u frozen;
+        frozen.Allocate(Vec3u(N, N, N), 0);
+        fine(0, 0, 0) = 1;
+        fine(N - 1, 0, 0) = 1;
+        fine(0, N - 1, 0) = 1;
+        fine(N - 1, N - 1, 0) = 1;
+        fine(0, 0, N - 1) = 1;
+        fine(N - 1, 0, N - 1) = 1;
+        fine(0, N - 1, N - 1) = 1;
+        fine(N - 1, N - 1, N - 1) = 1;
+        FastSweep((short*)fine.val, N, voxSize, distUnit, 2*voxSize, frozen);
       }
     }
   }
@@ -132,6 +356,40 @@ void AdapSDF::GatherTrigs(unsigned x, unsigned y, unsigned z,
   trigs.insert(trigs.end(), cell.begin(), cell.end());
 }
 
+float MinDist(const std::vector<size_t>& trigs,
+              const std::vector<TrigFrame> & trigFrames,
+  const Vec3f & query, const TrigMesh * mesh) {
+  float minDist = 1e20;
+  for (size_t i = 0; i < trigs.size(); i++) {
+    float px, py;
+    size_t tIdx = trigs[i];
+    const TrigFrame& frame = trigFrames[tIdx];
+    Triangle trig = mesh->GetTriangleVerts(tIdx);
+    Vec3f pv0 = query - trig.v[0];
+    px = pv0.dot(frame.x);
+    py = pv0.dot(frame.y);
+    TrigDistInfo info =
+        PointTrigDist2D(px, py, frame.v1x, frame.v2x, frame.v2y);
+
+    Vec3f normal = mesh->GetNormal(tIdx, info.bary);
+    Vec3f closest = info.bary[0] * trig.v[0] + info.bary[1] * trig.v[1] +
+                    info.bary[2] * trig.v[2];
+
+    float trigz = pv0.dot(frame.z);
+    // vector from closest point to voxel point.
+    Vec3f trigPt = query - closest;
+    float d = std::sqrt(info.sqrDist + trigz * trigz);
+    if (std::abs(minDist) > d) {
+      if (normal.dot(trigPt) < 0) {
+        minDist = -d;
+      } else {
+        minDist = d;
+      }
+    }
+  }
+  return minDist;
+}
+
 void AdapSDF::ComputeCoarseDist(unsigned x, unsigned y, unsigned z) {
   //gather triangles adjacent to this vertex.
   //using set or unordered_set is slower due to overhead.
@@ -147,37 +405,8 @@ void AdapSDF::ComputeCoarseDist(unsigned x, unsigned y, unsigned z) {
   if (trigs.size() == 0) {
     return;
   }
-  
-  float minDist = 1e20;
-  for (size_t i = 0; i < trigs.size(); i++) {
-    float px, py;
-    size_t tIdx = trigs[i];
-    const TrigFrame &frame = trigFrames[tIdx];
-    Triangle trig = mesh_->GetTriangleVerts(tIdx);
-    Vec3f point = voxSize * Vec3f(x, y, z) + origin;
-    Vec3f pv0 = point - trig.v[0];
-    px = pv0.dot(frame.x);
-    py = pv0.dot(frame.y);
-    TrigDistInfo info =
-        PointTrigDist2D(px, py, frame.v1x, frame.v2x, frame.v2y);
-
-    Vec3f normal = mesh_->GetNormal(tIdx, info.bary);
-    Vec3f closest = info.bary[0] * trig.v[0] + info.bary[1] * trig.v[1] +
-                    info.bary[2] * trig.v[2];
-
-    float trigz = pv0.dot(frame.z);
-    // vector from closest point to voxel point.
-    Vec3f trigPt = point - closest;
-    float d = std::sqrt(info.sqrDist + trigz * trigz);
-    if (std::abs(minDist) > d) {
-      if (normal.dot(trigPt) < 0) {
-        minDist = -d;
-      } else {
-        minDist = d;
-      }
-    }
-  }
-
+  Vec3f point = voxSize * Vec3f(x, y, z) + origin;
+  float minDist = MinDist(trigs, trigFrames, point, mesh_);
   dist(x, y, z) = short(minDist / distUnit);
 }
 
