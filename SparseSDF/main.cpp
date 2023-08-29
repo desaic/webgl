@@ -439,9 +439,9 @@ void GetSDFSlice(const AdapSDF& sdf, Array2D8u &slice, Vec3f sliceRes, float z) 
       if (dist <= -0.6) {
         slice(col, row) = 0;
       }
-      //if (dist > -0.05 && dist < 0.05) {
-      //  slice(col, row) = 255;
-      //}
+      if (dist > -0.05 && dist < 0.05) {
+        slice(col, row) = 255;
+      }
     }
   }
 }
@@ -582,10 +582,10 @@ void TestSDF() {
   slice.Allocate(20 * sdfSize[0], 20 * sdfSize[1]);
   float z = 15;
   timer.Start();
-  GetSDFFineSlice(sdf, slice, Vec3f(0.02f, 0.02f, 0.02f), z);
+  GetSDFSlice(sdf, slice, Vec3f(0.02f, 0.02f, 0.02f), z);
    ms = timer.ElapsedMS();
   std::cout << "slice time " << ms << "\n";
-  std::string sliceFile = "slicefine" + std::to_string(int(z / 0.001)) + ".png";
+  std::string sliceFile = "sliceiso" + std::to_string(int(z / 0.001)) + ".png";
   SavePng(sliceFile, slice);
   std::vector<uint8_t> dist(sdf.dist.GetData().size());
 
