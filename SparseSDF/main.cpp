@@ -426,20 +426,22 @@ void SaveSDFImages(const std::string & prefix, const Array3D<short> &sdf) {
 
 void GetSDFSlice(const AdapSDF& sdf, Array2D8u &slice, Vec3f sliceRes, float z) {
   Vec2u sliceSize = slice.GetSize();
+  float MaxDrawDist = 1.2f;
+  float distScale = 100;
   for (unsigned row = 0; row < sliceSize[1]; row++) {
     for (unsigned col = 0; col < sliceSize[0]; col++) {
       Vec3f x((col +0.5f)* sliceRes[0], (row+0.5f)*sliceRes[1], z);
       float dist = sdf.GetCoarseDist(x+sdf.origin);
-      if (dist < 0.6&&dist>-0.6) {
-        slice(col, row) = uint8_t(dist * 200+127);
+      if (dist < MaxDrawDist && dist > -MaxDrawDist) {
+        slice(col, row) = uint8_t(dist * distScale + 127);
       }
-      if (dist >= 0.6) {
+      if (dist >= MaxDrawDist) {
         slice(col, row) = 255;
       }
-      if (dist <= -0.6) {
+      if (dist <= -MaxDrawDist) {
         slice(col, row) = 0;
       }
-      if (dist > -0.05 && dist < 0.05) {
+      if (dist > -0.016 && dist < 0.016) {
         slice(col, row) = 255;
       }
     }
@@ -449,23 +451,25 @@ void GetSDFSlice(const AdapSDF& sdf, Array2D8u &slice, Vec3f sliceRes, float z) 
 void GetSDFFineSlice(const AdapSDF& sdf, Array2D8u& slice, Vec3f sliceRes,
                  float z) {
   Vec2u sliceSize = slice.GetSize();
+  float MaxDrawDist = 1.2f;
+  float distScale = 100;
   for (unsigned row = 0; row < sliceSize[1]; row++) {
     for (unsigned col = 0; col < sliceSize[0]; col++) {
       Vec3f x((col + 0.5f) * sliceRes[0], (row + 0.5f) * sliceRes[1], z);
-      //if (row == 200 && col == 1239) {
-      //  std::cout << "debug\n";
-      //}
-      float dist = sdf.GetFineDist(x + sdf.origin);
-      if (dist < 0.6 && dist > -0.6) {
-        slice(col, row) = uint8_t(dist * 200 + 127);
+      if (row == 255 && col == 1600) {
+        std::cout << "debug\n";
       }
-      if (dist >= 0.6) {
+      float dist = sdf.GetFineDist(x + sdf.origin);
+      if (dist < MaxDrawDist && dist > -MaxDrawDist) {
+        slice(col, row) = uint8_t(dist * distScale + 127);
+      }
+      else if (dist >= MaxDrawDist) {
         slice(col, row) = 255;
       }
-      if (dist <= -0.6) {
+      else if (dist <= -MaxDrawDist) {
         slice(col, row) = 0;
       }
-      if (dist > -0.05 && dist < 0.05) {
+      if (dist > -0.016 && dist < 0.016) {
         slice(col, row) = 255;
       }
     }
@@ -549,18 +553,19 @@ void CheckCornerCase(const AdapSDF &sdf) { Vec3u size = sdf.dist.GetSize();
 void TestSDF() {
   TrigMesh mesh1;
   
-  //std::string fileName = "F:/dolphin/meshes/fish/salmon.stl";
+  std::string fileName = "F:/dolphin/meshes/fish/salmon.stl";
   //std::string fileName = "F:/dolphin/meshes/lattice_big/MeshLattice.stl";
-  //mesh1.LoadStl(fileName);
+  mesh1.LoadStl(fileName);
   
-  std::string fileName = "F:/dolphin/meshes/sdfTest/soleRigid1.obj";
-  mesh1.LoadObj(fileName);
+  //std::string fileName = "F:/dolphin/meshes/sdfTest/soleRigid1.obj";
+  //mesh1.LoadObj(fileName);
   mesh1.ComputePseudoNormals();
   
   //SavePseudoNormals(mesh1,"psnormal.obj");
   AdapSDF sdf;
   Utils::Stopwatch timer;
-  
+  //brute force dense fine sdf
+  sdf.voxSize = 0.4;
   sdf.BuildTrigList(&mesh1);
   sdf.Compress();
   timer.Start();
@@ -580,12 +585,12 @@ void TestSDF() {
   Array2D8u slice;
   Vec3u sdfSize = sdf.dist.GetSize();
   slice.Allocate(20 * sdfSize[0], 20 * sdfSize[1]);
-  float z = 15;
+  float z = 5;
   timer.Start();
-  GetSDFSlice(sdf, slice, Vec3f(0.02f, 0.02f, 0.02f), z);
+  GetSDFFineSlice(sdf, slice, Vec3f(0.02f, 0.02f, 0.02f), z);
    ms = timer.ElapsedMS();
   std::cout << "slice time " << ms << "\n";
-  std::string sliceFile = "sliceiso" + std::to_string(int(z / 0.001)) + ".png";
+  std::string sliceFile = "sliceFine" + std::to_string(int(z / 0.001)) + ".png";
   SavePng(sliceFile, slice);
   std::vector<uint8_t> dist(sdf.dist.GetData().size());
 

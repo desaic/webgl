@@ -119,6 +119,18 @@ void AdapSDF::ComputeDistGrid5(Vec3f x0, FixedGrid5& fine,
   }
 }
 
+void PrintGrid5(const FixedGrid5&grid) { const unsigned N = grid.N;
+  for (unsigned z = 0; z < N; z++) {
+    for (unsigned y = 0; y < N; y++) {
+      for (unsigned x = 0; x < N; x++) {
+        std::cout << grid(x, y, z) << ' ';
+      }
+      std::cout << "\n";
+    }
+    std::cout << "\n";
+  }
+}
+
 void AdapSDF::ComputeFineDistBrute() {
   //allocate fine cells.
   std::cout<<trigList.size()<<"\n";
@@ -153,6 +165,10 @@ void AdapSDF::ComputeFineDistBrute() {
         }
         Vec3f x0 = voxSize * Vec3f(x, y, z) + origin;
         ComputeDistGrid5(x0, fine, trigs);
+        if (x == 80 && y == 12 && z == 37) {
+          std::cout << "debug sweep original dist\n";
+          PrintGrid5(fine);
+        }
       }
     }
   }
@@ -326,16 +342,24 @@ void AdapSDF::ComputeFineDistBrute() {
         }
         FixedGrid5& fine = fineGrid[sparseIdx];
         Array3D8u frozen;
+        if (x == 80 && y == 12 && z == 37) {
+          std::cout << "debug sweep\n";
+          PrintGrid5(fine);
+        }
         frozen.Allocate(Vec3u(N, N, N), 0);
-        fine(0, 0, 0) = 1;
-        fine(N - 1, 0, 0) = 1;
-        fine(0, N - 1, 0) = 1;
-        fine(N - 1, N - 1, 0) = 1;
-        fine(0, 0, N - 1) = 1;
-        fine(N - 1, 0, N - 1) = 1;
-        fine(0, N - 1, N - 1) = 1;
-        fine(N - 1, N - 1, N - 1) = 1;
-        FastSweep((short*)fine.val, N, voxSize, distUnit, 2*voxSize, frozen);
+        frozen(0, 0, 0) = 1;
+        frozen(N - 1, 0, 0) = 1;
+        frozen(0, N - 1, 0) = 1;
+        frozen(N - 1, N - 1, 0) = 1;
+        frozen(0, 0, N - 1) = 1;
+        frozen(N - 1, 0, N - 1) = 1;
+        frozen(0, N - 1, N - 1) = 1;
+        frozen(N - 1, N - 1, N - 1) = 1;
+        FastSweep((short*)fine.val, N, h_fine, distUnit, band*N, frozen);
+        if (x == 80 && y == 12 && z == 37) {
+          std::cout << "debug after sweep\n";
+          PrintGrid5(fine);
+        }
       }
     }
   }
@@ -477,15 +501,16 @@ float AdapSDF::GetFineDist(const Vec3f& x) const {
   Vec3f fineCoord = local - voxSize * Vec3f(ix, iy, iz);
   const unsigned N = FixedGrid5::N;
   float fine_h = voxSize / (N - 1);
-  //handle case where point is on right wall etc.
+
   float indexEps = 1e-3;
   Vec3f fineIdx = (1.0f / fine_h) * fineCoord;
+  // handle case where point is on right wall etc.
+  for (unsigned d = 0; d < 3; d++) {
+    fineIdx[d] = std::min(fineIdx[d], float(N - 1));
+  }
   unsigned fx = unsigned(fineIdx[0] - indexEps);
   unsigned fy = unsigned(fineIdx[1] - indexEps);
-  unsigned fz = unsigned(fineIdx[2] - indexEps);
-  if (fx>N-2 || fy>N-2||fz>N-2) {
-    return coarseDist;
-  }
+  unsigned fz = unsigned(fineIdx[2] - indexEps);  
   float a = (fx + 1) - fineIdx[0];
   float b = (fy + 1) - fineIdx[1];
   float c = (fz + 1) - fineIdx[2];
