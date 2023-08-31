@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.16)
+PROJECT (Water)
+include_directories(.)
+FILE(GLOB EXE_SRC "*.cpp" "*.c")
+set(CMAKE_CXX_STANDARD 17)
+add_executable(water ${EXE_SRC} )
+target_link_libraries(water ws2_32.lib)
