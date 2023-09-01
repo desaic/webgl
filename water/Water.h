@@ -11,7 +11,10 @@ class Water {
   int AdvectPhi();
 
   int Allocate(unsigned sx, unsigned sy, unsigned sz);
-
+  //linear 
+  Vec3f InterpU(const Vec3f & x);
+  //trilinear
+  float InterpPhi(const Vec3f& x);
  private:
   //defined on face centers
   // size is +1 of voxel grid size.

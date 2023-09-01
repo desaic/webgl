@@ -7,6 +7,7 @@ int Water::Allocate(unsigned sx, unsigned sy, unsigned sz) {
 }
 
 int Water::AdvectU() {}
+
 int Water::AddBodyForce() {}
 int Water::SolveP() {}
 int Water::AdvectPhi() {}
@@ -18,3 +19,6 @@ int Water::Step() {
   AdvectPhi();
   return 0;
 }
+
+Vec3f Water::InterpU(const Vec3f& x) { return Vec3f(0, 0, 0); }
+float Water::InterpPhi(const Vec3f& x) { return -1; }
