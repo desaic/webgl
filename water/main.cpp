@@ -3,7 +3,7 @@
 #include "Water.h"
 int main(int argc, char* argv[]){
   TrigMesh mesh;
-	std::cout<<"lmao\n";
+	std::cout<<"XD\n";
   Water water;
 	return 0;
 }

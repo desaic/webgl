@@ -4,7 +4,7 @@
 #include "Vec3.h"
 class Water {
  public:
-  int Step() { return 0; }
+  int Step();
   int AdvectU();
   int AddBodyForce();
   int SolveP();
