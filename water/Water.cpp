@@ -1,4 +1,5 @@
 #include "Water.h"
+#include <cmath>
 
 int Water::Allocate(unsigned sx, unsigned sy, unsigned sz) {
   u.Allocate(sx + 1, sy + 1, sz + 1);
@@ -32,10 +33,64 @@ int Water::AdvectU() {
 }
 
 int Water::AddBodyForce() {
-  
+  return -1;
 }
 
-int Water::SolveP() { return 0; }
+int Water::SolveP() { 
+        // Assuming the grids are cubic for simplicity
+        Vec3u size = p.GetSize();
+
+        if (size[0] == 0 || 
+            size[1] == 0 || 
+            size[2] == 0) return -1; // Error: grid size is zero
+
+        // Temp grid to store intermediate results
+        Array3D<float> p_temp(size[0], size[1], size[2]);
+        
+        float tolerance = 1e-4f;
+        float max_iterations = 100;
+
+        float hx = 1.0f / (size[0] - 1); // Assuming unit cube for simplicity
+        float hy = 1.0f / (size[1] - 1); // Assuming unit cube for simplicity
+        float hz = 1.0f / (size[2] - 1); // Assuming unit cube for simplicity
+
+        float h2 = h * h;
+
+        for(int iter = 0; iter < max_iterations; ++iter) {
+            float max_error = 0.0f;
+
+            for(int x = 1; x < size[0]; ++x) {
+                for(int y = 1; y < size[1]; ++y) {
+                    for(int z = 1; z < size[2]; ++z) {
+
+                        float divergence = -0.5f * (
+                            u(x+1, y, z)[0] - u(x-1,y,z)[0] +
+                            u(x, y+1, z)[1] - u(x,y-1,z)[1] +
+                            u(x, y, z+1)[2] - u(x,y,z-1)[2]
+                        ) / h;
+
+                        p_temp(x,y,z) = (1.0f / 6.0f) * (h2 * divergence +
+                            p(x+1, y, z) + p(x-1, y, z) +
+                            p(x, y+1, z) + p(x, y-1, z) +
+                            p(x, y, z+1) + p(x, y, z-1));
+
+                        max_error = std::max(max_error, std::fabs(p_temp(x,y,z) - p(x,y,z)));
+                    }
+                }
+            }
+
+            // Swap the grids
+            memcpy(p.DataPtr(), p_temp.DataPtr(), size[0]*size[1]*size[2]*sizeof(p(0,0,0)));
+
+            // Check for convergence
+            if (max_error < tolerance) {
+                return 0; // Success: the solution has converged
+            }
+        }
+
+        return 1; //
+}
+
 int Water::AdvectPhi() { return 0; }
 
 int Water::Step() {
