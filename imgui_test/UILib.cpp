@@ -35,11 +35,6 @@ int UILib::AddMesh(std::shared_ptr<TrigMesh> mesh) {
   return meshId;
 }
 
-void UILib::SetWindowSize(unsigned w, unsigned h) {
-  _width = w;
-  _height = h;
-}
-
 int UILib::AddButton(const std::string& text,
                      const std::function<void()>& onClick, bool sameLine) {  
   std::shared_ptr<Button> button = std::make_shared<Button>();
@@ -345,7 +340,7 @@ int UILib::LoadShaders() {
   return 0;
 }
 
-void UILib::SetWindowSize(int width, int height) {
+void UILib::SetWindowSize(unsigned width, unsigned height) {
   _width = width;
   _height = height;
 }
