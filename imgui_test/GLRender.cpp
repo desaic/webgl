@@ -74,6 +74,7 @@ void GLRender::Render() {
   glEnable(GL_DEPTH_TEST);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glUseProgram(0);
+
   for (size_t i = 0; i < _bufs.size(); i++) {
     DrawMesh(i);
   }
@@ -181,26 +182,28 @@ int GLRender::AllocateMeshBuffer(size_t meshId) {
     return - 1;
   }
   GLBuf& buf = _bufs[meshId];
+  auto mesh = buf.mesh;
+  mesh->ComputeTrigNormals();
+  const unsigned DIM = 3;
+  size_t numVerts = 3 * mesh->t.size();
+  size_t numFloats = DIM * numVerts;
+  std::vector<Vec3f> v(numVerts);
+  std::vector<Vec3f> n(numVerts);
+  for (size_t i = 0; i < mesh->t.size(); i += 3) {
+    Vec3f normal = *(Vec3f*)(mesh->nt.data() + i);
+    for (int j = 0; j < 3; j++) {
+      unsigned vidx = mesh->t[i + j];
+      unsigned dstV = i + j;
+      v[3 * dstV] = *(Vec3f*)(mesh->v.data() + 3 * vidx);
+      n[3 * dstV] = normal;
+    }
+  }
+
   glGenVertexArrays(1, &buf.vao);
   glBindVertexArray(buf.vao);
   buf.b.resize(GLBuf::NUM_BUF);
   glGenBuffers(GLBuf::NUM_BUF, buf.b.data());
-  buf.mesh->ComputeTrigNormals();
   glBindBuffer(GL_ARRAY_BUFFER, buf.b[0]);
-  const unsigned DIM = 3;
-  size_t numVerts = 3 * buf.mesh->t.size();
-  size_t numFloats = DIM * numVerts;
-  std::vector<Vec3f> v(numVerts);
-  std::vector<Vec3f> n(numVerts);
-  for (size_t i = 0; i < buf.mesh->t.size(); i+=3) {
-    Vec3f normal = *(Vec3f*)(buf.mesh->nt.data() + i);
-    for (int j = 0; j < 3; j++) {
-      unsigned vidx = buf.mesh->t[i + j];
-      unsigned dstV = i + j;
-      v[3 * dstV] = *(Vec3f*)(buf.mesh->v.data() + 3 * vidx);
-      n[3 * dstV] = normal;
-    }
-  }
   glBufferData(GL_ARRAY_BUFFER, numFloats * sizeof(GLfloat), v.data(),
                GL_DYNAMIC_DRAW);
   glEnableVertexAttribArray(0);
