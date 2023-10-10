@@ -36,59 +36,66 @@ int Water::AddBodyForce() {
   return -1;
 }
 
+// adapted from https://github.com/matthias-research/pages/blob/master/tenMinutePhysics/17-fluidSim.html
 int Water::SolveP() { 
-        // Assuming the grids are cubic for simplicity
-        Vec3u size = p.GetSize();
+        const Vec3u& size = p.GetSize();
 
         if (size[0] == 0 || 
             size[1] == 0 || 
-            size[2] == 0) return -1; // Error: grid size is zero
-
-        // Temp grid to store intermediate results
-        Array3D<float> p_temp(size[0], size[1], size[2]);
+            size[2] == 0) return -1; // empty grid
         
         float tolerance = 1e-4f;
-        float max_iterations = 100;
+        float cp = density * h / dt;
 
-        float hx = 1.0f / (size[0] - 1); // Assuming unit cube for simplicity
-        float hy = 1.0f / (size[1] - 1); // Assuming unit cube for simplicity
-        float hz = 1.0f / (size[2] - 1); // Assuming unit cube for simplicity
+        for(int iter = 0; iter < nIterations; ++iter) {
+            // right now checks for worst case in a single cell
+            float max_error = 0.0f; 
 
-        float h2 = h * h;
+            for (int x = 1; x < size[0] - 1; ++x) {
+                for (int y = 1; y < size[1] - 1; ++y) {
+                    for (int z = 1; z < size[2] - 1; ++z) {
+                        if (boundary(x,y,z) < 1e-5) continue;
 
-        for(int iter = 0; iter < max_iterations; ++iter) {
-            float max_error = 0.0f;
+                        float sx0 = boundary(x-1, y  , z  );
+                        float sx1 = boundary(x+1, y  , z  );
+                        float sy0 = boundary(x  , y-1, z  );
+                        float sy1 = boundary(x  , y+1, z  );
+                        float sz0 = boundary(x  , y  , z-1);
+                        float sz1 = boundary(x  , y  , z+1);
 
-            for(int x = 1; x < size[0]; ++x) {
-                for(int y = 1; y < size[1]; ++y) {
-                    for(int z = 1; z < size[2]; ++z) {
+                        float s = sx0 + sx1 + sy0 + sy1 + sz0 + sz1;
 
-                        float divergence = -0.5f * (
-                            u(x+1, y, z)[0] - u(x-1,y,z)[0] +
-                            u(x, y+1, z)[1] - u(x,y-1,z)[1] +
-                            u(x, y, z+1)[2] - u(x,y,z-1)[2]
-                        ) / h;
+                        if (s < 1e-5) continue;
 
-                        p_temp(x,y,z) = (1.0f / 6.0f) * (h2 * divergence +
-                            p(x+1, y, z) + p(x-1, y, z) +
-                            p(x, y+1, z) + p(x, y-1, z) +
-                            p(x, y, z+1) + p(x, y, z-1));
+                        float divergence = (
+                            u(x+1, y  , z  )[0] - u(x, y, z)[0] +
+                            u(x  , y+1, z  )[1] - u(x, y, z)[1] +
+                            u(x  , y  , z+1)[2] - u(x, y, z)[2]
+                        );
 
-                        max_error = std::max(max_error, std::fabs(p_temp(x,y,z) - p(x,y,z)));
+                        float pressure = overrelaxation* (-divergence / s);
+                        
+                        float p_0 = p(x, y, z);
+                        p(x, y, z) = pressure * cp;
+
+                        // Update velocity field, i think b/c gauss-seidel does in-place substitutions?
+                        u(x  , y  , z  )[0] -= pressure * sx0;
+                        u(x+1, y  , z  )[0] += pressure * sx1;
+                        u(x  , y  , z  )[1] -= pressure * sy0;
+                        u(x  , y+1, z  )[1] += pressure * sy1;                        
+                        u(x  , y  , z  )[2] -= pressure * sz0;
+                        u(x  , y  , z+1)[2] += pressure * sz1;
+
+                        max_error = std::max(max_error, std::fabs(p_0 - p(x,y,z)));
                     }
                 }
             }
-
-            // Swap the grids
-            memcpy(p.DataPtr(), p_temp.DataPtr(), size[0]*size[1]*size[2]*sizeof(p(0,0,0)));
-
-            // Check for convergence
             if (max_error < tolerance) {
-                return 0; // Success: the solution has converged
+                return 0; 
             }
         }
 
-        return 1; //
+        return 1; // did not converge 
 }
 
 int Water::AdvectPhi() { return 0; }
@@ -166,6 +173,17 @@ Vec3f Water::InterpU(const Vec3f& x) {
     u0[1] * c0 + u1[1] * c1,
     u0[2] * c0 + u1[2] * c1
   );
+}
+
+float Water::boundary(unsigned x, unsigned y, unsigned z) {
+  const Vec3u sz = u.GetSize();
+  if (x == 0 || x == sz[0] - 1 ||
+      y == 0 || y == sz[1] - 1 || 
+      z == 0 || z == sz[2]) {
+    return 0;
+  }
+
+  return 1;
 }
 
 float Water::InterpPhi(const Vec3f& x) { 

@@ -27,5 +27,10 @@ class Water {
   Array3D<float> p;
   float dt=0.01f;
   float h=0.1f;
+  float density=1.0f; // reasonable value?
+  int nIterations=50; // reasonable value?
+  float overrelaxation=1.9f;
+  
+  float boundary(unsigned x, unsigned y, unsigned z);
 };
 #endif
