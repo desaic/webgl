@@ -11,12 +11,18 @@ add_subdirectory("extern/imgui")
 include_directories("extern/imgui/backends")
 link_directories("extern/glfw3.3.8")
 add_compile_options("/std:c++latest")
-add_executable(${BIN}
-  ${SRC}
-  resource/icons.rc
-  )
+include_directories("inc")
 
-target_link_libraries(${BIN} imgui glfw3 opengl32 glew32s)
+list(REMOVE_ITEM SRC "main.cpp")
+
+add_library("UILib" ${SRC})
+  
+add_executable(${BIN}
+  "main.cpp"
+  resource/icons.rc
+)
+  
+target_link_libraries(${BIN} UILib imgui glfw3 opengl32 glew32s)
 
 # copy fonts over
 # @todo(mike) more consistent place for all this kind of stuff
