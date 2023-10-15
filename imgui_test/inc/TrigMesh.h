@@ -83,6 +83,7 @@ class TrigMesh {
   // save out a point cloud as obj.
   static void SaveObj(const std::string& filename,
                       const std::vector<Vec3f>& pts);
+  int SaveStlTxt(const std::string& filename);
 };
 
 TrigMesh SubSet(const TrigMesh& m, const std::vector<size_t>& trigs);

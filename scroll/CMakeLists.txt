@@ -8,6 +8,7 @@ link_directories("./libtiff/lib/")
 link_directories("./libtiff/zlib/lib/")
 
 add_subdirectory("../imgui_test" "ui")
+include_directories("../imgui_test/inc/")
 include_directories("./include")
 FILE(GLOB EXE_SRC "*.cpp" "*.c")
 link_directories("../imgui_test/extern/glfw3.3.8")

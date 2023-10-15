@@ -158,6 +158,13 @@ class UILib {
   int AddMesh(std::shared_ptr<TrigMesh> mesh);
 
   void SetWindowSize(unsigned w, unsigned h);
+
+  void SetShowGL(bool show) { _showGL = show; }
+
+  void SetInitImagePos(int x, int y) {
+    _initImagePosX = x;
+    _initImagePosY = y;
+  }
  private:
 
   void DrawImages();
@@ -169,6 +176,9 @@ class UILib {
   GLFWwindow* _window = nullptr;
   int _width = 2278;
   int _height = 900;
+
+  int _initImagePosX = 20;
+  int _initImagePosY = 0;
 
   mutable std::mutex _widgetsLock;
   std::vector<std::shared_ptr<UIWidget> > uiWidgets_;
@@ -188,7 +198,7 @@ class UILib {
   std::string imageWindowTitle_="Images";
   bool _running = false;
 
-
+  bool _showGL = true;
   std::mutex glLock_;
   GLRender _glRender;
 };
