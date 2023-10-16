@@ -244,10 +244,10 @@ std::string MakeFileName(const std::string& prefix,
 
 void ConvertImages() {
   //std::string prefix = "H:/scroll1mask/masked_";
-  std::string prefix = "H:/segments/dl.ash2txt.org/hari-seldon-uploads/team-finished-paths/scroll1/20230929220924/layers/";
+  std::string prefix = "H:/segments/dl.ash2txt.org/hari-seldon-uploads/team-finished-paths/scroll1/20231005123334/layers/";
   std::string suffixIn = ".tif";
   std::string suffixOut = ".png";
-  std::string outPrefix = "H:/segments/dl.ash2txt.org/hari-seldon-uploads/team-finished-paths/scroll1/20230929220924/png/";
+  std::string outPrefix = "H:/segments/dl.ash2txt.org/hari-seldon-uploads/team-finished-paths/scroll1/20231005123334/png/";
   unsigned i0 = 0;
   unsigned i1 = 64;
   const int padding = 2;
