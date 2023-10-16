@@ -7,13 +7,15 @@ include_directories("./libtiff/zlib/include/")
 link_directories("./libtiff/lib/")
 link_directories("./libtiff/zlib/lib/")
 
-add_executable(${BIN} ${SRC})
-set_target_properties(${BIN} PROPERTIES
-  EXCLUDE_FROM_ALL TRUE
-  CXX_STANDARD 20
-  CXX_STANDARD_REQUIRED TRUE
-)
+add_subdirectory("../imgui_test" "ui")
+include_directories("../imgui_test/inc/")
+include_directories("./include")
+FILE(GLOB EXE_SRC "*.cpp" "*.c")
+link_directories("../imgui_test/extern/glfw3.3.8")
+link_directories("../imgui_test/extern/glew-2.1.0")
 
-target_link_libraries( ${BIN} debug tiffd zlibstaticd)
-target_link_libraries( ${BIN} optimized tiff zlibstatic)
+add_executable(${BIN} ${SRC})
+
+target_link_libraries( ${BIN} debug     tiffd zlibstaticd UILib imgui glfw3 opengl32 glew32s)
+target_link_libraries( ${BIN} optimized tiff  zlibstatic  UILib imgui glfw3 opengl32 glew32s)
 

@@ -409,14 +409,17 @@ void UILib::UILoop() {
     ImGui::SetNextWindowPos(ImVec2(20, 0), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(800, 800), ImGuiCond_FirstUseEver);
 
-    _glRender.Render();
-    ImGui::Begin("GL view", 0, ImGuiWindowFlags_NoBringToFrontOnFocus);
-    ImGui::Image((ImTextureID)(size_t(_glRender.TexId())),
-                 ImVec2(float(_glRender.Width()), float(_glRender.Height())));
-    ImGui::End();
+    if (_showGL) {
+      _glRender.Render();
+      ImGui::Begin("GL view", 0, ImGuiWindowFlags_NoBringToFrontOnFocus);
+      ImGui::Image((ImTextureID)(size_t(_glRender.TexId())),
+                   ImVec2(float(_glRender.Width()), float(_glRender.Height())));
+      ImGui::End();
+    }
 
     //image viewer
-    ImGui::SetNextWindowPos(ImVec2(820, 0), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(_initImagePosX, _initImagePosY),
+                            ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(300, 300), ImGuiCond_FirstUseEver);
     ImGuiWindowFlags image_window_flags = 0;
     image_window_flags |= ImGuiWindowFlags_AlwaysHorizontalScrollbar;
@@ -447,7 +450,7 @@ void UILib::UILoop() {
     ImGui::End();
     //menu and buttons
     ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(0, 0));
+    ImGui::SetNextWindowSize(ImVec2(100, 40), ImGuiCond_FirstUseEver);
     ImGuiWindowFlags control_window_flags = 0;
     control_window_flags |= ImGuiWindowFlags_MenuBar;
     ImGui::Begin("Controls", nullptr, control_window_flags);   

@@ -6,6 +6,7 @@
 #include "lodepng.h"
 #include "TrigMesh.h"
 #include "tiffconf.h"
+#include "UILib.h"
 #include <random>
 #include <stdbool.h>
 #include <stdio.h>
@@ -374,8 +375,27 @@ void MakeSlices() {
 
 }
 
+void LoadImages() {
+  Array2D8u combined;
+
+}
+
+void UIMain() { 
+  UILib ui;
+  ui.SetShowGL(false);
+  ui.SetFontsDir("./fonts");
+  ui.SetWindowSize(1280, 800);
+  ui.Run();
+  const unsigned PollFreqMs = 100;
+  while (ui.IsRunning()) {
+    // main thread not doing much
+    std::this_thread::sleep_for(std::chrono::milliseconds(PollFreqMs));
+  }
+}
+
 int main(int argc, char* argv[]) {
   //MakeSlices();
-  ConvertImages();
+  //ConvertImages();
+  UIMain();
   return 0;
 }
