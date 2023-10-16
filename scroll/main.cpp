@@ -375,6 +375,11 @@ void MakeSlices() {
 
 }
 
+void LoadImages() {
+  Array2D8u combined;
+
+}
+
 void UIMain() { 
   UILib ui;
   ui.SetShowGL(false);
