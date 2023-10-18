@@ -3,6 +3,8 @@
 #include <iomanip>
 #include <sstream>
 #include "Array2D.h"
+#include "ConfigFile.h"
+
 #include "lodepng.h"
 #include "TrigMesh.h"
 #include "tiffconf.h"
@@ -380,11 +382,23 @@ void LoadImages() {
 
 }
 
+ConfigFile conf;
+
+void OpenConfig(const std::string & filename) {
+
+}
+
+void SaveConfig(const std::string& filename) {
+
+}
+
 void UIMain() { 
   UILib ui;
   ui.SetShowGL(false);
   ui.SetFontsDir("./fonts");
   ui.SetWindowSize(1280, 800);
+  ui.SetFileOpenCb(OpenConfig);
+  ui.SetFileSaveCb(SaveConfig);
   ui.Run();
   const unsigned PollFreqMs = 100;
   while (ui.IsRunning()) {
