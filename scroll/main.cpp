@@ -402,6 +402,8 @@ void SaveConfig(const std::string& filename) {
   conf.Save(out);
 }
 
+int dummyId = 0;
+
 void UIMain() {
   UILib ui;
   OpenConfig("config.txt");
@@ -410,6 +412,7 @@ void UIMain() {
   ui.SetWindowSize(1280, 800);
   ui.SetFileOpenCb(OpenConfig);
   ui.SetFileSaveCb(SaveConfig);
+  dummyId = ui.AddSlideri("lol", 20, -1, 30);
   ui.Run();
   const unsigned PollFreqMs = 100;
   while (ui.IsRunning()) {
