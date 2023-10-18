@@ -1,20 +1,21 @@
-#include <iostream>
-#include <array>
-#include <iomanip>
-#include <sstream>
-#include "Array2D.h"
-#include "ConfigFile.h"
-
-#include "lodepng.h"
-#include "TrigMesh.h"
-#include "tiffconf.h"
-#include "UILib.h"
-#include <random>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include <array>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <random>
+#include <sstream>
+
+#include "Array2D.h"
+#include "ConfigFile.h"
+#include "TrigMesh.h"
+#include "UILib.h"
+#include "lodepng.h"
+#include "tiffconf.h"
 #include "tiffio.h"
 
 static void LoadPngToSlice(const std::string& filename, Array2D8u& slice) {
@@ -31,8 +32,8 @@ static void LoadPngToSlice(const std::string& filename, Array2D8u& slice) {
   slice.SetSize(w, h);
 }
 
-static size_t ExtractMat(const Array2D8u& slice, Array2D8u& dst, uint8_t targetMat)
-{
+static size_t ExtractMat(const Array2D8u& slice, Array2D8u& dst,
+                         uint8_t targetMat) {
   size_t pixCount = 0;
   Vec2u sliceSize = slice.GetSize();
   dst.Allocate(sliceSize[0], sliceSize[1]);
@@ -55,8 +56,9 @@ struct Rect {
   Rect() : x(0), y(0), width(0), height(0) {}
 };
 
-///grows in x then y. modifies visited pixels
-static Rect GrowRect(const Array2D8u& slice, Array2D8u& visited, int x0, int y0) {
+/// grows in x then y. modifies visited pixels
+static Rect GrowRect(const Array2D8u& slice, Array2D8u& visited, int x0,
+                     int y0) {
   Rect r;
   Vec2u sliceSize = slice.GetSize();
   int x1 = x0;
@@ -106,7 +108,8 @@ static Rect GrowRect(const Array2D8u& slice, Array2D8u& visited, int x0, int y0)
   return r;
 }
 
-static void Img2Mesh(TrigMesh& out, const Array2D8u& slice, float* voxRes, float z0) {
+static void Img2Mesh(TrigMesh& out, const Array2D8u& slice, float* voxRes,
+                     float z0) {
   Vec2u sliceSize = slice.GetSize();
   Array2D8u visited(sliceSize[0], sliceSize[1]);
   visited.Fill(0);
@@ -138,7 +141,7 @@ static void Img2Mesh(TrigMesh& out, const Array2D8u& slice, float* voxRes, float
 
 /// each material is saved to a separate obj with _{material_id} suffix
 static void SaveSliceAsStl(std::string outFilePrefix, const Array2D8u& slice,
-  float* voxRes, float z0, int layer) {
+                           float* voxRes, float z0, int layer) {
   const unsigned int MAX_MATERIAL = 4;
   TrigMesh mout[MAX_MATERIAL];
   std::vector<int> pixCount(MAX_MATERIAL, 0);
@@ -151,8 +154,8 @@ static void SaveSliceAsStl(std::string outFilePrefix, const Array2D8u& slice,
     }
 
     Img2Mesh(mout[targetMat - 1], matSlice, voxRes, z0);
-    std::string outFile = outFilePrefix + std::to_string(layer)
-      + "_" + std::to_string(targetMat) + ".stl";
+    std::string outFile = outFilePrefix + std::to_string(layer) + "_" +
+                          std::to_string(targetMat) + ".stl";
     mout[targetMat - 1].SaveStlTxt(outFile);
   }
 }
@@ -164,10 +167,9 @@ void Png2StlTxt(const std::string dir, size_t numImg) {
     std::string imgFile = prefix + std::to_string(layer) + ".png";
     Array2D8u slice;
     LoadPngToSlice(imgFile, slice);
-    float voxRes[3] = { 0.064, 0.064, 1 };
+    float voxRes[3] = {0.064, 0.064, 1};
     float z0 = layer * voxRes[2];
-    SaveSliceAsStl(prefix, slice,
-      voxRes, z0, layer);
+    SaveSliceAsStl(prefix, slice, voxRes, z0, layer);
   }
 }
 
@@ -182,11 +184,10 @@ uint8_t map16to8(unsigned short x) {
   if (x > x1) {
     x = x1;
   }
-  return (x -x0)/ scale;
+  return (x - x0) / scale;
 }
 
-void LoadTiff(Array2D8u & image, const std::string & file) {
-
+void LoadTiff(Array2D8u& image, const std::string& file) {
   TIFF* tif;
   const char* filename = file.c_str();
   tif = TIFFOpen(filename, "r");
@@ -206,14 +207,14 @@ void LoadTiff(Array2D8u & image, const std::string & file) {
   TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &imagelength);
   printf("%d %d len: %d\n", tileWidth, tileLength, imagelength);
   size_t scanLineSize = TIFFScanlineSize(tif);
-  std::vector<uint8_t> buf (scanLineSize);
+  std::vector<uint8_t> buf(scanLineSize);
   image.Allocate(w, h);
   for (uint32 row = 0; row < imagelength; row++) {
     uint8_t* dst = image.DataPtr() + row * w;
     TIFFReadScanline(tif, buf.data(), row, 1);
-    for (uint32_t col = 0; col < w;col++) {
-      unsigned short srcVal = *(unsigned short*)(&buf[2*col]);
-      dst[col] =map16to8(srcVal);
+    for (uint32_t col = 0; col < w; col++) {
+      unsigned short srcVal = *(unsigned short*)(&buf[2 * col]);
+      dst[col] = map16to8(srcVal);
     }
   }
   TIFFClose(tif);
@@ -227,7 +228,7 @@ int SavePngGrey(const std::string& filename, const Array2D8u& arr) {
   state.info_png.color.colortype = LCT_GREY;
   state.info_png.color.bitdepth = 8;
   unsigned error = lodepng::encode(buf, arr.GetData(), arr.GetSize()[0],
-    arr.GetSize()[1], state);
+                                   arr.GetSize()[1], state);
   if (error) {
     return -2;
   }
@@ -238,19 +239,23 @@ int SavePngGrey(const std::string& filename, const Array2D8u& arr) {
   return 0;
 }
 
-std::string MakeFileName(const std::string& prefix,
-  int idx, int padding, const std::string& suffix) {
+std::string MakeFileName(const std::string& prefix, int idx, int padding,
+                         const std::string& suffix) {
   std::ostringstream oss;
   oss << prefix << std::setfill('0') << std::setw(padding) << idx << suffix;
   return oss.str();
 }
 
 void ConvertImages() {
-  //std::string prefix = "H:/scroll1mask/masked_";
-  std::string prefix = "H:/segments/dl.ash2txt.org/hari-seldon-uploads/team-finished-paths/scroll1/20231005123334/layers/";
+  // std::string prefix = "H:/scroll1mask/masked_";
+  std::string prefix =
+      "H:/segments/dl.ash2txt.org/hari-seldon-uploads/team-finished-paths/"
+      "scroll1/20231005123334/layers/";
   std::string suffixIn = ".tif";
   std::string suffixOut = ".png";
-  std::string outPrefix = "H:/segments/dl.ash2txt.org/hari-seldon-uploads/team-finished-paths/scroll1/20231005123334/png/";
+  std::string outPrefix =
+      "H:/segments/dl.ash2txt.org/hari-seldon-uploads/team-finished-paths/"
+      "scroll1/20231005123334/png/";
   unsigned i0 = 0;
   unsigned i1 = 64;
   const int padding = 2;
@@ -286,9 +291,9 @@ int LoadPngGrey(const std::string& filename, Array2D8u& arr) {
 
 uint8_t MergePixels(uint8_t a, uint8_t b) {
   uint8_t out;
-  //if there is a bright pixel, return the max to preserve it.
+  // if there is a bright pixel, return the max to preserve it.
   const uint8_t brightThresh = 125;
-  if (a>brightThresh) {
+  if (a > brightThresh) {
     if (a > b) {
       return a;
     }
@@ -300,7 +305,7 @@ uint8_t MergePixels(uint8_t a, uint8_t b) {
     }
     return b;
   }
-  //return average value otherwise.
+  // return average value otherwise.
   out = (uint16_t(a) + b) / 2;
   return out;
 }
@@ -316,12 +321,11 @@ struct UniRand {
 UniRand uniRand;
 
 uint8_t sampleMat(uint8_t greyVal) {
-  
-  //value below this is void.
+  // value below this is void.
   const uint8_t lowVal = 20;
-  //blend support and mat1
+  // blend support and mat1
   const uint8_t midVal = 100;
-  //values above this is mostly epoxy.
+  // values above this is mostly epoxy.
   const uint8_t highVal = 250;
   if (greyVal < lowVal) {
     return 0;
@@ -357,11 +361,11 @@ void MakeSlices() {
     std::string inFile = MakeFileName(inPrefix, i, padding, suffix);
     LoadPngGrey(inFile, image);
     Vec2u size = image.GetSize();
-    Vec2u outSize=size;
-    //compress 2x in y since y printing res is only 63.5um.
-    outSize[1] = size[1]/2;
-    Array2D8u slice(size[0],outSize[1]);
-    //read 2 src rows and combine into 1.
+    Vec2u outSize = size;
+    // compress 2x in y since y printing res is only 63.5um.
+    outSize[1] = size[1] / 2;
+    Array2D8u slice(size[0], outSize[1]);
+    // read 2 src rows and combine into 1.
     for (unsigned dstRow = 0; dstRow < outSize[1]; dstRow++) {
       const uint8_t* srcRow0 = image.DataPtr() + 2 * dstRow * size[0];
       const uint8_t* srcRow1 = image.DataPtr() + (2 * dstRow + 1) * size[0];
@@ -374,26 +378,33 @@ void MakeSlices() {
     std::string outFile = MakeFileName(outPrefix, i, padding, suffix);
     SavePngGrey(outFile, slice);
   }
-
 }
 
-void LoadImages() {
-  Array2D8u combined;
-
-}
+void LoadImages() { Array2D8u combined; }
 
 ConfigFile conf;
 
-void OpenConfig(const std::string & filename) {
-
+void OpenConfig(const std::string& filename) {
+  std::ifstream in(filename);
+  if (!in.good()) {
+    std::cout << "failed to open " << filename << "\n";
+    return;
+  }
+  conf.Load(in);
 }
 
 void SaveConfig(const std::string& filename) {
-
+  std::ofstream out(filename);
+  if (!out.good()) {
+    std::cout << "failed to write " << filename << "\n";
+    return;
+  }
+  conf.Save(out);
 }
 
-void UIMain() { 
+void UIMain() {
   UILib ui;
+  OpenConfig("config.txt");
   ui.SetShowGL(false);
   ui.SetFontsDir("./fonts");
   ui.SetWindowSize(1280, 800);
@@ -408,8 +419,8 @@ void UIMain() {
 }
 
 int main(int argc, char* argv[]) {
-  //MakeSlices();
-  //ConvertImages();
+  // MakeSlices();
+  // ConvertImages();
   UIMain();
   return 0;
 }
