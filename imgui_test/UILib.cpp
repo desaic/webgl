@@ -19,7 +19,13 @@ static void glfw_error_callback(int error, const char* description) {
 }
 
 UILib::UILib() {
-  _fileBrowser = std::make_shared<ImGui::FileBrowser>();
+  _openDialogue = std::make_shared<ImGui::FileBrowser>();
+  _openDialogue->SetTypeFilters({".txt"});
+  _openDialogue->SetTitle("Open config");
+  _saveDialogue = std::make_shared<ImGui::FileBrowser>(
+      ImGuiFileBrowserFlags_EnterNewFilename);
+  _saveDialogue->SetTitle("Save config");
+  _saveDialogue->SetTypeFilters({".txt"});
 }
 
 int UILib::AddImage() {
@@ -64,6 +70,14 @@ int UILib::AddLabel(const std::string& text) {
   std::lock_guard<std::mutex> lock(_widgetsLock);
   int id = int(uiWidgets_.size());
   uiWidgets_.push_back(label);  
+  return id;
+}
+
+int UILib::AddSlideri(const std::string& text, int initVal, int lb, int ub) {
+  std::shared_ptr<Slideri> slider = std::make_shared<Slideri>(text, initVal, lb,ub);
+  std::lock_guard<std::mutex> lock(_widgetsLock);
+  int id = int(uiWidgets_.size());
+  uiWidgets_.push_back(slider);
   return id;
 }
 
@@ -461,12 +475,14 @@ void UILib::UILoop() {
     if (pos.y < 0) {
       pos.y = 0;    
     }
+    int i1 = 1;
+    
     ImGui::SetWindowPos(pos);
     ImGui::PopStyleColor();
     if (ImGui::BeginMenuBar()) {
       if (ImGui::BeginMenu("File")) {
         if (ImGui::MenuItem("Open..", "Ctrl+O")) {
-          _fileBrowser->Open();
+          _openDialogue->Open();
         }
         if (ImGui::MenuItem("Save", "Ctrl+S")) { 
         }
@@ -480,7 +496,16 @@ void UILib::UILoop() {
     for (size_t i = 0; i < uiWidgets_.size();i++) {
       uiWidgets_[i]->Draw();
     }
-    _fileBrowser->Display();    
+    _openDialogue->Display();
+    if (_openDialogue->HasSelected() && _onFileOpen) {
+      _onFileOpen(_openDialogue->GetSelected().string());
+      _openDialogue->ClearSelected();
+    }
+    _saveDialogue->Display();
+    if (_saveDialogue->HasSelected() && _onFileSave) {
+      _onFileSave(_saveDialogue->GetSelected().string());
+      _saveDialogue->ClearSelected();
+    }   
     ImGui::End();
     // Rendering
 
@@ -521,6 +546,8 @@ void UILib::Shutdown() {
 std::string Button::GetUniqueString()const { return _text + "##" + std::to_string(_id); }
 
 void CheckBox::Draw() { ImGui::Checkbox(label_.c_str(),&b_); }
+
+void Slideri::Draw() { ImGui::SliderInt(label_.c_str(), &i_,lb_,ub_); }
 
 void PlotWidget::Draw() {
   std::lock_guard<std::mutex> lock(mtx_);

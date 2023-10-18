@@ -55,6 +55,21 @@ class CheckBox : public UIWidget {
   bool b_;
 };
 
+//integer slider.
+//integer is all we need.
+class Slideri : public UIWidget {
+ public:
+  Slideri(const std::string& label, int initVal, int lb, int ub)
+      : label_(label), i_(initVal),lb_(lb),ub_(ub) {}
+  std::string label_;
+  void Draw() override;
+  bool GetVal() const { return i_; }
+ private:
+  int i_= 0;
+  int lb_ = 0;
+  int ub_ = 100;
+};
+
 class PlotWidget : public UIWidget {
  public:
   PlotWidget(float initMin, float initMax, unsigned w, unsigned h,
@@ -90,6 +105,8 @@ class FloatingText {
 
 class UILib {
  public:
+   
+  using FileCallback=std::function<void(const std::string&)>;
   UILib();
   /// launch the ui thread and starts rendering and handling input.
   void Run();
@@ -108,7 +125,7 @@ class UILib {
   int SetButtonCallback(int buttonId, const std::function<void()>& onClick);
 
   int AddCheckBox(const std::string& label, bool initVal);
-
+  int AddSlideri(const std::string& text, int initVal, int lb, int ub);
   int AddLabel(const std::string& text);
 
   /// @return widget ID.
@@ -165,6 +182,8 @@ class UILib {
     _initImagePosX = x;
     _initImagePosY = y;
   }
+  void SetFileOpenCb(FileCallback cb) { _onFileOpen = cb; }
+  void SetFileSaveCb(FileCallback cb) { _onFileSave = cb; }
  private:
 
   void DrawImages();
@@ -188,8 +207,10 @@ class UILib {
 
   std::mutex _imagesLock;
   std::vector<GLTex> _images;
-
-  std::shared_ptr<ImGui::FileBrowser> _fileBrowser;
+  std::shared_ptr<ImGui::FileBrowser> _openDialogue;
+  std::shared_ptr<ImGui::FileBrowser> _saveDialogue;
+  FileCallback _onFileOpen;
+  FileCallback _onFileSave;
 
   std::string _fontsDir = "./fonts";
   std::string _shaderDir = "./glsl/";
