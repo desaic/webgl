@@ -393,8 +393,21 @@ void OpenConfig(const std::string& filename) {
   conf.Load(in);
 }
 
+bool endsWith(const std::string& fullString, const std::string& ending) {
+  if (fullString.length() >= ending.length()) {
+    return (fullString.compare(fullString.length() - ending.length(),
+                               ending.length(), ending) == 0);
+  } else {
+    return false;
+  }
+}
+
 void SaveConfig(const std::string& filename) {
-  std::ofstream out(filename);
+  std::string file=filename;
+  if (!endsWith(file, ".txt")) {
+    file = filename + ".txt";
+  }
+  std::ofstream out(file);
   if (!out.good()) {
     std::cout << "failed to write " << filename << "\n";
     return;

@@ -24,8 +24,8 @@ UILib::UILib() {
   _openDialogue->SetTitle("Open config");
   _saveDialogue = std::make_shared<ImGui::FileBrowser>(
       ImGuiFileBrowserFlags_EnterNewFilename);
-  _saveDialogue->SetTitle("Save config");
   _saveDialogue->SetTypeFilters({".txt"});
+  _saveDialogue->SetTitle("Save config");
 }
 
 int UILib::AddImage() {
@@ -485,6 +485,7 @@ void UILib::UILoop() {
           _openDialogue->Open();
         }
         if (ImGui::MenuItem("Save", "Ctrl+S")) { 
+          _saveDialogue->Open();
         }
         if (ImGui::MenuItem("Close", "Ctrl+W")) {
           
@@ -505,7 +506,7 @@ void UILib::UILoop() {
     if (_saveDialogue->HasSelected() && _onFileSave) {
       _onFileSave(_saveDialogue->GetSelected().string());
       _saveDialogue->ClearSelected();
-    }   
+    }
     ImGui::End();
     // Rendering
 
