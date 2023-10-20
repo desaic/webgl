@@ -13,9 +13,9 @@ include_directories("./include")
 FILE(GLOB EXE_SRC "*.cpp" "*.c")
 link_directories("../imgui_test/extern/glfw3.3.8")
 link_directories("../imgui_test/extern/glew-2.1.0")
-
 add_executable(${BIN} ${SRC})
 
+set_property(TARGET ${BIN} PROPERTY CXX_STANDARD 20)
 target_link_libraries( ${BIN} debug     tiffd zlibstaticd UILib imgui glfw3 opengl32 glew32s)
 target_link_libraries( ${BIN} optimized tiff  zlibstatic  UILib imgui glfw3 opengl32 glew32s)
 

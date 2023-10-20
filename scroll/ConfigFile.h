@@ -8,5 +8,5 @@ class ConfigFile {
   ConfigFile() {}
   void Load(std::istream& in);
   void Save(std::ostream& out);
-  std::map<std::string, std::string> conf;
+  std::string dataDir = "H:/segments";
 };

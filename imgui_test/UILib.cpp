@@ -464,7 +464,7 @@ void UILib::UILoop() {
     ImGui::End();
     //menu and buttons
     ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(100, 40), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(100, 200), ImGuiCond_FirstUseEver);
     ImGuiWindowFlags control_window_flags = 0;
     control_window_flags |= ImGuiWindowFlags_MenuBar;
     ImGui::Begin("Controls", nullptr, control_window_flags);   

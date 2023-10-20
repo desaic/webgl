@@ -17,6 +17,7 @@
 #include "lodepng.h"
 #include "tiffconf.h"
 #include "tiffio.h"
+#include "ImageIO.h"
 
 static void LoadPngToSlice(const std::string& filename, Array2D8u& slice) {
   std::vector<unsigned char> buf;
@@ -268,27 +269,6 @@ void ConvertImages() {
   }
 }
 
-int LoadPngGrey(const std::string& filename, Array2D8u& arr) {
-  std::vector<unsigned char> buf;
-  lodepng::State state;
-  state.info_raw.colortype = LCT_GREY;
-  state.info_raw.bitdepth = 8;
-  state.info_png.color.colortype = LCT_GREY;
-  state.info_png.color.bitdepth = 8;
-  unsigned error = lodepng::load_file(buf, filename.c_str());
-  if (error) {
-    return -1;
-  }
-  unsigned w, h;
-  arr.GetData().clear();
-  error = lodepng::decode(arr.GetData(), w, h, state, buf);
-  if (error) {
-    return -2;
-  }
-  arr.SetSize(w, h);
-  return 0;
-}
-
 uint8_t MergePixels(uint8_t a, uint8_t b) {
   uint8_t out;
   // if there is a bright pixel, return the max to preserve it.
@@ -416,7 +396,27 @@ void SaveConfig(const std::string& filename) {
 }
 
 int dummyId = 0;
+void TestImageDisplay(UILib& ui) {
+  const std::string testImageFile = "./resource/test.png";
+  Array2D8u image;
+  int ret = LoadPngColor(testImageFile, image);
+  if (ret < 0) {
+    return;
+  }
+  int imageId = ui.AddImage();
 
+  Vec2u size = image.GetSize();
+  Array2D8u imageA(size[0] / 3 * 4, size[1]);
+  for (size_t row = 0; row < size[1]; row++) {
+    for (size_t col = 0; col < size[0] / 3; col++) {
+      imageA(4 * col, row) = image(3 * col, row);
+      imageA(4 * col + 1, row) = image(3 * col + 1, row);
+      imageA(4 * col + 2, row) = image(3 * col + 2, row);
+      imageA(4 * col + 3, row) = 255;
+    }
+  }
+  ui.SetImageData(imageId, image, 3);
+}
 void UIMain() {
   UILib ui;
   OpenConfig("config.txt");
@@ -425,7 +425,10 @@ void UIMain() {
   ui.SetWindowSize(1280, 800);
   ui.SetFileOpenCb(OpenConfig);
   ui.SetFileSaveCb(SaveConfig);
+  ui.SetInitImagePos(100, 0);
   dummyId = ui.AddSlideri("lol", 20, -1, 30);
+  std::function<void()> btFunc = std::bind(&TestImageDisplay, std::ref(ui));  
+    ui.AddButton("Show image", btFunc);
   ui.Run();
   const unsigned PollFreqMs = 100;
   while (ui.IsRunning()) {
