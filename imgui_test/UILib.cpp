@@ -19,7 +19,13 @@ static void glfw_error_callback(int error, const char* description) {
 }
 
 UILib::UILib() {
-  _fileBrowser = std::make_shared<ImGui::FileBrowser>();
+  _openDialogue = std::make_shared<ImGui::FileBrowser>();
+  _openDialogue->SetTypeFilters({".txt"});
+  _openDialogue->SetTitle("Open config");
+  _saveDialogue = std::make_shared<ImGui::FileBrowser>(
+      ImGuiFileBrowserFlags_EnterNewFilename);
+  _saveDialogue->SetTypeFilters({".txt"});
+  _saveDialogue->SetTitle("Save config");
 }
 
 int UILib::AddImage() {
@@ -64,6 +70,14 @@ int UILib::AddLabel(const std::string& text) {
   std::lock_guard<std::mutex> lock(_widgetsLock);
   int id = int(uiWidgets_.size());
   uiWidgets_.push_back(label);  
+  return id;
+}
+
+int UILib::AddSlideri(const std::string& text, int initVal, int lb, int ub) {
+  std::shared_ptr<Slideri> slider = std::make_shared<Slideri>(text, initVal, lb,ub);
+  std::lock_guard<std::mutex> lock(_widgetsLock);
+  int id = int(uiWidgets_.size());
+  uiWidgets_.push_back(slider);
   return id;
 }
 
@@ -409,14 +423,17 @@ void UILib::UILoop() {
     ImGui::SetNextWindowPos(ImVec2(20, 0), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(800, 800), ImGuiCond_FirstUseEver);
 
-    _glRender.Render();
-    ImGui::Begin("GL view", 0, ImGuiWindowFlags_NoBringToFrontOnFocus);
-    ImGui::Image((ImTextureID)(size_t(_glRender.TexId())),
-                 ImVec2(float(_glRender.Width()), float(_glRender.Height())));
-    ImGui::End();
+    if (_showGL) {
+      _glRender.Render();
+      ImGui::Begin("GL view", 0, ImGuiWindowFlags_NoBringToFrontOnFocus);
+      ImGui::Image((ImTextureID)(size_t(_glRender.TexId())),
+                   ImVec2(float(_glRender.Width()), float(_glRender.Height())));
+      ImGui::End();
+    }
 
     //image viewer
-    ImGui::SetNextWindowPos(ImVec2(820, 0), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(_initImagePosX, _initImagePosY),
+                            ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(300, 300), ImGuiCond_FirstUseEver);
     ImGuiWindowFlags image_window_flags = 0;
     image_window_flags |= ImGuiWindowFlags_AlwaysHorizontalScrollbar;
@@ -447,7 +464,7 @@ void UILib::UILoop() {
     ImGui::End();
     //menu and buttons
     ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(0, 0));
+    ImGui::SetNextWindowSize(ImVec2(100, 200), ImGuiCond_FirstUseEver);
     ImGuiWindowFlags control_window_flags = 0;
     control_window_flags |= ImGuiWindowFlags_MenuBar;
     ImGui::Begin("Controls", nullptr, control_window_flags);   
@@ -458,14 +475,17 @@ void UILib::UILoop() {
     if (pos.y < 0) {
       pos.y = 0;    
     }
+    int i1 = 1;
+    
     ImGui::SetWindowPos(pos);
     ImGui::PopStyleColor();
     if (ImGui::BeginMenuBar()) {
       if (ImGui::BeginMenu("File")) {
         if (ImGui::MenuItem("Open..", "Ctrl+O")) {
-          _fileBrowser->Open();
+          _openDialogue->Open();
         }
         if (ImGui::MenuItem("Save", "Ctrl+S")) { 
+          _saveDialogue->Open();
         }
         if (ImGui::MenuItem("Close", "Ctrl+W")) {
           
@@ -477,7 +497,16 @@ void UILib::UILoop() {
     for (size_t i = 0; i < uiWidgets_.size();i++) {
       uiWidgets_[i]->Draw();
     }
-    _fileBrowser->Display();    
+    _openDialogue->Display();
+    if (_openDialogue->HasSelected() && _onFileOpen) {
+      _onFileOpen(_openDialogue->GetSelected().string());
+      _openDialogue->ClearSelected();
+    }
+    _saveDialogue->Display();
+    if (_saveDialogue->HasSelected() && _onFileSave) {
+      _onFileSave(_saveDialogue->GetSelected().string());
+      _saveDialogue->ClearSelected();
+    }
     ImGui::End();
     // Rendering
 
@@ -518,6 +547,8 @@ void UILib::Shutdown() {
 std::string Button::GetUniqueString()const { return _text + "##" + std::to_string(_id); }
 
 void CheckBox::Draw() { ImGui::Checkbox(label_.c_str(),&b_); }
+
+void Slideri::Draw() { ImGui::SliderInt(label_.c_str(), &i_,lb_,ub_); }
 
 void PlotWidget::Draw() {
   std::lock_guard<std::mutex> lock(mtx_);

@@ -1,0 +1,13 @@
+prefix=F:/github/tiff-4.5.1/zlib
+exec_prefix=F:/github/tiff-4.5.1/zlib
+libdir=F:/github/tiff-4.5.1/zlib/lib
+sharedlibdir=F:/github/tiff-4.5.1/zlib/lib
+includedir=F:/github/tiff-4.5.1/zlib/include
+
+Name: zlib
+Description: zlib compression library
+Version: 1.2.13
+
+Requires:
+Libs: -L${libdir} -L${sharedlibdir} -lz
+Cflags: -I${includedir}
