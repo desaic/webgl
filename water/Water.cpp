@@ -1,4 +1,5 @@
 #include "Water.h"
+#include <cmath>
 
 int Water::Allocate(unsigned sx, unsigned sy, unsigned sz) {
   u.Allocate(sx + 1, sy + 1, sz + 1);
@@ -10,19 +11,62 @@ int Water::Allocate(unsigned sx, unsigned sy, unsigned sz) {
 }
 
 int Water::AdvectU() {
-  const Vec3u sz = u.GetSize();
-  for (int x = 0; x < sz[0]; ++x) {
-    for (int y = 0; y < sz[1]; ++y) {
-      for (int z = 0; z < sz[2]; ++z) {
-        Vec3f& vPrev = u(x, y, z);
+  const float h2 = h / 2.0;
+  const Vec3u& sz = u.GetSize();
+  for (int i = 1; i < sz[0]; ++i) {
+    for (int j = 1; j < sz[1]; ++j) {
+      for (int k = 1; k < sz[2]; ++k) {
+        Vec3f prevVel = u(i, j, k);
+        // x
+        {
+          float x = i*h;
+          float y = j*h + h2;
+          float z = k*h + h2;
 
-        Vec3f p(
-           x - vPrev[0] * dt,
-           y - vPrev[1] * dt,
-           z - vPrev[2] * dt
-        );
+          float uX = u(i, j, k)[0];
+          float uY = AvgU_y(i, j, k);
+          float uZ = AvgU_z(i, j, k);
 
-        uTmp(x, y, z) =  InterpU(p);
+          x -= dt * uX;
+          y -= dt * uY;
+          z -= dt * uZ;
+
+          uTmp(i, j, k)[0] = InterpU(Vec3f(x, y, z))[0];
+        }
+
+        // y
+        {
+          float x = i*h + h2;
+          float y = j*h;
+          float z = k*h + h2;
+
+          float uX = AvgV_x(i, j, k);
+          float uY = u(i, j, k)[0];
+          float uZ = AvgV_z(i, j, k);
+  
+          x -= dt * uX;
+          y -= dt * uY;
+          z -= dt * uZ;
+
+          uTmp(i, j, k)[1] = InterpU(Vec3f(x, y, z))[1];
+        }
+
+        // z
+        {
+          float x = i*h + h2;
+          float y = j*h + h2;
+          float z = k*h;
+
+          float uX = AvgW_x(i, j, k);
+          float uY = AvgW_y(i, j, k);
+          float uZ = u(i, j, k)[2];
+          
+          x -= dt * uX;
+          y -= dt * uY;
+          z -= dt * uZ;
+
+          uTmp(i, j, k)[1] = InterpU(Vec3f(x, y, z))[2];
+        }
       }
     }
   } 
@@ -32,10 +76,80 @@ int Water::AdvectU() {
 }
 
 int Water::AddBodyForce() {
-  
+    const Vec3u& sz = u.GetSize();
+    for (int i = 1; i < sz[0]; ++i) {
+      for (int j = 0; j < sz[1]; ++j) {
+        for (int k = 0; k < sz[2]; ++k) {
+          u(i, j, k)[1] += gravity * dt;
+        }  
+      }
+    }
+
+    return 0;
 }
 
-int Water::SolveP() { return 0; }
+// adapted from https://github.com/matthias-research/pages/blob/master/tenMinutePhysics/17-fluidSim.html
+int Water::SolveP() { 
+    const Vec3u& size = p.GetSize();
+
+    if (size[0] == 0 || 
+        size[1] == 0 || 
+        size[2] == 0) return -1; // empty grid
+        
+    float tolerance = 1e-4f;
+    float cp = density * h / dt;
+
+    for (int iter = 0; iter < nIterations; ++iter) {
+        // right now checks for worst case in a single cell
+        float max_error = 0.0f; 
+
+        for (int x = 1; x < size[0] - 1; ++x) {
+            for (int y = 1; y < size[1] - 1; ++y) {
+                for (int z = 1; z < size[2] - 1; ++z) {
+                    if (boundary(x,y,z) < 1e-5) continue;
+
+                    float sx0 = boundary(x-1, y  , z  );
+                    float sx1 = boundary(x+1, y  , z  );
+                    float sy0 = boundary(x  , y-1, z  );
+                    float sy1 = boundary(x  , y+1, z  );
+                    float sz0 = boundary(x  , y  , z-1);
+                    float sz1 = boundary(x  , y  , z+1);
+
+                    float s = sx0 + sx1 + sy0 + sy1 + sz0 + sz1;
+
+                    if (s < 1e-5) continue;
+
+                    float divergence = (
+                        u(x+1, y  , z  )[0] - u(x, y, z)[0] +
+                        u(x  , y+1, z  )[1] - u(x, y, z)[1] +
+                        u(x  , y  , z+1)[2] - u(x, y, z)[2]
+                    );
+
+                    float pressure = overrelaxation* (-divergence / s);
+                        
+                    float p_0 = p(x, y, z);
+                    p(x, y, z) = pressure * cp;
+
+                    // Update velocity field, i think b/c gauss-seidel does in-place substitutions?
+                    u(x  , y  , z  )[0] -= pressure * sx0;
+                    u(x+1, y  , z  )[0] += pressure * sx1;
+                    u(x  , y  , z  )[1] -= pressure * sy0;
+                    u(x  , y+1, z  )[1] += pressure * sy1;                        
+                    u(x  , y  , z  )[2] -= pressure * sz0;
+                    u(x  , y  , z+1)[2] += pressure * sz1;
+
+                    max_error = std::max(max_error, std::fabs(p_0 - p(x,y,z)));
+                }
+            }
+        }
+        if (max_error < tolerance) {
+            return 0; 
+        }
+    }
+
+    return 1; // did not converge 
+}
+
 int Water::AdvectPhi() { return 0; }
 
 int Water::Step() {
@@ -44,6 +158,60 @@ int Water::Step() {
   SolveP();
   AdvectPhi();
   return 0;
+}
+
+float Water::AvgU_y(unsigned i, unsigned j, unsigned k) {
+  return 0.25f * ( 
+    u(i,   j,   k)[1] +
+    u(i-1, j,   k)[1] +
+    u(i,   j+1, k)[1] +
+    u(i-1, j+1, k)[1]
+  );
+}
+
+float Water::AvgU_z(unsigned i, unsigned j, unsigned k) {
+  return 0.25f * ( 
+    u(i,   j,   k)[2] +
+    u(i-1, j,   k)[2] +
+    u(i,   j, k+1)[2] +
+    u(i-1, j, k+1)[2]
+  );
+}
+
+float Water::AvgV_x(unsigned i, unsigned j, unsigned k) {
+  return 0.25f * ( 
+    u(i,   j,   k)[0] +
+    u(i+1, j,   k)[0] +
+    u(i,   j-1, k)[0] +
+    u(i+1, j-1, k)[0]
+  );
+}
+
+float Water::AvgV_z(unsigned i, unsigned j, unsigned k) {
+  return 0.25f * ( 
+    u(i,   j,   k)[2] +
+    u(i, j-1,   k)[2] +
+    u(i,   j, k+1)[2] +
+    u(i, j-1, k+1)[2]
+  );
+}
+
+float Water::AvgW_x(unsigned i, unsigned j, unsigned k) {
+  return 0.25f * ( 
+    u(i,   j,   k)[0] +
+    u(i+1, j,   k)[0] +
+    u(i,   j, k-1)[0] +
+    u(i+1, j, k-1)[0]
+  );
+}
+
+float Water::AvgW_y(unsigned i, unsigned j, unsigned k) {
+  return 0.25f * ( 
+    u(i,   j,   k)[0] +
+    u(i, j+1,   k)[0] +
+    u(i,   j, k-1)[0] +
+    u(i, j+1, k-1)[0]
+  );
 }
 
 Vec3f Water::InterpU(const Vec3f& x) { 
@@ -111,6 +279,17 @@ Vec3f Water::InterpU(const Vec3f& x) {
     u0[1] * c0 + u1[1] * c1,
     u0[2] * c0 + u1[2] * c1
   );
+}
+
+float Water::boundary(unsigned x, unsigned y, unsigned z) {
+  const Vec3u sz = u.GetSize();
+  if (x == 0 || x == sz[0] - 1 ||
+      y == 0 || y == sz[1] - 1 || 
+      z == 0 || z == sz[2]) {
+    return 0;
+  }
+
+  return 1;
 }
 
 float Water::InterpPhi(const Vec3f& x) { 

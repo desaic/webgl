@@ -27,5 +27,17 @@ class Water {
   Array3D<float> p;
   float dt=0.01f;
   float h=0.1f;
+  float density=1.0f; // reasonable value?
+  int nIterations=50; // reasonable value?
+  float overrelaxation=1.9f;
+  float gravity = -9.81f;
+  
+  float boundary(unsigned x, unsigned y, unsigned z);
+  float AvgU_y(unsigned i, unsigned j, unsigned k);
+  float AvgU_z(unsigned i, unsigned j, unsigned k);
+  float AvgV_x(unsigned i, unsigned j, unsigned k);
+  float AvgV_z(unsigned i, unsigned j, unsigned k);  
+  float AvgW_x(unsigned i, unsigned j, unsigned k);
+  float AvgW_y(unsigned i, unsigned j, unsigned k);
 };
 #endif
