@@ -395,45 +395,144 @@ void SaveConfig(const std::string& filename) {
   conf.Save(out);
 }
 
-int dummyId = 0;
-void TestImageDisplay(UILib& ui) {
-  const std::string testImageFile = "./resource/test.png";
-  Array2D8u image;
-  int ret = LoadPngColor(testImageFile, image);
-  if (ret < 0) {
-    return;
-  }
-  int imageId = ui.AddImage();
-
-  Vec2u size = image.GetSize();
-  Array2D8u imageA(size[0] / 3 * 4, size[1]);
+void GrayToRGBA(const Array2D8u & gray, Array2D8u & color) {
+  Vec2u size = gray.GetSize();
+  color.Allocate(size[0] * 4, size[1]);
   for (size_t row = 0; row < size[1]; row++) {
-    for (size_t col = 0; col < size[0] / 3; col++) {
-      imageA(4 * col, row) = image(3 * col, row);
-      imageA(4 * col + 1, row) = image(3 * col + 1, row);
-      imageA(4 * col + 2, row) = image(3 * col + 2, row);
-      imageA(4 * col + 3, row) = 255;
+    const uint8_t* srcPtr = gray.DataPtr() + row * size[0];
+    uint32_t* dstPtr = (uint32_t*)(color.DataPtr() + row * size[0] * 4);
+    for (size_t col = 0; col < size[1];col++) {
+      uint32_t gray = srcPtr[col];
+      uint32_t color = 0xff000000 | (gray<<16) | (gray<<8) | (gray);
+      dstPtr[col] = color;
     }
   }
-  ui.SetImageData(imageId, image, 3);
 }
+
+int dummyId = 0;
+
+void UpdateImage(UILib& ui, int imageId, const Array2D8u& gray) {
+  Array2D8u color;
+  GrayToRGBA(gray, color);
+  unsigned numChannels = 4;
+  ui.SetImageData(imageId, color, numChannels);
+}
+
+void InitRow(unsigned row, Array2D8u& image) {
+  const Vec2u& size = image.GetSize();
+  size_t x = 989345275647ull;
+  for (unsigned col = 0; col < size[0]; col++) {
+    image(col, row) = 200*( x%2);
+    x /= 2;
+  }
+
+  
+}
+
+void ShiftVec(const uint8_t* src, uint8_t* dst, size_t len, unsigned shift) {
+  std::memcpy(dst, src + shift, len - shift);
+}
+
+void Mult3PlusOneDiv2(uint8_t* vec, size_t len) {
+  uint8_t carry = (vec[0] > 0);
+  const uint8_t colorScale = 200;
+  for (unsigned i = 0; i < len-1; i++) {
+    uint8_t bit0 = vec[i] != 0;
+    uint8_t bit1 = vec[i+1] != 0;
+    uint8_t digiSum = (bit0 + bit1 + carry);
+    vec[i] = colorScale*( digiSum & 0x1);
+    carry = digiSum > 1;
+  }
+}
+
+size_t CollatzRow(unsigned row, Array2D8u& image) {
+  unsigned prevRow = row - 1;
+  const Vec2u size = image.GetSize();
+  if (row == 0) {
+    prevRow = size[1] - 1;
+  }
+  const uint8_t* prevRowPtr = image.DataPtr() + prevRow * size[0];
+  uint8_t* rowPtr = image.DataPtr() + row * size[0];
+  unsigned shift = size[0];
+  unsigned oneCount = 0;
+  for (unsigned col = 0; col < size[0]; col++) {
+    if (prevRowPtr[col] > 0) {
+      if (oneCount == 0) {
+        shift = col;
+      }
+      oneCount++;      
+    }
+  }
+  if (oneCount <= 1) {
+    //terminating
+    if (shift > 0) {
+      ShiftVec(prevRowPtr, rowPtr, size[0], shift);
+    }
+    return shift;
+  }
+  //every bit is 0. normally impossible.
+  if (shift >= size[0]) {
+    shift = 0;
+    return 0;
+  }
+  if (shift > 0) {
+    ShiftVec(prevRowPtr, rowPtr, size[0], shift);
+    for (size_t i = size[0] - shift; i < size[0]; i++) {
+      rowPtr[i] = 0;
+    }
+  } else {
+    std::memcpy(rowPtr, prevRowPtr, size[0]);
+  }
+
+  Mult3PlusOneDiv2(rowPtr, size[0]);
+  return 2 + shift;
+}
+
 void UIMain() {
   UILib ui;
   OpenConfig("config.txt");
   ui.SetShowGL(false);
   ui.SetFontsDir("./fonts");
-  ui.SetWindowSize(1280, 800);
+  ui.SetWindowSize(1280, 1000);
   ui.SetFileOpenCb(OpenConfig);
   ui.SetFileSaveCb(SaveConfig);
   ui.SetInitImagePos(100, 0);
   dummyId = ui.AddSlideri("lol", 20, -1, 30);
-  std::function<void()> btFunc = std::bind(&TestImageDisplay, std::ref(ui));  
-    ui.AddButton("Show image", btFunc);
+  int mainImageId = ui.AddImage();
+  
+  Array2D8u mainImage(1024, 800);
+  mainImage.Fill(0);
+  std::function<void()> btFunc =
+      std::bind(&UpdateImage, std::ref(ui), mainImageId, mainImage);
+  ui.AddButton("Update image", btFunc);
+  std::function<void()> saveImageFunc =
+      std::bind(&SavePngGrey, "mainImage.png" , std::ref(mainImage));
+  ui.AddButton("Save main image", saveImageFunc);
   ui.Run();
   const unsigned PollFreqMs = 100;
+  InitRow(0, mainImage);
+  unsigned row = 1;
+  unsigned stepCount = 0;
+  bool runCalc = true;
   while (ui.IsRunning()) {
-    // main thread not doing much
-    std::this_thread::sleep_for(std::chrono::milliseconds(PollFreqMs));
+   
+    if (runCalc) {
+      size_t steps = CollatzRow(row, mainImage);
+      stepCount += steps;
+      if (steps == 0) {
+        runCalc = 0;
+        std::cout << "total steps" << stepCount;
+      }
+      row++;
+      if (row >= mainImage.GetSize()[1]) {
+        row = 0;
+      }
+
+      UpdateImage(ui, mainImageId, mainImage);
+    } else {
+      std::this_thread::sleep_for(std::chrono::milliseconds(PollFreqMs));
+    }
+
   }
 }
 
