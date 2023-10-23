@@ -1,10 +1,10 @@
 #include "ImageIO.h"
-#include "lodepng.h"
-#include <filesystem>
-#include <iostream>
 
-int LoadPngColor(const std::string& filename, Array2D8u& slice)
-{
+#include <filesystem>
+
+#include "lodepng.h"
+
+int LoadPngColor(const std::string& filename, Array2D8u& slice) {
   std::filesystem::path p(filename);
   if (!(std::filesystem::exists(p) && std::filesystem::is_regular_file(p))) {
     return -1;
@@ -19,17 +19,34 @@ int LoadPngColor(const std::string& filename, Array2D8u& slice)
   state.info_png.color.bitdepth = 8;
   unsigned error = lodepng::load_file(buf, filename.c_str());
   if (error) {
-    std::cout << "lodepng load_file error " << error << ". file name " << filename << "\n";
     return -1;
   }
   unsigned w, h;
   slice.GetData().clear();
   error = lodepng::decode(slice.GetData(), w, h, state, buf);
   if (error) {
-    std::cout << "decode error " << error << "\n";
     return -2;
   }
   slice.SetSize(w * 3, h);
+  return 0;
+}
+
+int SavePngColor(const std::string& filename, const Array2D8u& arr) {
+  std::vector<unsigned char> buf;
+  lodepng::State state;
+  state.info_raw.colortype = LCT_RGB;
+  state.info_raw.bitdepth = 8;
+  state.info_png.color.colortype = LCT_RGB;
+  state.info_png.color.bitdepth = 8;
+  unsigned error =
+      lodepng::encode(buf, arr.GetData(), arr.GetSize()[0] / 3, arr.GetSize()[1], state);
+  if (error) {
+    return -2;
+  }
+  error = lodepng::save_file(buf, filename.c_str());
+  if (error) {
+    return -1;
+  }
   return 0;
 }
 
@@ -47,17 +64,35 @@ int LoadPngGrey(const std::string& filename, Array2D8u& arr) {
   unsigned w, h;
   arr.GetData().clear();
   error = lodepng::decode(arr.GetData(), w, h, state, buf);
+  if (error) {
+    return -2;
+  }
   arr.SetSize(w, h);
   return 0;
 }
 
-void EncodeBmpGray(const unsigned char* img, unsigned int width,
-               unsigned int height,
-               std::vector<unsigned char>& out) {
-  unsigned char bmp_file_header[14] = {'B', 'M', 0, 0,  0, 0, 0,
-                                       0,   0,   0, 54, 4, 0, 0};
-  unsigned char bmp_info_header[40] = {40, 0, 0, 0, 0, 0, 0, 0,
-                                       0,  0, 0, 0, 1, 0, 8, 0};
+int SavePngGrey(const std::string& filename, const Array2D8u& arr) {
+  std::vector<unsigned char> buf;
+  lodepng::State state;
+  state.info_raw.colortype = LCT_GREY;
+  state.info_raw.bitdepth = 8;
+  state.info_png.color.colortype = LCT_GREY;
+  state.info_png.color.bitdepth = 8;
+  unsigned error = lodepng::encode(buf, arr.GetData(), arr.GetSize()[0], arr.GetSize()[1], state);
+  if (error) {
+    return -2;
+  }
+  error = lodepng::save_file(buf, filename.c_str());
+  if (error) {
+    return -1;
+  }
+  return 0;
+}
+
+void EncodeBmpGray(const unsigned char* img, unsigned int width, unsigned int height,
+                   std::vector<unsigned char>& out) {
+  unsigned char bmp_file_header[14] = {'B', 'M', 0, 0, 0, 0, 0, 0, 0, 0, 54, 4, 0, 0};
+  unsigned char bmp_info_header[40] = {40, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 8, 0};
   unsigned y, padding;
 
   unsigned char colorPalette[1024];
