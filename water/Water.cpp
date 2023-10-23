@@ -10,6 +10,10 @@ int Water::Allocate(unsigned sx, unsigned sy, unsigned sz) {
   return 0;
 }
 
+int Water::Initialize() {
+  
+}
+
 int Water::AdvectU() {
   const float h2 = h / 2.0;
   const Vec3u& sz = u.GetSize();
@@ -147,7 +151,7 @@ int Water::SolveP() {
         }
     }
 
-    return 1; // did not converge 
+    return -1; // did not converge 
 }
 
 int Water::AdvectPhi() { return 0; }
