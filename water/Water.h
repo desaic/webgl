@@ -5,6 +5,7 @@
 class Water {
  public:
   int Initialize();
+  int InitializeSimple();
   int Step();
   int AdvectU();
   int AddBodyForce();
@@ -16,6 +17,8 @@ class Water {
   Vec3f InterpU(const Vec3f& x);
   //trilinear
   float InterpPhi(const Vec3f& x);
+
+  const Array3D<Vec3f>& U() { return u; }
  private:
   //defined on face centers
   // size is +1 of voxel grid size.
@@ -33,7 +36,7 @@ class Water {
   float overrelaxation=1.9f;
   float gravity = -9.81f;
   
-  float boundary(unsigned x, unsigned y, unsigned z);
+  int boundary(unsigned x, unsigned y, unsigned z);
   float AvgU_y(unsigned i, unsigned j, unsigned k);
   float AvgU_z(unsigned i, unsigned j, unsigned k);
   float AvgV_x(unsigned i, unsigned j, unsigned k);

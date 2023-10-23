@@ -35,6 +35,13 @@ int main(int argc, char* argv[]){
   TrigMesh mesh;
 	std::cout<<"XD\n";
   Water water;
+  water.InitializeSimple();
+      std::cout << water.U()(1, 1, 1)[0] << "," << water.U()(1, 1, 1)[1] << "," << water.U()(1, 1, 1)[2] << std::endl;
+
+  for (int i = 0; i < 100; ++ i) {
+    water.Step();
+    std::cout << water.U()(1, 1, 1)[0] << "," << water.U()(1, 1, 1)[1] << "," << water.U()(1, 1, 1)[2] << std::endl;
+  }
 
   ui.SetShowGL(false);
   ui.SetFontsDir("./fonts");
@@ -51,10 +58,8 @@ int main(int argc, char* argv[]){
   std::function<void()> saveImageFunc =
       std::bind(&SavePngGrey, "mainImage.png", std::ref(mainImage));
   ui.AddButton("Save main image", saveImageFunc);
-  ui.Run();
+  //ui.Run();
 
-	while (true) {
-		water.Step();
-	}
+
 	return 0;
 }

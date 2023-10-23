@@ -1,5 +1,6 @@
 #include "Water.h"
 #include <cmath>
+#include <iostream>
 
 int Water::Allocate(unsigned sx, unsigned sy, unsigned sz) {
   u.Allocate(sx + 1, sy + 1, sz + 1);
@@ -11,18 +12,35 @@ int Water::Allocate(unsigned sx, unsigned sy, unsigned sz) {
 }
 
 int Water::Initialize() {
-  
+  Allocate(3, 3, 3);
+  return 0;
+}
+
+int Water::InitializeSimple() {
+  Allocate(3,3,3);
+  const Vec3u& sz = u.GetSize();
+  for (int i = 1; i < sz[0] - 1; ++i) {
+      for (int j = 1; j < sz[1] - 1; ++j) {
+        for (int k = 1; k < sz[2] - 1; ++k) {
+          u(i, j, k) = Vec3f(1.0f, 0.f, 0.f);
+        }
+      }
+  }
+
+  return 0;
 }
 
 int Water::AdvectU() {
   const float h2 = h / 2.0;
   const Vec3u& sz = u.GetSize();
-  for (int i = 1; i < sz[0]; ++i) {
-    for (int j = 1; j < sz[1]; ++j) {
-      for (int k = 1; k < sz[2]; ++k) {
-        Vec3f prevVel = u(i, j, k);
+  for (int i = 0; i < sz[0]; ++i) {
+    for (int j = 0; j < sz[1]; ++j) {
+      for (int k = 0; k < sz[2]; ++k) {
+        if (boundary(i, j, k) == 0) continue;
+
+        //std::cout << "update " << i << "," << j << "," << k << std::endl;
         // x
-        {
+        if (i - 1 >= 0 && j + 1 < sz[1] && k + 1 < sz[2]) {
           float x = i*h;
           float y = j*h + h2;
           float z = k*h + h2;
@@ -36,10 +54,11 @@ int Water::AdvectU() {
           z -= dt * uZ;
 
           uTmp(i, j, k)[0] = InterpU(Vec3f(x, y, z))[0];
+          //std::cout << "update x " <<  uTmp(i, j, k)[0] << std::endl;
         }
 
         // y
-        {
+        if (j - 1 >= 0 && i + 1 < sz[0] && k + 1 < sz[2]) {
           float x = i*h + h2;
           float y = j*h;
           float z = k*h + h2;
@@ -53,10 +72,11 @@ int Water::AdvectU() {
           z -= dt * uZ;
 
           uTmp(i, j, k)[1] = InterpU(Vec3f(x, y, z))[1];
+          //std::cout << "update y " << uTmp(i, j, k)[1] << std::endl;
         }
 
         // z
-        {
+        if (k - 1 >= 0 && i + 1 < sz[0] && j + 1 < sz[1]) {
           float x = i*h + h2;
           float y = j*h + h2;
           float z = k*h;
@@ -70,6 +90,7 @@ int Water::AdvectU() {
           z -= dt * uZ;
 
           uTmp(i, j, k)[1] = InterpU(Vec3f(x, y, z))[2];
+          //std::cout << "update z " << uTmp(i, j, k)[2] << std::endl;
         }
       }
     }
@@ -285,11 +306,11 @@ Vec3f Water::InterpU(const Vec3f& x) {
   );
 }
 
-float Water::boundary(unsigned x, unsigned y, unsigned z) {
+int Water::boundary(unsigned x, unsigned y, unsigned z) {
   const Vec3u sz = u.GetSize();
   if (x == 0 || x == sz[0] - 1 ||
       y == 0 || y == sz[1] - 1 || 
-      z == 0 || z == sz[2]) {
+      z == 0 || z == sz[2] - 1) {
     return 0;
   }
 
