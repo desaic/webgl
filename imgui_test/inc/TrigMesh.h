@@ -1,5 +1,6 @@
 #pragma once
-
+#ifndef TRIG_MESH_H
+#define TRIG_MESH_H
 #include <string>
 #include <vector>
 
@@ -88,3 +89,4 @@ class TrigMesh {
 
 TrigMesh SubSet(const TrigMesh& m, const std::vector<size_t>& trigs);
 TrigMesh MakeCube(const Vec3f& mn, const Vec3f& mx);
+#endif

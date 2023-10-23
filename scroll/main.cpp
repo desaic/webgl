@@ -9,6 +9,7 @@
 #include <iostream>
 #include <random>
 #include <sstream>
+#include <filesystem>
 
 #include "Array2D.h"
 #include "ConfigFile.h"
@@ -18,6 +19,8 @@
 #include "tiffconf.h"
 #include "tiffio.h"
 #include "ImageIO.h"
+
+namespace fs = std::filesystem;
 
 static void LoadPngToSlice(const std::string& filename, Array2D8u& slice) {
   std::vector<unsigned char> buf;
@@ -31,6 +34,12 @@ static void LoadPngToSlice(const std::string& filename, Array2D8u& slice) {
   slice.GetData().clear();
   error = lodepng::decode(slice.GetData(), w, h, state, buf);
   slice.SetSize(w, h);
+}
+
+void createFolder(const std::string& folderPath) {
+  if (!fs::exists(folderPath)) {
+    fs::create_directory(folderPath);
+  }
 }
 
 static size_t ExtractMat(const Array2D8u& slice, Array2D8u& dst,
@@ -269,6 +278,79 @@ void ConvertImages() {
   }
 }
 
+void GetCol(const Array2D8u& image, unsigned j, std::vector<uint8_t>& col) {
+  Vec2u size = image.GetSize();
+  col.resize(size[1]);
+  for (unsigned row = 0; row < size[1]; row++) {
+    col[row] = image(j, row);
+  }
+}
+void SetCol(Array2D8u& image, unsigned j, const std::vector<uint8_t>& col) {
+  Vec2u size = image.GetSize();
+  for (unsigned row = 0; row < size[1]; row++) {
+    image(j, row) = col[row];
+  }
+}
+
+void DownsampleVec4x(const uint8_t * src, uint8_t * dst, size_t srclen) {
+  for (size_t i = 0; i < srclen; i+=4) {
+    uint16_t sum = 0;
+    for (unsigned j = 0; j < 4; j++) {
+      sum += src[i + j];
+    }
+    dst[i / 4] = uint8_t(sum / 4);
+  }
+}
+
+void Downsample4x(const Array2D8u &image, Array2D8u & dst) {
+  Vec2u size = image.GetSize();
+  Vec2u dstSize(size[0]/4, size[1]/4);
+  dst.Allocate(dstSize[0], dstSize[1]);
+
+  //skinny image. same rows. 1/4 cols.
+  Array2D8u tmpImage(dstSize[0], size[1]);
+
+  //downsample rows
+  for (unsigned row = 0; row < size[1]; row++) {
+    const uint8_t* srcPtr = image.DataPtr() + row * size[0];
+    uint8_t* dstPtr = tmpImage.DataPtr() + row * dstSize[0];
+    DownsampleVec4x(srcPtr, dstPtr, size[0]);
+  }
+  //SavePngGrey("tmp.png", tmpImage);
+  //cols
+  for (unsigned col = 0; col < dstSize[0]; col ++) {
+    std::vector<uint8_t> srcCol;
+    GetCol(tmpImage, col, srcCol);
+    std::vector<uint8_t> dstCol(dstSize[1]);
+    DownsampleVec4x(srcCol.data(), dstCol.data(), size[1]);
+    SetCol(dst, col, dstCol);
+  }
+}
+
+void DownsampleImages() {
+  std::string prefix =
+      "H:/segments/dl.ash2txt.org/hari-seldon-uploads/team-finished-paths/"
+      "scroll1/20231005123334/png/";
+  std::string suffixIn = ".png";
+  std::string suffixOut = ".png";
+  std::string outDir =
+      "H:/segments/dl.ash2txt.org/hari-seldon-uploads/team-finished-paths/"
+      "scroll1/20231005123334/png_quat/";
+  createFolder(outDir);
+  unsigned i0 = 0;
+  unsigned i1 = 64;
+  const int padding = 2;
+  for (unsigned i = i0; i <= i1; i++) {
+    std::string inFile = MakeFileName(prefix, i, padding, suffixIn);
+    Array2D8u image;
+    LoadPngGrey(inFile, image);
+    Array2D8u out;
+    Downsample4x(image, out);
+    std::string outFile = MakeFileName(outDir, i, padding, suffixOut);
+    SavePngGrey(outFile, out);
+  }
+}
+
 uint8_t MergePixels(uint8_t a, uint8_t b) {
   uint8_t out;
   // if there is a bright pixel, return the max to preserve it.
@@ -395,51 +477,151 @@ void SaveConfig(const std::string& filename) {
   conf.Save(out);
 }
 
-int dummyId = 0;
-void TestImageDisplay(UILib& ui) {
-  const std::string testImageFile = "./resource/test.png";
-  Array2D8u image;
-  int ret = LoadPngColor(testImageFile, image);
-  if (ret < 0) {
-    return;
-  }
-  int imageId = ui.AddImage();
-
-  Vec2u size = image.GetSize();
-  Array2D8u imageA(size[0] / 3 * 4, size[1]);
+void GrayToRGBA(const Array2D8u & gray, Array2D8u & color) {
+  Vec2u size = gray.GetSize();
+  color.Allocate(size[0] * 4, size[1]);
   for (size_t row = 0; row < size[1]; row++) {
-    for (size_t col = 0; col < size[0] / 3; col++) {
-      imageA(4 * col, row) = image(3 * col, row);
-      imageA(4 * col + 1, row) = image(3 * col + 1, row);
-      imageA(4 * col + 2, row) = image(3 * col + 2, row);
-      imageA(4 * col + 3, row) = 255;
+    const uint8_t* srcPtr = gray.DataPtr() + row * size[0];
+    uint32_t* dstPtr = (uint32_t*)(color.DataPtr() + row * size[0] * 4);
+    for (size_t col = 0; col < size[1];col++) {
+      uint32_t gray = srcPtr[col];
+      uint32_t color = 0xff000000 | (gray<<16) | (gray<<8) | (gray);
+      dstPtr[col] = color;
     }
   }
-  ui.SetImageData(imageId, image, 3);
 }
+
+int dummyId = 0;
+
+void UpdateImage(UILib& ui, int imageId, const Array2D8u& gray) {
+  Array2D8u color;
+  GrayToRGBA(gray, color);
+  unsigned numChannels = 4;
+  ui.SetImageData(imageId, color, numChannels);
+}
+
+void InitRow(unsigned row, Array2D8u& image) {
+  const Vec2u& size = image.GetSize();
+  size_t x = 989345275647ull;
+  for (unsigned col = 0; col < size[0]; col++) {
+    image(col, row) = 200*( x%2);
+    x /= 2;
+  }
+
+  
+}
+
+void ShiftVec(const uint8_t* src, uint8_t* dst, size_t len, unsigned shift) {
+  std::memcpy(dst, src + shift, len - shift);
+}
+
+void Mult3PlusOneDiv2(uint8_t* vec, size_t len) {
+  uint8_t carry = (vec[0] > 0);
+  const uint8_t colorScale = 200;
+  for (unsigned i = 0; i < len-1; i++) {
+    uint8_t bit0 = vec[i] != 0;
+    uint8_t bit1 = vec[i+1] != 0;
+    uint8_t digiSum = (bit0 + bit1 + carry);
+    vec[i] = colorScale*( digiSum & 0x1);
+    carry = digiSum > 1;
+  }
+}
+
+size_t CollatzRow(unsigned row, Array2D8u& image) {
+  unsigned prevRow = row - 1;
+  const Vec2u size = image.GetSize();
+  if (row == 0) {
+    prevRow = size[1] - 1;
+  }
+  const uint8_t* prevRowPtr = image.DataPtr() + prevRow * size[0];
+  uint8_t* rowPtr = image.DataPtr() + row * size[0];
+  unsigned shift = size[0];
+  unsigned oneCount = 0;
+  for (unsigned col = 0; col < size[0]; col++) {
+    if (prevRowPtr[col] > 0) {
+      if (oneCount == 0) {
+        shift = col;
+      }
+      oneCount++;      
+    }
+  }
+  if (oneCount <= 1) {
+    //terminating
+    if (shift > 0) {
+      ShiftVec(prevRowPtr, rowPtr, size[0], shift);
+    }
+    return shift;
+  }
+  //every bit is 0. normally impossible.
+  if (shift >= size[0]) {
+    shift = 0;
+    return 0;
+  }
+  if (shift > 0) {
+    ShiftVec(prevRowPtr, rowPtr, size[0], shift);
+    for (size_t i = size[0] - shift; i < size[0]; i++) {
+      rowPtr[i] = 0;
+    }
+  } else {
+    std::memcpy(rowPtr, prevRowPtr, size[0]);
+  }
+
+  Mult3PlusOneDiv2(rowPtr, size[0]);
+  return 2 + shift;
+}
+
 void UIMain() {
   UILib ui;
   OpenConfig("config.txt");
   ui.SetShowGL(false);
   ui.SetFontsDir("./fonts");
-  ui.SetWindowSize(1280, 800);
+  ui.SetWindowSize(1280, 1000);
   ui.SetFileOpenCb(OpenConfig);
   ui.SetFileSaveCb(SaveConfig);
   ui.SetInitImagePos(100, 0);
   dummyId = ui.AddSlideri("lol", 20, -1, 30);
-  std::function<void()> btFunc = std::bind(&TestImageDisplay, std::ref(ui));  
-    ui.AddButton("Show image", btFunc);
+  int mainImageId = ui.AddImage();
+  
+  Array2D8u mainImage(1024, 800);
+  mainImage.Fill(0);
+  std::function<void()> btFunc =
+      std::bind(&UpdateImage, std::ref(ui), mainImageId, mainImage);
+  ui.AddButton("Update image", btFunc);
+  std::function<void()> saveImageFunc =
+      std::bind(&SavePngGrey, "mainImage.png" , std::ref(mainImage));
+  ui.AddButton("Save main image", saveImageFunc);
   ui.Run();
   const unsigned PollFreqMs = 100;
+  InitRow(0, mainImage);
+  unsigned row = 1;
+  unsigned stepCount = 0;
+  bool runCalc = true;
   while (ui.IsRunning()) {
-    // main thread not doing much
-    std::this_thread::sleep_for(std::chrono::milliseconds(PollFreqMs));
+   
+    if (runCalc) {
+      size_t steps = CollatzRow(row, mainImage);
+      stepCount += steps;
+      if (steps == 0) {
+        runCalc = 0;
+        std::cout << "total steps" << stepCount;
+      }
+      row++;
+      if (row >= mainImage.GetSize()[1]) {
+        row = 0;
+      }
+
+      UpdateImage(ui, mainImageId, mainImage);
+    } else {
+      std::this_thread::sleep_for(std::chrono::milliseconds(PollFreqMs));
+    }
+
   }
 }
 
 int main(int argc, char* argv[]) {
   // MakeSlices();
   // ConvertImages();
-  UIMain();
+  DownsampleImages();
+ // UIMain();
   return 0;
 }
