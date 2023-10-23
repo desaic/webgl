@@ -9,6 +9,7 @@
 #include <iostream>
 #include <random>
 #include <sstream>
+#include <filesystem>
 
 #include "Array2D.h"
 #include "ConfigFile.h"
@@ -18,6 +19,8 @@
 #include "tiffconf.h"
 #include "tiffio.h"
 #include "ImageIO.h"
+
+namespace fs = std::filesystem;
 
 static void LoadPngToSlice(const std::string& filename, Array2D8u& slice) {
   std::vector<unsigned char> buf;
@@ -31,6 +34,12 @@ static void LoadPngToSlice(const std::string& filename, Array2D8u& slice) {
   slice.GetData().clear();
   error = lodepng::decode(slice.GetData(), w, h, state, buf);
   slice.SetSize(w, h);
+}
+
+void createFolder(const std::string& folderPath) {
+  if (!fs::exists(folderPath)) {
+    fs::create_directory(folderPath);
+  }
 }
 
 static size_t ExtractMat(const Array2D8u& slice, Array2D8u& dst,
@@ -266,6 +275,79 @@ void ConvertImages() {
     LoadTiff(image, inFile);
     std::string outFile = MakeFileName(outPrefix, i, padding, suffixOut);
     SavePngGrey(outFile, image);
+  }
+}
+
+void GetCol(const Array2D8u& image, unsigned j, std::vector<uint8_t>& col) {
+  Vec2u size = image.GetSize();
+  col.resize(size[1]);
+  for (unsigned row = 0; row < size[1]; row++) {
+    col[row] = image(j, row);
+  }
+}
+void SetCol(Array2D8u& image, unsigned j, const std::vector<uint8_t>& col) {
+  Vec2u size = image.GetSize();
+  for (unsigned row = 0; row < size[1]; row++) {
+    image(j, row) = col[row];
+  }
+}
+
+void DownsampleVec4x(const uint8_t * src, uint8_t * dst, size_t srclen) {
+  for (size_t i = 0; i < srclen; i+=4) {
+    uint16_t sum = 0;
+    for (unsigned j = 0; j < 4; j++) {
+      sum += src[i + j];
+    }
+    dst[i / 4] = uint8_t(sum / 4);
+  }
+}
+
+void Downsample4x(const Array2D8u &image, Array2D8u & dst) {
+  Vec2u size = image.GetSize();
+  Vec2u dstSize(size[0]/4, size[1]/4);
+  dst.Allocate(dstSize[0], dstSize[1]);
+
+  //skinny image. same rows. 1/4 cols.
+  Array2D8u tmpImage(dstSize[0], size[1]);
+
+  //downsample rows
+  for (unsigned row = 0; row < size[1]; row++) {
+    const uint8_t* srcPtr = image.DataPtr() + row * size[0];
+    uint8_t* dstPtr = tmpImage.DataPtr() + row * dstSize[0];
+    DownsampleVec4x(srcPtr, dstPtr, size[0]);
+  }
+  //SavePngGrey("tmp.png", tmpImage);
+  //cols
+  for (unsigned col = 0; col < dstSize[0]; col ++) {
+    std::vector<uint8_t> srcCol;
+    GetCol(tmpImage, col, srcCol);
+    std::vector<uint8_t> dstCol(dstSize[1]);
+    DownsampleVec4x(srcCol.data(), dstCol.data(), size[1]);
+    SetCol(dst, col, dstCol);
+  }
+}
+
+void DownsampleImages() {
+  std::string prefix =
+      "H:/segments/dl.ash2txt.org/hari-seldon-uploads/team-finished-paths/"
+      "scroll1/20231005123334/png/";
+  std::string suffixIn = ".png";
+  std::string suffixOut = ".png";
+  std::string outDir =
+      "H:/segments/dl.ash2txt.org/hari-seldon-uploads/team-finished-paths/"
+      "scroll1/20231005123334/png_quat/";
+  createFolder(outDir);
+  unsigned i0 = 0;
+  unsigned i1 = 64;
+  const int padding = 2;
+  for (unsigned i = i0; i <= i1; i++) {
+    std::string inFile = MakeFileName(prefix, i, padding, suffixIn);
+    Array2D8u image;
+    LoadPngGrey(inFile, image);
+    Array2D8u out;
+    Downsample4x(image, out);
+    std::string outFile = MakeFileName(outDir, i, padding, suffixOut);
+    SavePngGrey(outFile, out);
   }
 }
 
@@ -539,6 +621,7 @@ void UIMain() {
 int main(int argc, char* argv[]) {
   // MakeSlices();
   // ConvertImages();
-  UIMain();
+  DownsampleImages();
+ // UIMain();
   return 0;
 }
