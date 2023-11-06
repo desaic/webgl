@@ -14,7 +14,7 @@ void LoadSlices(std::string dir,
   for (size_t i = 0; i < numLayers; i++) {
     std::string file = dir + "/" + std::to_string(i) + ".png";
     Array2D8u img;
-    LoadPng(file, img);
+    LoadPngGrey(file, img);
 
   }
 }

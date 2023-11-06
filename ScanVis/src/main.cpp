@@ -12,12 +12,12 @@
 #include "meshutil.h"
 #include "AlignImages.hpp"
 #include "VolumeIO.hpp"
+#include "MorphOp.h"
 #include "cvMatUtil.hpp"
 #include "Avenir.h"
-#include "lodepng.h"
+#include "ImageIO.h"
 #include "SliceGen.h"
 #include "SliceToMesh.h"
-#include <opencv2\opencv.hpp>
 #include <string>
 #include <filesystem>
 #include <vector>
@@ -277,7 +277,7 @@ void testSaveVolume(const ConfigFile & conf) {
         }
     }
     float voxRes [3]= { 0.1, 0.1, 0.1 };
-    saveObjRect(outFile0, vol, voxRes, 1);
+    SaveVolAsObjMesh(outFile0, vol, voxRes, 1);
 }
 
 void loadPreviousVol(const ConfigFile & conf, Array3D<uint8_t> & vol) {
@@ -518,11 +518,11 @@ void makeVolumeTimeLapse(const ConfigFile & conf) {
 
                 flipY(vol);
                 std::string outFile0 = outDir0 + std::to_string(objCnt) + ".obj";
-                saveObjRect(outFile0, vol, voxRes, 1);
+                SaveVolAsObjMesh(outFile0, vol, voxRes, 1);
                 std::string outFile1 = outDir1 + std::to_string(objCnt) + ".obj";
-                saveObjRect(outFile1, vol, voxRes, 2);
+                SaveVolAsObjMesh(outFile1, vol, voxRes, 2);
                 std::string outFile2 = outDir2 + std::to_string(objCnt) + ".obj";
-                saveObjRect(outFile2, vol, voxRes, 3);
+                SaveVolAsObjMesh(outFile2, vol, voxRes, 3);
                 flipY(vol);
             //}
             objCnt++;
@@ -694,9 +694,9 @@ void shaveVol(const ConfigFile & conf) {
     float voxRes[3] = { 0.042, 0.04233,0.02 };
     std::cout << "avg depth " << sum << "\n";
     std::string outFile0 = dataDir + "/0.obj";
-    saveObjRect(outFile0, vol, voxRes, 1);
+    SaveVolAsObjMesh(outFile0, vol, voxRes, 1);
     std::string outFile1 = dataDir + "/1.obj";
-    saveObjRect(outFile1, vol, voxRes, 3);
+    SaveVolAsObjMesh(outFile1, vol, voxRes, 3);
     system("pause");
 }
 
@@ -983,8 +983,203 @@ void cropScanData(const ConfigFile& conf) {
   }
 }
 
+void DownsizeScansX() {
+  std::string scanDir = "I:/overlay1012ETH/scan/";
+  std::string scanDirOut = "I:/overlay1012ETH/scan0.5x/";
+  unsigned startIdx = 4;
+  unsigned endIdx = 4792;
+  for (size_t i = startIdx; i < endIdx; i++) {
+    std::string inFile = scanDir + "/scan_" + std::to_string(i) + ".png";
+    cv::Mat in = cv::imread(inFile,cv::IMREAD_GRAYSCALE);
+    if (in.empty()) {
+      continue;
+    }
+    cv::threshold(in, in, 200, 255, cv::THRESH_TOZERO_INV);
+    cv::Mat out;
+    cv::resize(in, out, cv::Size(0, 0), 0.5, 1.0, cv::INTER_LINEAR);
+    std::string outFile = scanDirOut + "/" + std::to_string(i) + ".png";
+    cv::imwrite(outFile, out);
+  }
+}
+
+void DownsizePrintsX() {
+  std::string scanDir = "I:/overlay1012ETH/print/";
+  std::string scanDirOut = "I:/overlay1012ETH/print0.5x/";
+  unsigned startIdx = 4;
+  unsigned endIdx = 4792;
+  for (size_t i = startIdx; i < endIdx; i++) {
+    std::string inFile = scanDir + "/slice_" + std::to_string(i) + "_0.png";
+    cv::Mat in = cv::imread(inFile, cv::IMREAD_GRAYSCALE);
+    if (in.empty()) {
+      continue;
+    }
+    cv::Mat out;
+    cv::resize(in, out, cv::Size(0, 0), 0.5, 1.0, cv::INTER_NEAREST);
+    std::string outFile = scanDirOut + "/" + std::to_string(i) + ".png";
+    cv::imwrite(outFile, out);
+
+    std::string inFile1 = scanDir + "/slice_" + std::to_string(i) + "_1.png";
+    in = cv::imread(inFile, cv::IMREAD_GRAYSCALE);
+    cv::resize(in, out, cv::Size(0, 0), 0.5, 1.0, cv::INTER_NEAREST);
+    outFile = scanDirOut + "/" + std::to_string(i+1) + ".png";
+    cv::imwrite(outFile, out);
+
+  }
+}
+
+void UpdateDepth(Array2Df & depth, const Array2D8u & scan, const Array2D8u & printMask, float z0) {
+  Vec2u size = scan.GetSize();
+  float scanRes = 0.008f;
+  float maxInc = 0.24f;
+  float maxDec = 0.15f;
+
+  float maxScanVal = 20.0f;
+  for (unsigned row = 0; row < size[1]; row++) {
+    const uint8_t *srcRow = scan.DataPtr() + row * size[0];
+    float* dstRow = &depth.GetData()[row * size[0]];
+    const uint8_t* maskPtr = printMask.DataPtr() + row * size[0];
+    for (unsigned col = 0; col < size[0]; col++) {
+      if (maskPtr[col] == 0) {
+        continue;
+      }
+      float s = srcRow[col];
+      
+       s -= 100;
+       s = std::min(s, maxScanVal);
+       s = z0 + s * scanRes;
+       
+       float oldh = dstRow[col];
+       float newh = std::min(oldh + maxInc, s);
+       newh = std::max(newh, oldh);
+       dstRow[col] = newh;
+    }
+  }
+}
+
+void MaskOneScan(const Array2Df& depth, Array2D8u& scan, float z0) {
+  Vec2u size = scan.GetSize();
+  float scanRes = 0.008f;
+  float maxInc = 0.24f;
+  float scanRange = 1.0f;
+  for (unsigned row = 0; row < size[1]; row++) {
+    uint8_t* dstRow = scan.DataPtr() + row * size[0];
+    const float* srcRow = &depth.GetData()[row * size[0]];
+    for (unsigned col = 0; col < size[0]; col++) {
+      float s = srcRow[col];
+      s-=z0;
+      if (s < -scanRange) {
+        dstRow[col] = 0;
+      }
+    }
+  }
+}
+
+void FloatToUint8(const Array2Df & in, Array2D8u & out, float z0) {
+  Vec2u size = in.GetSize();
+  out.Allocate(size[0], size[1]);
+  float range = 1;
+  float zres = 0.01;
+  for (unsigned row = 0; row < size[1]; row++) {
+    uint8_t* dstRow = out.DataPtr() + row * size[0];
+    const float* srcRow = &(in.GetData()[row * size[0]]);
+    for (unsigned col = 0; col < size[0]; col++) {
+      float h = (srcRow[col] - z0 + 1);
+      h = std::max(0.0f, h);
+      h /= zres;
+      h = std::min(255.0f, h);
+      dstRow[col] = uint8_t(h);
+    }
+  }
+}
+
+void Thresh(Array2D8u& arr, uint8_t thresh) {
+  auto& data = arr.GetData();
+  for (size_t i = 0; i < data.size(); i++) {
+    if (data[i] > thresh) {
+      data[i] = 255;
+    }
+    else {
+      data[i] = 0;
+    }
+  }
+}
+
+void MaskScans() {
+  std::string scanDir = "I:/overlay1012ETH/scan0.5x/";
+  std::string printDir = "I:/overlay1012ETH/print0.5x/";
+  std::string scanDirOut = "I:/overlay1012ETH/cleanScan/";
+  unsigned startIdx = 4;
+  unsigned endIdx = 4792;
+  Array2Df depth;
+  float zres = 0.025f;
+  int PrintDilateRad = 3;
+  for (size_t i = startIdx; i < endIdx; i++) {
+    std::string scanFile = scanDir + "/" + std::to_string(i) + ".png";
+    std::string printFile = printDir + "/" + std::to_string(i) + ".png";
+
+    Array2D8u scan;
+    LoadPngGrey(scanFile, scan);
+    if (scan.Empty()) {
+      continue;
+    }
+    Array2D8u print;
+    LoadPngGrey(printFile, print);
+
+    Array2D8u printMask = print;
+    Thresh(printMask,1);
+    Dilate(printMask, PrintDilateRad, PrintDilateRad);
+    Vec2u scanSize = scan.GetSize();
+    if (i == startIdx) {
+      depth.Allocate(scanSize[0], scanSize[1]);
+      depth.Fill(0);
+    }
+    float z0 = i * zres;
+    UpdateDepth(depth, scan, printMask, z0);
+    MaskOneScan(depth, scan, z0);
+    std::string outFile = scanDirOut + "/" + std::to_string(i) + ".png";
+    SavePngGrey(outFile, scan);
+
+    Array2D8u depthOut;
+    if ((i - 4) % 60 == 0) {
+      FloatToUint8(depth, depthOut, z0); 
+      std::string outFile = scanDirOut + "/depth" + std::to_string(i) + ".png";
+      SavePngGrey(outFile, depthOut);
+    }
+  }
+}
+
+void MakeVolMeshSeq() {
+  std::string scanDir = "I:/overlay1012ETH/cleanScan/";
+  std::string printDir = "";
+  unsigned startIdx = 4;
+  unsigned endIdx = 4792;
+}
+
+void SizeScans1080p() {
+  std::string scanDir = "I:/overlay1012ETH/scan/";
+  std::string scanDirOut = "I:/overlay1012ETH/scan0.5x/";
+  unsigned startIdx = 4;
+  unsigned endIdx = 4792;
+  for (size_t i = startIdx; i < endIdx; i++) {
+    std::string inFile = scanDir + "/scan_" + std::to_string(i) + ".png";
+    cv::Mat in = cv::imread(inFile, cv::IMREAD_GRAYSCALE);
+    if (in.empty()) {
+      continue;
+    }
+    cv::threshold(in, in, 200, 255, cv::THRESH_TOZERO_INV);
+    cv::Mat out;
+    cv::resize(in, out, cv::Size(0, 0), 0.5, 1.0, cv::INTER_LINEAR);
+    std::string outFile = scanDirOut + "/" + std::to_string(i) + ".png";
+    cv::imwrite(outFile, out);
+  }
+}
+
 int main(int argc, char * argv[])
 {
+  MaskScans();
+  //DownsizePrintsX();
+//  MakeVolMeshSeq();
+
     if (argc < 2) {
         std::cout << "Usage: " << argv[0] << " config.txt";
         return -1;

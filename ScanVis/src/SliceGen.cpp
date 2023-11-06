@@ -327,7 +327,7 @@ void FullPlateCalib(const ConfigFile& conf)
       raftSlice(x, y) = 50*raftPat(x, y, 0);
     }
   }
-  SavePng(outDir + "/raft.png", raftSlice);
+  SavePngGrey(outDir + "/raft.png", raftSlice);
   Vec2u numParts;
   Vec3u trayGridSize;
   for (size_t i = 0; i < DIM; i++) {
@@ -402,13 +402,13 @@ void FullPlateCalib(const ConfigFile& conf)
     //    slice(x, y) = slice(x, y) * 50;
     //  }
     //}
-    SavePng(outname, slice);
+    SavePngGrey(outname, slice);
   }
 }
 
 void TestWritePng() {
   Array2D8u img(500, 400);
-  SavePng("test.png", img);
+  SavePngGrey("test.png", img);
 }
 
 void TestDrawText()
@@ -418,7 +418,7 @@ void TestDrawText()
   std::string label = oss.str();
   Array2D8u text = DrawText(label, 50);
   text = Scale(text, 6, 3);
-  SavePng("testText.png", text);
+  SavePngGrey("testText.png", text);
 }
 
 void TestFont() {

@@ -6,8 +6,6 @@
 #include "meshutil.h"
 #include "VolumeIO.hpp"
 #include "Recon.hpp"
-#include "GridTree.h"
-#include <opencv2\opencv.hpp>
 #include <iostream>
 
 /// Print layer is flipped in Y to match scan and color images.
@@ -745,9 +743,9 @@ void StackColorVol(const ConfigFile & conf)
   flipY(printVol);
   float voxelRes[3] = { 0.042, 0.04233, 0.025 };
   std::string outFile0 = objDir0 + std::to_string(0) + "p.obj";
-  saveObjRect(outFile0, printVol, voxelRes, 1);
+  SaveVolAsObjMesh(outFile0, printVol, voxelRes, 1);
   std::string outFile1 = objDir1 + std::to_string(0) + "p.obj";
-  saveObjRect(outFile1, printVol, voxelRes, 3);
+  SaveVolAsObjMesh(outFile1, printVol, voxelRes, 3);
   flipY(printVol);
   //load depth data
   //warp depth data so that it's aligned to print data
@@ -888,9 +886,9 @@ void StackColorVol(const ConfigFile & conf)
     if (i > endIdx-3) {
       flipY(outvol);
       std::string outFile0 = objDir0 + std::to_string(i) + ".obj";
-      saveObjRect(outFile0, outvol, voxelRes, 1);
+      SaveVolAsObjMesh(outFile0, outvol, voxelRes, 1);
       std::string outFile1 = objDir1 + std::to_string(i) + ".obj";
-      saveObjRect(outFile1, outvol, voxelRes, 2);
+      SaveVolAsObjMesh(outFile1, outvol, voxelRes, 2);
       flipY(outvol);
     }
   }
