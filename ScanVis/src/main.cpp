@@ -1065,10 +1065,16 @@ void MaskOneScan(const Array2Df& depth, Array2D8u& scan, float z0) {
     uint8_t* dstRow = scan.DataPtr() + row * size[0];
     const float* srcRow = &depth.GetData()[row * size[0]];
     for (unsigned col = 0; col < size[0]; col++) {
-      float s = srcRow[col];
-      s-=z0;
-      if (s < -scanRange) {
-        dstRow[col] = 0;
+      float d = srcRow[col];
+      d-=z0;
+      float s = (dstRow[col]-100.0f) * scanRes;
+
+      float depthToScanVal = d / scanRes + 100;
+      depthToScanVal = std::max(0.0f, depthToScanVal);
+      depthToScanVal = std::min(140.0f, depthToScanVal);
+
+      if (s > d + maxInc || s<d) {
+        dstRow[col] = depthToScanVal;
       }
     }
   }
@@ -1107,7 +1113,7 @@ void Thresh(Array2D8u& arr, uint8_t thresh) {
 void MaskScans() {
   std::string scanDir = "I:/overlay1012ETH/scan0.5x/";
   std::string printDir = "I:/overlay1012ETH/print0.5x/";
-  std::string scanDirOut = "I:/overlay1012ETH/cleanScan/";
+  std::string scanDirOut = "I:/overlay1012ETH/cleanScan1/";
   unsigned startIdx = 4;
   unsigned endIdx = 4792;
   Array2Df depth;
@@ -1149,8 +1155,8 @@ void MaskScans() {
 }
 
 void MakeVolMeshSeq() {
-  std::string scanDir = "I:/overlay1012ETH/cleanScan/";
-  std::string printDir = "";
+  std::string scanDir = "I:/Render1012-1/scan0.25mm/";
+  std::string printDir = "I:/Render1012-1/print0.25mm/";
   unsigned startIdx = 4;
   unsigned endIdx = 4792;
 }
@@ -1182,11 +1188,50 @@ void SizeScans1080p() {
   }
 }
 
+void DownsampleScan4x() {
+  std::string scanDir = "I:/overlay1012ETH/cleanScan/";
+  std::string scanDirOut = "I:/overlay1012ETH/scan0.25mm/";
+  unsigned startIdx = 4;
+  unsigned endIdx = 4792;
+  for (size_t i = startIdx; i < endIdx; i++) {
+    std::string inFile = scanDir + "/" + std::to_string(i) + ".png";
+    cv::Mat in = cv::imread(inFile, cv::IMREAD_GRAYSCALE);
+    if (in.empty()) {
+      continue;
+    }
+    cv::threshold(in, in, 120, 120, cv::THRESH_TRUNC);
+    cv::Mat out;
+    cv::resize(in, out, cv::Size(0,0), 0.25, 0.25, cv::INTER_LINEAR);
+    std::ostringstream oss;
+    oss << scanDirOut << "/" << std::to_string(i) << ".png";
+    cv::imwrite(oss.str(), out);
+  }
+}
+void DownsamplePrint4x() {
+  std::string scanDir = "I:/overlay1012ETH/print0.5x/";
+  std::string scanDirOut = "I:/overlay1012ETH/print0.25mm/";
+  unsigned startIdx = 4;
+  unsigned endIdx = 4792;
+  for (size_t i = startIdx; i < endIdx; i++) {
+    std::string inFile = scanDir + "/" + std::to_string(i) + ".png";
+    cv::Mat in = cv::imread(inFile, cv::IMREAD_GRAYSCALE);
+    if (in.empty()) {
+      continue;
+    }
+    cv::Mat out;
+    cv::resize(in, out, cv::Size(0, 0), 0.25, 0.25, cv::INTER_NEAREST);
+    std::ostringstream oss;
+    oss << scanDirOut << "/" << std::to_string(i) << ".png";
+    cv::imwrite(oss.str(), out);
+  }
+}
 int main(int argc, char * argv[])
 {
+  MaskScans();
   //SizeScans1080p();
   //DownsizePrintsX();
-//  MakeVolMeshSeq();
+  //DownsamplePrint4x();
+  //MakeVolMeshSeq();
 
     if (argc < 2) {
         std::cout << "Usage: " << argv[0] << " config.txt";
