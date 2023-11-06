@@ -3,7 +3,7 @@
 #include <iomanip>
 #include <iostream>
 #include <sstream>
-
+#include "FixedArray.h"
 #include "Array2D.h"
 #include "Array3D.h"
 #include "cpu_voxelizer.h"
@@ -553,12 +553,12 @@ void CheckCornerCase(const AdapSDF &sdf) { Vec3u size = sdf.dist.GetSize();
 void TestSDF() {
   TrigMesh mesh1;
   
-  std::string fileName = "F:/dolphin/meshes/fish/salmon.stl";
+  //std::string fileName = "F:/dolphin/meshes/fish/salmon.stl";
   //std::string fileName = "F:/dolphin/meshes/lattice_big/MeshLattice.stl";
-  mesh1.LoadStl(fileName);
+  //mesh1.LoadStl(fileName);
   
-  //std::string fileName = "F:/dolphin/meshes/sdfTest/soleRigid1.obj";
-  //mesh1.LoadObj(fileName);
+  std::string fileName = "F:/dolphin/meshes/sdfTest/soleRigid1.obj";
+  mesh1.LoadObj(fileName);
   mesh1.ComputePseudoNormals();
   
   //SavePseudoNormals(mesh1,"psnormal.obj");
@@ -585,7 +585,7 @@ void TestSDF() {
   Array2D8u slice;
   Vec3u sdfSize = sdf.dist.GetSize();
   slice.Allocate(20 * sdfSize[0], 20 * sdfSize[1]);
-  float z = 5;
+  float z = 15;
   timer.Start();
   GetSDFFineSlice(sdf, slice, Vec3f(0.02f, 0.02f, 0.02f), z);
    ms = timer.ElapsedMS();
@@ -643,12 +643,219 @@ void TestTrigDist() {
 
 extern void VoxelConnector(int argc, char* argv[]);
 
+using Face = FixedArray<float>;
+
+struct DistanceGrid {
+  Array3D<short>* dist = nullptr;
+  float dx = 0.032f;
+  float distUnit = 0.002f;
+
+  DistanceGrid(Array3D<short>& grid, float gridRes, float unit)
+      : dist(&grid), dx(gridRes), distUnit(unit) {}
+};
+
+void DrawSphere(DistanceGrid& grid, Vec3f center, float r) {
+  Vec3f delta(0.05, 0.05, 0.05);
+  Vec3f sphereMin = center - r - delta;
+  Vec3f sphereMax = center + r + delta;
+  Vec3i idxMin, idxMax;
+  Vec3u gridSize = grid.dist->GetSize();
+  for (int dim = 0; dim < 3; dim++) {
+    idxMin[dim] = std::max(0, int(sphereMin[dim]/grid.dx));
+    idxMax[dim] =
+        std::min(int(gridSize[dim] - 1), int(sphereMax[dim] / grid.dx + 1));
+  }
+
+  for (int z = idxMin[2]; z <= idxMax[2]; z++) {
+    for (int y = idxMin[1]; y <= idxMax[1]; y++) {
+      for (int x = idxMin[2]; x <= idxMax[0]; x++) {
+        Vec3f corner = grid.dx * Vec3f(x,y,z);
+        float dist = (corner - center).norm() - r;
+      }
+    }
+  }
+
+}
+
+void LoadHybrid() {
+  std::string hybridFile = "F:/dolphin/meshes/hand/hand_0.5.HYBRID";
+  std::ifstream in(hybridFile);
+  unsigned nV, nF, nE;
+  in >> nV >> nF >> nE;
+  //each element occupies 3 lines in hybrid file.
+  nE /= 3;
+  std::cout << "vert face elts " << nV << " " << nF << " " << nE << "\n";
+  
+  float scale = 0.3f;
+
+  std::vector<Vec3f> verts(nV);
+  for (unsigned i = 0; i < nV; i++) {
+    in >> verts[i][0] >> verts[i][1] >> verts[i][2];
+  }
+
+  for (Vec3f& v:verts) {
+    v = scale * v;
+  }
+
+  std::vector<Face> faces(nF);
+  for (unsigned i = 0; i < faces.size(); i++) {
+    unsigned numFaceVert;
+    in >> numFaceVert;
+    faces[i].Allocate(numFaceVert);
+    for (unsigned j = 0; j < numFaceVert; j++) {
+      in >> faces[i][j];
+    }
+  }
+
+  std::string visualFile = "vis.obj";
+
+  std::ofstream out(visualFile);
+  for (unsigned i = 0; i < verts.size(); i++) {
+    out << "v " << verts[i][0] << " " << verts[i][1] << " " << verts[i][2]
+        << "\n";
+  }
+  for (unsigned i = 0; i < faces.size(); i++) {
+    out << "f ";
+    for (unsigned j = 0; j < faces[i].size(); j++) {
+      out << (faces[i][j]+1) << " ";
+    }
+    out << "\n";
+  }
+
+  Array3D<short> grid(512, 512, 512);
+  grid.Fill(10000);
+  float distUnit = 0.002;
+  float dx = 0.032;
+  DistanceGrid dg(grid, dx, distUnit);
+
+  BBox bbox;
+  ComputeBBox(verts, bbox);
+  std::cout << bbox.vmin[0] << " " << bbox.vmin[1] << " " << bbox.vmin[2]
+            << "\n";
+  std::cout << bbox.vmax[0] << " " << bbox.vmax[1] << " " << bbox.vmax[2]
+            << "\n";
+
+  float margin = 1.0f;
+
+  for (unsigned i = 0; i < verts.size(); i++) {
+    verts[i] = verts[i] - bbox.vmin + Vec3f(1,1,1);  
+  }
+  bbox.vmax = bbox.vmax - bbox.vmin + 2.0f*Vec3f(margin,margin,margin);
+  float thickness0 = 1.0f;
+  float thickness1 = 0.5f;
+  for (unsigned i = 0; i < verts.size(); i++) {
+    verts[i] = verts[i] - bbox.vmin + Vec3f(1, 1, 1);
+  }
+
+  
+  Vec3f delta(0.05, 0.05, 0.05);
+  float zmax = bbox.vmax[2];
+  for (unsigned i = 0; i < verts.size(); i++) {
+    float z = verts[i][2];
+    float alpha = z/zmax;
+    float r = 0.5f*(alpha*thickness1 + (1-alpha)*thickness0);
+    DrawSphere(dg, verts[i], r);
+  }
+
+}
+
+struct LineSeg {
+  Vec3f p0, p1;
+  LineSeg() {}
+  LineSeg(Vec3f a, Vec3f b):p0(a),p1(b) {}
+};
+
+float PtLineSegDist(Vec3f pt, Vec3f l1, Vec3f l2) {
+  Vec3f pl1 = pt - l1;
+  Vec3f l12 = l2 - l1;
+  float eps = 1e-12;
+  float len = l12.norm() + eps;
+  float t = pl1.dot(l12) / len / len;
+  if (t < 0) {
+    return pl1.norm();
+  }
+  if (t > 1) {
+    return (pt - l2).norm();
+  }
+  return (pl1 - t*l12).norm();
+}
+
+void PrintGrid(std::ostream& out, const Array3D8u& s) {
+  Vec3u size = s.GetSize();
+  out << size[0] << " " << size[1] << " " << size[2] << "\n";
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      for (unsigned x = 0; x < size[0]; x++) {
+        uint8_t val = s(x, y, z);
+        int outVal = 1;
+        if (val > 100) {
+          outVal = 2;
+        }
+        out << outVal << " ";
+      }
+      out<<"\n";
+    }
+  }
+}
+
+void MakeFluoriteLattice() {
+  Array3D8u corner(64, 64, 64);
+  corner.Fill(0);
+  Vec3u size = corner.GetSize();
+  Vec3f cellCenter(size[0] / 2, size[1] / 2, size[2] / 2);
+  float beamRad = 5;
+  std::vector<LineSeg> lines(2);
+  lines[0] = LineSeg(Vec3f(0, 0, 0), cellCenter);
+  lines[1] = LineSeg(Vec3f(size[0], size[1], 0), cellCenter);
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      for (unsigned x = 0; x < size[0]; x++) {
+        Vec3f pt(x + 0.5f, y + 0.5f, z + 0.5f);
+        float minDist = 10 * size[0];
+        for (const auto& l : lines) {
+          minDist = std::min(minDist, PtLineSegDist(pt, l.p0,l.p1));
+        }
+        if (minDist < beamRad) {
+          corner(x, y, z) = 1;
+        }
+      }
+    }
+  }
+  Scale(corner, 255);
+  Array3D8u s;
+  MirrorCubicStructure(corner, s);
+
+  std::vector<float> kern;
+  GaussianFilter1D(1, 3, kern);
+
+  Array3D8u s2, s4;
+  Upsample2x(s, s2);
+
+  FilterDecomp(s2, kern);
+  Downsample2x(s2, s);
+
+  std::ofstream out("fl_grid.txt");
+  PrintGrid(out, s);
+  for (size_t i = 0; i < s.GetData().size(); i++) {
+    if (s.GetData()[i] > 100) {
+      s.GetData()[i] = 2;
+    } else {
+      s.GetData()[i] = 1;    
+    }
+  }
+  std::string objFile = "fl_smooth.obj";
+  Vec3f voxRes(1, 1, 1);
+  Vec3f origin(0,0,0);
+  SaveVolAsObjMesh(objFile, s, (float*)(&voxRes), (float*)(&origin), 2);
+}
+
 int main(int argc, char* argv[]) {
   //VoxelConnector(argc, argv);
   //return 0;
   //TestTrigDist();
-  TestSDF();
-  return 0;
+  //TestSDF();
+  MakeFluoriteLattice();
+
   Array3D8u eyeVol;
   std::string imageDir = "F:/dolphin/meshes/eye0531/slices/";
   int maxIndex = 760;

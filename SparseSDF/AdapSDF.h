@@ -2,6 +2,7 @@
 #define ADAP_SDF_H
 
 #include "Array3D.h"
+#include "FixedGrid3D.h"
 #include "PointTrigDist.h"
 #include "SparseNode4.h"
 #include "Sparse3DMap.h"
@@ -33,6 +34,11 @@ struct FixedGrid5 {
 /// stores a dense coarse distance grid
 /// and a sparse grid of surface point samples.
 /// </summary>
+
+/// <summary>
+/// stores a dense coarse distance grid
+/// and a sparse grid of surface point samples.
+/// </summary>
 class AdapSDF {
  public:
   AdapSDF();
@@ -52,15 +58,27 @@ class AdapSDF {
   void ComputeCoarseDist(unsigned x, unsigned y, unsigned z);
   /// <summary>
   /// Goes through every fine vertex and compute its distance within voxSize.
-  /// Uses the triangle frames and trigList which are computed while ComputeCoarseDist().
+  /// Uses the triangle frames and trigList which are computed while
+  /// ComputeCoarseDist().
   /// </summary>
   void ComputeFineDistBrute();
-  void ComputeDistGrid5(Vec3f x0, FixedGrid5& fine,
+  void FastSweepFine();
+  void PropagateNeighbors();
+  void ComputeFineCellDist(size_t sparseIdx);
+  /// compute point-triangle distances between a fine grid and triangles
+  void ComputeFinePtTrig(unsigned x, unsigned y, unsigned z);
+  void ComputeDistGrid5(Vec3f x0, FixedGrid3D<5>& fine,
                         const std::vector<size_t>& trigs);
   void GatherTrigs(unsigned x, unsigned y, unsigned z,
                    std::vector<size_t>& trigs);
   bool HasCellDense(const Vec3u& gridIdx) const;
   bool HasCellSparse(const Vec3u& gridIdx) const;
+
+  /// <summary>
+  /// Clears trigList and trigFrames.
+  /// </summary>
+  void ClearTemporaryArrays();
+
   /// <summary>
   /// After adding points, compress to save memory.
   /// Dense operations no longer valid after this point.
@@ -71,7 +89,7 @@ class AdapSDF {
   /// Biliearly interpolates the vertex distance grid.
   /// </summary>
   /// <returns>distance in mm</returns>
-  float GetCoarseDist(const Vec3f & x) const;
+  float GetCoarseDist(const Vec3f& x) const;
   /// <summary>
   /// taken as the min of the bilinear interpolated distance
   /// and the point sample based distance.
@@ -101,32 +119,29 @@ class AdapSDF {
 
   TrigMesh* mesh_ = nullptr;
   // coarse grid contains index into list of refined cells.
-  // 
+  //
   // only a sparse subset of voxels have refined cells.
   // sparse nodes are stored at 1/4 resolution of the full grid.
   Sparse3DMap<unsigned> sparseGrid;
 
   // flat list of fine cells indexed by sparseGrid.
   // index 0 is reserved for empty cells.
-  std::vector<FixedGrid5> fineGrid;
-  //temporary lists of triangles intersecting coarse voxels
-  //not used during distance interpolation.
-  std::vector<std::vector<size_t> > trigList;
-  //temporary additional triangle information
+  std::vector<FixedGrid3D<5>> fineGrid;
+  // temporary lists of triangles intersecting coarse voxels
+  // cleared after initialization.
+  std::vector<std::vector<size_t>> trigList;
+  // temporary additional triangle information
   std::vector<TrigFrame> trigFrames;
-  //debugging variable mapping linear cell index back to 3D voxel index.
-  std::vector<Vec3u> debugIndex;
   // mm. default is 1um.
   float distUnit = 0.001f;
 
   Vec3f origin = {0.0f, 0.0f, 0.0f};
 
   // in mm. square voxels only.
-  float voxSize=0.4;
+  float voxSize = 0.4;
   // 1/4 of voxSize by default.
   float pointSpacing = 0.1f;
   unsigned band = 5;
-
 };
 
 #endif
