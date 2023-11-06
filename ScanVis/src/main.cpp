@@ -1156,27 +1156,35 @@ void MakeVolMeshSeq() {
 }
 
 void SizeScans1080p() {
-  std::string scanDir = "I:/overlay1012ETH/scan/";
-  std::string scanDirOut = "I:/overlay1012ETH/scan0.5x/";
+  std::string scanDir = "I:/overlay1012ETH/cleanScan/";
+  std::string scanDirOut = "I:/overlay1012ETH/scan1080/";
   unsigned startIdx = 4;
   unsigned endIdx = 4792;
+  unsigned scanCount = 0;
+  unsigned dstWidth = 1920;
+  unsigned dstHeight = 1080;
   for (size_t i = startIdx; i < endIdx; i++) {
-    std::string inFile = scanDir + "/scan_" + std::to_string(i) + ".png";
+    std::string inFile = scanDir + "/" + std::to_string(i) + ".png";
     cv::Mat in = cv::imread(inFile, cv::IMREAD_GRAYSCALE);
     if (in.empty()) {
       continue;
     }
-    cv::threshold(in, in, 200, 255, cv::THRESH_TOZERO_INV);
     cv::Mat out;
-    cv::resize(in, out, cv::Size(0, 0), 0.5, 1.0, cv::INTER_LINEAR);
-    std::string outFile = scanDirOut + "/" + std::to_string(i) + ".png";
-    cv::imwrite(outFile, out);
+    unsigned w0 = unsigned( (in.cols * dstHeight) / in.rows );
+    cv::resize(in, out, cv::Size(w0, dstHeight),0,0,cv::INTER_LINEAR);
+    cv::Mat dstImage;
+    unsigned borderCols = dstWidth - out.cols;
+    cv::copyMakeBorder(out, dstImage, 0, 0, 0, borderCols, cv::BORDER_CONSTANT, 0);
+    std::ostringstream oss;
+    oss << scanDirOut << "/" << std::setfill('0') << std::setw(4)<<std::to_string(scanCount)<<".png";
+    cv::imwrite(oss.str(), dstImage);
+    scanCount++;
   }
 }
 
 int main(int argc, char * argv[])
 {
-  MaskScans();
+  SizeScans1080p();
   //DownsizePrintsX();
 //  MakeVolMeshSeq();
 
