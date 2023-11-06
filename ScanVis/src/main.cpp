@@ -1184,7 +1184,7 @@ void SizeScans1080p() {
 
 int main(int argc, char * argv[])
 {
-  SizeScans1080p();
+  //SizeScans1080p();
   //DownsizePrintsX();
 //  MakeVolMeshSeq();
 
