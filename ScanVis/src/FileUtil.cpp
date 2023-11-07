@@ -211,8 +211,8 @@ void saveHeightObj(std::string filename, const std::vector<float> & h, int width
   if(saveTrig){
       for (int i = 0; i < height - 1; i++) {
           for (int j = 0; j < width - 1; j++) {
-              out.out << "f " << (i*width + j + 1) << " " << ((i + 1)*width + j + 1) << " " << (i*width + j + 2) << "\n";
-              out.out << "f " << ((i + 1)*width + j + 1) << " " << ((i + 1)*width + j + 2) << " " << (i*width + j + 2) << "\n";
+              out.out << "f " << (i*width + j + 1) << " " << (i*width + j + 2) << " " << ((i + 1) * width + j + 1) << "\n";
+              out.out << "f " << ((i + 1)*width + j + 1) << " " << (i * width + j + 2) << " " << ((i + 1)*width + j + 2) << "\n";
           }
       }
   }

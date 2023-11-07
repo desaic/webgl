@@ -1154,6 +1154,148 @@ void MaskScans() {
   }
 }
 
+void UpdateDepth(Array2Df& depth, const Array2D8u& scan, float z0) {
+  Vec2u size = scan.GetSize();
+  float scanRes = 0.008f;
+  float maxInc = 0.24f;
+  float maxDec = 0.15f;
+  float maxScanVal = 20.0f;
+  for (unsigned row = 0; row < size[1]; row++) {
+    const uint8_t* srcRow = scan.DataPtr() + row * size[0];
+    float* dstRow = &depth.GetData()[row * size[0]];
+    for (unsigned col = 0; col < size[0]; col++) {
+      float s = srcRow[col];
+      s -= 100;
+      if (s < -40) {
+        continue;
+      }
+      s = std::min(s, maxScanVal);
+      s = z0 + s * scanRes;
+      
+      float oldh = dstRow[col];
+      float newh = std::min(oldh + maxInc, s);
+      newh = std::max(newh, oldh);
+      dstRow[col] = newh;
+    }
+  }
+}
+
+void SaveHeightWithUV(std::string file, unsigned width, unsigned height, float*dx, float duv) {
+  std::ofstream out(file);
+  if (!out.good()) {
+    return;
+  }
+  for (int i = 0; i < height; i++) {
+    for (int j = 0; j < width; j++) {
+      out << "v " << j * dx[0] << " " << i * dx[1] << " " << 0 << "\n";
+    }
+  }
+  for (int i = 0; i < height; i++) {
+    for (int j = 0; j < width; j++) {
+      out << "vt " << j * duv << " " << i * duv << "\n";
+    }
+  }
+  for (int i = 0; i < height - 1; i++) {
+    for (int j = 0; j < width - 1; j++) {
+      out << "f " << (i * width + j + 1) << "/" << (i * width + j + 1) << " " << (i * width + j + 2)
+          << "/" << (i * width + j + 2) << " " << ((i + 1) * width + j + 1) << "/"
+          << ((i + 1) * width + j + 1) << "\n";
+      out << "f " << ((i + 1) * width + j + 1) << "/" << ((i + 1) * width + j + 1) << " "
+          << (i * width + j + 2) << "/" << (i * width + j + 2) << " " << ((i + 1) * width + j + 2)
+          << "/" << ((i + 1) * width + j + 2) << "\n";
+    }
+  }
+  
+}
+
+template <typename T>
+void FlipY(const Array2D<T>& src, Array2D<T>& dst) {
+  Vec2u size = src.GetSize();
+  dst.Allocate(size[0], size[1]);
+  for (unsigned row = 0; row < size[1]; row++) {
+    const T * srcRow = src.DataPtr() + row * size[0];
+    T* dstRow = dst.DataPtr() + (size[1] - row - 1) * size[0];
+    for (unsigned col = 0; col < size[0]; col++) {
+      dstRow[col] = srcRow[col];
+    }
+  }
+}
+
+void PrintToColor(const Array2D8u& print, Array2D8u& image) {
+  uint8_t matColors[3][3] = {{204, 204, 204}, {204, 77, 77}, {59, 59, 171}};
+  Vec2u size = print.GetSize();
+  Vec2u imageSize = image.GetSize();
+  unsigned rowOff = imageSize[1] - size[1];
+  for (unsigned row = 0; row < size[1]; row++) {
+    const uint8_t* srcRow = print.DataPtr() + row * size[0];
+    uint8_t* dstRow = image.DataPtr() + (row + rowOff) * imageSize[0];
+    for (unsigned col = 0; col < size[0]; col++) {
+      uint8_t mat = srcRow[col] / 50;
+      if (mat > 0&&mat<=3) {
+        mat--;
+        dstRow[3 * col] = matColors[mat][0];
+        dstRow[3 * col+1] = matColors[mat][1];
+        dstRow[3 * col+2] = matColors[mat][2];
+      }
+    }
+  }
+}
+
+//render heightmaps for wax
+void MakeHeightMeshSeq() {
+  std::string scanDir = "I:/Render1012-1/scan0.25mm/";
+  std::string printDir = "I:/Render1012-1/print0.25mm/";
+  std::string heightDir = "H:/nature/heightMesh";
+  createDir(heightDir);
+  unsigned startIdx = 4;
+  unsigned endIdx = 4792;
+  float voxRes = 0.255;
+  float zRes = 0.02;
+  Array2Df height;
+  int meshCount = 0;
+  int numMats = 3;
+  float dx[3] = { 0.1f*voxRes, 0.1f*voxRes, 0.1f };
+  float duv = 1.0f / 1600;
+  //rbg
+  Array2D8u texImage(4800, 1600);
+  texImage.Fill(204);
+  
+  for (size_t i = startIdx; i < endIdx; i++) {
+    std::string scanFile = scanDir + "/" + std::to_string(i) + ".png";
+    std::string printFile = printDir + "/" + std::to_string(i) + ".png";
+    Array2D8u scan;
+    LoadPngGrey(scanFile, scan);
+    if (scan.Empty()) {
+      continue;
+    }
+    Array2D8u print;
+    LoadPngGrey(printFile, print);
+    Vec2u scanSize = scan.GetSize();
+    if (height.Empty()) {
+      height.Allocate(scanSize[0], scanSize[1]);
+      height.Fill(0);
+      //SaveHeightWithUV(heightDir +"/height_uv.obj", scanSize[0], scanSize[1], dx, duv);
+    }
+    
+    float z0 = i * zRes;
+    UpdateDepth(height, scan, z0);
+    
+    std::ostringstream outMesh;
+    outMesh << heightDir << "/" << std::setfill('0') << std::setw(4) << meshCount << ".obj";
+
+    Array2Df outh;
+    FlipY(height, outh);
+    saveHeightObj(outMesh.str(), outh.GetData(), int(scanSize[0]), int(scanSize[1]), dx, false);
+    
+    texImage.Fill(204);
+    PrintToColor(print, texImage);
+    std::ostringstream imageFile;
+    imageFile << heightDir << "/" << std::setfill('0') << std::setw(4) << meshCount << ".png";
+    SavePngColor(imageFile.str(), texImage);
+    meshCount++;
+  }
+}
+
 void MakeVolMeshSeq() {
   std::string scanDir = "I:/Render1012-1/scan0.25mm/";
   std::string printDir = "I:/Render1012-1/print0.25mm/";
@@ -1169,12 +1311,23 @@ void SizeScans1080p() {
   unsigned scanCount = 0;
   unsigned dstWidth = 1920;
   unsigned dstHeight = 1080;
+
+  cv::Mat meanScan;
+
+  //temporal smoothing
   for (size_t i = startIdx; i < endIdx; i++) {
     std::string inFile = scanDir + "/" + std::to_string(i) + ".png";
     cv::Mat in = cv::imread(inFile, cv::IMREAD_GRAYSCALE);
     if (in.empty()) {
       continue;
     }
+    if (meanScan.empty()) {
+      meanScan = in;
+    }
+
+    in = 0.5 * meanScan + 0.5 * in;
+    meanScan = 0.5 * meanScan + 0.5 * in;
+
     cv::Mat out;
     unsigned w0 = unsigned( (in.cols * dstHeight) / in.rows );
     cv::resize(in, out, cv::Size(w0, dstHeight),0,0,cv::INTER_LINEAR);
@@ -1227,11 +1380,11 @@ void DownsamplePrint4x() {
 }
 int main(int argc, char * argv[])
 {
-  MaskScans();
+  //MaskScans();
   //SizeScans1080p();
   //DownsizePrintsX();
-  //DownsamplePrint4x();
-  //MakeVolMeshSeq();
+  //DownsampleScan4x();
+  MakeHeightMeshSeq();
 
     if (argc < 2) {
         std::cout << "Usage: " << argv[0] << " config.txt";
