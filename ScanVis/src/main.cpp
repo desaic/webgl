@@ -1296,11 +1296,88 @@ void MakeHeightMeshSeq() {
   }
 }
 
+void WriteMatIntoVol(Array3D8u &vol, const Array2Df& height, const Array2D8u & slice, 
+  float voxRes) {
+  Vec3u vsize = vol.GetSize();
+  Vec2u sliceSize = slice.GetSize();
+  for (unsigned row = 0; row < sliceSize[1]; row++) {
+    if (row >= vsize[1]) {
+      break;
+    }
+
+    const float* hrow = height.DataPtr() + row * sliceSize[0];
+    const uint8_t* sliceRow = slice.DataPtr() + row * sliceSize[0];
+
+    for (unsigned col = 0; col < sliceSize[0]; col++) {
+      if (col >= vsize[0]) {
+        break;
+      }
+      float h = hrow[col];
+      int z = int(h / voxRes + 0.5f);
+      if (z < 0) {
+        continue;
+      }
+      if (z >= vsize[2]) {
+        z = vsize[2] - 1;
+      }
+      uint8_t mat = sliceRow[col] / 50;
+      if (mat > 1) {
+        vol(col, row, z) = mat;
+      }
+    }
+  }
+}
+
 void MakeVolMeshSeq() {
-  std::string scanDir = "I:/Render1012-1/scan0.25mm/";
-  std::string printDir = "I:/Render1012-1/print0.25mm/";
+  std::string scanDir = "H:/nature/scan0.25mm/";
+  std::string printDir = "H:/nature/print0.25mm/";
+  std::string volDir = "H:/nature/volMesh";
+  createDir(volDir);
+  createDir(volDir + "/2");
+  createDir(volDir + "/3");
   unsigned startIdx = 4;
   unsigned endIdx = 4792;
+  float voxRes = 0.255;
+  float zRes = 0.02;
+  Array2Df height;
+  int meshCount = 0;
+  int numMats = 3;
+  float dx[3] = { 0.1f * voxRes, 0.1f * voxRes, 0.1f };
+  float duv = 1.0f / 1600;
+  Array3D8u vol;
+
+  for (size_t i = startIdx; i < endIdx; i++) {
+    std::string scanFile = scanDir + "/" + std::to_string(i) + ".png";
+    std::string printFile = printDir + "/" + std::to_string(i) + ".png";
+    Array2D8u scan;
+    LoadPngGrey(scanFile, scan);
+    if (scan.Empty()) {
+      continue;
+    }
+    Array2D8u print;
+    LoadPngGrey(printFile, print);
+    Vec2u scanSize = scan.GetSize();
+    if (height.Empty()) {
+      height.Allocate(scanSize[0], scanSize[1]);
+      height.Fill(0);
+
+      vol.Allocate(scanSize[0], scanSize[1], endIdx * zRes / voxRes + 3);
+    }
+    float z0 = i * zRes;
+    UpdateDepth(height, scan, z0);
+    if (i > 100) {
+      WriteMatIntoVol(vol, height, print, voxRes);
+      std::ostringstream mat2File;
+      mat2File << volDir << "/2/" << std::setfill('0') << std::setw(4) << meshCount << ".obj";
+      float res[3] = { voxRes,voxRes,voxRes };
+      SaveVolAsObjMesh(mat2File.str(), vol, res, 2);
+
+      std::ostringstream mat3File;
+      mat3File << volDir << "/3/" << std::setfill('0') << std::setw(4) << meshCount << ".obj";
+      SaveVolAsObjMesh(mat3File.str(), vol, res, 3);
+    }
+    meshCount++;
+  }
 }
 
 void SizeScans1080p() {
@@ -1378,14 +1455,15 @@ void DownsamplePrint4x() {
     cv::imwrite(oss.str(), out);
   }
 }
+
 int main(int argc, char * argv[])
 {
   //MaskScans();
   //SizeScans1080p();
   //DownsizePrintsX();
   //DownsampleScan4x();
-  MakeHeightMeshSeq();
-
+  //MakeHeightMeshSeq();
+  MakeVolMeshSeq();
     if (argc < 2) {
         std::cout << "Usage: " << argv[0] << " config.txt";
         return -1;
