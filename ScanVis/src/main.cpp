@@ -1322,7 +1322,8 @@ void WriteMatIntoVol(Array3D8u &vol, const Array2Df& height, const Array2D8u & s
       }
       uint8_t mat = sliceRow[col] / 50;
       if (mat > 1) {
-        vol(col, row, z) = mat;
+        unsigned dstRow = vsize[1] - row - 1;
+        vol(col, dstRow, z) = mat;
       }
     }
   }
