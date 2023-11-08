@@ -787,11 +787,7 @@ void PrintGrid(std::ostream& out, const Array3D8u& s) {
     for (unsigned y = 0; y < size[1]; y++) {
       for (unsigned x = 0; x < size[0]; x++) {
         uint8_t val = s(x, y, z);
-        int outVal = 1;
-        if (val > 100) {
-          outVal = 2;
-        }
-        out << outVal << " ";
+        out << int(val) << " ";
       }
       out<<"\n";
     }
@@ -849,13 +845,44 @@ void MakeFluoriteLattice() {
   SaveVolAsObjMesh(objFile, s, (float*)(&voxRes), (float*)(&origin), 2);
 }
 
+float gyroid(float x, float y, float z) {
+  return std::cos(x) * std::sin(y) + std::cos(y) * std::sin(z) +
+         std::cos(z) * std::sin(x);
+}
+
+void MakeGyroidCell() {
+  Array3D8u dist(125,125,125);
+  dist.Fill(1);
+  Vec3u size = dist.GetSize();
+  float thickness = 10;
+  float gyroidScale = (2 * 3.1415926)/size[0];
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      for (unsigned x = 0; x < size[0]; x++) {
+        Vec3f coord(x + 0.5f, y + 0.5f, z + 0.5f);
+        coord = gyroidScale * coord;
+        float f = gyroid(coord[0], coord[1], coord[2]);
+        if (std::abs(f) < 0.5f) {
+          dist(x, y, z) = 0;
+        }
+      }
+    }
+  }
+  std::ofstream out("gyroid_grid.txt");
+  PrintGrid(out, dist);
+  std::string objFile = "gyroidCell.obj";
+  Vec3f voxRes(1, 1, 1);
+  Vec3f origin(0, 0, 0);
+  SaveVolAsObjMesh(objFile, dist, (float*)(&voxRes), (float*)(&origin), 2);
+}
+
 int main(int argc, char* argv[]) {
   //VoxelConnector(argc, argv);
   //return 0;
   //TestTrigDist();
   //TestSDF();
-  MakeFluoriteLattice();
-
+//  MakeFluoriteLattice();
+  MakeGyroidCell();
   Array3D8u eyeVol;
   std::string imageDir = "F:/dolphin/meshes/eye0531/slices/";
   int maxIndex = 760;
