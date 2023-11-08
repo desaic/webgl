@@ -1329,6 +1329,19 @@ void WriteMatIntoVol(Array3D8u &vol, const Array2Df& height, const Array2D8u & s
   }
 }
 
+void SubtractVol(Array3D8u& vol, const Array3D8u&b) {
+  Vec3u size = vol.GetSize();
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      for (unsigned x = 0; x < size[0]; x++) {
+        if (b(x, y, z) > 0) {
+          vol(x, y, z) = 0;
+        }
+      }
+    }
+  }
+}
+
 void MakeVolMeshSeq() {
   std::string scanDir = "H:/nature/scan0.25mm/";
   std::string printDir = "H:/nature/print0.25mm/";
@@ -1346,7 +1359,7 @@ void MakeVolMeshSeq() {
   float dx[3] = { 0.1f * voxRes, 0.1f * voxRes, 0.1f };
   float duv = 1.0f / 1600;
   Array3D8u vol;
-
+  Array3D8u oldvol;
   for (size_t i = startIdx; i < endIdx; i++) {
     std::string scanFile = scanDir + "/" + std::to_string(i) + ".png";
     std::string printFile = printDir + "/" + std::to_string(i) + ".png";
@@ -1366,16 +1379,26 @@ void MakeVolMeshSeq() {
     }
     float z0 = i * zRes;
     UpdateDepth(height, scan, z0);
-    if (i > 100) {
-      WriteMatIntoVol(vol, height, print, voxRes);
-      std::ostringstream mat2File;
-      mat2File << volDir << "/2/" << std::setfill('0') << std::setw(4) << meshCount << ".obj";
-      float res[3] = { voxRes,voxRes,voxRes };
-      SaveVolAsObjMesh(mat2File.str(), vol, res, 2);
 
-      std::ostringstream mat3File;
-      mat3File << volDir << "/3/" << std::setfill('0') << std::setw(4) << meshCount << ".obj";
-      SaveVolAsObjMesh(mat3File.str(), vol, res, 3);
+    if (i>100) {
+      if (meshCount == 489) {
+        oldvol = vol;
+      }
+      WriteMatIntoVol(vol, height, print, voxRes);
+      if (meshCount == 489) {
+        SubtractVol(vol, oldvol);
+      }
+      if (meshCount > 488) {
+        std::ostringstream mat2File;
+        mat2File << volDir << "/2/" << std::setfill('0') << std::setw(4) << meshCount << ".obj";
+        //output cm
+        float res[3] = { 0.1 * voxRes,0.1 * voxRes,0.1 * voxRes };
+        SaveVolAsObjMesh(mat2File.str(), vol, res, 2);
+
+        std::ostringstream mat3File;
+        mat3File << volDir << "/3/" << std::setfill('0') << std::setw(4) << meshCount << ".obj";
+        SaveVolAsObjMesh(mat3File.str(), vol, res, 3);
+      }
     }
     meshCount++;
   }
