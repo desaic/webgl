@@ -1480,6 +1480,111 @@ void DownsamplePrint4x() {
   }
 }
 
+cv::Mat calculate_cdf(cv::Mat histogram) {
+  cv::Mat sum = cv::Mat::zeros(histogram.size(),CV_32FC1);
+  sum.at<float>(0) = (histogram.at<float>(0));
+  size_t len = histogram.total();
+  for (int i = 1; i < histogram.total(); ++i) {
+    sum.at<float>(i) = sum.at<float>(i - 1) + histogram.at<float>(i);
+  }
+
+  cv::Mat normalized_cdf = sum / float(sum.at<float>(len - 1));
+  return normalized_cdf;
+}
+
+cv::Mat calculate_lookup(cv::Mat src_cdf, cv::Mat ref_cdf) {
+  
+  cv::Mat lookup_table = cv::Mat::zeros(1, 256, CV_8UC1);
+  const float eps = 1e-6;
+  for (unsigned srci = 0; srci < src_cdf.total(); srci++) {
+    float f1 = src_cdf.at<float>(srci);
+    for (unsigned refi = 0; refi < ref_cdf.total();refi++) {
+      float f2 = ref_cdf.at<float>(refi);
+      if (ref_cdf.at<float>(refi) >= src_cdf.at<float>(srci)) {
+        lookup_table.at<uint8_t>(srci) = refi;
+        break;
+      }      
+    }
+  }
+  return lookup_table;
+}
+void MatchHistoGray(const cv::Mat& ref, cv::Mat & dst) {
+  cv::Mat refImage = ref;
+  bool uniform = true; bool accumulate = false;
+  int histSize = 256;
+  // Calculate the histogram of the target image
+  cv::Mat histDst;
+  float range[] = { 0, 256 };
+  const float* histRange = { range };
+  cv::calcHist(&dst, 1, 0, cv::Mat(), histDst, 1, &histSize, &histRange, uniform, accumulate);
+
+  // Calculate the cumulative distribution function (CDF) of the source image
+  cv::Mat histRef;
+  cv::calcHist(&refImage, 1, 0, cv::Mat(), histRef, 1, &histSize, &histRange, uniform, accumulate);
+
+  cv::Mat refCDF = calculate_cdf(histRef);
+  cv::Mat dstCDF = calculate_cdf(histDst);
+  
+  cv::Mat lut = calculate_lookup(dstCDF, refCDF);
+
+  // Apply the matching LUT to the equalized source image
+  cv::LUT(dst, lut, dst);
+}
+
+void MatchHistoRGB(const cv::Mat& src, cv::Mat dst) {
+  std::vector<cv::Mat> bgr_src;
+  cv::split(src, bgr_src);
+  std::vector<cv::Mat> bgr_dst;
+  cv::split(dst, bgr_dst);
+  for (unsigned c = 0; c < 3; c++) {
+    MatchHistoGray(bgr_src[c], bgr_dst[c]);
+  }
+  cv::merge(bgr_dst, dst);
+}
+
+void CopyTimelapseImages() {
+  std::string inDir = "H:/nature/handTimeLapse1109/";
+  std::string outDir = "H:/nature/timelapse1109/";
+  int i0 = 1;
+  int i1 = 1921;
+  int outCount = 0;
+  
+  cv::Mat refImage;
+  std::string refImageFile = "H:/nature/timeLapseRef.png";
+  refImage = cv::imread(refImageFile);
+
+  cv::Mat avgFrame;
+  for (int i = i0; i <= i1; i++) {
+    cv::Mat image;
+    std::string imageName = inDir + std::to_string(i) + ".png";
+    image =cv::imread(imageName);
+    if (image.empty()) {
+      continue;
+    }
+    float theta = 180.0f+2.47f; // Angle in degrees
+
+    cv::Point2f center(image.cols / 2.0, image.rows / 2.0);
+    cv::Mat rotationMatrix = cv::getRotationMatrix2D(center, theta, 1.0);
+    cv::Rect roi(42, 44, 1850, 980);
+    cv::Mat rotatedImage;
+    cv::warpAffine(image, rotatedImage, rotationMatrix, image.size());
+    cv::Mat cropped = rotatedImage(roi);
+    
+    MatchHistoRGB(refImage, cropped);      
+
+    if (i == i0) {
+      avgFrame = cropped;
+    }
+    float alpha = 0.8;
+    addWeighted(avgFrame, alpha, cropped, 1.0f-alpha, 0.0, image);
+    avgFrame = image;
+    std::ostringstream outImageName;
+    outImageName << outDir << std::setfill('0') << std::setw(4) << outCount << ".png";
+    cv::imwrite(outImageName.str(), image);
+    outCount++;
+  }
+}
+
 int main(int argc, char * argv[])
 {
   //MaskScans();
@@ -1487,7 +1592,8 @@ int main(int argc, char * argv[])
   //DownsizePrintsX();
   //DownsampleScan4x();
   //MakeHeightMeshSeq();
-  MakeVolMeshSeq();
+  //MakeVolMeshSeq();
+  CopyTimelapseImages();
     if (argc < 2) {
         std::cout << "Usage: " << argv[0] << " config.txt";
         return -1;
