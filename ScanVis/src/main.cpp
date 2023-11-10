@@ -1246,6 +1246,7 @@ void MakeHeightMeshSeq() {
   std::string scanDir = "H:/nature/scan0.25mm/";
   std::string printDir = "H:/nature/print0.25mm/";
   std::string heightDir = "H:/nature/heightMesh";
+  std::string texDir = "H:/nature/heightTex/";
   createDir(heightDir);
   unsigned startIdx = 118;
   unsigned endIdx = 3880;
@@ -1274,7 +1275,7 @@ void MakeHeightMeshSeq() {
     if (height.Empty()) {
       height.Allocate(scanSize[0], scanSize[1]);
       height.Fill(0);
-      SaveHeightWithUV(heightDir +"/height_uv.obj", scanSize[0], scanSize[1], dx, duv);
+     // SaveHeightWithUV(heightDir +"/height_uv.obj", scanSize[0], scanSize[1], dx, duv);
     }
     
     float z0 = i * zRes;
@@ -1283,14 +1284,14 @@ void MakeHeightMeshSeq() {
     std::ostringstream outMesh;
     outMesh << heightDir << "/" << std::setfill('0') << std::setw(4) << meshCount << ".obj";
 
-    Array2Df outh;
-    FlipY(height, outh);
-    saveHeightObj(outMesh.str(), outh.GetData(), int(scanSize[0]), int(scanSize[1]), dx, false);
-    
-    texImage.Fill(204);
+    //Array2Df outh;
+    //FlipY(height, outh);
+    //saveHeightObj(outMesh.str(), outh.GetData(), int(scanSize[0]), int(scanSize[1]), dx, false);
+    //
+    //texImage.Fill(204);
     PrintToColor(print, texImage);
     std::ostringstream imageFile;
-    imageFile << heightDir << "/" << std::setfill('0') << std::setw(4) << meshCount << ".png";
+    imageFile << texDir << "/" << std::setfill('0') << std::setw(4) << meshCount << ".png";
     SavePngColor(imageFile.str(), texImage);
     meshCount++;
   }
