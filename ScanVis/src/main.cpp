@@ -984,11 +984,11 @@ void cropScanData(const ConfigFile& conf) {
 }
 
 void DownsizeScansX() {
-  std::string scanDir = "I:/overlay1012ETH/scan/";
-  std::string scanDirOut = "I:/overlay1012ETH/scan0.5x/";
-  unsigned startIdx = 4;
-  unsigned endIdx = 4792;
-  for (size_t i = startIdx; i < endIdx; i++) {
+  std::string scanDir = "H:/nature/scan1109/";
+  std::string scanDirOut = "H:/nature/scan0.5x/";
+  unsigned startIdx = 3880;
+  unsigned endIdx = 3880;
+  for (size_t i = startIdx; i <= endIdx; i++) {
     std::string inFile = scanDir + "/scan_" + std::to_string(i) + ".png";
     cv::Mat in = cv::imread(inFile,cv::IMREAD_GRAYSCALE);
     if (in.empty()) {
@@ -1003,8 +1003,8 @@ void DownsizeScansX() {
 }
 
 void DownsizePrintsX() {
-  std::string scanDir = "I:/overlay1012ETH/print/";
-  std::string scanDirOut = "I:/overlay1012ETH/print0.5x/";
+  std::string scanDir = "H:/nature/print1109/";
+  std::string scanDirOut = "H:/nature/print0.5x/";
   unsigned startIdx = 4;
   unsigned endIdx = 4792;
   for (size_t i = startIdx; i < endIdx; i++) {
@@ -1111,15 +1111,15 @@ void Thresh(Array2D8u& arr, uint8_t thresh) {
 }
 
 void MaskScans() {
-  std::string scanDir = "I:/overlay1012ETH/scan0.5x/";
-  std::string printDir = "I:/overlay1012ETH/print0.5x/";
-  std::string scanDirOut = "I:/overlay1012ETH/cleanScan1/";
-  unsigned startIdx = 4;
-  unsigned endIdx = 4792;
+  std::string scanDir = "H:/nature/scan0.5x/";
+  std::string printDir = "H:/nature/print0.5x/";
+  std::string scanDirOut = "H:/nature/cleanScan/";
+  unsigned startIdx = 118;
+  unsigned endIdx = 3880;
   Array2Df depth;
   float zres = 0.025f;
   int PrintDilateRad = 3;
-  for (size_t i = startIdx; i < endIdx; i++) {
+  for (size_t i = startIdx; i <= endIdx; i++) {
     std::string scanFile = scanDir + "/" + std::to_string(i) + ".png";
     std::string printFile = printDir + "/" + std::to_string(i) + ".png";
 
@@ -1139,7 +1139,7 @@ void MaskScans() {
       depth.Allocate(scanSize[0], scanSize[1]);
       depth.Fill(0);
     }
-    float z0 = i * zres;
+    float z0 = (i - startIdx) * zres;
     UpdateDepth(depth, scan, printMask, z0);
     MaskOneScan(depth, scan, z0);
     std::string outFile = scanDirOut + "/" + std::to_string(i) + ".png";
@@ -1222,7 +1222,7 @@ void FlipY(const Array2D<T>& src, Array2D<T>& dst) {
 }
 
 void PrintToColor(const Array2D8u& print, Array2D8u& image) {
-  uint8_t matColors[3][3] = {{204, 204, 204}, {204, 77, 77}, {59, 59, 171}};
+  uint8_t matColors[3][3] = {{204, 204, 204},{59, 59, 171}, {204, 77, 77}};
   Vec2u size = print.GetSize();
   Vec2u imageSize = image.GetSize();
   unsigned rowOff = imageSize[1] - size[1];
@@ -1243,14 +1243,14 @@ void PrintToColor(const Array2D8u& print, Array2D8u& image) {
 
 //render heightmaps for wax
 void MakeHeightMeshSeq() {
-  std::string scanDir = "I:/Render1012-1/scan0.25mm/";
-  std::string printDir = "I:/Render1012-1/print0.25mm/";
+  std::string scanDir = "H:/nature/scan0.25mm/";
+  std::string printDir = "H:/nature/print0.25mm/";
   std::string heightDir = "H:/nature/heightMesh";
   createDir(heightDir);
-  unsigned startIdx = 4;
-  unsigned endIdx = 4792;
+  unsigned startIdx = 118;
+  unsigned endIdx = 3880;
   float voxRes = 0.255;
-  float zRes = 0.02;
+  float zRes = 0.025;
   Array2Df height;
   int meshCount = 0;
   int numMats = 3;
@@ -1274,7 +1274,7 @@ void MakeHeightMeshSeq() {
     if (height.Empty()) {
       height.Allocate(scanSize[0], scanSize[1]);
       height.Fill(0);
-      //SaveHeightWithUV(heightDir +"/height_uv.obj", scanSize[0], scanSize[1], dx, duv);
+      SaveHeightWithUV(heightDir +"/height_uv.obj", scanSize[0], scanSize[1], dx, duv);
     }
     
     float z0 = i * zRes;
@@ -1405,10 +1405,10 @@ void MakeVolMeshSeq() {
 }
 
 void SizeScans1080p() {
-  std::string scanDir = "I:/overlay1012ETH/cleanScan/";
-  std::string scanDirOut = "I:/overlay1012ETH/scan1080/";
+  std::string scanDir = "H:/nature/cleanScan/";
+  std::string scanDirOut = "H:/nature/scan1080/";
   unsigned startIdx = 4;
-  unsigned endIdx = 4792;
+  unsigned endIdx = 3880;
   unsigned scanCount = 0;
   unsigned dstWidth = 1920;
   unsigned dstHeight = 1080;
@@ -1416,7 +1416,7 @@ void SizeScans1080p() {
   cv::Mat meanScan;
 
   //temporal smoothing
-  for (size_t i = startIdx; i < endIdx; i++) {
+  for (size_t i = startIdx; i <= endIdx; i++) {
     std::string inFile = scanDir + "/" + std::to_string(i) + ".png";
     cv::Mat in = cv::imread(inFile, cv::IMREAD_GRAYSCALE);
     if (in.empty()) {
@@ -1431,10 +1431,19 @@ void SizeScans1080p() {
 
     cv::Mat out;
     unsigned w0 = unsigned( (in.cols * dstHeight) / in.rows );
-    cv::resize(in, out, cv::Size(w0, dstHeight),0,0,cv::INTER_LINEAR);
-    cv::Mat dstImage;
-    unsigned borderCols = dstWidth - out.cols;
-    cv::copyMakeBorder(out, dstImage, 0, 0, 0, borderCols, cv::BORDER_CONSTANT, 0);
+     cv::Mat dstImage;
+    if (w0<dstWidth) {
+      cv::resize(in, out, cv::Size(w0, dstHeight), 0, 0, cv::INTER_LINEAR);
+      unsigned borderCols = dstWidth - out.cols;
+      cv::copyMakeBorder(out, dstImage, 0, 0, 0, borderCols, cv::BORDER_CONSTANT, 0);
+    }
+    else {
+      unsigned h0 = unsigned(in.rows * dstWidth / in.cols);
+      cv::resize(in, out, cv::Size(dstWidth, h0), 0, 0, cv::INTER_LINEAR);
+      unsigned borderRows = dstHeight - h0;
+      cv::copyMakeBorder(out, dstImage, 0, borderRows, 0, 0, cv::BORDER_CONSTANT, 0);
+    }
+    cv::flip(dstImage, dstImage, 0);
     std::ostringstream oss;
     oss << scanDirOut << "/" << std::setfill('0') << std::setw(4)<<std::to_string(scanCount)<<".png";
     cv::imwrite(oss.str(), dstImage);
@@ -1443,11 +1452,11 @@ void SizeScans1080p() {
 }
 
 void DownsampleScan4x() {
-  std::string scanDir = "I:/overlay1012ETH/cleanScan/";
-  std::string scanDirOut = "I:/overlay1012ETH/scan0.25mm/";
-  unsigned startIdx = 4;
-  unsigned endIdx = 4792;
-  for (size_t i = startIdx; i < endIdx; i++) {
+  std::string scanDir = "H:/nature/cleanScan/";
+  std::string scanDirOut = "H:/nature/scan0.25mm/";
+  unsigned startIdx = 118;
+  unsigned endIdx = 3880;
+  for (size_t i = startIdx; i <= endIdx; i++) {
     std::string inFile = scanDir + "/" + std::to_string(i) + ".png";
     cv::Mat in = cv::imread(inFile, cv::IMREAD_GRAYSCALE);
     if (in.empty()) {
@@ -1457,16 +1466,17 @@ void DownsampleScan4x() {
     cv::Mat out;
     cv::resize(in, out, cv::Size(0,0), 0.25, 0.25, cv::INTER_LINEAR);
     std::ostringstream oss;
+    cv::flip(out, out, 0);
     oss << scanDirOut << "/" << std::to_string(i) << ".png";
     cv::imwrite(oss.str(), out);
   }
 }
 void DownsamplePrint4x() {
-  std::string scanDir = "I:/overlay1012ETH/print0.5x/";
-  std::string scanDirOut = "I:/overlay1012ETH/print0.25mm/";
-  unsigned startIdx = 4;
-  unsigned endIdx = 4792;
-  for (size_t i = startIdx; i < endIdx; i++) {
+  std::string scanDir = "H:/nature/print0.5x/";
+  std::string scanDirOut = "H:/nature/print0.25mm/";
+  unsigned startIdx = 3880;
+  unsigned endIdx = 3881;
+  for (size_t i = startIdx; i <= endIdx; i++) {
     std::string inFile = scanDir + "/" + std::to_string(i) + ".png";
     cv::Mat in = cv::imread(inFile, cv::IMREAD_GRAYSCALE);
     if (in.empty()) {
@@ -1475,6 +1485,7 @@ void DownsamplePrint4x() {
     cv::Mat out;
     cv::resize(in, out, cv::Size(0, 0), 0.25, 0.25, cv::INTER_NEAREST);
     std::ostringstream oss;
+    cv::flip(out, out, 0);
     oss << scanDirOut << "/" << std::to_string(i) << ".png";
     cv::imwrite(oss.str(), out);
   }
@@ -1546,7 +1557,7 @@ void CopyTimelapseImages() {
   std::string inDir = "H:/nature/handTimeLapse1109/";
   std::string outDir = "H:/nature/timelapse1109/";
   int i0 = 1;
-  int i1 = 1921;
+  int i1 = 3883;
   int outCount = 0;
   
   cv::Mat refImage;
@@ -1587,13 +1598,15 @@ void CopyTimelapseImages() {
 
 int main(int argc, char * argv[])
 {
+  //DownsizeScansX();
+  //DownsizePrintsX();
   //MaskScans();
   //SizeScans1080p();
-  //DownsizePrintsX();
   //DownsampleScan4x();
-  //MakeHeightMeshSeq();
+  //DownsamplePrint4x();
+  MakeHeightMeshSeq();
   //MakeVolMeshSeq();
-  CopyTimelapseImages();
+  //CopyTimelapseImages();
     if (argc < 2) {
         std::cout << "Usage: " << argv[0] << " config.txt";
         return -1;
