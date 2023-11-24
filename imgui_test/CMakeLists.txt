@@ -30,3 +30,10 @@ set(FONT_FOLDER fonts)
 add_custom_command(TARGET ${BIN} POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/${FONT_FOLDER}" "$<TARGET_FILE_DIR:${BIN}>/${FONT_FOLDER}")
 install(DIRECTORY ${FONT_FOLDER} TYPE BIN) # to install dir
+
+add_custom_command(
+    TARGET ${BIN} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E
+    copy_directory "${CMAKE_SOURCE_DIR}/glsl/" "${CMAKE_BINARY_DIR}/glsl"
+    COMMENT "Copying glsl folder to output directory"
+)
