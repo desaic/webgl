@@ -1298,7 +1298,7 @@ void MakeHeightMeshSeq() {
 }
 
 void WriteMatIntoVol(Array3D8u &vol, const Array2Df& height, const Array2D8u & slice, 
-  float voxRes) {
+  float voxRes, float z0) {
   Vec3u vsize = vol.GetSize();
   Vec2u sliceSize = slice.GetSize();
   for (unsigned row = 0; row < sliceSize[1]; row++) {
@@ -1314,6 +1314,10 @@ void WriteMatIntoVol(Array3D8u &vol, const Array2Df& height, const Array2D8u & s
         break;
       }
       float h = hrow[col];
+      if (h < z0 - 0.15f) {
+        //do not write value too low
+        continue;
+      }
       int z = int(h / voxRes + 0.5f);
       if (z < 0) {
         continue;
@@ -1350,15 +1354,14 @@ void MakeVolMeshSeq() {
   createDir(volDir);
   createDir(volDir + "/2");
   createDir(volDir + "/3");
-  unsigned startIdx = 4;
-  unsigned endIdx = 4792;
+  unsigned startIdx = 118;
+  unsigned endIdx = 3880;
   float voxRes = 0.255;
-  float zRes = 0.02;
+  float zRes = 0.025;
   Array2Df height;
   int meshCount = 0;
   int numMats = 3;
   float dx[3] = { 0.1f * voxRes, 0.1f * voxRes, 0.1f };
-  float duv = 1.0f / 1600;
   Array3D8u vol;
   Array3D8u oldvol;
   for (size_t i = startIdx; i < endIdx; i++) {
@@ -1378,28 +1381,31 @@ void MakeVolMeshSeq() {
 
       vol.Allocate(scanSize[0], scanSize[1], endIdx * zRes / voxRes + 3);
     }
-    float z0 = i * zRes;
+    float z0 = (i - startIdx) * zRes;
     UpdateDepth(height, scan, z0);
 
-    if (i>100) {
-      if (meshCount == 489) {
-        oldvol = vol;
-      }
-      WriteMatIntoVol(vol, height, print, voxRes);
-      if (meshCount == 489) {
-        SubtractVol(vol, oldvol);
-      }
-      if (meshCount > 488) {
-        std::ostringstream mat2File;
-        mat2File << volDir << "/2/" << std::setfill('0') << std::setw(4) << meshCount << ".obj";
-        //output cm
-        float res[3] = { 0.1 * voxRes,0.1 * voxRes,0.1 * voxRes };
-        SaveVolAsObjMesh(mat2File.str(), vol, res, 2);
 
-        std::ostringstream mat3File;
-        mat3File << volDir << "/3/" << std::setfill('0') << std::setw(4) << meshCount << ".obj";
-        SaveVolAsObjMesh(mat3File.str(), vol, res, 3);
-      }
+    if (meshCount == 316) {
+      oldvol = vol;
+    }
+    WriteMatIntoVol(vol, height, print, voxRes,z0);
+    if (meshCount == 316) {
+      SubtractVol(vol, oldvol);
+    }
+    if (meshCount > 200) 
+    {
+      std::ostringstream mat2File;
+      mat2File << volDir << "/2/" << std::setfill('0') << std::setw(4) << meshCount << ".obj";
+      //output cm
+      float res[3] = { 0.1 * voxRes,0.1 * voxRes,0.1 * voxRes };
+      SaveVolAsObjMesh(mat2File.str(), vol, res, 2);
+
+      std::ostringstream mat3File;
+      mat3File << volDir << "/3/" << std::setfill('0') << std::setw(4) << meshCount << ".obj";
+      SaveVolAsObjMesh(mat3File.str(), vol, res, 3);
+    }
+    if (meshCount >= 316) {
+      break;
     }
     meshCount++;
   }
@@ -1605,8 +1611,8 @@ int main(int argc, char * argv[])
   //SizeScans1080p();
   //DownsampleScan4x();
   //DownsamplePrint4x();
-  MakeHeightMeshSeq();
-  //MakeVolMeshSeq();
+  //MakeHeightMeshSeq();
+  MakeVolMeshSeq();
   //CopyTimelapseImages();
     if (argc < 2) {
         std::cout << "Usage: " << argv[0] << " config.txt";
