@@ -3,6 +3,7 @@
 #include <string>
 #include <memory>
 
+#include "Camera.h"
 #include "TrigMesh.h"
 #include "Scene.h"
 
@@ -65,7 +66,7 @@ class GLRender {
   /// mvit model view inverse transpose.
   unsigned int _mvp_loc = 0, _mvit_loc = 0, _light_loc = 0;
 
-  Camera _cam;
+  Camera _camera;
   bool captureMouse = false;
   double xpos0 = 0, ypos0 = 0;
   float camSpeed = 1;

@@ -7,13 +7,13 @@ struct Camera {
   Camera();
 
   void update();
-  
+
   float angle_xz, angle_y;
   Vec3f eye;
   Vec3f at;
   Vec3f up;
   float p[4][4];
   // aspect ratio for perspective matrix;
-  float ratio;
+  float ratio = 1.0f;
 };
 #endif

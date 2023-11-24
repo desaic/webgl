@@ -42,7 +42,7 @@ void GLRender::Resize(unsigned int width, unsigned int height) {
                _height, 0, format, type, nullptr);
   glBindRenderbuffer(GL_RENDERBUFFER, _depth_buffer);
   glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, _width, _height);
-  _cam.ratio = width / (float)height;
+  _camera.ratio = width / (float)height;
 }
 
 int GLRender::DrawMesh(size_t meshId) {
@@ -64,6 +64,7 @@ void GLRender::Render() {
   }
   GLenum err;
   Matrix4f v, mvp, mvit;
+  _camera.update();  
 
   glUseProgram(_program);
   glBindFramebuffer(GL_FRAMEBUFFER, _fbo);
@@ -73,7 +74,7 @@ void GLRender::Render() {
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   glEnable(GL_DEPTH_TEST);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  glUseProgram(0);
+  glUseProgram(0);  
 
   for (size_t i = 0; i < _bufs.size(); i++) {
     DrawMesh(i);
@@ -97,10 +98,10 @@ int checkShaderError(GLuint shader) {
 }
 
 void GLRender::ResetCam() {
-  _cam.angle_xz = 0;
-  _cam.eye = Vec3f(0, 50, -200);
-  _cam.at = Vec3f(0, 0, 200);
-  _cam.update();
+  _camera.angle_xz = 0;
+  _camera.eye = Vec3f(0, 50, -200);
+  _camera.at = Vec3f(0, 0, 200);
+  _camera.update();
 }
 
 int GLRender::Init(const std::string& vertShader,
