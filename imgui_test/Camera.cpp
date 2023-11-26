@@ -1,7 +1,7 @@
 #include "Camera.h"
 
 //mat4x4
-#include "linmath.h"
+#include "Matrix4f.h"
 
 Camera::Camera() : angle_xz(3.14f), angle_y(0) {
   for (int ii = 0; ii < 3; ii++) {

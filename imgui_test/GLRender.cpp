@@ -73,12 +73,16 @@ void GLRender::Render() {
   glClearColor(208 / 255.0f, 150 / 255.0f, 102 / 255.0f, 0.8);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   glEnable(GL_DEPTH_TEST);
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  glUseProgram(0);  
-
+  const GLsizei matCount = 1;
+  const GLboolean noTranspose = GL_FALSE;
+  glUniformMatrix4fv(_mvp_loc, matCount, noTranspose,
+                     (const GLfloat*)_camera.p);
   for (size_t i = 0; i < _bufs.size(); i++) {
     DrawMesh(i);
   }
+
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glUseProgram(0);
 }
 
 int checkShaderError(GLuint shader) {

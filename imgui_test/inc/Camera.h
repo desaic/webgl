@@ -12,6 +12,7 @@ struct Camera {
   Vec3f eye;
   Vec3f at;
   Vec3f up;
+  // projection matrix
   float p[4][4];
   // aspect ratio for perspective matrix;
   float ratio = 1.0f;
