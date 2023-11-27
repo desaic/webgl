@@ -1,5 +1,8 @@
 #include "Camera.h"
 
+//debug
+#include <iostream>
+
 // mat4x4
 #include "Matrix4f.h"
 
@@ -17,19 +20,58 @@ Camera::Camera() {
   update();
 }
 
-void Camera::update() {
-  const float MAXY = 0.49f * 3.141593f;
-  const float MAXXZ = 2 * 3.141593f;
+void Camera::rotate(float dx, float dy) { 
+  Vec3f viewDir = at - eye;
+  float len = viewDir.norm2();
+  if (len == 0) {
+    return;
+  }
+  len = std::sqrt(len);
+  viewDir = (1.0f / len) * viewDir;
+  Vec3f y = Vec3f(0, 1, 0);
+  float longitude = 0, latitude = 0;
+  if (std::abs(viewDir[1]) > 0.9999f) {    
+    longitude = std::atan2(up[2], up[0]);
+    if (viewDir[1] > 0) {
+      longitude += M_PI;
+    }
+  } else {
+    longitude = std::atan2(viewDir[2], viewDir[0]);
+  }
+  float xzLen = std::sqrt(viewDir[0] * viewDir[0] + viewDir[2] * viewDir[2]);
+  latitude = std::atan2(viewDir[1], xzLen);
 
-  Vec3f viewDir = eye-at;
+  longitude += dx;
+  latitude -= dy;
+  if (latitude > 0.4999f * M_PI) {
+    latitude = 0.4999f * M_PI;
+  }
+  if (latitude < -0.4999f * M_PI) {
+    latitude = -0.4999f * M_PI;
+  }
+  float c = std::cos(latitude);
+  float s = std::sin(latitude);
+  viewDir = Vec3f(c* std::cos(longitude), s,c*std::sin(longitude));
+ 
+  up = Vec3f(-s * std::cos(longitude), c, -s * std::sin(longitude));
+  eye = at - len * viewDir;
+  update();
+}
+
+void Camera::update() {
+  Vec3f viewDir = at-eye;
   viewDir.normalize();
   if (viewDir.norm2() == 0) {
     viewDir = Vec3f(0, 0, -1);
   }
-  Vec3f yaxis = Vec3f(0, 1, 0);
-  Vec3f right = viewDir.cross(yaxis);
+  Vec3f right;
+  if (std::abs(viewDir[1]) > 0.999f) {
+    right = viewDir.cross(up);
+  } else {
+    right = viewDir.cross(Vec3f(0, 1, 0));
+  }
   up = right.cross(viewDir);
-
+  up.normalize();
   proj = Matrix4f::perspectiveProjection(fovRad, aspect, near, far, false);
   view = Matrix4f::lookAt(eye, at, up);
 }

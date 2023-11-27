@@ -7,6 +7,7 @@
 struct Camera {
   Camera();
 
+  void rotate(float dx, float dy);
   void update();
 
   Vec3f eye;
@@ -14,7 +15,7 @@ struct Camera {
   Vec3f up;
   float near=0.2f, far=10.0f;
   float fovRad = 0.7;
-
+  
   // view times projection
   // @param dst 16 numbers, column major because glsl.
   void VP(float * dst);

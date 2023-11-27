@@ -25,6 +25,15 @@ struct GLBuf {
   bool _allocated = false;
 };
 
+struct Mouse {
+  bool left = false,mid=false, right = false;
+  float wheel=0;
+  int x = 0;
+  int y = 0;
+  int oldx = 0;
+  int oldy = 0;
+};
+
 class GLRender {
  public:
   GLRender();
@@ -53,6 +62,8 @@ class GLRender {
 
   int DrawMesh(size_t meshId);
 
+  void SetMouse(int x, int y, float wheel, bool left, bool mid, bool right);
+
  private:
   
    unsigned _fbo = 0;
@@ -68,8 +79,8 @@ class GLRender {
   unsigned int _mvp_loc = 0, _mvit_loc = 0, _light_loc = 0;
 
   Camera _camera;
+  Mouse _mouse;
   bool captureMouse = false;
-  double xpos0 = 0, ypos0 = 0;
   float camSpeed = 1;
   float xRotSpeed = 4e-3f, yRotSpeed = 4e-3f;
 

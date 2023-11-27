@@ -68,6 +68,33 @@ int GLRender::DrawMesh(size_t meshId) {
   return 0;
 }
 
+void GLRender::SetMouse(int x, int y, float wheel, bool left, bool mid,
+                        bool right) {
+  _mouse.x = x;
+  _mouse.y = y;
+  //rotate around _camera.at
+  if (left) {
+    if (_mouse.left) {
+      int dx = x - _mouse.oldx;
+      int dy = y - _mouse.oldy;
+      _mouse.oldx = x;
+      _mouse.oldy = y;
+      _camera.rotate(xRotSpeed * dx, yRotSpeed * dy);
+    } else {
+      _mouse.oldx = x;
+      _mouse.oldy = y;
+    }
+  }
+  // pan
+  else if (mid) {
+  } else if (wheel != 0) {
+    //zoom
+  }
+  _mouse.left = left;
+  _mouse.mid = mid;
+  _mouse.right = right;
+}
+
 /// renders once
 void GLRender::Render() {
   if (!_initialized) {
@@ -94,10 +121,6 @@ void GLRender::Render() {
   for (size_t i = 0; i < _bufs.size(); i++) {
     DrawMesh(i);
   }
-
-  //debug
-  Matrix3f:
-  _camera.eye = _camera.at + Matrix3f::rotateY(0.01)*(_camera.eye - _camera.at);
 
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glUseProgram(0);

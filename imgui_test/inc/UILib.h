@@ -184,6 +184,7 @@ class UILib {
   }
   void SetFileOpenCb(FileCallback cb) { _onFileOpen = cb; }
   void SetFileSaveCb(FileCallback cb) { _onFileSave = cb; }
+
  private:
 
   void DrawImages();

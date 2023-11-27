@@ -424,12 +424,32 @@ void UILib::UILoop() {
     ImGui::SetNextWindowSize(ImVec2(800, 800), ImGuiCond_FirstUseEver);
 
     if (_showGL) {
-      _glRender.Render();
       ImGui::Begin("GL view", 0, ImGuiWindowFlags_NoBringToFrontOnFocus);
+      if (io.WantCaptureMouse && ImGui::IsMousePosValid() &&
+              ImGui::IsWindowFocused()) {
+        bool left = false, mid = false, right = false;
+        for (int i = 0; i < IM_ARRAYSIZE(io.MouseDown); i++) {
+          if (ImGui::IsMouseDown(i)) {
+            if (i == 0) {
+              left = true;
+            }
+            if (i == 1) {
+              right = true;
+            }
+            if (i == 2) {
+              mid = true;
+            }
+          }
+        }
+        _glRender.SetMouse(io.MousePos.x, io.MousePos.y, io.MouseWheel, left,
+                           mid, right);
+      }
+      _glRender.Render();
       ImGui::Image((ImTextureID)(size_t(_glRender.TexId())),
                    ImVec2(float(_glRender.Width()), float(_glRender.Height())),
                    {0, 1}, {1, 0});
       ImGui::End();
+
     }
 
     //image viewer
