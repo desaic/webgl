@@ -7,11 +7,11 @@ uniform vec3 lightpos;
 void main()
 {
     float ambient = 0.02;
-    vec3 L = vec3(0.0, 10, 50.0) - pos;
+    vec3 L = vec3(10.0, 100, 200.0) - pos;
 	float lightDist = length(L);
 	L = (1.0/lightDist) * L;
 	lightDist = lightDist+0.5;
-	lightDist = min(1, 25000/lightDist/lightDist);
+	lightDist = min(1, 50000/lightDist/lightDist);
 	vec3 N = normalize(normal);
 	float diffuse = max(0, dot(L, N));
 	vec3 V = -normalize(pos);

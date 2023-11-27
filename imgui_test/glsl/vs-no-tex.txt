@@ -10,7 +10,9 @@ smooth out vec3 normal;
 smooth out vec3 fcolor;
 void main()
 {    
-	normal = normalize(vNormal);
+	vec4 n = vec4(vNormal, 0.0);
+	n = MVIT * n;	
+	normal = normalize(n.xyz);
 	vec4 p = MVP * vec4(vPos, 1.0);
 	fcolor = vcolor;
 	gl_Position = p;

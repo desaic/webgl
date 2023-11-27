@@ -427,7 +427,8 @@ void UILib::UILoop() {
       _glRender.Render();
       ImGui::Begin("GL view", 0, ImGuiWindowFlags_NoBringToFrontOnFocus);
       ImGui::Image((ImTextureID)(size_t(_glRender.TexId())),
-                   ImVec2(float(_glRender.Width()), float(_glRender.Height())));
+                   ImVec2(float(_glRender.Width()), float(_glRender.Height())),
+                   {0, 1}, {1, 0});
       ImGui::End();
     }
 
