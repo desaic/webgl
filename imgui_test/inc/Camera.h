@@ -8,12 +8,14 @@ struct Camera {
   Camera();
 
   void rotate(float dx, float dy);
+  void pan(float dx, float dy);
+  void zoom(float ratio);
   void update();
 
   Vec3f eye;
   Vec3f at;
   Vec3f up;
-  float near=0.2f, far=10.0f;
+  float near=1.0f, far=500.0f;
   float fovRad = 0.7;
   
   // view times projection

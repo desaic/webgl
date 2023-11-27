@@ -86,9 +86,23 @@ void GLRender::SetMouse(int x, int y, float wheel, bool left, bool mid,
     }
   }
   // pan
-  else if (mid) {
+  else if (right) {
+    if (_mouse.right) {
+      int dx = x - _mouse.oldx;
+      int dy = y - _mouse.oldy;
+      _mouse.oldx = x;
+      _mouse.oldy = y;
+      _camera.pan(camSpeed * dx, camSpeed * dy);
+    } else {
+      _mouse.oldx = x;
+      _mouse.oldy = y;
+    }
   } else if (wheel != 0) {
-    //zoom
+    if (wheel > 0) {
+      _camera.zoom(1.0f/zoomRatio);
+    } else {
+      _camera.zoom(zoomRatio);
+    }
   }
   _mouse.left = left;
   _mouse.mid = mid;
@@ -145,7 +159,8 @@ int checkShaderError(GLuint shader) {
 void GLRender::ResetCam() {
   _camera.eye = Vec3f(0, 50, 100);
   _camera.at = Vec3f(0, 0, 0);
-  _camera.far = 200;
+  _camera.near = 1;
+  _camera.far = 500;
   _camera.update();
 }
 

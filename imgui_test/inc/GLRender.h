@@ -81,8 +81,9 @@ class GLRender {
   Camera _camera;
   Mouse _mouse;
   bool captureMouse = false;
-  float camSpeed = 1;
+  float camSpeed = 0.4;
   float xRotSpeed = 4e-3f, yRotSpeed = 4e-3f;
+  float zoomRatio = 1.25f;
 
   std::string _vs_string, _fs_string;
   std::vector<GLBuf> _bufs;

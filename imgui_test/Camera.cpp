@@ -58,6 +58,56 @@ void Camera::rotate(float dx, float dy) {
   update();
 }
 
+void Camera::pan(float dx, float dy) {
+  Vec3f viewDir = at - eye;
+  float len = viewDir.norm2();
+  if (len == 0) {
+    eye = at + Vec3f(0, 0, near);
+    viewDir = at - eye;
+    len = viewDir.norm2();
+  }
+  len = std::sqrt(len);
+  viewDir = (1.0f / len) * viewDir;
+
+  Vec3f right;
+  if (std::abs(viewDir[1]) > 0.999f) {
+    right = viewDir.cross(up);
+  } else {
+    right = viewDir.cross(Vec3f(0, 1, 0));
+  }
+  right.normalize();
+  dx *= len / far;
+  dy *= len / far;
+  Vec3f displacement = -dx * right + dy * up;
+  at = at + displacement;
+  eye = eye + displacement;
+  update();
+}
+
+void Camera::zoom(float ratio) {
+  if (ratio <= 0) {
+    ratio = 0.1f;
+  }
+  Vec3f viewDir = at - eye;
+  float len = viewDir.norm2();
+  if (len == 0) {
+    eye = at + Vec3f(0, 0, near);
+    viewDir = at - eye;
+    len = viewDir.norm2();
+  }
+  len = std::sqrt(len);
+  viewDir = (1.0f / len) * viewDir;
+  len = len * ratio;
+  if (len < near) {
+    len = near;
+  }
+  if (len > far) {
+    len = far;
+  }
+  eye = at - len * viewDir;
+  update();
+}
+
 void Camera::update() {
   Vec3f viewDir = at-eye;
   viewDir.normalize();
