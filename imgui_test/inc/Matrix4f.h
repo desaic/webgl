@@ -25,8 +25,9 @@ class Matrix4f {
   Matrix4f& operator=(const Matrix4f& rm);  // assignment operator
   Matrix4f& operator/=(float d);
   // no destructor necessary
-
+  // row then col
   const float& operator()(int i, int j) const;
+  // row , col
   float& operator()(int i, int j);
 
   Vec4f getRow(int i) const;

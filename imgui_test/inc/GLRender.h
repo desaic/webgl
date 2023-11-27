@@ -21,7 +21,8 @@ struct GLBuf {
 
   std::shared_ptr<TrigMesh> mesh;
 
-  GLBuf(std::shared_ptr<TrigMesh> m) : mesh(m) {}
+  GLBuf(std::shared_ptr<TrigMesh> m) : mesh(m),b(NUM_BUF) {}
+  bool _allocated = false;
 };
 
 class GLRender {

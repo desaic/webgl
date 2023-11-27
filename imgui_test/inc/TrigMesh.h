@@ -29,7 +29,7 @@ struct Edge {
 
 class TrigMesh {
  public:
-  TrigMesh() = default;
+  TrigMesh();
   using TValue = float;
   using TIndex = unsigned;
   std::vector<TValue> v;
@@ -50,6 +50,9 @@ class TrigMesh {
 
   // texture coordinates
   std::vector<Vec2f> uv;
+
+  // overall mesh color
+  Vec3f meshColor;
 
   size_t GetNumTrigs() const { return t.size() / 3; }
   size_t GetNumVerts() const { return v.size() / 3; }

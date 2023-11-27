@@ -107,7 +107,7 @@ int main(int, char**)
   ui.AddButton("Show image", btFunc);
 
   auto mesh=std::make_shared<TrigMesh>();
-  mesh->LoadStl("F:/dolphin/meshes/cube50mm.stl");
+  mesh->LoadObj("F:/dolphin/meshes/cube50mm.obj");
   ui.AddMesh(mesh);
   ui.SetWindowSize(1280, 800);
   ui.Run();

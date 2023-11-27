@@ -2,19 +2,29 @@
 #define CAMERA_H
 
 #include "Vec3.h"
+#include "Matrix4f.h"
 
 struct Camera {
   Camera();
 
   void update();
 
-  float angle_xz, angle_y;
   Vec3f eye;
   Vec3f at;
   Vec3f up;
-  // projection matrix
-  float p[4][4];
+  float near=0.2f, far=10.0f;
+  float fovRad = 0.7;
+
+  // view times projection
+  // @param dst 16 numbers, column major because glsl.
+  void VP(float * dst);
+  // inverse transpose of view matrix
+  // does nothing to rotation
+  void VIT(float* dst);
+
+  Matrix4f view, proj;
+
   // aspect ratio for perspective matrix;
-  float ratio = 1.0f;
+  float aspect = 1.0f;
 };
 #endif

@@ -9,6 +9,8 @@
 #include "ObjLoader.h"
 #include "Vec3.h"
 
+TrigMesh::TrigMesh() : meshColor(0.5f, 0.5f, 0.5f) {}
+
 int TrigMesh::LoadStl(const std::string& meshFile) {
   std::vector<unsigned> solids;
   std::vector<float> n;

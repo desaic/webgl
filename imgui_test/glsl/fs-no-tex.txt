@@ -6,11 +6,12 @@ out vec4 outcolor;
 uniform vec3 lightpos;
 void main()
 {
-    vec3 L = vec3(0.0, 0.5, 0.0) - pos;
+    float ambient = 0.02;
+    vec3 L = vec3(0.0, 10, 50.0) - pos;
 	float lightDist = length(L);
 	L = (1.0/lightDist) * L;
 	lightDist = lightDist+0.5;
-	lightDist = min(1, 10/lightDist/lightDist);
+	lightDist = min(1, 25000/lightDist/lightDist);
 	vec3 N = normalize(normal);
 	float diffuse = max(0, dot(L, N));
 	vec3 V = -normalize(pos);
@@ -19,7 +20,7 @@ void main()
 	float alpha=4;
 	float specular = max(0,dot(N,H));
 	specular = 0.5* pow(specular, alpha);
-    vec4 c = (diffuse*lightDist  )* vec4(fcolor, 1.0);
+    vec4 c = (diffuse *lightDist + ambient)* vec4(fcolor, 1.0);
 	c.w=1.0;
     outcolor = c;
 };
