@@ -443,6 +443,27 @@ void UILib::UILoop() {
         }
         _glRender.SetMouse(io.MousePos.x, io.MousePos.y, io.MouseWheel, left,
                            mid, right);
+
+        bool hasKey = false;
+        std::string keys;
+        ImGuiKey start_key = ImGuiKey_NamedKey_BEGIN;
+        for (ImGuiKey key = start_key; key < ImGuiKey_NamedKey_END;
+             key = (ImGuiKey)(key + 1)) {
+          if (!ImGui::IsKeyDown(key)) {
+            continue;
+          }
+          std::string keyname = std::string(ImGui::GetKeyName(key))+" ";
+          if (keyname.size() > 2) {
+            //lol
+            continue;
+          }
+
+          keys.insert(keys.end(), keyname.begin(), keyname.end());
+          hasKey = true;
+        }
+        if (hasKey) {
+          _glRender.KeyPressed(keys, io.KeyCtrl, io.KeyShift, io.KeyAlt);
+        }
       }
       _glRender.Render();
       ImGui::Image((ImTextureID)(size_t(_glRender.TexId())),

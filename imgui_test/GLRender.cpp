@@ -109,6 +109,13 @@ void GLRender::SetMouse(int x, int y, float wheel, bool left, bool mid,
   _mouse.right = right;
 }
 
+void GLRender::KeyPressed(const std::string& keys, bool ctrl, bool shift,
+                          bool alt) {
+  if (keys[0] == 'R' && ctrl) {
+    ResetCam();
+  }
+}
+
 /// renders once
 void GLRender::Render() {
   if (!_initialized) {

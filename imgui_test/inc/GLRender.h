@@ -34,6 +34,13 @@ struct Mouse {
   int oldy = 0;
 };
 
+struct Keys {
+  std::string keys;
+  bool ctrl = false;
+  bool shift = false;
+  bool alt = false;
+};
+
 class GLRender {
  public:
   GLRender();
@@ -63,6 +70,8 @@ class GLRender {
   int DrawMesh(size_t meshId);
 
   void SetMouse(int x, int y, float wheel, bool left, bool mid, bool right);
+
+  void KeyPressed(const std::string & keys, bool ctrl, bool shift, bool alt);
 
  private:
   
