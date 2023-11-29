@@ -107,9 +107,12 @@ int main(int, char**)
   ui.AddButton("Show image", btFunc);
 
   auto mesh=std::make_shared<TrigMesh>();
-  mesh->LoadObj("F:/dolphin/meshes/Cattedrale.obj");
-  ui.AddMesh(mesh);
-  
+  mesh->LoadObj("F:/dump/cyl_out.obj");
+  int meshId = ui.AddMesh(mesh);
+  ui.SetMeshColor(meshId, Vec3b(250,180,128));
+  Array2D8u texImage;
+  LoadPngColor("F:/dump/checker.png", texImage);
+  ui.SetMeshTex(meshId, texImage, 3);
   ui.SetWindowSize(1280, 800);
   ui.Run();
   const unsigned PollFreqMs = 100;

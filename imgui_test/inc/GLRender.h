@@ -3,7 +3,9 @@
 #include <string>
 #include <memory>
 
+#include "Array2D.h"
 #include "Camera.h"
+#include "GLTex.h"
 #include "TrigMesh.h"
 #include "Scene.h"
 
@@ -14,14 +16,14 @@ struct GLBuf {
   // vertex array object
   unsigned int vao = 0;
   // determined by number of vertex attributes in vertex shader.
-  static const int NUM_BUF = 4;
-  // vertex and color buffer
+  static const int NUM_BUF = 3;
+  // vertex buffer
   std::vector<unsigned int> b;
   bool _needsUpdate = false;
 
   std::shared_ptr<TrigMesh> mesh;
-
-  GLBuf(std::shared_ptr<TrigMesh> m) : mesh(m),b(NUM_BUF) {}
+  GLTex _tex;
+  GLBuf(std::shared_ptr<TrigMesh> m);
   bool _allocated = false;
 };
 
@@ -72,6 +74,11 @@ class GLRender {
   void SetMouse(int x, int y, float wheel, bool left, bool mid, bool right);
 
   void KeyPressed(const std::string & keys, bool ctrl, bool shift, bool alt);
+  
+  int SetMeshTexture(int meshId, const Array2D8u& image, int numChannels);
+
+  //overwrites existing texture image
+  int SetSolidColor(int meshId, Vec3b color);
 
  private:
   
@@ -86,7 +93,7 @@ class GLRender {
   /// mvp model view projection.
   /// mvit model view inverse transpose.
   unsigned int _mvp_loc = 0, _mvit_loc = 0, _light_loc = 0;
-
+  unsigned int _tex_loc = 0;
   Camera _camera;
   Mouse _mouse;
   bool captureMouse = false;

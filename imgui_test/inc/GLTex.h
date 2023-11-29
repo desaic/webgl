@@ -10,11 +10,18 @@ struct GLTex{
   // image can be shown at different scales.
   unsigned _drawWidth = 1, _drawHeight = 1;
   std::vector<uint8_t> _buf;
-  bool HasImage() const { return _texId != 0; }
+  bool HasImage() const;
   void UpdateTextureData();
   unsigned int _texId = 0;
   bool _needUpdate = false;
   // true if the texture data in GPU needs to be reallocated
   bool _needAlloc = false;
   float renderScale_ = 1.0f;
+
+  int SetImageData(const unsigned char* data, unsigned width, unsigned height,
+                    int numChannels);
+  //an 8x8 white image.
+  void MakeDefaultTex();
+
+  unsigned int TexWrapParam = 0;
 };

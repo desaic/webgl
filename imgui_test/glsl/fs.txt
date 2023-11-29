@@ -1,7 +1,6 @@
 #version 330
 in vec3 pos;
 in vec3 normal;
-in vec3 fcolor;
 in vec2 UV;
 out vec4 outcolor;
 uniform vec3 lightpos;
@@ -11,11 +10,13 @@ uniform sampler2D texSampler;
 
 void main()
 {
-    vec3 L = vec3(0.0, 0.5, 0.0) - pos;
+	float ambient = 0.02;
+    vec3 L = vec3(10.0, 100, 300.0) - pos;
 	float lightDist = length(L);
 	L = (1.0/lightDist) * L;
 	lightDist = lightDist+0.5;
-	lightDist = min(1, 10/lightDist/lightDist);
+	lightDist = min(300,lightDist);
+	lightDist = min(1, 50000/lightDist/lightDist);
 	vec3 N = normalize(normal);
 	float diffuse = max(0, dot(L, N));
 	vec3 V = -normalize(pos);
@@ -24,8 +25,7 @@ void main()
 	float alpha=4;
 	float specular = max(0,dot(N,H));
 	specular = 0.5* pow(specular, alpha);
-    vec4 c = (diffuse*lightDist  )* vec4(fcolor, 1.0);
-	c.w=1.0;
+    float c = (diffuse*lightDist + ambient);
 	vec4 texColor = texture( texSampler, UV );
     outcolor = c * texColor;
 };

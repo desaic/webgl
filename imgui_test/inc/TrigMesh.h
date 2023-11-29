@@ -51,9 +51,6 @@ class TrigMesh {
   // texture coordinates
   std::vector<Vec2f> uv;
 
-  // overall mesh color
-  Vec3f meshColor;
-
   size_t GetNumTrigs() const { return t.size() / 3; }
   size_t GetNumVerts() const { return v.size() / 3; }
   int LoadStl(const std::string& filename);

@@ -59,9 +59,15 @@ int GLRender::DrawMesh(size_t meshId) {
   if (meshId >= _bufs.size()) {
     return -1;
   }
-  const GLBuf& buf = _bufs[meshId];
+  GLBuf& buf = _bufs[meshId];
   if (!buf._allocated) {
     AllocateMeshBuffer(meshId);
+  }
+  if (buf._tex.HasImage()) {
+    buf._tex.UpdateTextureData();
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, buf._tex._texId);
+    glUniform1i(_tex_loc, 0); 
   }
   glBindVertexArray(buf.vao);
   glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(3 * buf.mesh->GetNumTrigs()));
@@ -121,7 +127,6 @@ void GLRender::Render() {
   if (!_initialized) {
     return;
   }
-  GLenum err;
   Matrix4f v, mvp, mvit;
   _camera.update();
 
@@ -217,8 +222,10 @@ int GLRender::Init(const std::string& vertShader,
   glUseProgram(_program);
   _mvp_loc = glGetUniformLocation(_program, "MVP");
   _mvit_loc = glGetUniformLocation(_program, "MVIT");
+  _tex_loc = glGetUniformLocation(_program, "texSampler");
+    
   glGenFramebuffers(1, &_fbo);
-  glBindFramebuffer(GL_FRAMEBUFFER, _fbo);
+  glBindFramebuffer(GL_FRAMEBUFFER, _fbo);  
   glGenTextures(1, &_render_tex);
   glGenRenderbuffers(1, &_depth_buffer);
   Resize(INIT_WIDTH, INIT_HEIGHT);
@@ -249,11 +256,27 @@ int GLRender::AllocateMeshBuffer(size_t meshId) {
   auto mesh = buf.mesh;
   mesh->ComputeTrigNormals();
   const unsigned DIM = 3;
-  size_t numVerts = 3 * mesh->t.size();
+  size_t numVerts = mesh->t.size();
   size_t numFloats = DIM * numVerts;
+  size_t numUV = 2 * numVerts;
   std::vector<Vec3f> v(numVerts);
   std::vector<Vec3f> n(numVerts);
-  std::vector<Vec3f> color(numVerts, buf.mesh->meshColor);
+  std::vector<Vec2f> uv;
+  if (mesh->uv.size() != numVerts) {
+    // generate uv by placing each triangle on its own pixel to have 
+    // per-triangle coloring
+    unsigned TexWidth = std::sqrt(mesh->GetNumTrigs() + 1) + 1;
+    float pixelSize = 1.0f / TexWidth;
+    uv.resize(numVerts, Vec2f(0, 0));
+    for (unsigned i = 0; i < numVerts; i++) {
+      unsigned t = i / 3;
+      unsigned row = i / TexWidth;
+      unsigned col = i % TexWidth;
+      uv[i] = Vec2f ((col + 0.5f) * pixelSize, (row + 0.5f) * pixelSize);
+    }
+  } else {
+    uv = mesh->uv;
+  }
   for (size_t i = 0; i < mesh->t.size(); i += 3) {
     Vec3f normal = *(Vec3f*)(mesh->nt.data() + i);
     for (int j = 0; j < 3; j++) {
@@ -265,7 +288,6 @@ int GLRender::AllocateMeshBuffer(size_t meshId) {
   }
   glGenVertexArrays(1, &buf.vao);
   glBindVertexArray(buf.vao);
-  buf.b.resize(GLBuf::NUM_BUF);
   glGenBuffers(GLBuf::NUM_BUF, buf.b.data());
   glBindBuffer(GL_ARRAY_BUFFER, buf.b[0]);
   glBufferData(GL_ARRAY_BUFFER, numFloats * sizeof(GLfloat), v.data(),
@@ -280,10 +302,10 @@ int GLRender::AllocateMeshBuffer(size_t meshId) {
   glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, 0);
 
   glBindBuffer(GL_ARRAY_BUFFER, buf.b[2]);
-  glBufferData(GL_ARRAY_BUFFER, numFloats * sizeof(GLfloat), color.data(),
+  glBufferData(GL_ARRAY_BUFFER, numUV * sizeof(GLfloat), uv.data(),
                GL_DYNAMIC_DRAW);
   glEnableVertexAttribArray(2);
-  glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, 0);
+  glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0);
   buf._allocated = true;
   return 0;
 }
@@ -292,4 +314,35 @@ int GLRender::AddMesh(std::shared_ptr<TrigMesh> mesh) {
   int meshId = int(_bufs.size());
   _bufs.push_back(mesh);
   return meshId;
+}
+
+int GLRender::SetMeshTexture(int meshId, const Array2D8u& image,
+                             int numChannels) {
+  if (meshId < 0 || meshId >= _bufs.size()) {
+    return -1;
+  }
+  Vec2u size = image.GetSize();
+  _bufs[meshId]._tex.SetImageData(image.DataPtr(), size[0], size[1],
+                                 numChannels);
+  return 0;
+}
+
+int GLRender::SetSolidColor(int meshId, Vec3b color) {
+  if (meshId < 0 || meshId >= _bufs.size()) {
+    return -1;
+  }
+  auto& buf = _bufs[meshId]._tex._buf;
+  for (unsigned i = 0; i < buf.size(); i += 4) {
+    buf[i] = color[0];
+    buf[i + 1] = color[1];
+    buf[i + 2] = color[2];
+    buf[i + 2] = 255;
+  }
+  _bufs[meshId]._tex._needUpdate = true;
+  return 0;
+}
+
+GLBuf::GLBuf(std::shared_ptr<TrigMesh> m) : mesh(m), b(NUM_BUF) {
+  _tex.TexWrapParam = GL_REPEAT;
+  _tex.MakeDefaultTex();
 }

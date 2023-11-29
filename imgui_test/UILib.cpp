@@ -37,8 +37,12 @@ int UILib::AddImage() {
 
 int UILib::AddMesh(std::shared_ptr<TrigMesh> mesh) {
   std::lock_guard<std::mutex> lock(glLock_);
-  int meshId = _glRender.AddMesh(mesh);  
+  int meshId = _glRender.AddMesh(mesh);
   return meshId;
+}
+
+int UILib::SetMeshColor(int meshId, Vec3b color) {
+  return _glRender.SetSolidColor(meshId, color);
 }
 
 int UILib::AddButton(const std::string& text,
@@ -167,36 +171,7 @@ int UILib::SetImageData(int imageId, const Array2D8u& image, int numChannels) {
   }
   GLTex& d = _images[unsigned(imageId)];
   Vec2u size = image.GetSize();
-  d._needAlloc = !(d.HasImage() && d._height == size[1] &&
-                   d._width == size[0] && d._numChan == numChannels);
-  d._drawHeight = size[1];
-  if (numChannels >0) {
-    d._drawWidth = size[0] / numChannels;
-  }
-
-  if (numChannels == 3) {
-    // convert RGB to RGBA
-    d._numChan = 4;
-    d._width = size[0]/3*4;
-    d._height = size[1];
-    d._buf.resize(d._width * d._height);
-    const auto& imgData = image.GetData();
-    size_t dstIdx = 0;
-    for (size_t i = 0; i < imgData.size(); i+=3) {
-      d._buf[dstIdx] = imgData[i];
-      d._buf[dstIdx + 1] = imgData[i + 1];
-      d._buf[dstIdx + 2] = imgData[i + 2];
-      d._buf[dstIdx + 3] = 255;
-      dstIdx += 4;
-    }
-  } else {
-    d._numChan = numChannels;
-    d._width = size[0];
-    d._height = size[1];
-    d._buf = image.GetData();
-  }
-  d._needUpdate = true;
-  return 0;
+  return d.SetImageData(image.DataPtr(), size[0], size[1], numChannels);  
 }
 
 bool UILib::GetCheckBoxVal(int id) const {
@@ -246,6 +221,10 @@ int UILib::SetImageData(int imageId, const Array2D4b& image) {
   return 0;
 }
 
+int UILib::SetMeshTex(int meshId, const Array2D8u& image, int numChannels) {
+  return _glRender.SetMeshTexture(meshId, image, numChannels);
+}
+
 int UILib::SetImageScale(int id, float scale) {
   std::lock_guard<std::mutex> lock(_imagesLock);
   if (id < 0 || id >= _images.size()) {
@@ -258,10 +237,7 @@ int UILib::SetImageScale(int id, float scale) {
 void UILib::DrawImages() {
   for (size_t i = 0; i < _images.size(); i++) {
     GLTex& img = _images[i];
-    if (img._needUpdate) {
-      img.UpdateTextureData();
-      img._needUpdate = false;
-    }
+    img.UpdateTextureData();    
     float scale = img.renderScale_;
     if (scale > 10) {
       scale = 10;
@@ -340,8 +316,8 @@ std::string loadTxtFile(std::string filename) {
 }
 
 int UILib::LoadShaders() {
-  std::string vs = loadTxtFile(_shaderDir + "/vs-no-tex.txt");
-  std::string fs = loadTxtFile(_shaderDir + "/fs-no-tex.txt");
+  std::string vs = loadTxtFile(_shaderDir + "/vs.txt");
+  std::string fs = loadTxtFile(_shaderDir + "/fs.txt");
   if (vs.size() == 0 || fs.size() == 0) {
     std::cout << "could not locate shader file " << vs << "\n";
     return -1;

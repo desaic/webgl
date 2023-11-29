@@ -142,6 +142,8 @@ class UILib {
 
   int SetImageData(int imageId, const Array2D4b& image);
 
+  int SetMeshTex(int meshId, const Array2D8u& image, int numChannels);
+
   int SetImageScale(int id, float scale);
 
   size_t NumImages() const { return _images.size(); }
@@ -173,6 +175,9 @@ class UILib {
 
   /// @return mesh index
   int AddMesh(std::shared_ptr<TrigMesh> mesh);
+
+  /// will overwrite existing texture image
+  int SetMeshColor(int meshId, Vec3b color);
 
   void SetWindowSize(unsigned w, unsigned h);
 

@@ -7,14 +7,13 @@ layout(location = 1) in vec3 vNormal;
 layout(location = 2) in vec3 vcolor;
 smooth out vec3 pos;
 smooth out vec3 normal;
-smooth out vec3 fcolor;
+
 void main()
 {    
 	vec4 n = vec4(vNormal, 0.0);
 	n = MVIT * n;	
 	normal = normalize(n.xyz);
 	vec4 p = MVP * vec4(vPos, 1.0);
-	fcolor = vcolor;
 	gl_Position = p;
 	pos = p.xyz;
 };
