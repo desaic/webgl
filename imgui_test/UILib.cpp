@@ -335,6 +335,30 @@ void UILib::SetWindowSize(unsigned width, unsigned height) {
   _height = height;
 }
 
+std::shared_ptr<UIWidget> UILib::GetWidget(int id) {
+  if (id < uiWidgets_.size()) {
+    return uiWidgets_[id];
+  }
+  return nullptr;
+}
+
+KeyboardInput ReadKeys(const ImGuiIO& io) {
+  KeyboardInput input;
+  ImGuiKey start_key = ImGuiKey_NamedKey_BEGIN;
+  for (ImGuiKey key = start_key; key < ImGuiKey_NamedKey_END;
+       key = (ImGuiKey)(key + 1)) {
+    if (!ImGui::IsKeyDown(key)) {
+      continue;
+    }
+    std::string keyname = std::string(ImGui::GetKeyName(key)) + " ";
+    input.keys.insert(input.keys.end(), keyname.begin(), keyname.end());    
+  }
+  input.alt = io.KeyAlt;
+  input.ctrl =io.KeyCtrl;
+  input.shift = io.KeyShift;
+  return input;
+}
+
 void UILib::UILoop() {
   glfwSetErrorCallback(glfw_error_callback);
   if (!glfwInit()) {
@@ -398,7 +422,11 @@ void UILib::UILoop() {
 
     ImGui::SetNextWindowPos(ImVec2(20, 0), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(800, 800), ImGuiCond_FirstUseEver);
-
+    KeyboardInput keyboardInput = ReadKeys(io);
+    if (keyboardInput.hasKey() && _keyboardCb) {
+      _keyboardCb(keyboardInput);
+    }
+    
     if (_showGL) {
       ImGui::Begin("GL view", 0, ImGuiWindowFlags_NoBringToFrontOnFocus);
       if (io.WantCaptureMouse && ImGui::IsMousePosValid() &&
@@ -419,26 +447,8 @@ void UILib::UILoop() {
         }
         _glRender.SetMouse(io.MousePos.x, io.MousePos.y, io.MouseWheel, left,
                            mid, right);
-
-        bool hasKey = false;
-        std::string keys;
-        ImGuiKey start_key = ImGuiKey_NamedKey_BEGIN;
-        for (ImGuiKey key = start_key; key < ImGuiKey_NamedKey_END;
-             key = (ImGuiKey)(key + 1)) {
-          if (!ImGui::IsKeyDown(key)) {
-            continue;
-          }
-          std::string keyname = std::string(ImGui::GetKeyName(key))+" ";
-          if (keyname.size() > 2) {
-            //lol
-            continue;
-          }
-
-          keys.insert(keys.end(), keyname.begin(), keyname.end());
-          hasKey = true;
-        }
-        if (hasKey) {
-          _glRender.KeyPressed(keys, io.KeyCtrl, io.KeyShift, io.KeyAlt);
+        if (keyboardInput.hasKey()) {
+          _glRender.KeyPressed(keyboardInput);
         }
       }
       _glRender.Render();
@@ -448,7 +458,6 @@ void UILib::UILoop() {
       ImGui::End();
 
     }
-
     //image viewer
     ImGui::SetNextWindowPos(ImVec2(_initImagePosX, _initImagePosY),
                             ImGuiCond_FirstUseEver);

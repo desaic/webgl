@@ -10,6 +10,7 @@
 #include "Array2D.h"
 #include "GLRender.h"
 #include "GLTex.h"
+#include "KeyboardInput.h"
 
 namespace ImGui {
 class FileBrowser;
@@ -63,7 +64,18 @@ class Slideri : public UIWidget {
       : label_(label), i_(initVal),lb_(lb),ub_(ub) {}
   std::string label_;
   void Draw() override;
-  bool GetVal() const { return i_; }
+  int GetVal() const { 
+    return i_; 
+  }
+  void SetVal(int val) {
+    if (val < lb_) {
+      val = lb_;
+    }
+    if (val > ub_) {
+      val = ub_;
+    }
+    i_ = val;
+  }
  private:
   int i_= 0;
   int lb_ = 0;
@@ -105,8 +117,10 @@ class FloatingText {
 
 class UILib {
  public:
-   
+
   using FileCallback=std::function<void(const std::string&)>;
+  using KeyboardCb = std::function<void(KeyboardInput input)>;
+
   UILib();
   /// launch the ui thread and starts rendering and handling input.
   void Run();
@@ -190,6 +204,10 @@ class UILib {
   void SetFileOpenCb(FileCallback cb) { _onFileOpen = cb; }
   void SetFileSaveCb(FileCallback cb) { _onFileSave = cb; }
 
+  void SetKeyboardCb(KeyboardCb cb) { _keyboardCb = cb; }
+
+  std::shared_ptr<UIWidget> GetWidget(int id);
+
  private:
 
   void DrawImages();
@@ -228,4 +246,6 @@ class UILib {
   bool _showGL = true;
   std::mutex glLock_;
   GLRender _glRender;
+
+  KeyboardCb _keyboardCb;
 };

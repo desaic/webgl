@@ -115,10 +115,13 @@ void GLRender::SetMouse(int x, int y, float wheel, bool left, bool mid,
   _mouse.right = right;
 }
 
-void GLRender::KeyPressed(const std::string& keys, bool ctrl, bool shift,
-                          bool alt) {
-  if (keys[0] == 'R' && ctrl) {
-    ResetCam();
+void GLRender::KeyPressed(KeyboardInput& input) {
+  _keyboardInput = input;
+  std::vector<std::string> keys = input.splitKeys();
+  for (std::string key : keys) {
+    if (key == "R" && input.ctrl) {
+      ResetCam();
+    }
   }
 }
 

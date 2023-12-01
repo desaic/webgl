@@ -6,6 +6,7 @@
 #include "Array2D.h"
 #include "Camera.h"
 #include "GLTex.h"
+#include "KeyboardInput.h"
 #include "TrigMesh.h"
 #include "Scene.h"
 
@@ -35,13 +36,6 @@ struct Mouse {
   int y = 0;
   int oldx = 0;
   int oldy = 0;
-};
-
-struct Keys {
-  std::string keys;
-  bool ctrl = false;
-  bool shift = false;
-  bool alt = false;
 };
 
 class GLRender {
@@ -74,7 +68,7 @@ class GLRender {
 
   void SetMouse(int x, int y, float wheel, bool left, bool mid, bool right);
 
-  void KeyPressed(const std::string & keys, bool ctrl, bool shift, bool alt);
+  void KeyPressed(KeyboardInput &keys);
 
   int NeedsUpdate(size_t meshId);
 
@@ -111,4 +105,6 @@ class GLRender {
   const static unsigned INIT_WIDTH = 800, INIT_HEIGHT = 800;
   unsigned _width = 0, _height = 0;
   bool _initialized = false;
+
+  KeyboardInput _keyboardInput;
 };
