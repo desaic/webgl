@@ -252,10 +252,30 @@ int GLRender::AllocateMeshBuffer(size_t meshId) {
   if (meshId >= _bufs.size()) {
     return -1;
   }
+  GLBuf& buf = _bufs[meshId];  
+  glGenVertexArrays(1, &buf.vao);
+  glBindVertexArray(buf.vao);
+  glGenBuffers(GLBuf::NUM_BUF, buf.b.data());
+  buf._allocated = true;
+  UploadMeshData(meshId);
+  return 0;
+}
+
+int GLRender::UploadMeshData(size_t meshId) {
+  if (meshId >= _bufs.size()) {
+    return -1;
+  }
   GLBuf& buf = _bufs[meshId];
+  if (!buf._allocated) {
+    AllocateMeshBuffer(meshId);
+  }
+
   auto mesh = buf.mesh;
-  mesh->ComputeTrigNormals();
+  if (mesh->nt.size() != mesh->t.size()) {
+    mesh->ComputeTrigNormals();
+  }
   const unsigned DIM = 3;
+  buf._numTrigs = mesh->t.size() / 3;
   size_t numVerts = mesh->t.size();
   size_t numFloats = DIM * numVerts;
   size_t numUV = 2 * numVerts;
@@ -263,7 +283,7 @@ int GLRender::AllocateMeshBuffer(size_t meshId) {
   std::vector<Vec3f> n(numVerts);
   std::vector<Vec2f> uv;
   if (mesh->uv.size() != numVerts) {
-    // generate uv by placing each triangle on its own pixel to have 
+    // generate uv by placing each triangle on its own pixel to have
     // per-triangle coloring
     unsigned TexWidth = std::sqrt(mesh->GetNumTrigs() + 1) + 1;
     float pixelSize = 1.0f / TexWidth;
@@ -272,7 +292,7 @@ int GLRender::AllocateMeshBuffer(size_t meshId) {
       unsigned t = i / 3;
       unsigned row = i / TexWidth;
       unsigned col = i % TexWidth;
-      uv[i] = Vec2f ((col + 0.5f) * pixelSize, (row + 0.5f) * pixelSize);
+      uv[i] = Vec2f((col + 0.5f) * pixelSize, (row + 0.5f) * pixelSize);
     }
   } else {
     uv = mesh->uv;
@@ -282,13 +302,11 @@ int GLRender::AllocateMeshBuffer(size_t meshId) {
     for (int j = 0; j < 3; j++) {
       unsigned vidx = mesh->t[i + j];
       unsigned dstV = i + j;
-      v[ dstV] = *(Vec3f*)(mesh->v.data() + 3 * vidx);
+      v[dstV] = *(Vec3f*)(mesh->v.data() + 3 * vidx);
       n[dstV] = normal;
     }
   }
-  glGenVertexArrays(1, &buf.vao);
   glBindVertexArray(buf.vao);
-  glGenBuffers(GLBuf::NUM_BUF, buf.b.data());
   glBindBuffer(GL_ARRAY_BUFFER, buf.b[0]);
   glBufferData(GL_ARRAY_BUFFER, numFloats * sizeof(GLfloat), v.data(),
                GL_DYNAMIC_DRAW);
@@ -306,7 +324,6 @@ int GLRender::AllocateMeshBuffer(size_t meshId) {
                GL_DYNAMIC_DRAW);
   glEnableVertexAttribArray(2);
   glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0);
-  buf._allocated = true;
   return 0;
 }
 
@@ -316,9 +333,17 @@ int GLRender::AddMesh(std::shared_ptr<TrigMesh> mesh) {
   return meshId;
 }
 
-int GLRender::SetMeshTexture(int meshId, const Array2D8u& image,
+int GLRender::NeedsUpdate(size_t meshId) {
+  if (meshId >= _bufs.size()) {
+    return -1;
+  }
+  _bufs[meshId]._needsUpdate = true;
+  return 0;
+}
+
+int GLRender::SetMeshTexture(size_t meshId, const Array2D8u& image,
                              int numChannels) {
-  if (meshId < 0 || meshId >= _bufs.size()) {
+  if (meshId >= _bufs.size()) {
     return -1;
   }
   Vec2u size = image.GetSize();
@@ -327,8 +352,8 @@ int GLRender::SetMeshTexture(int meshId, const Array2D8u& image,
   return 0;
 }
 
-int GLRender::SetSolidColor(int meshId, Vec3b color) {
-  if (meshId < 0 || meshId >= _bufs.size()) {
+int GLRender::SetSolidColor(size_t meshId, Vec3b color) {
+  if (meshId >= _bufs.size()) {
     return -1;
   }
   auto& buf = _bufs[meshId]._tex._buf;

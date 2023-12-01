@@ -22,6 +22,7 @@ struct GLBuf {
   bool _needsUpdate = false;
 
   std::shared_ptr<TrigMesh> mesh;
+  size_t _numTrigs = 0;
   GLTex _tex;
   GLBuf(std::shared_ptr<TrigMesh> m);
   bool _allocated = false;
@@ -74,11 +75,15 @@ class GLRender {
   void SetMouse(int x, int y, float wheel, bool left, bool mid, bool right);
 
   void KeyPressed(const std::string & keys, bool ctrl, bool shift, bool alt);
-  
-  int SetMeshTexture(int meshId, const Array2D8u& image, int numChannels);
+
+  int NeedsUpdate(size_t meshId);
+
+  int SetMeshTexture(size_t meshId, const Array2D8u& image, int numChannels);
 
   //overwrites existing texture image
-  int SetSolidColor(int meshId, Vec3b color);
+  int SetSolidColor(size_t meshId, Vec3b color);
+
+  int UploadMeshData(size_t meshId);
 
  private:
   
