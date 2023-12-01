@@ -157,7 +157,9 @@ class UILib {
   int SetImageData(int imageId, const Array2D4b& image);
 
   int SetMeshTex(int meshId, const Array2D8u& image, int numChannels);
-
+  
+  int SetMeshNeedsUpdate(int meshId);
+  
   int SetImageScale(int id, float scale);
 
   size_t NumImages() const { return _images.size(); }

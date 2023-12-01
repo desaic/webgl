@@ -70,7 +70,7 @@ class GLRender {
 
   void KeyPressed(KeyboardInput &keys);
 
-  int NeedsUpdate(size_t meshId);
+  int SetNeedsUpdate(size_t meshId);
 
   int SetMeshTexture(size_t meshId, const Array2D8u& image, int numChannels);
 

@@ -1,0 +1,328 @@
+
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <sstream>
+
+#include "Array2D.h"
+#include "ImageIO.h"
+#include "TrigMesh.h"
+#include "UILib.h"
+#include "lodepng.h"
+std::vector<Vec3b> generateRainbowPalette(int numColors);
+
+void ShowGLInfo(UILib& ui, int label_id) {
+  std::string info = ui.GetGLInfo();
+  ui.SetLabelText(label_id, info);
+}
+
+void TestImageDisplay(UILib& ui) {
+  Array2D8u image(300, 100);
+  int imageId = ui.AddImage();
+  image.Fill(128);
+  Vec2u size = image.GetSize();
+  Array2D8u imageA(size[0] / 3 * 4, size[1]);
+  for (size_t row = 0; row < size[1]; row++) {
+    for (size_t col = 0; col < size[0] / 3; col++) {
+      imageA(4 * col, row) = image(3 * col, row);
+      imageA(4 * col + 1, row) = image(3 * col + 1, row);
+      imageA(4 * col + 2, row) = image(3 * col + 2, row);
+      imageA(4 * col + 3, row) = 255;
+    }
+  }
+  ui.SetImageData(imageId, image, 3);
+}
+
+struct UVState {
+  UVState() {}
+  UVState(TrigMesh& m) : mesh(&m) { Init(); }
+
+  void Init();
+
+  TrigMesh* mesh = nullptr;
+  std::vector<uint32_t> trigLabels;
+  /// temporary variable. overwritten by each chart.
+  std::vector<uint8_t> vertLabels;
+  /// <summary>
+  /// Maps from vertex index to list of triangle indices.
+  /// </summary>
+  std::vector<std::vector<uint32_t> > vertToTrig;
+  /// <summary>
+  /// Per-triangle uv coordinates.
+  /// </summary>
+  std::vector<Vec2f> uv;
+
+  uint32_t numCharts = 0;
+  /// list of triangles for each chart
+  std::vector<std::vector<uint32_t> > charts;
+
+  float distortionBound = 2.0f;
+
+  // debug states
+  std::vector<unsigned> trigLevel;
+
+  // temporary vertex uv. can be overwritten by new charts.
+  std::vector<Vec2f> tmpUV;
+  std::vector<unsigned> rejectedVerts;
+};
+
+void UVState::Init() {
+  size_t numTrigs = mesh->GetNumTrigs();
+  size_t numVerts = mesh->GetNumVerts();
+  trigLabels.clear();
+  trigLabels.resize(numTrigs, 0);
+  vertToTrig.clear();
+  vertToTrig.resize(numVerts);
+  for (size_t i = 0; i < numTrigs; i++) {
+    for (size_t j = 0; j < 3; j++) {
+      size_t vIdx = mesh->t[3 * i + j];
+      vertToTrig[vIdx].push_back(i);
+    }
+  }
+  if (mesh->nt.size() != mesh->t.size()) {
+    mesh->ComputeTrigNormals();
+  }
+  numCharts = 0;
+  charts.clear();
+  vertLabels.clear();
+  vertLabels.resize(numVerts, 0);
+  tmpUV.resize(numVerts);
+  trigLevel.resize(numTrigs, 0);
+  uv = mesh->uv;
+}
+
+void LoadUVSeg(const std::string& segFile, UVState& state) {
+  std::ifstream in(segFile);
+  std::string line;
+  std::vector<unsigned> chartId;
+  std::vector<unsigned> level;
+  unsigned numTrigs = 0;
+  unsigned trigId = 0;
+  unsigned maxChartId = 0;
+  while (std::getline(in, line)) {
+    if (line.size() == 0) {
+      continue;
+    }
+    if (line[0] == '#') {
+      continue;
+    }
+    std::istringstream ss(line);
+    if (line.find("num_trigs") != std::string::npos) {
+      std::string tok;
+      ss >> tok >> numTrigs;
+      if (numTrigs > 0 || numTrigs < state.mesh->GetNumTrigs()) {
+        chartId.resize(numTrigs);
+        level.resize(numTrigs);
+      } else {
+        std::cout << "invalid num trigs " << numTrigs << "\n";
+        return;
+      }
+    } else {
+      ss >> chartId[trigId] >> level[trigId];
+      maxChartId = std::max(chartId[trigId], maxChartId);
+      trigId++;
+    }
+  }
+  state.trigLevel = level;
+  state.charts.resize(maxChartId + 1);
+  for (size_t t = 0; t < chartId.size(); t++) {
+    state.charts[chartId[t]].push_back(t);
+  }
+  state.trigLabels = chartId;
+}
+
+void FillRainbowColor(Array2D8u& image) {
+  Vec2u size = image.GetSize();
+  size_t numPix = (size[0] / 4) * size[1];
+  std::vector<Vec3b> colors = generateRainbowPalette(int(numPix));
+  auto& data = image.GetData();
+  for (size_t i = 0; i < data.size()/4; i++) {
+    size_t colorIdx = i % colors.size();
+    data[4 * i] = colors[colorIdx][0];
+    data[4 * i + 1] = colors[colorIdx][1];
+    data[4 * i + 2] = colors[colorIdx][2];
+    data[4 * i + 3] = 255;
+  }
+}
+
+struct DebuggerState {
+  DebuggerState() {
+    trigLabelImage.Allocate(4096, 1024);
+    FillRainbowColor(trigLabelImage);
+    trigLabelImage(0, 0)=255;
+    trigLabelImage(1, 0)=0;
+    trigLabelImage(2, 0)=0;
+  }
+  unsigned displayTrigLevel = 50;
+  int sliderId = 0;
+  std::shared_ptr<Slideri> levelSlider;
+  std::shared_ptr<CheckBox> trigLabelCheckBox;
+  std::vector<Vec2f> uv;
+  UVState uvState;
+  void SetMesh(TrigMesh* m) {
+    uvState.mesh = m;
+    uvState.Init();
+    uv = m->uv;
+  }
+  Array2D8u trigLabelImage;
+  Array2D8u texImage;
+  bool showTrigLabels = false;
+
+  UILib* ui = nullptr;
+  int meshId = 0;
+  void Refresh();
+};
+
+std::vector<Vec3b> generateRainbowPalette(int numColors) {
+  std::vector<Vec3b> colors;
+
+  float frequency =
+      M_PI /
+      numColors;  // Controls the frequency of the rainbow (adjust as needed)
+  for (int i = 0; i < numColors; ++i) {
+    int red = static_cast<uint8_t>(std::sin(frequency * i) * 127 + 128);
+    int green = static_cast<uint8_t>(
+        std::sin(frequency * i + 2 * M_PI / 3) * 127 + 128);
+    int blue = static_cast<uint8_t>(
+        std::sin(frequency * i + 4 * M_PI / 3) * 127 + 128);
+    colors.push_back(Vec3b(red, green, blue));
+  }
+
+  return colors;
+}
+
+void MakePerPixelUV(TrigMesh& mesh, unsigned width) {
+  unsigned numTrig = mesh.GetNumTrigs();
+  float pixSize = 1.0f / width;
+  for (unsigned t = 0; t < numTrig; t++) {
+    unsigned row = (t*10) / width;
+    unsigned col = (t*10) % width;
+    Vec2f uv((col + 0.5f) * pixSize, (row + 0.5f) * pixSize);
+    mesh.uv[3 * t] = uv;
+    mesh.uv[3 * t + 1] = uv;
+    mesh.uv[3 * t + 2] = uv;
+  }
+}
+
+void DebuggerState::Refresh() {
+  bool checkBoxVal = trigLabelCheckBox->GetVal();
+  if (showTrigLabels != checkBoxVal) {
+    showTrigLabels = checkBoxVal;
+    if (showTrigLabels) {
+      Vec2u texSize = trigLabelImage.GetSize();
+      MakePerPixelUV(*uvState.mesh, texSize[0] / 4);
+      ui->SetMeshTex(meshId, trigLabelImage, 4);
+    } else {
+      uvState.mesh->uv = uv;
+      ui->SetMeshTex(meshId, texImage, 4);
+    }
+    ui->SetMeshNeedsUpdate(meshId);
+  }
+}
+
+DebuggerState debState;
+
+void ShowTrigsUpToLevel(unsigned maxlevel, DebuggerState& debState) {
+  auto& image = debState.trigLabelImage;
+  Vec2u size = image.GetSize();
+  unsigned width = size[0] / 4;
+  unsigned lastIdx = width * size[1] - 1;
+  auto& mesh = *(debState.uvState.mesh);
+  unsigned numTrig = mesh.GetNumTrigs();
+  float pixSize = 1.0f / size[0];
+  for (size_t t = 0; t < numTrig; t++) {
+    unsigned label = debState.uvState.trigLabels[t];
+    unsigned tlevel = debState.uvState.trigLevel[t];
+    if (tlevel > maxlevel) {
+      label = lastIdx;
+    }
+    unsigned row = label / width;
+    unsigned col = label % width;
+    Vec2f uv = pixSize * Vec2f(col+0.5f, row+0.4f);
+    mesh.uv[3 * t] = uv;
+    mesh.uv[3 * t+1] = uv;
+    mesh.uv[3 * t+2] = uv;
+  }
+  if (debState.showTrigLabels) {
+    debState.ui->SetMeshNeedsUpdate(debState.meshId);
+  }
+}
+
+void HandleKeys(KeyboardInput input) {
+  std::vector<std::string> keys = input.splitKeys();
+  for (const auto& key : keys) {
+    bool sliderChange = false;
+    int sliderVal = 0;
+    if (key == "LeftArrow") {
+      sliderChange = true;
+      sliderVal = debState.levelSlider->GetVal();
+      sliderVal--;
+    } else if (key == "RightArrow") {
+      sliderVal = debState.levelSlider->GetVal();
+      sliderVal++;
+      sliderChange = true;
+    }
+
+    if (sliderChange) {
+      debState.levelSlider->SetVal(sliderVal);
+      sliderVal = debState.levelSlider->GetVal();
+      ShowTrigsUpToLevel(sliderVal, debState);      
+    }
+  }
+}
+
+void ConvertChan3To4(const Array2D8u& rgb, Array2D8u& rgba) {
+  Vec2u inSize = rgb.GetSize();
+  unsigned realWidth = inSize[0] / 3;
+  rgba.Allocate(4 * realWidth, inSize[1]);
+  size_t numPix = realWidth * inSize[1];
+  const auto& inData = rgb.GetData();
+  auto& outData = rgba.GetData();
+  for (size_t i = 0; i < numPix; i++) {
+    outData[4 * i] = inData[3 * i];
+    outData[4 * i + 1] = inData[3 * i + 1];
+    outData[4 * i + 2] = inData[3 * i + 2];
+    outData[4 * i + 3] = 255;
+  }
+}
+
+int main(int, char**) {
+  UILib ui;
+  ui.SetFontsDir("./fonts");
+  std::function<void()> btFunc = std::bind(&TestImageDisplay, std::ref(ui));
+  ui.SetWindowSize(1280, 800);
+  int buttonId = ui.AddButton("GLInfo", {});
+  int gl_info_id = ui.AddLabel(" ");
+  std::function<void()> showGLInfoFunc =
+      std::bind(&ShowGLInfo, std::ref(ui), gl_info_id);
+  ui.SetButtonCallback(buttonId, showGLInfoFunc);
+  ui.AddButton("Show image", btFunc);
+  auto mesh = std::make_shared<TrigMesh>();
+  mesh->LoadObj("F:/dump/cyl_out.obj");
+  int meshId = ui.AddMesh(mesh);
+  ui.SetMeshColor(meshId, Vec3b(250, 180, 128));
+  debState.SetMesh(mesh.get());
+  LoadUVSeg("F:/dump/seg.txt", debState.uvState);
+
+  Array2D8u texImage;
+  LoadPngColor("F:/dump/checker.png", texImage);
+  ConvertChan3To4(texImage, debState.texImage);
+  ui.SetMeshTex(meshId, debState.texImage, 4);
+  ui.SetWindowSize(1280, 800);
+  debState.meshId = meshId;
+  debState.sliderId = ui.AddSlideri("trig level", 20, 0, 99);
+  debState.levelSlider =
+      std::dynamic_pointer_cast<Slideri>(ui.GetWidget(debState.sliderId));
+  int boxId = ui.AddCheckBox("Show Trig Label", false);
+  debState.trigLabelCheckBox =
+      std::dynamic_pointer_cast<CheckBox>(ui.GetWidget(boxId));
+  ui.SetKeyboardCb(HandleKeys);
+  ui.Run();
+  const unsigned PollFreqMs = 20;
+  debState.ui = &ui;
+  while (ui.IsRunning()) {
+    debState.Refresh();
+    std::this_thread::sleep_for(std::chrono::milliseconds(PollFreqMs));
+  }
+  return 0;
+}

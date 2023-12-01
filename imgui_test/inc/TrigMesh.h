@@ -32,6 +32,7 @@ class TrigMesh {
   TrigMesh();
   using TValue = float;
   using TIndex = unsigned;
+
   std::vector<TValue> v;
   std::vector<TIndex> t;
 
@@ -85,6 +86,7 @@ class TrigMesh {
   static void SaveObj(const std::string& filename,
                       const std::vector<Vec3f>& pts);
   int SaveStlTxt(const std::string& filename);
+
 };
 
 TrigMesh SubSet(const TrigMesh& m, const std::vector<size_t>& trigs);

@@ -221,6 +221,8 @@ int UILib::SetImageData(int imageId, const Array2D4b& image) {
   return 0;
 }
 
+int UILib::SetMeshNeedsUpdate(int meshId) { return _glRender.SetNeedsUpdate(meshId); }
+
 int UILib::SetMeshTex(int meshId, const Array2D8u& image, int numChannels) {
   return _glRender.SetMeshTexture(meshId, image, numChannels);
 }

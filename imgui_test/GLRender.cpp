@@ -63,6 +63,9 @@ int GLRender::DrawMesh(size_t meshId) {
   if (!buf._allocated) {
     AllocateMeshBuffer(meshId);
   }
+  if (buf._needsUpdate) {
+    UploadMeshData(meshId);
+  }
   if (buf._tex.HasImage()) {
     buf._tex.UpdateTextureData();
     glActiveTexture(GL_TEXTURE0);
@@ -327,6 +330,7 @@ int GLRender::UploadMeshData(size_t meshId) {
                GL_DYNAMIC_DRAW);
   glEnableVertexAttribArray(2);
   glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0);
+  buf._needsUpdate = false;
   return 0;
 }
 
@@ -336,7 +340,7 @@ int GLRender::AddMesh(std::shared_ptr<TrigMesh> mesh) {
   return meshId;
 }
 
-int GLRender::NeedsUpdate(size_t meshId) {
+int GLRender::SetNeedsUpdate(size_t meshId) {
   if (meshId >= _bufs.size()) {
     return -1;
   }
