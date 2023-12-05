@@ -195,8 +195,8 @@ void MakePerPixelUV(TrigMesh& mesh, unsigned width) {
   unsigned numTrig = mesh.GetNumTrigs();
   float pixSize = 1.0f / width;
   for (unsigned t = 0; t < numTrig; t++) {
-    unsigned row = (t*10) / width;
-    unsigned col = (t*10) % width;
+    unsigned row = t / width;
+    unsigned col = t % width;
     Vec2f uv((col + 0.5f) * pixSize, (row + 0.5f) * pixSize);
     mesh.uv[3 * t] = uv;
     mesh.uv[3 * t + 1] = uv;
@@ -298,7 +298,7 @@ int main(int, char**) {
   ui.SetButtonCallback(buttonId, showGLInfoFunc);
   ui.AddButton("Show image", btFunc);
   auto mesh = std::make_shared<TrigMesh>();
-  mesh->LoadObj("F:/dump/cyl_out.obj");
+  mesh->LoadObj("F:/dump/uv_out.obj");
   int meshId = ui.AddMesh(mesh);
   ui.SetMeshColor(meshId, Vec3b(250, 180, 128));
   debState.SetMesh(mesh.get());
@@ -310,7 +310,7 @@ int main(int, char**) {
   ui.SetMeshTex(meshId, debState.texImage, 4);
   ui.SetWindowSize(1280, 800);
   debState.meshId = meshId;
-  debState.sliderId = ui.AddSlideri("trig level", 20, 0, 999);
+  debState.sliderId = ui.AddSlideri("trig level", 20, 0, 9999);
   debState.levelSlider =
       std::dynamic_pointer_cast<Slideri>(ui.GetWidget(debState.sliderId));
   int boxId = ui.AddCheckBox("Show Trig Label", false);

@@ -431,7 +431,7 @@ void UILib::UILoop() {
     
     if (_showGL) {
       ImGui::Begin("GL view", 0, ImGuiWindowFlags_NoBringToFrontOnFocus);
-      if (io.WantCaptureMouse && ImGui::IsMousePosValid() &&
+      if (io.WantCaptureMouse && ImGui::IsWindowHovered() &&
               ImGui::IsWindowFocused()) {
         bool left = false, mid = false, right = false;
         for (int i = 0; i < IM_ARRAYSIZE(io.MouseDown); i++) {
