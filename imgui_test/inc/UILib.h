@@ -119,6 +119,8 @@ class UILib {
  public:
 
   using FileCallback=std::function<void(const std::string&)>;
+  using ChangeDirCallback=std::function<void(const std::string&)>;
+  using MultiFileCallBack = std::function<void(const std::vector<std::string>&)>;
   using KeyboardCb = std::function<void(KeyboardInput input)>;
 
   UILib();
@@ -199,13 +201,23 @@ class UILib {
 
   void SetShowGL(bool show) { _showGL = show; }
 
+  void ShowFileOpen(bool multi, const std::string& startingDir) {    
+    _openMultiple = multi;
+    _showFileOpen = true;
+    if (!startingDir.empty()) {
+      _pwd = startingDir;
+    }
+  }
+
   void SetInitImagePos(int x, int y) {
     _initImagePosX = x;
     _initImagePosY = y;
   }
   void SetFileOpenCb(FileCallback cb) { _onFileOpen = cb; }
   void SetFileSaveCb(FileCallback cb) { _onFileSave = cb; }
-
+  void SetChangeDirCb(ChangeDirCallback cb) {_onChangeDir = cb;}
+  void SetMultipleFilesOpenCb(MultiFileCallBack cb) { _onMultipleFilesOpen = cb; }
+  
   void SetKeyboardCb(KeyboardCb cb) { _keyboardCb = cb; }
 
   std::shared_ptr<UIWidget> GetWidget(int id);
@@ -237,6 +249,12 @@ class UILib {
   std::shared_ptr<ImGui::FileBrowser> _saveDialogue;
   FileCallback _onFileOpen;
   FileCallback _onFileSave;
+  bool _openMultiple = false;
+  MultiFileCallBack _onMultipleFilesOpen;
+  bool _showFileOpen = false;
+  std::string _openFileTitle = "Open...";
+  std::string _pwd = "./";
+  ChangeDirCallback _onChangeDir;
 
   std::string _fontsDir = "./fonts";
   std::string _shaderDir = "./glsl/";

@@ -3,7 +3,6 @@
 #include <functional>
 #include <iostream>
 #include "imgui.h"
-#include <Windows.h>
 #define GLEW_STATIC
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>  // Will drag system OpenGL headers
@@ -18,10 +17,7 @@ static void glfw_error_callback(int error, const char* description) {
   std::cout << "Glfw Error " << error << " " << description << "\n";
 }
 
-UILib::UILib() {
-  _openDialogue = std::make_shared<ImGui::FileBrowser>();
-  _openDialogue->SetTypeFilters({".txt"});
-  _openDialogue->SetTitle("Open config");
+UILib::UILib() {  
   _saveDialogue = std::make_shared<ImGui::FileBrowser>(
       ImGuiFileBrowserFlags_EnterNewFilename);
   _saveDialogue->SetTypeFilters({".txt"});
@@ -511,7 +507,7 @@ void UILib::UILoop() {
     if (ImGui::BeginMenuBar()) {
       if (ImGui::BeginMenu("File")) {
         if (ImGui::MenuItem("Open..", "Ctrl+O")) {
-          _openDialogue->Open();
+          _showFileOpen = true;
         }
         if (ImGui::MenuItem("Save", "Ctrl+S")) { 
           _saveDialogue->Open();
@@ -526,11 +522,45 @@ void UILib::UILoop() {
     for (size_t i = 0; i < uiWidgets_.size();i++) {
       uiWidgets_[i]->Draw();
     }
-    _openDialogue->Display();
-    if (_openDialogue->HasSelected() && _onFileOpen) {
-      _onFileOpen(_openDialogue->GetSelected().string());
-      _openDialogue->ClearSelected();
+
+    if (_showFileOpen) {
+      int openFlags = 0;
+      if (_openMultiple) {
+        openFlags = ImGuiFileBrowserFlags_MultipleSelection;
+      }
+      _openDialogue = std::make_shared<ImGui::FileBrowser>(openFlags);
+      _openDialogue->SetPwd(std::filesystem::path(_pwd));
+      //_openDialogue->SetTypeFilters({".txt"}); 
+      _openDialogue->SetTitle(_openFileTitle);
+      _openDialogue->Open();
+      _showFileOpen = false;      
     }
+    if (_openDialogue) {
+      _openDialogue->Display();
+      if (_pwd != _openDialogue->GetPwd().string()) {
+        _pwd = _openDialogue->GetPwd().string();
+        if (_onChangeDir) {
+          _onChangeDir(_pwd);
+        }
+      }
+      if (_openDialogue->HasSelected()) {
+        if (_openMultiple) {
+          if (_onMultipleFilesOpen) {
+            const auto paths = _openDialogue->GetMultiSelected();
+            std::vector<std::string> files(paths.size());
+            for (size_t i = 0; i < files.size(); i++) {
+              files[i] = paths[i].string();
+            }
+            _onMultipleFilesOpen(files);
+          }
+          _openMultiple = false;
+        } else if(_onFileOpen){
+          _onFileOpen(_openDialogue->GetSelected().string());          
+        }
+        _openDialogue->ClearSelected();
+      }
+    }
+    
     _saveDialogue->Display();
     if (_saveDialogue->HasSelected() && _onFileSave) {
       _onFileSave(_saveDialogue->GetSelected().string());

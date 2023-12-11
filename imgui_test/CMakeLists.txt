@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.0)
 project(ImguiExample)
 set(BIN ImguiExample)
-
+set(CMAKE_CXX_STANDARD 20)
 file(GLOB_RECURSE SRC "*.cpp" "*.h")
 include_directories("extern/imgui")
 include_directories("extern/glfw3.3.8")

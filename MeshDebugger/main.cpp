@@ -7,6 +7,7 @@
 #include "Array2D.h"
 #include "ImageIO.h"
 #include "TrigMesh.h"
+#include "UIConf.h"
 #include "UILib.h"
 #include "lodepng.h"
 
@@ -215,6 +216,7 @@ void DebuggerState::LevelSliderChanged() {
 }
 
 void DebuggerState::Refresh() {
+  if(!uvState.mesh){return;}
   bool checkBoxVal = trigLabelCheckBox->GetVal();
   if (showTrigLabels != checkBoxVal) {
     showTrigLabels = checkBoxVal;
@@ -300,17 +302,7 @@ void ConvertChan3To4(const Array2D8u& rgb, Array2D8u& rgba) {
   }
 }
 
-int main(int, char**) {
-  UILib ui;
-  ui.SetFontsDir("./fonts");
-  std::function<void()> btFunc = std::bind(&TestImageDisplay, std::ref(ui));
-  ui.SetWindowSize(1280, 800);
-  int buttonId = ui.AddButton("GLInfo", {});
-  int gl_info_id = ui.AddLabel(" ");
-  std::function<void()> showGLInfoFunc =
-      std::bind(&ShowGLInfo, std::ref(ui), gl_info_id);
-  ui.SetButtonCallback(buttonId, showGLInfoFunc);
-  ui.AddButton("Show image", btFunc);
+void DebugUV(UILib & ui) {
   auto mesh = std::make_shared<TrigMesh>();
   mesh->LoadObj("F:/dump/uv_out.obj");
   int meshId = ui.AddMesh(mesh);
@@ -322,8 +314,77 @@ int main(int, char**) {
   LoadPngColor("F:/dump/checker.png", texImage);
   ConvertChan3To4(texImage, debState.texImage);
   ui.SetMeshTex(meshId, debState.texImage, 4);
-  ui.SetWindowSize(1280, 800);
   debState.meshId = meshId;
+}
+
+//info for voxelizing
+//multi-material interface connector designs
+struct ConnectorVox {
+  std::vector<std::string> filenames;
+  void LoadMeshes(const std::vector<std::string>& files);
+  std::vector<TrigMesh> meshes;
+};
+
+std::string getFileExtension(const std::string& filename) {
+  size_t dotPosition = filename.find_last_of('.');
+  if (dotPosition != std::string::npos &&
+      dotPosition != filename.length() - 1) {
+    return filename.substr(dotPosition + 1);
+  }
+  return "";
+}
+
+void ConnectorVox::LoadMeshes(const std::vector<std::string>& files) {
+  meshes.resize(files.size());
+  for (size_t i = 0; i < files.size();i++) {
+    const auto& file = files[i]; 
+    std::string ext = getFileExtension(file);
+    std::cout << ext << "\n";
+    std::transform(ext.begin(), ext.end(), ext.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    if (ext.size() != 3) {
+      continue;
+    }
+    if (ext == "obj") {
+      meshes[i].LoadObj(file);
+    } else if (ext == "stl") {
+      meshes[i].LoadStl(file);
+    }
+  }
+}
+
+ConnectorVox connector;
+
+void OnOpenConnectorMeshes(const std::vector<std::string>& files) {
+  connector.LoadMeshes(files);
+}
+
+void OpenConnectorMeshes(UILib& ui, const UIConf & conf) {
+  ui.SetMultipleFilesOpenCb(OnOpenConnectorMeshes);
+  ui.ShowFileOpen(true, conf.workingDir);
+}
+
+void OnChangeDir(std::string dir, UIConf& conf) {
+  conf.workingDir = dir;
+  conf.Save();
+}
+
+int main(int, char**) {
+  UILib ui;
+  UIConf conf;
+  conf.Load("");
+  ui.SetFontsDir("./fonts");
+  std::function<void()> btFunc = std::bind(&TestImageDisplay, std::ref(ui));
+  ui.SetWindowSize(1280, 800);
+  ui.AddButton("Open Meshes", [&] { OpenConnectorMeshes(ui, conf); });
+  int buttonId = ui.AddButton("GLInfo", {});
+  int gl_info_id = ui.AddLabel(" ");
+  std::function<void()> showGLInfoFunc =
+      std::bind(&ShowGLInfo, std::ref(ui), gl_info_id);
+  ui.SetButtonCallback(buttonId, showGLInfoFunc);
+  ui.AddButton("Show image", btFunc);
+  ui.SetWindowSize(1280, 800);
+  ui.SetChangeDirCb([&](const std::string& dir) { OnChangeDir(dir, conf); });
   debState.sliderId = ui.AddSlideri("trig level", 20, 0, 9999);
   debState.levelSlider =
       std::dynamic_pointer_cast<Slideri>(ui.GetWidget(debState.sliderId));
@@ -338,5 +399,6 @@ int main(int, char**) {
     debState.Refresh();
     std::this_thread::sleep_for(std::chrono::milliseconds(PollFreqMs));
   }
+  conf.Save();
   return 0;
 }
