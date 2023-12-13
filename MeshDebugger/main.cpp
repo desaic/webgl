@@ -7,11 +7,16 @@
 #include "Array2D.h"
 #include "Array3D.h"
 #include "BBox.h"
+#include "cpu_voxelizer.h"
+#include "MeshUtil.h"
 #include "ImageIO.h"
 #include "TrigMesh.h"
 #include "UIConf.h"
 #include "UILib.h"
 #include "lodepng.h"
+#include "Timer.h"
+#include "ZRaycast.h"
+#include "RaycastConf.h"
 
 std::vector<Vec3b> generateRainbowPalette(int numColors);
 
@@ -336,10 +341,12 @@ struct ConnectorVox {
   std::function<void(const std::string&)> LogCb;
 
   std::vector<std::string> filenames;
+  std::string dir;
   bool _hasFileNames = false;
   bool _fileLoaded = false;  
   bool _voxelized = false;
   int _voxResId = -1;
+  int _outPrefixId = -1;
   std::vector<TrigMesh> meshes;
   Array3D8u grid;
 
@@ -356,6 +363,9 @@ std::string getFileExtension(const std::string& filename) {
 }
 
 void ConnectorVox::LoadMeshes() {
+  if (filenames.size() == 0) {
+    return;
+  }
   meshes.resize(filenames.size());
   Log("load meshes");
   for (size_t i = 0; i < filenames.size();i++) {
@@ -373,21 +383,125 @@ void ConnectorVox::LoadMeshes() {
       meshes[i].LoadStl(file);
     }
   }
-
+  std::filesystem::path filePath(filenames[0]);
+  dir = filePath.parent_path().string();
   _fileLoaded = true;
   Log("load meshes done");
+}
+
+struct SimpleVoxCb : public VoxCallback {
+  SimpleVoxCb(Array3D8u& grid, uint8_t matId) : _grid(grid), _matId(matId) {}
+  virtual void operator()(unsigned x, unsigned y, unsigned z,
+                          size_t trigIdx) override {
+    _grid(x, y, z) = _matId;
+  }  
+  Array3D8u& _grid;
+  uint8_t _matId = 1;
+};
+
+void VoxelizeCPU(uint8_t matId, const voxconf& conf, const TrigMesh& mesh,
+                 Array3D8u& grid) {
+  SimpleVoxCb cb(grid, matId);
+  Timer timer;
+  timer.start();
+  cpu_voxelize_mesh(conf, &mesh, cb);
+  timer.end();
+  float ms = timer.getMilliseconds();
+}
+
+void VoxelizeMesh(uint8_t matId, const BBox& box, float voxRes,
+                  const TrigMesh& mesh, Array3D8u& grid) {
+  ZRaycast raycast;
+  RaycastConf rcConf;
+  rcConf.voxelSize_ = voxRes;
+  rcConf.box_ = box;
+  ABufferf abuf;
+  Timer timer;
+  timer.start();
+  int ret = raycast.Raycast(mesh, abuf, rcConf);
+  timer.end();
+  float ms = timer.getMilliseconds();
+  std::cout << "vox time " << ms << "ms\n";
+  timer.start();
+  float z0 = box.vmin[2];
+  //expand abuf to vox grid
+  Vec3u gridSize = grid.GetSize();
+  for (unsigned y = 0; y < gridSize[1]; y++) {
+    for (unsigned x = 0; x < gridSize[0]; x++) {
+      const auto intersections = abuf(x, y);
+      for (auto seg : intersections) {
+        unsigned zIdx0 = seg.t0 / voxRes + 0.5f;
+        unsigned zIdx1 = seg.t1 / voxRes + 0.5f;
+
+        for (unsigned z = zIdx0; z < zIdx1; z++) {
+          if (z >= gridSize[2]) {
+            continue;
+          }
+          grid(x, y, z) = matId;
+        }
+      }
+    }
+  }
+  timer.end();
+  ms = timer.getMilliseconds();
+  std::cout << "copy time " << ms << "ms\n";
+}
+
+void SaveVoxTxt(const Array3D8u & grid, float voxRes, const std::string & filename) {
+  std::ofstream out(filename);
+  if (!out.good()) {
+    std::cout << "cannot open output " << filename << "\n";
+    return;
+  }
+  out << "voxelSize\n" << voxRes << " " << voxRes << " " << voxRes << "\n";
+  out << "spacing\n0.2\ndirection\n0 0 1\ngrid\n";
+  Vec3u gridsize = grid.GetSize();
+  out << gridsize[0] << " " << gridsize[1] << " " << gridsize[2] << "\n";
+  for (unsigned z = 0; z < gridsize[2]; z++) {
+    for (unsigned y = 0; y < gridsize[1]; y++) {
+      for (unsigned x = 0; x < gridsize[0]; x++) {
+        out << int(grid(x, y, z) + 1) << " ";
+      }
+      out << "\n";
+    }    
+  }
+  out << "\n";
 }
 
 void ConnectorVox::VoxelizeMeshes() {
   Log("voxelize meshes");
   BBox box;
-  for (auto m:meshes) {
-    BBox mbox;    
+  for (auto &m:meshes) {
+    MergeCloseVertices(m);
+    m.ComputePseudoNormals();
+    BBox mbox;
     ComputeBBox(m.v, mbox);
     box.Merge(mbox);
   }
   float voxRes = conf.voxResMM;
+  voxconf conf;
+  conf.unit = Vec3f(voxRes, voxRes, voxRes);
+
+  int band = 0;
+  box.vmin = box.vmin - float(band) * conf.unit;
+  box.vmax = box.vmax + float(band) * conf.unit;
+  conf.origin = box.vmin;
+
+  Vec3f count = (box.vmax - box.vmin) / conf.unit;
+  conf.gridSize = Vec3u(count[0] + 1, count[1] + 1, count[2] + 1);
+  grid.Allocate(count[0], count[1], count[2]);
+
+  for (unsigned i = 0; i < meshes.size(); i++) {
+    VoxelizeMesh(uint8_t(i + 1), box, voxRes, meshes[i], grid); 
+  }
   _voxelized = true;
+  for (unsigned i = 0; i < meshes.size(); i++) {
+    uint8_t mat = i + 1;
+    SaveVolAsObjMesh(dir + "/vox_out" + std::to_string(i + 1) + ".obj", grid,
+                     (float*)(&conf.unit), i + 1);
+  }
+  std::string gridFilename = dir + "/grid.txt";
+  SaveVoxTxt(grid, voxRes, gridFilename);
   Log("voxelize meshes done");
 }
 
@@ -449,6 +563,7 @@ void LogToUI(const std::string & str, UILib&ui, int statusLabel) {
 
 int main(int, char**) {
   UILib ui;
+  connector.conf.Load("");
   ui.SetFontsDir("./fonts");
   std::function<void()> btFunc = std::bind(&TestImageDisplay, std::ref(ui));
   ui.SetWindowSize(1280, 800);
@@ -472,6 +587,8 @@ int main(int, char**) {
   connector.LogCb =
       std::bind(LogToUI, std::placeholders::_1, std::ref(ui), statusLabel);
   connector._voxResId = ui.AddWidget(std::make_shared<InputInt>("vox res um", 32));
+  connector._outPrefixId =
+      ui.AddWidget(std::make_shared<InputText> ("output file", "grid.txt"));
   ui.Run();
   
   const unsigned PollFreqMs = 20;

@@ -27,6 +27,19 @@ void ComputeBBox(const std::vector<float>& verts, BBox& box)
   UpdateBBox(verts, box);
 }
 
+void ComputeBBox(Vec3f v0, Vec3f v1, Vec3f v2, BBox& box) {
+  const unsigned dim = 3;
+  box.vmin = v0;
+  box.vmax = v0;
+  for (unsigned j = 0; j < dim; j++) {
+    box.vmin[j] = std::min(box.vmin[j], v1[j]);
+    box.vmax[j] = std::max(box.vmax[j], v1[j]);
+    box.vmin[j] = std::min(box.vmin[j], v2[j]);
+    box.vmax[j] = std::max(box.vmax[j], v2[j]);
+  }
+  box._init = true;
+}
+
 void BBox::Merge(const BBox& b) {
   if (!b._init) {
     return;
@@ -38,7 +51,7 @@ void BBox::Merge(const BBox& b) {
   } else {
     for (size_t i = 0; i < 3; i++) {
       vmin[i] = std::min(b.vmin[i], vmin[i]);
-      vmax[i] = std::min(b.vmax[i], vmax[i]);
+      vmax[i] = std::max(b.vmax[i], vmax[i]);
     }
   }
 }

@@ -45,6 +45,43 @@ std::string escape_json(const std::string& s) {
   return o.str();
 }
 
+std::string unescape_json_string(const std::string& str) {
+  std::string result;
+  for (size_t i = 0; i < str.length(); ++i) {
+    if (str[i] == '\\') {
+      switch (str[i + 1]) {
+        case '"':
+        case '\\':
+        case '/':
+          result += str[i + 1];
+          break;
+        case 'b':
+          result += '\b';
+          break;
+        case 'f':
+          result += '\f';
+          break;
+        case 'n':
+          result += '\n';
+          break;
+        case 'r':
+          result += '\r';
+          break;
+        case 't':
+          result += '\t';
+          break;
+        default:
+          result += str[i];
+          break;
+      }
+      ++i;
+    } else {
+      result += str[i];
+    }
+  }
+  return result;
+}
+
 int UIConf::Load(const std::string& confFile) {
   std::ifstream in;
   std::string file = _confFile;
@@ -89,7 +126,7 @@ int UIConf::Load(const std::string& confFile) {
     if (key == "workingDir") {
       i++;
       std::string val(&str[t[i].start], t[i].end - t[i].start);
-      workingDir = val;
+      workingDir = unescape_json_string(val);
     } else if (key == "voxResMM") {
       i++;
       std::string val(&str[t[i].start], t[i].end - t[i].start);

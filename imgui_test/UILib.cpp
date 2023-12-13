@@ -285,7 +285,16 @@ void Button::Draw(){
   }
 }
 
-void InputInt::Draw() { ImGui::InputInt(_label.c_str(), &_value, 1, 2000);
+void InputInt::Draw() {
+  ImGui::InputInt(_label.c_str(), &_value, 1, 2000);
+  if (ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+    _entered = true;
+  }
+}
+
+void InputText::Draw() {
+  //imgui only support fixed length
+  ImGui::InputText(_label.c_str(), _value.data(), _value.size());
   if (ImGui::IsKeyPressed(ImGuiKey_Enter)) {
     _entered = true;
   }

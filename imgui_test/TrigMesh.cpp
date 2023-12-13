@@ -40,6 +40,18 @@ int TrigMesh::LoadStep(const std::string& meshFile) {
   return 0;
 }
 
+// compute triangle area.
+float TrigMesh::GetArea(unsigned tIdx) const {
+  unsigned vIdx[3] = {t[tIdx * 3], t[tIdx * 3 + 1], t[tIdx * 3 + 2]};
+  Vec3f v0(v[vIdx[0] * 3], v[vIdx[0] * 3 + 1], v[vIdx[0] * 3 + 2]);
+  Vec3f e10 =
+      Vec3f(v[vIdx[1] * 3], v[vIdx[1] * 3 + 1], v[vIdx[1] * 3 + 2]) - v0;
+  Vec3f e20 =
+      Vec3f(v[vIdx[2] * 3], v[vIdx[2] * 3 + 1], v[vIdx[2] * 3 + 2]) - v0;
+
+  return (e10.cross(e20)).norm() * 0.5f;
+}
+
 Vec3f TrigMesh::GetNormal(unsigned tIdx, const Vec3f& bary) {
   Vec3f n;
   float eps = 1e-5;
@@ -72,6 +84,17 @@ Vec3f TrigMesh::GetNormal(unsigned tIdx, const Vec3f& bary) {
     n[2] = nt[i0 + 2];
   }
   return n;
+}
+
+Vec3f TrigMesh::GetTrigNormal(size_t tIdx) const {
+  return Vec3f(nt[3 * tIdx], nt[3 * tIdx + 1], nt[3 * tIdx + 2]);
+}
+
+Vec2f TrigMesh::GetTriangleUV(unsigned tIdx, unsigned j) const {
+  if (uv.size() <= 3 * tIdx) {
+    return Vec2f(.0f, .0f);
+  }
+  return uv[3 * tIdx + j];
 }
 
 void TrigMesh::ComputeTrigEdges() {
@@ -151,18 +174,6 @@ void TrigMesh::ComputeVertNormals() {
     nv[vIdx].normalize();
     //}
   }
-}
-
-// compute triangle area.
-float TrigMesh::GetArea(unsigned tIdx) const {
-  unsigned vIdx[3] = {t[tIdx * 3], t[tIdx * 3 + 1], t[tIdx * 3 + 2]};
-  Vec3f v0(v[vIdx[0] * 3], v[vIdx[0] * 3 + 1], v[vIdx[0] * 3 + 2]);
-  Vec3f e10 =
-      Vec3f(v[vIdx[1] * 3], v[vIdx[1] * 3 + 1], v[vIdx[1] * 3 + 2]) - v0;
-  Vec3f e20 =
-      Vec3f(v[vIdx[2] * 3], v[vIdx[2] * 3 + 1], v[vIdx[2] * 3 + 2]) - v0;
-
-  return (e10.cross(e20)).norm() * 0.5f;
 }
 
 // https://math.stackexchange.com/questions/18686/uniform-random-point-in-triangle-in-3d

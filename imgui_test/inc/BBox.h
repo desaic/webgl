@@ -11,11 +11,6 @@ struct BBox{
   bool _init = false;
 };
 
-struct BBoxInt {
-	Vec3i mn, mx;
-	BBoxInt() :mn(0), mx(0) {}
-};
-
 ///oriented bounding box
 struct OBBox {
   Vec3f origin;
@@ -27,6 +22,13 @@ struct OBBox {
   }
 };
 
+struct IntBox {
+  /// vertices at min and max coordinates
+  Vec3i min, max;
+  IntBox() : min(0, 0, 0), max(0, 0, 0) {}
+};
+
 void UpdateBBox(const std::vector<float>& verts, BBox& box);
 
 void ComputeBBox(const std::vector<float>& verts, BBox& box);
+void ComputeBBox(Vec3f v0, Vec3f v1, Vec3f v2, BBox& box);

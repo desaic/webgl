@@ -57,8 +57,11 @@ class TrigMesh {
   int LoadStl(const std::string& filename);
   int LoadObj(const std::string& filename);
   int LoadStep(const std::string& filename);
+
   // can get face, edge or vertex normal depending on bary centric coord.
   Vec3f GetNormal(unsigned tIdx, const Vec3f& bary);
+  Vec3f GetTrigNormal(size_t tIdx)const;
+  Vec2f GetTriangleUV(unsigned tIdx, unsigned j) const;
   // compute triangle area.
   float GetArea(unsigned tIdx) const;
   Vec3f GetRandomSample(const unsigned tIdx, const float r1,

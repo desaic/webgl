@@ -49,6 +49,21 @@ class InputInt : public UIWidget {
   bool _entered = false;
 };
 
+class InputText : public UIWidget {
+ public:
+  InputText(const std::string& label, const std::string& initVal)
+      : _label(label) {
+    size_t len = std::min(initVal.size(), _value.size()-1);
+    std::memcpy(_value.data(), initVal.data(), len); 
+    _value[len] = 0;
+  }
+  void Draw() override;
+  std::string _label;
+  //imgui input text only supports fixed buffer
+  std::array<char, 300> _value;
+  bool _entered = false;
+};
+
 class Label : public UIWidget {
  public:
   std::string _text;
