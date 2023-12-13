@@ -90,6 +90,16 @@ int UIConf::Load(const std::string& confFile) {
       i++;
       std::string val(&str[t[i].start], t[i].end - t[i].start);
       workingDir = val;
+    } else if (key == "voxResMM") {
+      i++;
+      std::string val(&str[t[i].start], t[i].end - t[i].start);
+      double f = 0.032;
+      try {
+        f = std::stod(val);
+      } catch (const std::exception& e) {
+        std::cout << key << " invalid value " << val << "\n";
+      }
+      voxResMM = float(f);
     } else {
       std::cout << "Unexpected key: " << key << "\n";
       i++;
@@ -121,6 +131,7 @@ int UIConf::Save() {
   const bool LAST_ITEM = true;
   out << "{\n";
   PrintJson("workingDir", workingDir, out);
+  PrintJson("voxResMM", voxResMM, out);
   PrintJson("absoluteZero", -273.15f, out, LAST_ITEM);
   out<<"}\n";
   return 0;

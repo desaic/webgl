@@ -14,11 +14,31 @@ void UpdateBBox(const std::vector<float>& verts, BBox& box)
 }
 
 void ComputeBBox(const std::vector<float>& verts, BBox& box)
-{
+{  
+  if (verts.size() == 0) {
+    return;
+  }
   const unsigned dim = 3;
   for (size_t i = 0; i < 3; i++) {
     box.vmin[i] = verts[i];
     box.vmax[i] = verts[i];
   }
+  box._init = true;
   UpdateBBox(verts, box);
+}
+
+void BBox::Merge(const BBox& b) {
+  if (!b._init) {
+    return;
+  }
+  if (!_init) {
+    vmin = b.vmin;
+    vmax = b.vmax;
+    _init = true;
+  } else {
+    for (size_t i = 0; i < 3; i++) {
+      vmin[i] = std::min(b.vmin[i], vmin[i]);
+      vmax[i] = std::min(b.vmax[i], vmax[i]);
+    }
+  }
 }

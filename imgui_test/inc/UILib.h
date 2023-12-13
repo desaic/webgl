@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -37,6 +38,15 @@ class Button : public UIWidget {
   int _id = 0;
   std::string GetUniqueString() const;
   bool sameLine_ = false;
+};
+
+class InputInt : public UIWidget {
+ public:
+  InputInt(const std::string& label, int val) : _label(label), _value(val) {}
+  void Draw() override;
+  std::string _label;
+  int _value;
+  bool _entered = false;
 };
 
 class Label : public UIWidget {
@@ -149,6 +159,8 @@ class UILib {
 
   int AddPlot(float initMin, float initMax,
               const std::string& title);
+
+  int AddWidget(std::shared_ptr <UIWidget> widget);
 
   int SetPlotData(int widgetId, const std::vector<float>& data);
 

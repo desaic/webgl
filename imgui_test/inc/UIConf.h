@@ -11,6 +11,7 @@ class UIConf {
   void SetWorkingDir(const std::string& dir) { workingDir = dir; }
   std::string _confFile = "./uiconf.json";
   int _numTokens = 128;
+  float voxResMM = 0.032f;
   std::string workingDir = "./";
 };
 #endif

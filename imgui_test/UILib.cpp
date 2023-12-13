@@ -91,6 +91,12 @@ int UILib::AddPlot(float initMin, float initMax, const std::string& title) {
   return id;
 }
 
+int UILib::AddWidget(std::shared_ptr<UIWidget> widget) {
+  int id = int(uiWidgets_.size());
+  uiWidgets_.push_back(widget);
+  return id;
+}
+
 int UILib::SetPlotData(int widgetId, const std::vector<float>& data) {
   std::lock_guard<std::mutex> lock(_widgetsLock);
   if (widgetId < 0 || widgetId >= uiWidgets_.size()) {
@@ -276,6 +282,12 @@ void Button::Draw(){
   }
   if (ImGui::Button(bString.c_str()) && _onClick) {
     _onClick();
+  }
+}
+
+void InputInt::Draw() { ImGui::InputInt(_label.c_str(), &_value, 1, 2000);
+  if (ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+    _entered = true;
   }
 }
 

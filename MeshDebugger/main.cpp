@@ -5,6 +5,8 @@
 #include <sstream>
 
 #include "Array2D.h"
+#include "Array3D.h"
+#include "BBox.h"
 #include "ImageIO.h"
 #include "TrigMesh.h"
 #include "UIConf.h"
@@ -320,9 +322,28 @@ void DebugUV(UILib & ui) {
 //info for voxelizing
 //multi-material interface connector designs
 struct ConnectorVox {
+  void LoadMeshes();
+  void VoxelizeMeshes();
+  void Log(const std::string& str) const {
+    if (LogCb) {
+      LogCb(str);
+    } else {
+      std::cout << str << "\n";
+    }
+  }
+  void Refresh(UILib& ui);
+
+  std::function<void(const std::string&)> LogCb;
+
   std::vector<std::string> filenames;
-  void LoadMeshes(const std::vector<std::string>& files);
+  bool _hasFileNames = false;
+  bool _fileLoaded = false;  
+  bool _voxelized = false;
+  int _voxResId = -1;
   std::vector<TrigMesh> meshes;
+  Array3D8u grid;
+
+  UIConf conf;
 };
 
 std::string getFileExtension(const std::string& filename) {
@@ -334,10 +355,11 @@ std::string getFileExtension(const std::string& filename) {
   return "";
 }
 
-void ConnectorVox::LoadMeshes(const std::vector<std::string>& files) {
-  meshes.resize(files.size());
-  for (size_t i = 0; i < files.size();i++) {
-    const auto& file = files[i]; 
+void ConnectorVox::LoadMeshes() {
+  meshes.resize(filenames.size());
+  Log("load meshes");
+  for (size_t i = 0; i < filenames.size();i++) {
+    const auto& file = filenames[i]; 
     std::string ext = getFileExtension(file);
     std::cout << ext << "\n";
     std::transform(ext.begin(), ext.end(), ext.begin(),
@@ -351,12 +373,64 @@ void ConnectorVox::LoadMeshes(const std::vector<std::string>& files) {
       meshes[i].LoadStl(file);
     }
   }
+
+  _fileLoaded = true;
+  Log("load meshes done");
+}
+
+void ConnectorVox::VoxelizeMeshes() {
+  Log("voxelize meshes");
+  BBox box;
+  for (auto m:meshes) {
+    BBox mbox;    
+    ComputeBBox(m.v, mbox);
+    box.Merge(mbox);
+  }
+  float voxRes = conf.voxResMM;
+  _voxelized = true;
+  Log("voxelize meshes done");
+}
+
+bool FloatEq(float a, float b, float eps) { return std::abs(a - b) < eps; }
+
+void ConnectorVox::Refresh(UILib & ui) {
+  //update configs
+  bool confChanged = false;
+  const float EPS = 5e-5f;
+  const float umToMM=0.001f;
+  if (_voxResId >= 0) {
+    std::shared_ptr<InputInt> input =
+        std::dynamic_pointer_cast<InputInt>(ui.GetWidget(_voxResId));
+    float uiVoxRes = conf.voxResMM;
+    if (input &&input->_entered) {
+      uiVoxRes = float(input->_value * umToMM);      
+      input->_entered = false;
+    }
+    if (!FloatEq(uiVoxRes, conf.voxResMM,EPS)) {
+      conf.voxResMM = uiVoxRes;
+      confChanged = true;
+    }
+  }
+
+  if (confChanged) {
+    conf.Save();
+  }
+
+  if (_hasFileNames && !_fileLoaded) {
+    LoadMeshes();
+    _voxelized = false;
+  }
+  if (_fileLoaded && !_voxelized) {
+    VoxelizeMeshes();
+  }
 }
 
 ConnectorVox connector;
 
 void OnOpenConnectorMeshes(const std::vector<std::string>& files) {
-  connector.LoadMeshes(files);
+  connector.filenames = files;
+  connector._fileLoaded = false;
+  connector._hasFileNames = true;
 }
 
 void OpenConnectorMeshes(UILib& ui, const UIConf & conf) {
@@ -369,14 +443,16 @@ void OnChangeDir(std::string dir, UIConf& conf) {
   conf.Save();
 }
 
+void LogToUI(const std::string & str, UILib&ui, int statusLabel) {
+  ui.SetLabelText(statusLabel, str);
+}
+
 int main(int, char**) {
   UILib ui;
-  UIConf conf;
-  conf.Load("");
   ui.SetFontsDir("./fonts");
   std::function<void()> btFunc = std::bind(&TestImageDisplay, std::ref(ui));
   ui.SetWindowSize(1280, 800);
-  ui.AddButton("Open Meshes", [&] { OpenConnectorMeshes(ui, conf); });
+  ui.AddButton("Open Meshes", [&] { OpenConnectorMeshes(ui, connector.conf); });
   int buttonId = ui.AddButton("GLInfo", {});
   int gl_info_id = ui.AddLabel(" ");
   std::function<void()> showGLInfoFunc =
@@ -384,7 +460,7 @@ int main(int, char**) {
   ui.SetButtonCallback(buttonId, showGLInfoFunc);
   ui.AddButton("Show image", btFunc);
   ui.SetWindowSize(1280, 800);
-  ui.SetChangeDirCb([&](const std::string& dir) { OnChangeDir(dir, conf); });
+  ui.SetChangeDirCb([&](const std::string& dir) { OnChangeDir(dir, connector.conf); });
   debState.sliderId = ui.AddSlideri("trig level", 20, 0, 9999);
   debState.levelSlider =
       std::dynamic_pointer_cast<Slideri>(ui.GetWidget(debState.sliderId));
@@ -392,13 +468,19 @@ int main(int, char**) {
   debState.trigLabelCheckBox =
       std::dynamic_pointer_cast<CheckBox>(ui.GetWidget(boxId));
   ui.SetKeyboardCb(HandleKeys);
+  int statusLabel = ui.AddLabel("status");
+  connector.LogCb =
+      std::bind(LogToUI, std::placeholders::_1, std::ref(ui), statusLabel);
+  connector._voxResId = ui.AddWidget(std::make_shared<InputInt>("vox res um", 32));
   ui.Run();
+  
   const unsigned PollFreqMs = 20;
   debState.ui = &ui;
   while (ui.IsRunning()) {
     debState.Refresh();
+    connector.Refresh(ui);
     std::this_thread::sleep_for(std::chrono::milliseconds(PollFreqMs));
   }
-  conf.Save();
+  connector.conf.Save();
   return 0;
 }

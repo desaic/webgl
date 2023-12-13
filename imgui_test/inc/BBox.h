@@ -7,6 +7,8 @@ struct BBox{
 	Vec3f vmin, vmax;
 	BBox():vmin(0.0f,0.0f,0.0f),
 		vmax(0.0f,0.0f,0.0f) {}
+  void Merge(const BBox& b);
+  bool _init = false;
 };
 
 struct BBoxInt {
