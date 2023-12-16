@@ -300,6 +300,12 @@ void InputText::Draw() {
   }
 }
 
+std::string InputText::GetString() const {
+  size_t len = strnlen(_value.data(), _value.size());
+  std::string out(_value.begin(), _value.begin() + len);
+  return out;
+}
+
 void Label::Draw() { ImGui::Text("%s", _text.c_str()); }
 
 int UILib::LoadFonts(ImGuiIO&io) {

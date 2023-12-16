@@ -123,7 +123,12 @@ int UIConf::Load(const std::string& confFile) {
   /* Loop over all keys of the root object */
   for (int i = 1; i < r; i++) {
     std::string key(&str[t[i].start], t[i].end - t[i].start);
-    if (key == "workingDir") {
+    if (key == "outputFile") {
+      i++;
+      std::string val(&str[t[i].start], t[i].end - t[i].start);
+      outputFile = val;
+    }
+    else if (key == "workingDir") {
       i++;
       std::string val(&str[t[i].start], t[i].end - t[i].start);
       workingDir = unescape_json_string(val);
@@ -167,6 +172,7 @@ int UIConf::Save() {
   }
   const bool LAST_ITEM = true;
   out << "{\n";
+  PrintJson("outputFile", outputFile, out);
   PrintJson("workingDir", workingDir, out);
   PrintJson("voxResMM", voxResMM, out);
   PrintJson("absoluteZero", -273.15f, out, LAST_ITEM);

@@ -57,6 +57,7 @@ class InputText : public UIWidget {
     std::memcpy(_value.data(), initVal.data(), len); 
     _value[len] = 0;
   }
+  std::string GetString()const;
   void Draw() override;
   std::string _label;
   //imgui input text only supports fixed buffer

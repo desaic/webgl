@@ -11,6 +11,7 @@ class UIConf {
   void SetWorkingDir(const std::string& dir) { workingDir = dir; }
   std::string _confFile = "./uiconf.json";
   int _numTokens = 128;
+  std::string outputFile = "grid.txt";
   float voxResMM = 0.032f;
   std::string workingDir = "./";
 };
