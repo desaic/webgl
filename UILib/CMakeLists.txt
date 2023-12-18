@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0)
-project(ImguiExample)
+project(UILib)
 set(BIN ImguiExample)
 set(CMAKE_CXX_STANDARD 20)
 file(GLOB_RECURSE SRC "*.cpp" "*.h")

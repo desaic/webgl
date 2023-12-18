@@ -454,7 +454,7 @@ void UILib::UILoop() {
     
     if (_showGL) {
 
-      //ImGui::Begin("GL view", 0, ImGuiWindowFlags_NoBringToFrontOnFocus);
+      ImGui::Begin("GL view", 0, ImGuiWindowFlags_NoBringToFrontOnFocus);
       if (io.WantCaptureMouse && ImGui::IsWindowHovered() &&
               ImGui::IsWindowFocused()) {
         bool left = false, mid = false, right = false;
@@ -478,10 +478,11 @@ void UILib::UILoop() {
         }
       }
       _glRender.Render();
-      ImGui::Image((ImTextureID)(size_t(_glRender.TexId())),
+      ImGui::Image(
+          (ImTextureID)(size_t(_glRender.TexId())),
                    ImVec2(float(_glRender.Width()), float(_glRender.Height())),
                    {0, 1}, {1, 0});
-      //ImGui::End();
+      ImGui::End();
 
     }
     //image viewer
@@ -490,7 +491,6 @@ void UILib::UILoop() {
     ImGui::SetNextWindowSize(ImVec2(300, 300), ImGuiCond_FirstUseEver);
     ImGuiWindowFlags image_window_flags = 0;
     image_window_flags |= ImGuiWindowFlags_AlwaysHorizontalScrollbar;
-    image_window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus;
     std::string imageWinTitle;
     
     {
