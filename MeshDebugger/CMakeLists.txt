@@ -8,6 +8,14 @@ set(CMAKE_CXX_STANDARD 17)
 include_directories("../imgui_test/inc/")
 link_directories("../imgui_test/extern/glfw3.3.8")
 link_directories("../imgui_test/extern/glew-2.1.0")
+
+option(USE_NANOVDB "test openvdb" OFF)
+if (USE_NANOVDB)
+  set(NANOVDB_INC_DIR "F:/github/openvdb/nanovdb/")
+  include_directories(${NANOVDB_INC_DIR})
+  add_compile_definitions(USE_NANOVDB)
+endif()
+
 add_executable(${BIN} ${EXE_SRC} resource/icons.rc)
 target_link_libraries(${BIN} UILib imgui glfw3 opengl32 glew32s)
 

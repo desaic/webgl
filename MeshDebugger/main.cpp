@@ -17,6 +17,7 @@
 #include "Timer.h"
 #include "ZRaycast.h"
 #include "RaycastConf.h"
+#include "TestNanoVdb.h"
 
 std::vector<Vec3b> generateRainbowPalette(int numColors);
 
@@ -479,16 +480,16 @@ void ConnectorVox::VoxelizeMeshes() {
     box.Merge(mbox);
   }
   float voxRes = conf.voxResMM;
-  voxconf conf;
-  conf.unit = Vec3f(voxRes, voxRes, voxRes);
+  voxconf vconf;
+  vconf.unit = Vec3f(voxRes, voxRes, voxRes);
 
   int band = 0;
-  box.vmin = box.vmin - float(band) * conf.unit;
-  box.vmax = box.vmax + float(band) * conf.unit;
-  conf.origin = box.vmin;
+  box.vmin = box.vmin - float(band) * vconf.unit;
+  box.vmax = box.vmax + float(band) * vconf.unit;
+  vconf.origin = box.vmin;
 
-  Vec3f count = (box.vmax - box.vmin) / conf.unit;
-  conf.gridSize = Vec3u(count[0] + 1, count[1] + 1, count[2] + 1);
+  Vec3f count = (box.vmax - box.vmin) / vconf.unit;
+  vconf.gridSize = Vec3u(count[0] + 1, count[1] + 1, count[2] + 1);
   grid.Allocate(count[0], count[1], count[2]);
 
   for (unsigned i = 0; i < meshes.size(); i++) {
@@ -497,10 +498,11 @@ void ConnectorVox::VoxelizeMeshes() {
   _voxelized = true;
   for (unsigned i = 0; i < meshes.size(); i++) {
     uint8_t mat = i + 1;
-    SaveVolAsObjMesh(dir + "/vox_out" + std::to_string(i + 1) + ".obj", grid,
-                     (float*)(&conf.unit), i + 1);
+    SaveVolAsObjMesh(
+        dir + "/" + conf.outputFile + std::to_string(i + 1) + ".obj", grid,
+                     (float*)(&vconf.unit), i + 1);
   }
-  std::string gridFilename = dir + "/grid.txt";
+  std::string gridFilename = dir + "/" + conf.outputFile;
   SaveVoxTxt(grid, voxRes, gridFilename);
   Log("voxelize meshes done");
 }
@@ -524,6 +526,15 @@ void ConnectorVox::Refresh(UILib & ui) {
       conf.voxResMM = uiVoxRes;
       confChanged = true;
     }
+  }
+  if (_outPrefixId >= 0) {
+    std::shared_ptr<InputText> input =
+        std::dynamic_pointer_cast<InputText>(ui.GetWidget(_outPrefixId));
+    if (input && input->_entered) {
+      input->_entered = false;
+    }
+    conf.outputFile = input->GetString();
+    confChanged = true;
   }
 
   if (confChanged) {
@@ -562,6 +573,7 @@ void LogToUI(const std::string & str, UILib&ui, int statusLabel) {
 }
 
 int main(int, char**) {
+  TestNanoVdb();
   UILib ui;
   connector.conf.Load("");
   ui.SetFontsDir("./fonts");
@@ -588,7 +600,7 @@ int main(int, char**) {
       std::bind(LogToUI, std::placeholders::_1, std::ref(ui), statusLabel);
   connector._voxResId = ui.AddWidget(std::make_shared<InputInt>("vox res um", 32));
   connector._outPrefixId =
-      ui.AddWidget(std::make_shared<InputText> ("output file", "grid.txt"));
+      ui.AddWidget(std::make_shared<InputText> ("output file", connector.conf.outputFile));
   ui.Run();
   
   const unsigned PollFreqMs = 20;
