@@ -453,7 +453,8 @@ void UILib::UILoop() {
     }
     
     if (_showGL) {
-      ImGui::Begin("GL view", 0, ImGuiWindowFlags_NoBringToFrontOnFocus);
+
+      //ImGui::Begin("GL view", 0, ImGuiWindowFlags_NoBringToFrontOnFocus);
       if (io.WantCaptureMouse && ImGui::IsWindowHovered() &&
               ImGui::IsWindowFocused()) {
         bool left = false, mid = false, right = false;
@@ -480,7 +481,7 @@ void UILib::UILoop() {
       ImGui::Image((ImTextureID)(size_t(_glRender.TexId())),
                    ImVec2(float(_glRender.Width()), float(_glRender.Height())),
                    {0, 1}, {1, 0});
-      ImGui::End();
+      //ImGui::End();
 
     }
     //image viewer

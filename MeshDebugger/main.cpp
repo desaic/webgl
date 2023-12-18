@@ -10,10 +10,12 @@
 #include "cpu_voxelizer.h"
 #include "MeshUtil.h"
 #include "ImageIO.h"
+#include "ImageUtils.h"
 #include "TrigMesh.h"
 #include "UIConf.h"
 #include "UILib.h"
 #include "lodepng.h"
+#include "StringUtil.h"
 #include "Timer.h"
 #include "ZRaycast.h"
 #include "RaycastConf.h"
@@ -295,21 +297,6 @@ void HandleKeys(KeyboardInput input) {
   }
 }
 
-void ConvertChan3To4(const Array2D8u& rgb, Array2D8u& rgba) {
-  Vec2u inSize = rgb.GetSize();
-  unsigned realWidth = inSize[0] / 3;
-  rgba.Allocate(4 * realWidth, inSize[1]);
-  size_t numPix = realWidth * inSize[1];
-  const auto& inData = rgb.GetData();
-  auto& outData = rgba.GetData();
-  for (size_t i = 0; i < numPix; i++) {
-    outData[4 * i] = inData[3 * i];
-    outData[4 * i + 1] = inData[3 * i + 1];
-    outData[4 * i + 2] = inData[3 * i + 2];
-    outData[4 * i + 3] = 255;
-  }
-}
-
 void DebugUV(UILib & ui) {
   auto mesh = std::make_shared<TrigMesh>();
   mesh->LoadObj("F:/dump/uv_out.obj");
@@ -354,15 +341,6 @@ struct ConnectorVox {
   UIConf conf;
 };
 
-std::string getFileExtension(const std::string& filename) {
-  size_t dotPosition = filename.find_last_of('.');
-  if (dotPosition != std::string::npos &&
-      dotPosition != filename.length() - 1) {
-    return filename.substr(dotPosition + 1);
-  }
-  return "";
-}
-
 void ConnectorVox::LoadMeshes() {
   if (filenames.size() == 0) {
     return;
@@ -371,7 +349,7 @@ void ConnectorVox::LoadMeshes() {
   Log("load meshes");
   for (size_t i = 0; i < filenames.size();i++) {
     const auto& file = filenames[i]; 
-    std::string ext = getFileExtension(file);
+    std::string ext = get_suffix(file);
     std::cout << ext << "\n";
     std::transform(ext.begin(), ext.end(), ext.begin(),
                    [](unsigned char c) { return std::tolower(c); });
@@ -588,15 +566,6 @@ struct PcdPoints {
   const float* operator[](size_t i) const{ return &(_data[i * floatsPerPoint]); }
 };
 
-std::string get_suffix(const std::string& str,
-                       const std::string& delimiters = ".") {
-  size_t pos = str.find_last_of(delimiters);
-  if (pos == std::string::npos) {
-    return "";  // No suffix found
-  }
-  return str.substr(pos + 1);
-}
-
 void LoadPCD(const std::string& file, PcdPoints& points) {
   std::cout << "loading " << file << "\n";
   std::ifstream in(file, std::ios_base::binary);
@@ -652,26 +621,6 @@ void ComputeBBox(BBox & box, const PcdPoints& points) {
       box.vmax[d] = std::max((*pt)[d], box.vmax[d]);
     }
   }
-}
-
-std::string remove_suffix(const std::string& str, const std::string& suffix) {
-  size_t pos = str.rfind(suffix);
-  if (pos != std::string::npos) {
-    return str.substr(0, pos);
-  } else {
-    return str;  // Suffix not found, return original string
-  }
-}
-
-void RGBToGrey(uint32_t& c) {
-  uint8_t red = (c >> 16) & 0xff;
-  uint8_t green = (c >> 8) & 0xff;
-  uint8_t blue = (c) & 0xff;
-  float grey = 0.299 * red + 0.587 * green + 0.114 * blue;
-  if (grey > 255) {
-    grey = 255;
-  }
-  c=uint32_t(grey);
 }
 
 void PreviewPCDToPng(std::string pcdfile) { 

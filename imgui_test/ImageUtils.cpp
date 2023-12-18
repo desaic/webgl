@@ -41,3 +41,29 @@ void DrawLine(Array2D4b& img, Vec2f p0, Vec2f p1, Vec4b color)
     }
   }
 }
+
+void ConvertChan3To4(const Array2D8u& rgb, Array2D8u& rgba) {
+  Vec2u inSize = rgb.GetSize();
+  unsigned realWidth = inSize[0] / 3;
+  rgba.Allocate(4 * realWidth, inSize[1]);
+  size_t numPix = realWidth * inSize[1];
+  const auto& inData = rgb.GetData();
+  auto& outData = rgba.GetData();
+  for (size_t i = 0; i < numPix; i++) {
+    outData[4 * i] = inData[3 * i];
+    outData[4 * i + 1] = inData[3 * i + 1];
+    outData[4 * i + 2] = inData[3 * i + 2];
+    outData[4 * i + 3] = 255;
+  }
+}
+
+void RGBToGrey(uint32_t& c) {
+  uint8_t red = (c >> 16) & 0xff;
+  uint8_t green = (c >> 8) & 0xff;
+  uint8_t blue = (c) & 0xff;
+  float grey = 0.299 * red + 0.587 * green + 0.114 * blue;
+  if (grey > 255) {
+    grey = 255;
+  }
+  c=uint32_t(grey);
+}
