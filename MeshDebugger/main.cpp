@@ -685,8 +685,8 @@ void PreviewPCDToPng(std::string pcdfile) {
   Vec3f at = 0.5f * (box.vmin + box.vmax);
   Vec3f size = box.vmax = box.vmin;
   float diagLen = size.norm();
-  float eyeDist = 2 * diagLen;
-  Vec3f eye = box.vmax + eyeDist * (box.vmax-box.vmin);
+  float eyeDist = 5 * diagLen;
+  Vec3f eye = box.vmax + eyeDist * ((box.vmax-box.vmin).normalizedCopy());
 
   const unsigned IMAGE_WIDTH = 800;
   Array2D8u image(IMAGE_WIDTH, IMAGE_WIDTH);
