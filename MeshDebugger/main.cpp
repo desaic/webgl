@@ -762,6 +762,8 @@ int main(int, char**) {
   
   const unsigned PollFreqMs = 20;
   debState.ui = &ui;
+
+  DebugUV(ui);
   while (ui.IsRunning()) {
     debState.Refresh();
     connector.Refresh(ui);

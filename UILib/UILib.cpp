@@ -455,6 +455,8 @@ void UILib::UILoop() {
     if (_showGL) {
 
       ImGui::Begin("GL view", 0, ImGuiWindowFlags_NoBringToFrontOnFocus);
+      ImVec2 windowsize = ImGui::GetContentRegionAvail();
+      _glRender.Resize(uint32_t(windowsize[0]), uint32_t(windowsize[1]));
       if (io.WantCaptureMouse && ImGui::IsWindowHovered() &&
               ImGui::IsWindowFocused()) {
         bool left = false, mid = false, right = false;
