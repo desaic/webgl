@@ -10,7 +10,8 @@ int Water::Allocate(unsigned sx, unsigned sy, unsigned sz) {
   const unsigned numZ = sz + 2;
   u.Allocate(numX, numY, numZ);
   uTmp.Allocate(numX, numY, numZ);
-  phi.Allocate(numX, numY, numZ);
+  phi.Allocate(numX+1, numY+1, numZ+1);
+  // Initialize phi?
   p.Allocate(numX, numY, numZ);
   numCells = Vec3u(numX, numY, numZ);
   SetBoundary();
@@ -95,6 +96,19 @@ int Water::AdvectU() {
   return 0;
 }
 
+int Water::AdvectPhi() { 
+  const Vec3u& sz = u.GetSize();
+  for (int i = 0; i < sz[0]; ++i) {
+    for (int j = 0; j < sz[1]; ++j) {
+      for (int k = 0; k < sz[2]; ++k) { 
+
+      }
+    }
+  }
+  return 0;
+}
+
+
 int Water::AddBodyForce() {
     const Vec3u& sz = u.GetSize();
     for (int i = 1; i < sz[0] - 1; ++i) {
@@ -130,7 +144,7 @@ int Water::SolveP() {
                     int sz0 = s(x  , y  , z-1);
                     int sz1 = s(x  , y  , z+1);
 
-                    int s = sx0 + sx1 + sy0 + sy1 + sz0 + sz1; // number of neighboring cells contributing (i.e. not fixed/boundaries)
+                    int s = sx0 + sx1 + sy0 + sy1 + sz0 + sz1; 
 
                     if (s == 0) continue;
                     float divergence = (
@@ -158,8 +172,6 @@ int Water::SolveP() {
 
     return 0;
 }
-
-int Water::AdvectPhi() { return 0; }
 
 int Water::Step() {
   AddBodyForce();
@@ -265,6 +277,7 @@ float Water::InterpU(Vec3f& x, Axis axis) {
   float a1 = ((x[0]-dx) - x0 * h) / h;
   float b1 = ((x[1]-dy) - y0 * h) / h;
   float c1 = ((x[2]-dz) - z0 * h) / h;
+
   int x1 = std::min(x0 + 1, int(sz[0] - 1));
   int y1 = std::min(y0 + 1, int(sz[1] - 1));
   int z1 = std::min(z0 + 1, int(sz[2] - 1));
@@ -295,18 +308,6 @@ float Water::InterpU(Vec3f& x, Axis axis) {
 
   // Z
   return (c0 * u0) + (c1 * u1);
-}
-
-void Water::ClampBounds(Vec3f& x) {
-  const Vec3u& sz = u.GetSize();
-
-  x[0] = std::max(x[0], 0.f);
-  x[1] = std::max(x[1], 0.f);
-  x[2] = std::max(x[2], 0.f);
-
-  x[0] = std::min(x[0], (sz[0] - 1) * h);
-  x[1] = std::min(x[1], (sz[1] - 1) * h);
-  x[2] = std::min(x[2], (sz[2] - 1) * h);
 }
 
 float Water::InterpPhi(const Vec3f& x) { 

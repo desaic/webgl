@@ -228,6 +228,12 @@ void testStep() {
   Water water;
   water.Allocate(50, 50, 50);
   water.Step();
+
+  while (true) {
+    std::cout << "S";
+    water.Step();
+  }
+
 }
 
 int main(int argc, char* argv[]){

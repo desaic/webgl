@@ -28,11 +28,14 @@ class Water {
   Array3D<Vec3f>& U() { return u; }
   const Array3D<float>& P() { return p; }
  private:
+  // Boundary
+  Array3D<uint8_t> s;
+
   //defined on face centers
   // size is +1 of voxel grid size.
-  Array3D<uint8_t> s;
   Array3D<Vec3f> u;
   Array3D<Vec3f> uTmp;
+
   //defined on vertices
   //size is +1 of voxel grid size.
   Array3D<float> phi;
@@ -46,7 +49,6 @@ class Water {
   float gravity = -9.81f;
   Vec3u numCells;
   
-  void ClampBounds(Vec3f& x);
   float AvgU_y(unsigned i, unsigned j, unsigned k);
   float AvgU_z(unsigned i, unsigned j, unsigned k);
   float AvgV_x(unsigned i, unsigned j, unsigned k);
