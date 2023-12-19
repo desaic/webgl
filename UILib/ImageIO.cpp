@@ -50,6 +50,25 @@ int SavePngColor(const std::string& filename, const Array2D8u& arr) {
   return 0;
 }
 
+int SavePngColor(const std::string& filename, const Array2D4b& arr) {
+  std::vector<unsigned char> buf;
+  lodepng::State state;
+  state.info_raw.colortype = LCT_RGBA;
+  state.info_raw.bitdepth = 8;
+  state.info_png.color.colortype = LCT_RGB;
+  state.info_png.color.bitdepth = 8;
+  unsigned error = lodepng::encode(buf, (unsigned char*)arr.DataPtr(), arr.GetSize()[0],
+                                   arr.GetSize()[1], state);
+  if (error) {
+    return -2;
+  }
+  error = lodepng::save_file(buf, filename.c_str());
+  if (error) {
+    return -1;
+  }
+  return 0;
+}
+
 int LoadPngGrey(const std::string& filename, Array2D8u& arr) {
   std::vector<unsigned char> buf;
   lodepng::State state;

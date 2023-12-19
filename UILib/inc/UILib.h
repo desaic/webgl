@@ -259,7 +259,7 @@ class UILib {
   std::thread _uiThread;
   std::array<float, 4> _clearColor = {0.5f, 0.5f, 0.5f, 1};
   GLFWwindow* _window = nullptr;
-  int _width = 2278;
+  int _width = 1280;
   int _height = 900;
 
   int _initImagePosX = 20;

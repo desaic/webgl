@@ -19,7 +19,6 @@ void GLTex::UpdateTextureData() {
     std::cout << "can only display gray RGB, or RGBA image.\n";
     return;
   }
-
   //already allocated correct GL texture buffer
   if (!_needAlloc) {
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, _height, format, type,
@@ -53,6 +52,8 @@ void GLTex::UpdateTextureData() {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap);
   // instead of opengl default 4 byte alignment
   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+  std::cout << width << " " << _height << "\n";
+
   glTexImage2D(GL_TEXTURE_2D, 0, format, width, _height, 0, format, type,
                _buf.data());
   errCode = glGetError();

@@ -22,7 +22,7 @@ int LoadPngColor(const std::string& filename, Array2D8u& slice);
 /// <returns>0 on success. -1 could not open output file.
 /// -2 failure to encode file.</returns>
 int SavePngColor(const std::string& filename, const Array2D8u& arr);
-
+int SavePngColor(const std::string& filename, const Array2D4b& arr);
 /// Load a gray scale png to a 2D byte array.
 /// <returns>0 on success. -1 file not found. -2 failure to decode
 /// file.</returns>
