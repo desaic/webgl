@@ -195,11 +195,11 @@ void testInterpU() {
   for (int i = 0; i < 4; ++ i) {
     for (int j = 0; j < 4; ++ j) {
       for (int k = 0; k < 4; ++k) {
-        float x = 0.25f * i * h;
-        float y = 0.25f * j * h;
-        float z = 0.25f * k * h;
+        float x = 0.25 *i * h;
+        float y = 0.25* j * h;
+        float z = 0.25* k * h;
         Vec3f p(x,y,z);
-        Vec3f interpolated = water.InterpU(p);
+        Vec3f interpolated = water.InterpU(p, Axis::X);
 
         std::cout << interpolated[1] << " ";
       }
@@ -209,7 +209,7 @@ void testInterpU() {
   }
 }
 
-void testSolvePZero() {
+void testSolvePSimple() {
   Water water;
   water.Allocate(2, 2, 1);
   Array3D<Vec3f>& u = water.U();
@@ -224,11 +224,17 @@ void testSolvePZero() {
   water.Step();
 }
 
+void testStep() {
+  Water water;
+  water.Allocate(50, 50, 50);
+  water.Step();
+}
+
 int main(int argc, char* argv[]){
   UILib ui;
-  //testSolvePZero();
-
-  testInterpU();
+  //testSolvePSimple();
+  testStep();
+  //testInterpU();
   //testAdvectU_3x3_X_interior();
   //testAdvectU_3x3_X_constant();
   //testAdvectU_3x3_Y_constant();

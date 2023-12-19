@@ -14,6 +14,7 @@ int Water::Allocate(unsigned sx, unsigned sy, unsigned sz) {
   p.Allocate(numX, numY, numZ);
   numCells = Vec3u(numX, numY, numZ);
   SetBoundary();
+
   return 0;
 }
 
@@ -52,11 +53,8 @@ int Water::AdvectU() {
           x -= dt * uX;
           y -= dt * uY;
           z -= dt * uZ;
-          std::cout << x << " " << y << " " << z << std::endl;
-          uTmp(i, j, k)[0] = InterpU(Vec3f(x, y, z))[0];
-          std::cout << uTmp(i,j,k)[0] << std::endl;
+          uTmp(i, j, k)[0] = InterpU(Vec3f(x, y, z), Axis::X);
         }
-
         // y
         if (s(i, j - 1, k) > 0 && i < sz[0] - 1 && k < sz[2] - 1) {
           float x = i*h + h2;
@@ -71,9 +69,8 @@ int Water::AdvectU() {
           y -= dt * uY;
           z -= dt * uZ;
 
-          uTmp(i, j, k)[1] = InterpU(Vec3f(x, y, z))[1];
+          uTmp(i, j, k)[1] = InterpU(Vec3f(x, y, z), Axis::Y);
         }
-
         // z
         if (s(i, j, k - 1) > 0 && i < sz[0] - 1 && j < sz[1] - 1) {
           float x = i*h + h2;
@@ -88,7 +85,7 @@ int Water::AdvectU() {
           y -= dt * uY;
           z -= dt * uZ;
 
-          uTmp(i, j, k)[2] = InterpU(Vec3f(x, y, z))[2];
+          uTmp(i, j, k)[2] = InterpU(Vec3f(x, y, z), Axis::Z);
         }
       }
     }
@@ -226,54 +223,75 @@ float Water::AvgW_y(unsigned i, unsigned j, unsigned k) {
   );
 }
 
-Vec3f Water::InterpU(Vec3f& x) { 
+float Water::InterpU(Vec3f& x, Axis axis) { 
   const Vec3u& sz = u.GetSize();
 
-  x[0] = std::max(std::min(x[0], sz[0] * h), 0.0f);
-  x[1] = std::max(std::min(x[1], sz[1] * h), 0.0f);
-  x[2] = std::max(std::min(x[2], sz[2] * h), 0.0f);
+  const float halfH = h/2.0;
 
-  x = x/h;
+  x[0] = std::max(std::min(x[0], sz[0] * h), h);
+  x[1] = std::max(std::min(x[1], sz[1] * h), h);
+  x[2] = std::max(std::min(x[2], sz[2] * h), h);
 
-  if (x[0] < 0 || x[0] > sz[0] - 1 ||
-      x[1] < 0 || x[1] > sz[1] - 1 ||
-      x[2] < 0 || x[2] > sz[2] - 1) {
-    return Vec3f(0,0,0);
+  float dx = 0.f;
+  float dy = 0.f;
+  float dz = 0.f;
+
+  uint8_t uIdx = 0;
+
+  switch(axis) { 
+    case Axis::X:
+      dy = halfH;
+      dz = halfH;
+      uIdx = 0;
+      break;
+    case Axis::Y:
+      dx = halfH;
+      dz = halfH;
+      uIdx = 1;
+      break;
+    case Axis::Z:
+      dx = halfH;
+      dy = halfH;
+      uIdx = 2;
+      break;
+    default:
+      break;
   }
 
-  int x0 = floor(x[0]);
-  int x1 = x0 + 1;
-  int y0 = floor(x[1]);
-  int y1 = y0 + 1;
-  int z0 = floor(x[2]);
-  int z1 = z0 + 1;
+  int x0 = std::min(unsigned(floor((x[0] - dx) / h)), sz[0] - 1);
+  int y0 = std::min(unsigned(floor((x[1] - dy) / h)), sz[1] - 1);
+  int z0 = std::min(unsigned(floor((x[2] - dz) / h)), sz[2] - 1);
 
-  float a1 = x[0] - x0;
-  float b1 = x[1] - y0;
-  float c1 = x[2] - z0;
+  float a1 = ((x[0]-dx) - x0 * h) / h;
+  float b1 = ((x[1]-dy) - y0 * h) / h;
+  float c1 = ((x[2]-dz) - z0 * h) / h;
+  int x1 = std::min(x0 + 1, int(sz[0] - 1));
+  int y1 = std::min(y0 + 1, int(sz[1] - 1));
+  int z1 = std::min(z0 + 1, int(sz[2] - 1));
+
 
   float a0 = 1.0 - a1;
   float b0 = 1.0 - b1;
   float c0 = 1.0 - c1;
 
-  Vec3f& u000 = u(x0, y0, z0);
-  Vec3f& u001 = u(x0, y0, z1);
-  Vec3f& u010 = u(x0, y1, z0);
-  Vec3f& u011 = u(x0, y1, z1);
-  Vec3f& u100 = u(x1, y0, z0);
-  Vec3f& u101 = u(x1, y0, z1);
-  Vec3f& u110 = u(x1, y1, z0);
-  Vec3f& u111 = u(x1, y1, z1);
+  float u000 = u(x0, y0, z0)[uIdx];
+  float u001 = u(x0, y0, z1)[uIdx];
+  float u010 = u(x0, y1, z0)[uIdx];
+  float u011 = u(x0, y1, z1)[uIdx];
+  float u100 = u(x1, y0, z0)[uIdx];
+  float u101 = u(x1, y0, z1)[uIdx];
+  float u110 = u(x1, y1, z0)[uIdx];
+  float u111 = u(x1, y1, z1)[uIdx];
 
   // X
-  Vec3f u00 = (a0 * u000) + (a1 * u100);
-  Vec3f u10 = (a0 * u010) + (a1 * u110);
-  Vec3f u01 = (a0 * u001) + (a1 * u101);
-  Vec3f u11 = (a0 * u011) + (a1 * u111);
+  float u00 = (a0 * u000) + (a1 * u100);
+  float u10 = (a0 * u010) + (a1 * u110);
+  float u01 = (a0 * u001) + (a1 * u101);
+  float u11 = (a0 * u011) + (a1 * u111);
 
   // Y
-  Vec3f u0 = (b0 * u00) + (b1 * u10);
-  Vec3f u1 = (b0 * u01) + (b1 * u11);
+  float u0 = (b0 * u00) + (b1 * u10);
+  float u1 = (b0 * u01) + (b1 * u11);
 
   // Z
   return (c0 * u0) + (c1 * u1);
