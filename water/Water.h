@@ -4,8 +4,6 @@
 #include "Vec3.h"
 class Water {
  public:
-  int Initialize();
-  int InitializeSimple();
   int Step();
   int AdvectU();
   int AddBodyForce();
@@ -13,15 +11,19 @@ class Water {
   int AdvectPhi();
 
   int Allocate(unsigned sx, unsigned sy, unsigned sz);
+  void SetBoundary();
   //linear 
-  Vec3f InterpU(const Vec3f& x);
+  Vec3f InterpU(Vec3f& x);
   //trilinear
   float InterpPhi(const Vec3f& x);
 
-  const Array3D<Vec3f>& U() { return u; }
+  const Array3D<Vec3f>& U() const { return u; }
+  Array3D<Vec3f>& U() { return u; }
+  const Array3D<float>& P() { return p; }
  private:
   //defined on face centers
   // size is +1 of voxel grid size.
+  Array3D<uint8_t> s;
   Array3D<Vec3f> u;
   Array3D<Vec3f> uTmp;
   //defined on vertices
@@ -29,14 +31,15 @@ class Water {
   Array3D<float> phi;
   //intermediate variable pressure.
   Array3D<float> p;
-  float dt=0.01f;
-  float h=0.1f;
-  float density=1.0f; // reasonable value?
-  int nIterations=50; // reasonable value?
-  float overrelaxation=1.9f;
+  float dt = 0.01666667f;
+  float h = 0.02f;
+  float density = 1000.f; // reasonable value?
+  int nIterations = 1; // reasonable value?
+  float overrelaxation = 1.9f;
   float gravity = -9.81f;
+  Vec3u numCells;
   
-  int boundary(unsigned x, unsigned y, unsigned z);
+  void ClampBounds(Vec3f& x);
   float AvgU_y(unsigned i, unsigned j, unsigned k);
   float AvgU_z(unsigned i, unsigned j, unsigned k);
   float AvgV_x(unsigned i, unsigned j, unsigned k);

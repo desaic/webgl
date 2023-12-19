@@ -4,9 +4,10 @@
 #include "TrigMesh.h"
 #include "Water.h"
 #include "UILib.h"
+#include <cassert>
 
-void debugInterpU() {
-	
+void approxEqual(float a, float b) {
+	assert(abs(a - b) < 1e-10);
 }
 
 void GrayToRGBA(const Array2D8u& gray, Array2D8u& color) {
@@ -30,34 +31,225 @@ void UpdateImage(UILib& ui, int imageId, const Array2D8u& gray) {
   ui.SetImageData(imageId, color, numChannels);
 }
 
-int main(int argc, char* argv[]){
-  UILib ui;
-  TrigMesh mesh;
-	std::cout<<"XD\n";
+void testAdvectU_3x3_X_interior() {
   Water water;
-  water.InitializeSimple();
-      std::cout << water.U()(1, 1, 1)[0] << "," << water.U()(1, 1, 1)[1] << "," << water.U()(1, 1, 1)[2] << std::endl;
-
-  for (int i = 0; i < 100; ++ i) {
-    water.Step();
-    std::cout << water.U()(1, 1, 1)[0] << "," << water.U()(1, 1, 1)[1] << "," << water.U()(1, 1, 1)[2] << std::endl;
+  water.Allocate(3,3,3);
+  Array3D<Vec3f>& u = water.U();
+  const Vec3u& sz = u.GetSize();
+  for (int i = 1; i < sz[0] - 1; ++i) {
+    for (int j = 1; j < sz[1] - 1; ++j) {
+      for (int k = 1; k < sz[2] - 1; ++k) {
+        u(i, j, k) = Vec3f(1.0f, 0.f, 0.f);
+      }
+    }
   }
 
-  ui.SetShowGL(false);
-  ui.SetFontsDir("./fonts");
-  ui.SetWindowSize(1280, 1000);
-  ui.SetInitImagePos(100, 0);
-  int dummyId = ui.AddSlideri("lol", 20, -1, 30);
-  int mainImageId = ui.AddImage();
+  water.AdvectU();
+  
+  for (int i = 0; i < sz[0]; ++i) {
+    for (int j = 0; j < sz[1]; ++j) {
+      for (int k = 0; k < sz[2]; ++k) {
+        if (i == 0 || j == 0 || k == 0 || i == sz[0] -1 || j == sz[1] - 1 || k == sz[2] - 1) {
+          approxEqual(u(i,j,k)[0], 0);
+        } else {
+          approxEqual(u(i,j,k)[1], 0);
+          approxEqual(u(i,j,k)[2], 0);
+        }
+      }
+    }
+  }
 
-  Array2D8u mainImage(1024, 800);
-  mainImage.Fill(0);
-  std::function<void()> btFunc =
-      std::bind(&UpdateImage, std::ref(ui), mainImageId, mainImage);
-  ui.AddButton("Update image", btFunc);
-  std::function<void()> saveImageFunc =
-      std::bind(&SavePngGrey, "mainImage.png", std::ref(mainImage));
-  ui.AddButton("Save main image", saveImageFunc);
+  approxEqual(u(1,2,1)[0], u(1,2,2)[0]);
+
+  std::cout << "testAdvectU_3x3_X_interior passed!" << std::endl;
+}
+
+void testAdvectU_3x3_X_constant() {
+  Water water;
+  water.Allocate(3,3,3);
+  Array3D<Vec3f>& u = water.U();
+  const Vec3u& sz = u.GetSize();
+  for (int i = 0; i < sz[0]; ++i) {
+    for (int j = 0; j < sz[1]; ++j) {
+      for (int k = 0; k < sz[2]; ++k) {
+        u(i, j, k) = Vec3f(1.0f, 0.f, 0.f);
+      }
+    }
+  }
+
+  water.AdvectU();
+  
+  for (int i = 0; i < sz[0]; ++i) {
+    for (int j = 0; j < sz[1]; ++j) {
+      for (int k = 0; k < sz[2]; ++k) {
+        approxEqual(u(i,j,k)[0], 1);
+        approxEqual(u(i,j,k)[1], 0);
+        approxEqual(u(i,j,k)[2], 0);
+      }
+    }
+  }
+
+  std::cout << "testAdvectU_3x3_X_constant passed!" << std::endl;
+}
+
+void testAdvectU_3x3_Y_constant() {
+  Water water;
+  water.Allocate(3,3,3);
+  Array3D<Vec3f>& u = water.U();
+  const Vec3u& sz = u.GetSize();
+  for (int i = 0; i < sz[0]; ++i) {
+    for (int j = 0; j < sz[1]; ++j) {
+      for (int k = 0; k < sz[2]; ++k) {
+        u(i, j, k) = Vec3f(0.f, 1.f, 0.f);
+      }
+    }
+  }
+
+  water.AdvectU();
+  
+  for (int i = 0; i < sz[0]; ++i) {
+    for (int j = 0; j < sz[1]; ++j) {
+      for (int k = 0; k < sz[2]; ++k) {
+        approxEqual(u(i,j,k)[0], 0);
+        approxEqual(u(i,j,k)[1], 1);
+        approxEqual(u(i,j,k)[2], 0);
+      }
+    }
+  }
+
+  std::cout << "testAdvectU_3x3_Y_constant passed!" << std::endl;
+}
+
+void testAdvectU_3x3_Z_constant() {
+  Water water;
+  water.Allocate(3,3,3);
+  Array3D<Vec3f>& u = water.U();
+  const Vec3u& sz = u.GetSize();
+  for (int i = 0; i < sz[0]; ++i) {
+    for (int j = 0; j < sz[1]; ++j) {
+      for (int k = 0; k < sz[2]; ++k) {
+        u(i, j, k) = Vec3f(0.f, 0.f, 1.f);
+      }
+    }
+  }
+
+  water.AdvectU();
+  
+  for (int i = 0; i < sz[0]; ++i) {
+    for (int j = 0; j < sz[1]; ++j) {
+      for (int k = 0; k < sz[2]; ++k) {
+        approxEqual(u(i,j,k)[0], 0);
+        approxEqual(u(i,j,k)[1], 0);
+        approxEqual(u(i,j,k)[2], 1);
+      }
+    }
+  }
+
+  std::cout << "testAdvectU_3x3_Z_constant passed!" << std::endl;
+}
+
+void testAdvectU_3x3_constant() {
+  Water water;
+  water.Allocate(3,3,3);
+  Array3D<Vec3f>& u = water.U();
+  const Vec3u& sz = u.GetSize();
+  for (int i = 0; i < sz[0]; ++i) {
+    for (int j = 0; j < sz[1]; ++j) {
+      for (int k = 0; k < sz[2]; ++k) {
+        u(i, j, k) = Vec3f(1.f, 1.f, 1.f);
+      }
+    }
+  }
+
+  water.AdvectU();
+  
+  for (int i = 0; i < sz[0]; ++i) {
+    for (int j = 0; j < sz[1]; ++j) {
+      for (int k = 0; k < sz[2]; ++k) {
+        approxEqual(u(i,j,k)[0], 1);
+        approxEqual(u(i,j,k)[1], 1);
+        approxEqual(u(i,j,k)[2], 1);
+      }
+    }
+  }
+
+  std::cout << "testAdvectU_3x3_constant passed!" << std::endl;
+}
+
+void testInterpU() {
+  Water water;
+  water.Allocate(1, 1, 1);
+  Array3D<Vec3f>& u = water.U();
+  
+  u(0,0,0) = Vec3f(0.0, 0.0, 0.0);
+  u(0,1,0) = Vec3f(10.0, 10.0, 10.0);
+  u(0,0,1) = Vec3f(20.0, 20.0, 20.0);
+  u(0,1,1) = Vec3f(30.0, 30.0, 30.0);
+  u(1,0,0) = Vec3f(40.0, 40.0, 40.0);
+  u(1,1,0) = Vec3f(50.0, 50.0, 50.0);
+  u(1,0,1) = Vec3f(60.0, 60.0, 60.0);
+  u(1,1,1) = Vec3f(70.0, 70.0, 70.0);
+
+  const float h = 0.02;
+
+  for (int i = 0; i < 4; ++ i) {
+    for (int j = 0; j < 4; ++ j) {
+      for (int k = 0; k < 4; ++k) {
+        float x = 0.25f * i * h;
+        float y = 0.25f * j * h;
+        float z = 0.25f * k * h;
+        Vec3f p(x,y,z);
+        Vec3f interpolated = water.InterpU(p);
+
+        std::cout << interpolated[1] << " ";
+      }
+      std::cout << "\n";
+    }
+    std::cout << "\n";
+  }
+}
+
+void testSolvePZero() {
+  Water water;
+  water.Allocate(2, 2, 1);
+  Array3D<Vec3f>& u = water.U();
+  const Vec3u& sz = u.GetSize();
+  for (int i = 0; i < sz[0]; ++i) {
+    for (int j = 0; j < sz[1]; ++j) {
+      for (int k = 0; k < sz[2]; ++k) {
+      }
+    }
+  }
+
+  water.Step();
+}
+
+int main(int argc, char* argv[]){
+  UILib ui;
+  //testSolvePZero();
+
+  testInterpU();
+  //testAdvectU_3x3_X_interior();
+  //testAdvectU_3x3_X_constant();
+  //testAdvectU_3x3_Y_constant();
+  //testAdvectU_3x3_Z_constant();
+  //testAdvectU_3x3_constant();
+
+  //ui.SetShowGL(false);
+  //ui.SetFontsDir("./fonts");
+  //ui.SetWindowSize(1280, 1000);
+  //ui.SetInitImagePos(100, 0);
+  //int dummyId = ui.AddSlideri("lol", 20, -1, 30);
+  //int mainImageId = ui.AddImage();
+
+  //Array2D8u mainImage(1024, 800);
+  //mainImage.Fill(0);
+  //std::function<void()> btFunc =
+  //    std::bind(&UpdateImage, std::ref(ui), mainImageId, mainImage);
+  //ui.AddButton("Update image", btFunc);
+  //std::function<void()> saveImageFunc =
+  //    std::bind(&SavePngGrey, "mainImage.png", std::ref(mainImage));
+  //ui.AddButton("Save main image", saveImageFunc);
   //ui.Run();
 
 
