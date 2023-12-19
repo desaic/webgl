@@ -12,12 +12,12 @@
 #include "meshutil.h"
 #include "AlignImages.hpp"
 #include "VolumeIO.hpp"
+#include "MorphOp.h"
 #include "cvMatUtil.hpp"
 #include "Avenir.h"
-#include "lodepng.h"
+#include "ImageIO.h"
 #include "SliceGen.h"
 #include "SliceToMesh.h"
-#include <opencv2\opencv.hpp>
 #include <string>
 #include <filesystem>
 #include <vector>
@@ -277,7 +277,7 @@ void testSaveVolume(const ConfigFile & conf) {
         }
     }
     float voxRes [3]= { 0.1, 0.1, 0.1 };
-    saveObjRect(outFile0, vol, voxRes, 1);
+    SaveVolAsObjMesh(outFile0, vol, voxRes, 1);
 }
 
 void loadPreviousVol(const ConfigFile & conf, Array3D<uint8_t> & vol) {
@@ -518,11 +518,11 @@ void makeVolumeTimeLapse(const ConfigFile & conf) {
 
                 flipY(vol);
                 std::string outFile0 = outDir0 + std::to_string(objCnt) + ".obj";
-                saveObjRect(outFile0, vol, voxRes, 1);
+                SaveVolAsObjMesh(outFile0, vol, voxRes, 1);
                 std::string outFile1 = outDir1 + std::to_string(objCnt) + ".obj";
-                saveObjRect(outFile1, vol, voxRes, 2);
+                SaveVolAsObjMesh(outFile1, vol, voxRes, 2);
                 std::string outFile2 = outDir2 + std::to_string(objCnt) + ".obj";
-                saveObjRect(outFile2, vol, voxRes, 3);
+                SaveVolAsObjMesh(outFile2, vol, voxRes, 3);
                 flipY(vol);
             //}
             objCnt++;
@@ -694,9 +694,9 @@ void shaveVol(const ConfigFile & conf) {
     float voxRes[3] = { 0.042, 0.04233,0.02 };
     std::cout << "avg depth " << sum << "\n";
     std::string outFile0 = dataDir + "/0.obj";
-    saveObjRect(outFile0, vol, voxRes, 1);
+    SaveVolAsObjMesh(outFile0, vol, voxRes, 1);
     std::string outFile1 = dataDir + "/1.obj";
-    saveObjRect(outFile1, vol, voxRes, 3);
+    SaveVolAsObjMesh(outFile1, vol, voxRes, 3);
     system("pause");
 }
 
@@ -983,8 +983,637 @@ void cropScanData(const ConfigFile& conf) {
   }
 }
 
+void DownsizeScansX() {
+  std::string scanDir = "H:/nature/scan1109/";
+  std::string scanDirOut = "H:/nature/scan0.5x/";
+  unsigned startIdx = 3880;
+  unsigned endIdx = 3880;
+  for (size_t i = startIdx; i <= endIdx; i++) {
+    std::string inFile = scanDir + "/scan_" + std::to_string(i) + ".png";
+    cv::Mat in = cv::imread(inFile,cv::IMREAD_GRAYSCALE);
+    if (in.empty()) {
+      continue;
+    }
+    cv::threshold(in, in, 200, 255, cv::THRESH_TOZERO_INV);
+    cv::Mat out;
+    cv::resize(in, out, cv::Size(0, 0), 0.5, 1.0, cv::INTER_LINEAR);
+    std::string outFile = scanDirOut + "/" + std::to_string(i) + ".png";
+    cv::imwrite(outFile, out);
+  }
+}
+
+void DownsizePrintsX() {
+  std::string scanDir = "H:/nature/print1109/";
+  std::string scanDirOut = "H:/nature/print0.5x/";
+  unsigned startIdx = 4;
+  unsigned endIdx = 4792;
+  for (size_t i = startIdx; i < endIdx; i++) {
+    std::string inFile = scanDir + "/slice_" + std::to_string(i) + "_0.png";
+    cv::Mat in = cv::imread(inFile, cv::IMREAD_GRAYSCALE);
+    if (in.empty()) {
+      continue;
+    }
+    cv::Mat out;
+    cv::resize(in, out, cv::Size(0, 0), 0.5, 1.0, cv::INTER_NEAREST);
+    std::string outFile = scanDirOut + "/" + std::to_string(i) + ".png";
+    cv::imwrite(outFile, out);
+
+    std::string inFile1 = scanDir + "/slice_" + std::to_string(i) + "_1.png";
+    in = cv::imread(inFile, cv::IMREAD_GRAYSCALE);
+    cv::resize(in, out, cv::Size(0, 0), 0.5, 1.0, cv::INTER_NEAREST);
+    outFile = scanDirOut + "/" + std::to_string(i+1) + ".png";
+    cv::imwrite(outFile, out);
+
+  }
+}
+
+void UpdateDepth(Array2Df & depth, const Array2D8u & scan, const Array2D8u & printMask, float z0) {
+  Vec2u size = scan.GetSize();
+  float scanRes = 0.008f;
+  float maxInc = 0.24f;
+  float maxDec = 0.15f;
+
+  float maxScanVal = 20.0f;
+  for (unsigned row = 0; row < size[1]; row++) {
+    const uint8_t *srcRow = scan.DataPtr() + row * size[0];
+    float* dstRow = &depth.GetData()[row * size[0]];
+    const uint8_t* maskPtr = printMask.DataPtr() + row * size[0];
+    for (unsigned col = 0; col < size[0]; col++) {
+      if (maskPtr[col] == 0) {
+        continue;
+      }
+      float s = srcRow[col];
+      
+       s -= 100;
+       s = std::min(s, maxScanVal);
+       s = z0 + s * scanRes;
+       
+       float oldh = dstRow[col];
+       float newh = std::min(oldh + maxInc, s);
+       newh = std::max(newh, oldh);
+       dstRow[col] = newh;
+    }
+  }
+}
+
+void MaskOneScan(const Array2Df& depth, Array2D8u& scan, float z0) {
+  Vec2u size = scan.GetSize();
+  float scanRes = 0.008f;
+  float maxInc = 0.24f;
+  float scanRange = 1.0f;
+  for (unsigned row = 0; row < size[1]; row++) {
+    uint8_t* dstRow = scan.DataPtr() + row * size[0];
+    const float* srcRow = &depth.GetData()[row * size[0]];
+    for (unsigned col = 0; col < size[0]; col++) {
+      float d = srcRow[col];
+      d-=z0;
+      float s = (dstRow[col]-100.0f) * scanRes;
+
+      float depthToScanVal = d / scanRes + 100;
+      depthToScanVal = std::max(0.0f, depthToScanVal);
+      depthToScanVal = std::min(140.0f, depthToScanVal);
+
+      if (s > d + maxInc || s<d) {
+        dstRow[col] = depthToScanVal;
+      }
+    }
+  }
+}
+
+void FloatToUint8(const Array2Df & in, Array2D8u & out, float z0) {
+  Vec2u size = in.GetSize();
+  out.Allocate(size[0], size[1]);
+  float range = 1;
+  float zres = 0.01;
+  for (unsigned row = 0; row < size[1]; row++) {
+    uint8_t* dstRow = out.DataPtr() + row * size[0];
+    const float* srcRow = &(in.GetData()[row * size[0]]);
+    for (unsigned col = 0; col < size[0]; col++) {
+      float h = (srcRow[col] - z0 + 1);
+      h = std::max(0.0f, h);
+      h /= zres;
+      h = std::min(255.0f, h);
+      dstRow[col] = uint8_t(h);
+    }
+  }
+}
+
+void Thresh(Array2D8u& arr, uint8_t thresh) {
+  auto& data = arr.GetData();
+  for (size_t i = 0; i < data.size(); i++) {
+    if (data[i] > thresh) {
+      data[i] = 255;
+    }
+    else {
+      data[i] = 0;
+    }
+  }
+}
+
+void MaskScans() {
+  std::string scanDir = "H:/nature/scan0.5x/";
+  std::string printDir = "H:/nature/print0.5x/";
+  std::string scanDirOut = "H:/nature/cleanScan/";
+  unsigned startIdx = 118;
+  unsigned endIdx = 3880;
+  Array2Df depth;
+  float zres = 0.025f;
+  int PrintDilateRad = 3;
+  for (size_t i = startIdx; i <= endIdx; i++) {
+    std::string scanFile = scanDir + "/" + std::to_string(i) + ".png";
+    std::string printFile = printDir + "/" + std::to_string(i) + ".png";
+
+    Array2D8u scan;
+    LoadPngGrey(scanFile, scan);
+    if (scan.Empty()) {
+      continue;
+    }
+    Array2D8u print;
+    LoadPngGrey(printFile, print);
+
+    Array2D8u printMask = print;
+    Thresh(printMask,1);
+    Dilate(printMask, PrintDilateRad, PrintDilateRad);
+    Vec2u scanSize = scan.GetSize();
+    if (i == startIdx) {
+      depth.Allocate(scanSize[0], scanSize[1]);
+      depth.Fill(0);
+    }
+    float z0 = (i - startIdx) * zres;
+    UpdateDepth(depth, scan, printMask, z0);
+    MaskOneScan(depth, scan, z0);
+    std::string outFile = scanDirOut + "/" + std::to_string(i) + ".png";
+    SavePngGrey(outFile, scan);
+
+    Array2D8u depthOut;
+    if ((i - 4) % 60 == 0) {
+      FloatToUint8(depth, depthOut, z0); 
+      std::string outFile = scanDirOut + "/depth" + std::to_string(i) + ".png";
+      SavePngGrey(outFile, depthOut);
+    }
+  }
+}
+
+void UpdateDepth(Array2Df& depth, const Array2D8u& scan, float z0) {
+  Vec2u size = scan.GetSize();
+  float scanRes = 0.008f;
+  float maxInc = 0.24f;
+  float maxDec = 0.15f;
+  float maxScanVal = 20.0f;
+  for (unsigned row = 0; row < size[1]; row++) {
+    const uint8_t* srcRow = scan.DataPtr() + row * size[0];
+    float* dstRow = &depth.GetData()[row * size[0]];
+    for (unsigned col = 0; col < size[0]; col++) {
+      float s = srcRow[col];
+      s -= 100;
+      if (s < -40) {
+        continue;
+      }
+      s = std::min(s, maxScanVal);
+      s = z0 + s * scanRes;
+      
+      float oldh = dstRow[col];
+      float newh = std::min(oldh + maxInc, s);
+      newh = std::max(newh, oldh);
+      dstRow[col] = newh;
+    }
+  }
+}
+
+void SaveHeightWithUV(std::string file, unsigned width, unsigned height, float*dx, float duv) {
+  std::ofstream out(file);
+  if (!out.good()) {
+    return;
+  }
+  for (int i = 0; i < height; i++) {
+    for (int j = 0; j < width; j++) {
+      out << "v " << j * dx[0] << " " << i * dx[1] << " " << 0 << "\n";
+    }
+  }
+  for (int i = 0; i < height; i++) {
+    for (int j = 0; j < width; j++) {
+      out << "vt " << j * duv << " " << i * duv << "\n";
+    }
+  }
+  for (int i = 0; i < height - 1; i++) {
+    for (int j = 0; j < width - 1; j++) {
+      out << "f " << (i * width + j + 1) << "/" << (i * width + j + 1) << " " << (i * width + j + 2)
+          << "/" << (i * width + j + 2) << " " << ((i + 1) * width + j + 1) << "/"
+          << ((i + 1) * width + j + 1) << "\n";
+      out << "f " << ((i + 1) * width + j + 1) << "/" << ((i + 1) * width + j + 1) << " "
+          << (i * width + j + 2) << "/" << (i * width + j + 2) << " " << ((i + 1) * width + j + 2)
+          << "/" << ((i + 1) * width + j + 2) << "\n";
+    }
+  }
+  
+}
+
+template <typename T>
+void FlipY(const Array2D<T>& src, Array2D<T>& dst) {
+  Vec2u size = src.GetSize();
+  dst.Allocate(size[0], size[1]);
+  for (unsigned row = 0; row < size[1]; row++) {
+    const T * srcRow = src.DataPtr() + row * size[0];
+    T* dstRow = dst.DataPtr() + (size[1] - row - 1) * size[0];
+    for (unsigned col = 0; col < size[0]; col++) {
+      dstRow[col] = srcRow[col];
+    }
+  }
+}
+
+void PrintToColor(const Array2D8u& print, Array2D8u& image) {
+  uint8_t matColors[3][3] = {{204, 204, 204},{59, 59, 171}, {204, 77, 77}};
+  Vec2u size = print.GetSize();
+  Vec2u imageSize = image.GetSize();
+  unsigned rowOff = imageSize[1] - size[1];
+  for (unsigned row = 0; row < size[1]; row++) {
+    const uint8_t* srcRow = print.DataPtr() + row * size[0];
+    uint8_t* dstRow = image.DataPtr() + (row + rowOff) * imageSize[0];
+    for (unsigned col = 0; col < size[0]; col++) {
+      uint8_t mat = srcRow[col] / 50;
+      if (mat > 0&&mat<=3) {
+        mat--;
+        dstRow[3 * col] = matColors[mat][0];
+        dstRow[3 * col+1] = matColors[mat][1];
+        dstRow[3 * col+2] = matColors[mat][2];
+      }
+    }
+  }
+}
+
+//render heightmaps for wax
+void MakeHeightMeshSeq() {
+  std::string scanDir = "H:/nature/scan0.25mm/";
+  std::string printDir = "H:/nature/print0.25mm/";
+  std::string heightDir = "H:/nature/heightMesh";
+  std::string texDir = "H:/nature/heightTex/";
+  createDir(heightDir);
+  unsigned startIdx = 118;
+  unsigned endIdx = 3880;
+  float voxRes = 0.255;
+  float zRes = 0.025;
+  Array2Df height;
+  int meshCount = 0;
+  int numMats = 3;
+  float dx[3] = { 0.1f*voxRes, 0.1f*voxRes, 0.1f };
+  float duv = 1.0f / 1600;
+  //rbg
+  Array2D8u texImage(4800, 1600);
+  texImage.Fill(204);
+  
+  for (size_t i = startIdx; i < endIdx; i++) {
+    std::string scanFile = scanDir + "/" + std::to_string(i) + ".png";
+    std::string printFile = printDir + "/" + std::to_string(i) + ".png";
+    Array2D8u scan;
+    LoadPngGrey(scanFile, scan);
+    if (scan.Empty()) {
+      continue;
+    }
+    Array2D8u print;
+    LoadPngGrey(printFile, print);
+    Vec2u scanSize = scan.GetSize();
+    if (height.Empty()) {
+      height.Allocate(scanSize[0], scanSize[1]);
+      height.Fill(0);
+     // SaveHeightWithUV(heightDir +"/height_uv.obj", scanSize[0], scanSize[1], dx, duv);
+    }
+    
+    float z0 = i * zRes;
+    UpdateDepth(height, scan, z0);
+    
+    std::ostringstream outMesh;
+    outMesh << heightDir << "/" << std::setfill('0') << std::setw(4) << meshCount << ".obj";
+
+    //Array2Df outh;
+    //FlipY(height, outh);
+    //saveHeightObj(outMesh.str(), outh.GetData(), int(scanSize[0]), int(scanSize[1]), dx, false);
+    //
+    //texImage.Fill(204);
+    PrintToColor(print, texImage);
+    std::ostringstream imageFile;
+    imageFile << texDir << "/" << std::setfill('0') << std::setw(4) << meshCount << ".png";
+    SavePngColor(imageFile.str(), texImage);
+    meshCount++;
+  }
+}
+
+void WriteMatIntoVol(Array3D8u &vol, const Array2Df& height, const Array2D8u & slice, 
+  float voxRes, float z0) {
+  Vec3u vsize = vol.GetSize();
+  Vec2u sliceSize = slice.GetSize();
+  for (unsigned row = 0; row < sliceSize[1]; row++) {
+    if (row >= vsize[1]) {
+      break;
+    }
+
+    const float* hrow = height.DataPtr() + row * sliceSize[0];
+    const uint8_t* sliceRow = slice.DataPtr() + row * sliceSize[0];
+
+    for (unsigned col = 0; col < sliceSize[0]; col++) {
+      if (col >= vsize[0]) {
+        break;
+      }
+      float h = hrow[col];
+      if (h < z0 - 0.15f) {
+        //do not write value too low
+        continue;
+      }
+      int z = int(h / voxRes + 0.5f);
+      if (z < 0) {
+        continue;
+      }
+      if (z >= vsize[2]) {
+        z = vsize[2] - 1;
+      }
+      uint8_t mat = sliceRow[col] / 50;
+      if (mat > 1) {
+        unsigned dstRow = vsize[1] - row - 1;
+        vol(col, dstRow, z) = mat;
+      }
+    }
+  }
+}
+
+void SubtractVol(Array3D8u& vol, const Array3D8u&b) {
+  Vec3u size = vol.GetSize();
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      for (unsigned x = 0; x < size[0]; x++) {
+        if (b(x, y, z) > 0) {
+          vol(x, y, z) = 0;
+        }
+      }
+    }
+  }
+}
+
+void MakeVolMeshSeq() {
+  std::string scanDir = "H:/nature/scan0.25mm/";
+  std::string printDir = "H:/nature/print0.25mm/";
+  std::string volDir = "H:/nature/volMesh";
+  createDir(volDir);
+  createDir(volDir + "/2");
+  createDir(volDir + "/3");
+  unsigned startIdx = 118;
+  unsigned endIdx = 3880;
+  float voxRes = 0.255;
+  float zRes = 0.025;
+  Array2Df height;
+  int meshCount = 0;
+  int numMats = 3;
+  float dx[3] = { 0.1f * voxRes, 0.1f * voxRes, 0.1f };
+  Array3D8u vol;
+  Array3D8u oldvol;
+  for (size_t i = startIdx; i < endIdx; i++) {
+    std::string scanFile = scanDir + "/" + std::to_string(i) + ".png";
+    std::string printFile = printDir + "/" + std::to_string(i) + ".png";
+    Array2D8u scan;
+    LoadPngGrey(scanFile, scan);
+    if (scan.Empty()) {
+      continue;
+    }
+    Array2D8u print;
+    LoadPngGrey(printFile, print);
+    Vec2u scanSize = scan.GetSize();
+    if (height.Empty()) {
+      height.Allocate(scanSize[0], scanSize[1]);
+      height.Fill(0);
+
+      vol.Allocate(scanSize[0], scanSize[1], endIdx * zRes / voxRes + 3);
+    }
+    float z0 = (i - startIdx) * zRes;
+    UpdateDepth(height, scan, z0);
+
+
+    if (meshCount == 316) {
+      oldvol = vol;
+    }
+    WriteMatIntoVol(vol, height, print, voxRes,z0);
+    if (meshCount == 316) {
+      SubtractVol(vol, oldvol);
+    }
+    if (meshCount > 200) 
+    {
+      std::ostringstream mat2File;
+      mat2File << volDir << "/2/" << std::setfill('0') << std::setw(4) << meshCount << ".obj";
+      //output cm
+      float res[3] = { 0.1 * voxRes,0.1 * voxRes,0.1 * voxRes };
+      SaveVolAsObjMesh(mat2File.str(), vol, res, 2);
+
+      std::ostringstream mat3File;
+      mat3File << volDir << "/3/" << std::setfill('0') << std::setw(4) << meshCount << ".obj";
+      SaveVolAsObjMesh(mat3File.str(), vol, res, 3);
+    }
+    if (meshCount >= 316) {
+      break;
+    }
+    meshCount++;
+  }
+}
+
+void SizeScans1080p() {
+  std::string scanDir = "H:/nature/cleanScan/";
+  std::string scanDirOut = "H:/nature/scan1080/";
+  unsigned startIdx = 4;
+  unsigned endIdx = 3880;
+  unsigned scanCount = 0;
+  unsigned dstWidth = 1920;
+  unsigned dstHeight = 1080;
+
+  cv::Mat meanScan;
+
+  //temporal smoothing
+  for (size_t i = startIdx; i <= endIdx; i++) {
+    std::string inFile = scanDir + "/" + std::to_string(i) + ".png";
+    cv::Mat in = cv::imread(inFile, cv::IMREAD_GRAYSCALE);
+    if (in.empty()) {
+      continue;
+    }
+    if (meanScan.empty()) {
+      meanScan = in;
+    }
+
+    in = 0.5 * meanScan + 0.5 * in;
+    meanScan = 0.5 * meanScan + 0.5 * in;
+
+    cv::Mat out;
+    unsigned w0 = unsigned( (in.cols * dstHeight) / in.rows );
+     cv::Mat dstImage;
+    if (w0<dstWidth) {
+      cv::resize(in, out, cv::Size(w0, dstHeight), 0, 0, cv::INTER_LINEAR);
+      unsigned borderCols = dstWidth - out.cols;
+      cv::copyMakeBorder(out, dstImage, 0, 0, 0, borderCols, cv::BORDER_CONSTANT, 0);
+    }
+    else {
+      unsigned h0 = unsigned(in.rows * dstWidth / in.cols);
+      cv::resize(in, out, cv::Size(dstWidth, h0), 0, 0, cv::INTER_LINEAR);
+      unsigned borderRows = dstHeight - h0;
+      cv::copyMakeBorder(out, dstImage, 0, borderRows, 0, 0, cv::BORDER_CONSTANT, 0);
+    }
+    cv::flip(dstImage, dstImage, 0);
+    std::ostringstream oss;
+    oss << scanDirOut << "/" << std::setfill('0') << std::setw(4)<<std::to_string(scanCount)<<".png";
+    cv::imwrite(oss.str(), dstImage);
+    scanCount++;
+  }
+}
+
+void DownsampleScan4x() {
+  std::string scanDir = "H:/nature/cleanScan/";
+  std::string scanDirOut = "H:/nature/scan0.25mm/";
+  unsigned startIdx = 118;
+  unsigned endIdx = 3880;
+  for (size_t i = startIdx; i <= endIdx; i++) {
+    std::string inFile = scanDir + "/" + std::to_string(i) + ".png";
+    cv::Mat in = cv::imread(inFile, cv::IMREAD_GRAYSCALE);
+    if (in.empty()) {
+      continue;
+    }
+    cv::threshold(in, in, 120, 120, cv::THRESH_TRUNC);
+    cv::Mat out;
+    cv::resize(in, out, cv::Size(0,0), 0.25, 0.25, cv::INTER_LINEAR);
+    std::ostringstream oss;
+    cv::flip(out, out, 0);
+    oss << scanDirOut << "/" << std::to_string(i) << ".png";
+    cv::imwrite(oss.str(), out);
+  }
+}
+void DownsamplePrint4x() {
+  std::string scanDir = "H:/nature/print0.5x/";
+  std::string scanDirOut = "H:/nature/print0.25mm/";
+  unsigned startIdx = 3880;
+  unsigned endIdx = 3881;
+  for (size_t i = startIdx; i <= endIdx; i++) {
+    std::string inFile = scanDir + "/" + std::to_string(i) + ".png";
+    cv::Mat in = cv::imread(inFile, cv::IMREAD_GRAYSCALE);
+    if (in.empty()) {
+      continue;
+    }
+    cv::Mat out;
+    cv::resize(in, out, cv::Size(0, 0), 0.25, 0.25, cv::INTER_NEAREST);
+    std::ostringstream oss;
+    cv::flip(out, out, 0);
+    oss << scanDirOut << "/" << std::to_string(i) << ".png";
+    cv::imwrite(oss.str(), out);
+  }
+}
+
+cv::Mat calculate_cdf(cv::Mat histogram) {
+  cv::Mat sum = cv::Mat::zeros(histogram.size(),CV_32FC1);
+  sum.at<float>(0) = (histogram.at<float>(0));
+  size_t len = histogram.total();
+  for (int i = 1; i < histogram.total(); ++i) {
+    sum.at<float>(i) = sum.at<float>(i - 1) + histogram.at<float>(i);
+  }
+
+  cv::Mat normalized_cdf = sum / float(sum.at<float>(len - 1));
+  return normalized_cdf;
+}
+
+cv::Mat calculate_lookup(cv::Mat src_cdf, cv::Mat ref_cdf) {
+  
+  cv::Mat lookup_table = cv::Mat::zeros(1, 256, CV_8UC1);
+  const float eps = 1e-6;
+  for (unsigned srci = 0; srci < src_cdf.total(); srci++) {
+    float f1 = src_cdf.at<float>(srci);
+    for (unsigned refi = 0; refi < ref_cdf.total();refi++) {
+      float f2 = ref_cdf.at<float>(refi);
+      if (ref_cdf.at<float>(refi) >= src_cdf.at<float>(srci)) {
+        lookup_table.at<uint8_t>(srci) = refi;
+        break;
+      }      
+    }
+  }
+  return lookup_table;
+}
+void MatchHistoGray(const cv::Mat& ref, cv::Mat & dst) {
+  cv::Mat refImage = ref;
+  bool uniform = true; bool accumulate = false;
+  int histSize = 256;
+  // Calculate the histogram of the target image
+  cv::Mat histDst;
+  float range[] = { 0, 256 };
+  const float* histRange = { range };
+  cv::calcHist(&dst, 1, 0, cv::Mat(), histDst, 1, &histSize, &histRange, uniform, accumulate);
+
+  // Calculate the cumulative distribution function (CDF) of the source image
+  cv::Mat histRef;
+  cv::calcHist(&refImage, 1, 0, cv::Mat(), histRef, 1, &histSize, &histRange, uniform, accumulate);
+
+  cv::Mat refCDF = calculate_cdf(histRef);
+  cv::Mat dstCDF = calculate_cdf(histDst);
+  
+  cv::Mat lut = calculate_lookup(dstCDF, refCDF);
+
+  // Apply the matching LUT to the equalized source image
+  cv::LUT(dst, lut, dst);
+}
+
+void MatchHistoRGB(const cv::Mat& src, cv::Mat dst) {
+  std::vector<cv::Mat> bgr_src;
+  cv::split(src, bgr_src);
+  std::vector<cv::Mat> bgr_dst;
+  cv::split(dst, bgr_dst);
+  for (unsigned c = 0; c < 3; c++) {
+    MatchHistoGray(bgr_src[c], bgr_dst[c]);
+  }
+  cv::merge(bgr_dst, dst);
+}
+
+void CopyTimelapseImages() {
+  std::string inDir = "H:/nature/handTimeLapse1109/";
+  std::string outDir = "H:/nature/timelapse1109/";
+  int i0 = 1;
+  int i1 = 3883;
+  int outCount = 0;
+  
+  cv::Mat refImage;
+  std::string refImageFile = "H:/nature/timeLapseRef.png";
+  refImage = cv::imread(refImageFile);
+
+  cv::Mat avgFrame;
+  for (int i = i0; i <= i1; i++) {
+    cv::Mat image;
+    std::string imageName = inDir + std::to_string(i) + ".png";
+    image =cv::imread(imageName);
+    if (image.empty()) {
+      continue;
+    }
+    float theta = 180.0f+2.47f; // Angle in degrees
+
+    cv::Point2f center(image.cols / 2.0, image.rows / 2.0);
+    cv::Mat rotationMatrix = cv::getRotationMatrix2D(center, theta, 1.0);
+    cv::Rect roi(42, 44, 1850, 980);
+    cv::Mat rotatedImage;
+    cv::warpAffine(image, rotatedImage, rotationMatrix, image.size());
+    cv::Mat cropped = rotatedImage(roi);
+    
+    MatchHistoRGB(refImage, cropped);      
+
+    if (i == i0) {
+      avgFrame = cropped;
+    }
+    float alpha = 0.8;
+    addWeighted(avgFrame, alpha, cropped, 1.0f-alpha, 0.0, image);
+    avgFrame = image;
+    std::ostringstream outImageName;
+    outImageName << outDir << std::setfill('0') << std::setw(4) << outCount << ".png";
+    cv::imwrite(outImageName.str(), image);
+    outCount++;
+  }
+}
+
 int main(int argc, char * argv[])
 {
+  //DownsizeScansX();
+  //DownsizePrintsX();
+  //MaskScans();
+  //SizeScans1080p();
+  //DownsampleScan4x();
+  //DownsamplePrint4x();
+  //MakeHeightMeshSeq();
+  MakeVolMeshSeq();
+  //CopyTimelapseImages();
     if (argc < 2) {
         std::cout << "Usage: " << argv[0] << " config.txt";
         return -1;

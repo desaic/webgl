@@ -17,7 +17,7 @@ void savePointsObj(const std::string & fileName, const std::vector<std::array<fl
 ///save the boundary of a volume into obj file 
 /// closed by rectangles.
 /// @param voxRes 3 floats for voxel resolution in x y z 
-void saveObjRect(std::string outfile, const Array3D8u & vol,
+void SaveVolAsObjMesh(std::string outfile, const Array3D8u & vol,
     float * voxRes, int mat);
 
 #endif // MESHUTIL_H
