@@ -211,8 +211,11 @@ int UILib::SetImageData(int imageId, const Array2D4b& image) {
   const unsigned inputChan = 4;
   GLTex& d = _images[unsigned(imageId)];
   Vec2u size = image.GetSize();
-  d._needAlloc = !(d.HasImage() && d._height == size[1] &&
-                   d._width == size[0] * inputChan && d._numChan == inputChan);
+  if (!d._needAlloc) {
+    d._needAlloc =
+        !(d.HasImage() && d._height == size[1] &&
+          d._width == size[0] * inputChan && d._numChan == inputChan);
+  }
   d._drawHeight = size[1];
   d._drawWidth = size[0];  
   d._numChan = inputChan;

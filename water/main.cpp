@@ -1,6 +1,7 @@
 #include <iostream>
 #include "UILib.h"
 #include "ImageIO.h"
+#include "ImageUtils.h"
 #include "TrigMesh.h"
 #include "Water.h"
 #include "UILib.h"
@@ -230,10 +231,78 @@ void testStep() {
   water.Step();
 }
 
+void DrawVecs(const Water& water, Array2D4b& image, float vScale) {
+  Vec3u gridSize = water.U().GetSize(); 
+  if (gridSize[0] == 0 || gridSize[1] == 0 || gridSize[2] == 0) {
+    return;
+  }
+  unsigned z = gridSize[2] / 2;
+  int spacing = 10;
+  Vec2u imageSize = image.GetSize();
+  unsigned maxX = std::min(gridSize[0] - 1, imageSize[0] / spacing);
+  unsigned maxY = std::min(gridSize[1] - 1, imageSize[1] / spacing);
+  image.Fill(Vec4b(10, 10, 10, 255));
+  for (unsigned y = 0;y<maxY;y++) {
+    for (unsigned x = 0; x < maxX; x++) {
+      unsigned ox = x * spacing + (spacing / 2);
+      unsigned oy = y * spacing + (spacing / 2);
+
+      float vx = (water.U()(x, y, z)[0] + water.U()(x + 1, y, z)[0]) / 2;
+      float vy = (water.U()(x, y, z)[1] + water.U()(x, y+1, z)[1]) / 2;
+      unsigned px = ox + vx * vScale;
+      unsigned py = oy + vy * vScale;      
+      DrawLine(image, Vec2f(ox, oy), Vec2f(px, py), Vec4b(255, 255, 255, 255));      
+    }
+  }
+}
+
+class WaterApp {
+ public:
+  WaterApp(UILib* ui) : _ui(ui) { Init(); }
+  void Init() {
+    _water.Allocate(50, 50, 1);
+    _image.Allocate(800, 800);
+    _image.Fill(Vec4b(10, 10, 10, 255));
+    if (!_ui) {
+      return;
+    }
+    _imageId = _ui->AddImage();
+    _vScaleSliderId = _ui->AddSlideri("v scale", 10, 1, 500);
+    _ui->AddButton("save image",
+                   [&] { SavePngColor("water_app.png", _image); });
+  }
+
+  int& ImageId() { return _imageId; }
+  int ImageId() const { return _imageId; }
+
+  void Refresh() {
+    if (!_ui || _imageId < 0) {
+      return;
+    }
+    _water.Step();
+    float vScale = 1.0f;
+    if (_vScaleSliderId >= 0) {
+      std::shared_ptr<Slideri> slider =
+          std::dynamic_pointer_cast<Slideri> (_ui->GetWidget(_vScaleSliderId));
+      vScale = slider->GetVal() / 10.0f;
+    }
+    DrawVecs(_water, _image, vScale);
+    _ui->SetImageData(_imageId, _image);
+  }
+ private:
+  Water _water;
+  UILib* _ui = nullptr;
+  int _imageId = -1;
+  Array2D4b _image;
+  int _vScaleSliderId = -1;
+};
+
 int main(int argc, char* argv[]){
   UILib ui;
+  WaterApp app(&ui);
+
   //testSolvePSimple();
-  testStep();
+  //testStep();
   //testInterpU();
   //testAdvectU_3x3_X_interior();
   //testAdvectU_3x3_X_constant();
@@ -241,23 +310,14 @@ int main(int argc, char* argv[]){
   //testAdvectU_3x3_Z_constant();
   //testAdvectU_3x3_constant();
 
-  //ui.SetShowGL(false);
-  //ui.SetFontsDir("./fonts");
-  //ui.SetWindowSize(1280, 1000);
-  //ui.SetInitImagePos(100, 0);
-  //int dummyId = ui.AddSlideri("lol", 20, -1, 30);
-  //int mainImageId = ui.AddImage();
+  ui.SetFontsDir("./fonts");
+  ui.SetInitImagePos(100, 0);
+  ui.Run();
 
-  //Array2D8u mainImage(1024, 800);
-  //mainImage.Fill(0);
-  //std::function<void()> btFunc =
-  //    std::bind(&UpdateImage, std::ref(ui), mainImageId, mainImage);
-  //ui.AddButton("Update image", btFunc);
-  //std::function<void()> saveImageFunc =
-  //    std::bind(&SavePngGrey, "mainImage.png", std::ref(mainImage));
-  //ui.AddButton("Save main image", saveImageFunc);
-  //ui.Run();
-
-
+  const unsigned PollFreqMs = 20;
+  while (ui.IsRunning()) {
+    app.Refresh();
+    std::this_thread::sleep_for(std::chrono::milliseconds(PollFreqMs));
+  }
 	return 0;
 }
