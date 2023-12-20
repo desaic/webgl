@@ -56,7 +56,7 @@ class Water {
   float dt = 0.01666667f;
   float h = 0.02f;
   float density = 1000.f; // reasonable value?
-  int nIterations = 50; // reasonable value?
+  int nIterations = 200; // reasonable value?
   float overrelaxation = 1.9f;
   float gravity = 0.f; //-9.81f;
   Vec3u numCells;

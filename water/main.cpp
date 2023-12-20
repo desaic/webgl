@@ -241,19 +241,42 @@ void DrawVecs(const Water& water, Array2D4b& image, float vScale) {
   Vec2u imageSize = image.GetSize();
   unsigned maxX = std::min(gridSize[0] - 1, imageSize[0] / spacing);
   unsigned maxY = std::min(gridSize[1] - 1, imageSize[1] / spacing);
-  image.Fill(Vec4b(10, 10, 10, 255));
   for (unsigned y = 0;y<maxY;y++) {
     for (unsigned x = 0; x < maxX; x++) {
       unsigned ox = x * spacing + (spacing / 2);
       unsigned oy = y * spacing + (spacing / 2);
 
-      //float vx = (water.U()(x, y, z)[0] + water.U()(x + 1, y, z)[0]) / 2;
-      //float vy = (water.U()(x, y, z)[1] + water.U()(x, y+1, z)[1]) / 2;
-      float smokeVal = water.Smoke()(x,y,z);
-
-      unsigned px = ox + smokeVal * vScale;
-      unsigned py = oy + smokeVal * vScale;      
+      float vx = (water.U()(x, y, z)[0] + water.U()(x + 1, y, z)[0]) / 2;
+      float vy = (water.U()(x, y, z)[1] + water.U()(x, y+1, z)[1]) / 2;
+      
+      unsigned px = ox + vx * vScale;
+      unsigned py = oy + vy * vScale;      
       DrawLine(image, Vec2f(ox, oy), Vec2f(px, py), Vec4b(255, 255, 255, 255));      
+    }
+  }
+}
+
+void DrawScalar(const Water& water, Array2D4b& image, float vScale) {
+  Vec3u gridSize = water.U().GetSize();
+  if (gridSize[0] == 0 || gridSize[1] == 0 || gridSize[2] == 0) {
+    return;
+  }
+  unsigned z = gridSize[2] / 2;
+  Vec2u imageSize = image.GetSize();
+  int spacing = 10;
+  unsigned maxX = std::min(spacing*(gridSize[0] - 1), imageSize[0]);
+  unsigned maxY = std::min(spacing * (gridSize[1] - 1), imageSize[1]);
+  for (unsigned y = 0; y < maxY; y++) {
+    for (unsigned x = 0; x < maxX; x++) {
+      unsigned ox = x;
+      unsigned oy = y;
+      unsigned sx = x / spacing;
+      unsigned sy = y / spacing;
+      float smokeVal = water.Smoke()(sx, sy, z);
+      uint8_t c = 100*(smokeVal * vScale);
+      Vec4b color(c, c, c, 255);
+
+      image(ox, oy) = color;
     }
   }
 }
@@ -288,6 +311,8 @@ class WaterApp {
           std::dynamic_pointer_cast<Slideri> (_ui->GetWidget(_vScaleSliderId));
       vScale = slider->GetVal() / 10.0f;
     }
+    _image.Fill(Vec4b(10, 10, 10, 255));
+    DrawScalar(_water, _image, vScale);
     DrawVecs(_water, _image, vScale);
     _ui->SetImageData(_imageId, _image);
   }

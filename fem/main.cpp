@@ -32,6 +32,14 @@ void LogToUI(const std::string& str, UILib& ui, int statusLabel) {
   ui.SetLabelText(statusLabel, str);
 }
 
+//triangle mesh for rendering an fe mesh. 
+class FETrigMesh{
+ public:
+  FETrigMesh(ElementMesh& em) : _em(em) {}
+  ElementMesh& _em;
+  TrigMesh mesh;
+};
+
 class FemApp {
  public:
   FemApp(UILib* ui) : _ui(ui) {
@@ -54,6 +62,7 @@ class FemApp {
  private:
   UILib* _ui = nullptr;
   ElementMesh _em;
+  TrigMesh renderMesh;
   int _hexInputId = -1;
 };
 

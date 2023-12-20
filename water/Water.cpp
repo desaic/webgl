@@ -23,15 +23,15 @@ int Water::Allocate(unsigned sx, unsigned sy, unsigned sz) {
 }
 
 void Water::SetInitialVelocity() {
-  for (int y = 0; y < numCells[1]; ++y) {
-    u(1, y, 1)[0] = 2.0f;
+  for (int y = 2; y < numCells[1]-2; ++y) {
+    u(2, y, 2)[0] = 2.0f;
   }
 }
 
 void Water::SetInitialSmoke() {
-  for (int x = 0; x < numCells[0]; ++x) {
-    for (int y = 0; y < numCells[1]; ++y) {
-      for (int z = 0; z < numCells[2]; ++z) {
+  for (int x = 1; x < numCells[0]-1; ++x) {
+    for (int y = 1; y < numCells[1]-1; ++y) {
+      for (int z = 1; z < numCells[2]-1; ++z) {
         smoke(x,y,z) = 1.0f;
       }
     }
@@ -71,7 +71,9 @@ void Water::SetBoundary() {
       for (int k = 0; k < numCells[2]; ++k) {
         uint8_t val = 1;
         if (i == 0 || j == 0 || k == 0 || 
-            i == numCells[0] - 1 || k == numCells[2] - 1 ) 
+            i == numCells[0] - 1 ||
+            j == numCells[1] - 1 ||
+            k == numCells[2] - 1) 
           val = 0;
         s(i, j, k) = val;
       }
@@ -171,7 +173,7 @@ int Water::AdvectSmoke() {
         const float y = halfH + (h*j) - (dt*uY);
         const float z = halfH + (h*k) - (dt*uZ);
 
-        smokeTemp(i, j, k) = InterpSmoke(Vec3f(x,y,z));;
+        smokeTemp(i, j, k) = InterpSmoke(Vec3f(x,y,z));
       }
     }
   }
@@ -192,7 +194,7 @@ int Water::AddBodyForce() {
 
     for (int x = 1; x < sz[0] - 1; ++x) {
       for (int z = 1; z < sz[2] - 1; ++z) {
-        //u(x, sz[1] - 2, z)[0] = 0.75;
+        u(x, sz[1] - 2, z)[0] += 1*dt;
       }
     }
 
