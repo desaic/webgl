@@ -227,14 +227,8 @@ void testSolvePSimple() {
 
 void testStep() {
   Water water;
-  water.Allocate(50, 50, 50);
+  water.Allocate(5, 5, 1);
   water.Step();
-
-  while (true) {
-    std::cout << "S";
-    water.Step();
-  }
-
 }
 
 void DrawVecs(const Water& water, Array2D4b& image, float vScale) {
@@ -253,10 +247,12 @@ void DrawVecs(const Water& water, Array2D4b& image, float vScale) {
       unsigned ox = x * spacing + (spacing / 2);
       unsigned oy = y * spacing + (spacing / 2);
 
-      float vx = (water.U()(x, y, z)[0] + water.U()(x + 1, y, z)[0]) / 2;
-      float vy = (water.U()(x, y, z)[1] + water.U()(x, y+1, z)[1]) / 2;
-      unsigned px = ox + vx * vScale;
-      unsigned py = oy + vy * vScale;      
+      //float vx = (water.U()(x, y, z)[0] + water.U()(x + 1, y, z)[0]) / 2;
+      //float vy = (water.U()(x, y, z)[1] + water.U()(x, y+1, z)[1]) / 2;
+      float smokeVal = water.Smoke()(x,y,z);
+
+      unsigned px = ox + smokeVal * vScale;
+      unsigned py = oy + smokeVal * vScale;      
       DrawLine(image, Vec2f(ox, oy), Vec2f(px, py), Vec4b(255, 255, 255, 255));      
     }
   }
@@ -304,9 +300,7 @@ class WaterApp {
 };
 
 int main(int argc, char* argv[]){
-  UILib ui;
-  WaterApp app(&ui);
-
+  
   //testSolvePSimple();
   //testStep();
   //testInterpU();
@@ -315,6 +309,9 @@ int main(int argc, char* argv[]){
   //testAdvectU_3x3_Y_constant();
   //testAdvectU_3x3_Z_constant();
   //testAdvectU_3x3_constant();
+  //return 0;
+  UILib ui;
+  WaterApp app(&ui);
 
   ui.SetFontsDir("./fonts");
   ui.SetInitImagePos(100, 0);

@@ -16,17 +16,25 @@ class Water {
   int AddBodyForce();
   int SolveP();
   int AdvectPhi();
+  int AdvectSmoke();
 
   int Allocate(unsigned sx, unsigned sy, unsigned sz);
   void SetBoundary();
+  void SetInitialSmoke();
+  void SetInitialVelocity();
   //linear 
   float InterpU(Vec3f& x, Axis axis);
   //trilinear
   float InterpPhi(const Vec3f& x);
+  float InterpSmoke(Vec3f& x);
+
 
   const Array3D<Vec3f>& U() const { return u; }
   Array3D<Vec3f>& U() { return u; }
   const Array3D<float>& P() { return p; }
+
+  const Array3D<float>& Smoke() const { return smoke; }
+  Array3D<float>& Smoke() { return smoke; }  
  private:
   // Boundary
   Array3D<uint8_t> s;
@@ -35,6 +43,10 @@ class Water {
   // size is +1 of voxel grid size.
   Array3D<Vec3f> u;
   Array3D<Vec3f> uTmp;
+
+  // smoke
+  Array3D<float> smoke;
+  Array3D<float> smokeTemp;
 
   //defined on vertices
   //size is +1 of voxel grid size.
@@ -46,7 +58,7 @@ class Water {
   float density = 1000.f; // reasonable value?
   int nIterations = 50; // reasonable value?
   float overrelaxation = 1.9f;
-  float gravity = -9.81f;
+  float gravity = 0.f; //-9.81f;
   Vec3u numCells;
   
   float AvgU_y(unsigned i, unsigned j, unsigned k);

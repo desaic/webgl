@@ -10,13 +10,58 @@ int Water::Allocate(unsigned sx, unsigned sy, unsigned sz) {
   const unsigned numZ = sz + 2;
   u.Allocate(numX, numY, numZ);
   uTmp.Allocate(numX, numY, numZ);
-  phi.Allocate(numX+1, numY+1, numZ+1);
-  // Initialize phi?
+  smoke.Allocate(numX, numY, numZ);
+  smokeTemp.Allocate(numX, numY, numZ);
+  phi.Allocate(numX+1, numY+1, numZ+1);  // Initialize phi?
   p.Allocate(numX, numY, numZ);
   numCells = Vec3u(numX, numY, numZ);
   SetBoundary();
+  SetInitialSmoke();
+  SetInitialVelocity();
 
   return 0;
+}
+
+void Water::SetInitialVelocity() {
+  for (int y = 0; y < numCells[1]; ++y) {
+    u(1, y, 1)[0] = 2.0f;
+  }
+}
+
+void Water::SetInitialSmoke() {
+  for (int x = 0; x < numCells[0]; ++x) {
+    for (int y = 0; y < numCells[1]; ++y) {
+      for (int z = 0; z < numCells[2]; ++z) {
+        smoke(x,y,z) = 1.0f;
+      }
+    }
+  }
+
+  const float smokeWidth = 0.25 * numCells[1];
+  const int minY = floor(0.5 * numCells[1] - 0.5 * smokeWidth);
+  const int maxY = floor(0.5 * numCells[1] + 0.5 * smokeWidth);
+
+  for (int y = minY; y < maxY; ++y) {
+    for (int z = 0; z < numCells[2]; ++z) {
+      smoke(0, y, z) = 0.0f;
+    }
+  }
+
+  //const int x0 = numCells[0] / 4;
+  //const int y0 = numCells[1] / 4;
+  //const int z0 = numCells[2] / 4;
+
+  //const int x1 = numCells[0] / 2;
+  //const int y1 = numCells[1] / 2;
+  //const int z1 = numCells[2] / 2;
+
+  //for (int x = x0; x < x1; ++x) {
+  //  for (int y = y0; y < y1; ++y) {
+  //    for (int z = z0; z < z1; ++z) {
+  //      smoke(x,y,z) = 1.0f;
+  //    }
+  //  }
+  //}
 }
 
 void Water::SetBoundary() {
@@ -26,7 +71,7 @@ void Water::SetBoundary() {
       for (int k = 0; k < numCells[2]; ++k) {
         uint8_t val = 1;
         if (i == 0 || j == 0 || k == 0 || 
-            i == numCells[0] - 1 || k == numCells[2] - 1) 
+            k == numCells[2] - 1 || j == numCells[1] - 1) 
           val = 0;
         s(i, j, k) = val;
       }
@@ -37,6 +82,7 @@ void Water::SetBoundary() {
 int Water::AdvectU() {
   const float h2 = h / 2.0;
   const Vec3u& sz = u.GetSize();
+  uTmp = u;
   for (int i = 1; i < sz[0]; ++i) {
     for (int j = 1; j < sz[1]; ++j) {
       for (int k = 1; k < sz[2]; ++k) {
@@ -54,6 +100,7 @@ int Water::AdvectU() {
           x -= dt * uX;
           y -= dt * uY;
           z -= dt * uZ;
+
           uTmp(i, j, k)[0] = InterpU(Vec3f(x, y, z), Axis::X);
         }
         // y
@@ -108,6 +155,29 @@ int Water::AdvectPhi() {
   return 0;
 }
 
+int Water::AdvectSmoke() {
+  const float halfH = h / 2.0f;
+  smokeTemp = smoke;
+
+  for (int i = 1; i < numCells[0] - 1; ++i) {
+    for (int j = 1; j < numCells[1] - 1; ++j) {
+      for (int k = 1; k < numCells[2] - 1; ++k) {
+        if (s(i, j, k) == 0) continue;
+        const float uX = 0.5 * (u(i, j, k)[0] + u(i+1, j, k)[0]);
+        const float uY = 0.5 * (u(i, j, k)[1] + u(i, j+1, k)[1]);
+        const float uZ = 0.5 * (u(i, j, k)[2] + u(i+1, j, k+1)[2]);
+
+        const float x = halfH + (h*i) - (dt*uX);
+        const float y = halfH + (h*j) - (dt*uY);
+        const float z = halfH + (h*k) - (dt*uZ);
+
+        smokeTemp(i, j, k) = InterpSmoke(Vec3f(x,y,z));;
+      }
+    }
+  }
+  smoke = smokeTemp;
+  return 0;
+}
 
 int Water::AddBodyForce() {
     const Vec3u& sz = u.GetSize();
@@ -117,6 +187,12 @@ int Water::AddBodyForce() {
           if (s(i, j, k) == 1 && s(i, j-1, k) == 1)
             u(i, j, k)[1] += gravity * dt;
         }  
+      }
+    }
+
+    for (int x = 1; x < sz[0] - 1; ++x) {
+      for (int z = 1; z < sz[2] - 1; ++z) {
+        //u(x, sz[1] - 2, z)[0] = 0.75;
       }
     }
 
@@ -177,7 +253,8 @@ int Water::Step() {
   AddBodyForce();
   SolveP();
   AdvectU();
-  AdvectPhi();
+  AdvectSmoke();
+  //AdvectPhi();
   return 0;
 }
 
@@ -192,10 +269,10 @@ float Water::AvgU_y(unsigned i, unsigned j, unsigned k) {
 
 float Water::AvgU_z(unsigned i, unsigned j, unsigned k) {
   return 0.25f * ( 
-    u(i,   j,   k)[2] +
-    u(i-1, j,   k)[2] +
-    u(i,   j, k+1)[2] +
-    u(i-1, j, k+1)[2]
+    u(i,   j,   k  )[2] +
+    u(i-1, j,   k  )[2] +
+    u(i,   j,   k+1)[2] +
+    u(i-1, j,   k+1)[2]
   );
 }
 
@@ -210,35 +287,113 @@ float Water::AvgV_x(unsigned i, unsigned j, unsigned k) {
 
 float Water::AvgV_z(unsigned i, unsigned j, unsigned k) {
   return 0.25f * ( 
-    u(i,   j,   k)[2] +
-    u(i, j-1,   k)[2] +
-    u(i,   j, k+1)[2] +
-    u(i, j-1, k+1)[2]
+    u(i,   j,   k  )[2] +
+    u(i,   j-1, k  )[2] +
+    u(i,   j,   k+1)[2] +
+    u(i,   j-1, k+1)[2]
   );
 }
 
 float Water::AvgW_x(unsigned i, unsigned j, unsigned k) {
   return 0.25f * ( 
-    u(i,   j,   k)[0] +
-    u(i+1, j,   k)[0] +
-    u(i,   j, k-1)[0] +
-    u(i+1, j, k-1)[0]
+    u(i,   j,   k  )[0] +
+    u(i+1, j,   k  )[0] +
+    u(i,   j,   k-1)[0] +
+    u(i+1, j,   k-1)[0]
   );
 }
 
 float Water::AvgW_y(unsigned i, unsigned j, unsigned k) {
   return 0.25f * ( 
-    u(i,   j,   k)[0] +
-    u(i, j+1,   k)[0] +
-    u(i,   j, k-1)[0] +
-    u(i, j+1, k-1)[0]
+    u(i,   j,   k  )[1] +
+    u(i,   j+1, k  )[1] +
+    u(i,   j,   k-1)[1] +
+    u(i,   j+1, k-1)[1]
   );
 }
+
+//float Water::AvgU_y(unsigned i, unsigned j, unsigned k) {
+//  return 0.125f * ( 
+//    u(i,   j,   k  )[1] +
+//    u(i-1, j,   k  )[1] +
+//    u(i,   j+1, k  )[1] +
+//    u(i-1, j+1, k  )[1] +
+//    u(i,   j,   k+1)[1] +
+//    u(i-1, j,   k+1)[1] + 
+//    u(i,   j+1, k+1)[1] +
+//    u(i-1, j+1, k+1)[1]
+//  );
+//}
+//
+//float Water::AvgU_z(unsigned i, unsigned j, unsigned k) {
+//  return 0.125f * ( 
+//    u(i,   j,   k  )[2] +
+//    u(i-1, j,   k  )[2] +
+//    u(i,   j,   k+1)[2] +
+//    u(i-1, j,   k+1)[2] +
+//    u(i,   j+1, k  )[2] +
+//    u(i-1, j+1, k  )[2] +
+//    u(i,   j+1, k+1)[2] +
+//    u(i-1, j+1, k+1)[2]
+//  );
+//}
+//
+//float Water::AvgV_x(unsigned i, unsigned j, unsigned k) {
+//  return 0.125f * ( 
+//    u(i,   j,   k  )[0] +
+//    u(i,   j-1, k  )[0] +
+//    u(i+1, j,   k  )[0] +
+//    u(i+1, j-1, k  )[0] +
+//    u(i,   j,   k+1)[0] +
+//    u(i,   j-1, k+1)[0] +
+//    u(i+1, j,   k+1)[0] +
+//    u(i+1, j-1, k+1)[0]
+//  );
+//}
+//
+//float Water::AvgV_z(unsigned i, unsigned j, unsigned k) {
+//  return 0.125f * ( 
+//    u(i,   j,   k  )[2] +
+//    u(i,   j-1, k  )[2] +
+//    u(i,   j,   k+1)[2] +
+//    u(i,   j-1, k+1)[2] +
+//    u(i+1, j,   k  )[2] +
+//    u(i+1, j-1, k  )[2] +
+//    u(i+1, j,   k+1)[2] +
+//    u(i+1, j-1, k+1)[2]
+//  );
+//}
+//
+//float Water::AvgW_x(unsigned i, unsigned j, unsigned k) {
+//  return 0.125f * ( 
+//    u(i,   j,   k  )[0] +
+//    u(i+1, j,   k  )[0] +
+//    u(i,   j,   k-1)[0] +
+//    u(i+1, j,   k-1)[0] +
+//    u(i,   j+1, k  )[0] +
+//    u(i+1, j+1, k  )[0] +
+//    u(i,   j+1, k-1)[0] +
+//    u(i+1, j+1, k-1)[0]
+//  );
+//}
+//
+//float Water::AvgW_y(unsigned i, unsigned j, unsigned k) {
+//  return 0.125f * ( 
+//    u(i,   j,   k  )[0] +
+//    u(i,   j+1, k  )[0] +
+//    u(i,   j,   k-1)[0] +
+//    u(i,   j+1, k-1)[0] +
+//    u(i+1, j,   k  )[0] +
+//    u(i+1, j+1, k  )[0] +
+//    u(i+1, j,   k-1)[0] +
+//    u(i+1, j+1, k-1)[0]
+//  );
+//}
 
 float Water::InterpU(Vec3f& x, Axis axis) { 
   const Vec3u& sz = u.GetSize();
 
-  const float halfH = h/2.0;
+  const float halfH = h / 2.0f;
 
   x[0] = std::max(std::min(x[0], sz[0] * h), h);
   x[1] = std::max(std::min(x[1], sz[1] * h), h);
@@ -282,7 +437,6 @@ float Water::InterpU(Vec3f& x, Axis axis) {
   int y1 = std::min(y0 + 1, int(sz[1] - 1));
   int z1 = std::min(z0 + 1, int(sz[2] - 1));
 
-
   float a0 = 1.0 - a1;
   float b0 = 1.0 - b1;
   float c0 = 1.0 - c1;
@@ -295,6 +449,58 @@ float Water::InterpU(Vec3f& x, Axis axis) {
   float u101 = u(x1, y0, z1)[uIdx];
   float u110 = u(x1, y1, z0)[uIdx];
   float u111 = u(x1, y1, z1)[uIdx];
+
+  // X
+  float u00 = (a0 * u000) + (a1 * u100);
+  float u10 = (a0 * u010) + (a1 * u110);
+  float u01 = (a0 * u001) + (a1 * u101);
+  float u11 = (a0 * u011) + (a1 * u111);
+
+  // Y
+  float u0 = (b0 * u00) + (b1 * u10);
+  float u1 = (b0 * u01) + (b1 * u11);
+
+  // Z
+  return (c0 * u0) + (c1 * u1);
+}
+
+float Water::InterpSmoke(Vec3f& x) {
+  const Vec3u& sz = u.GetSize();
+
+  const float halfH = h / 2.0f;
+
+  x[0] = std::max(std::min(x[0], sz[0] * h), h);
+  x[1] = std::max(std::min(x[1], sz[1] * h), h);
+  x[2] = std::max(std::min(x[2], sz[2] * h), h);
+
+  float dx = halfH;
+  float dy = halfH;
+  float dz = halfH;
+
+  int x0 = std::min(unsigned(floor((x[0] - dx) / h)), sz[0] - 1);
+  int y0 = std::min(unsigned(floor((x[1] - dy) / h)), sz[1] - 1);
+  int z0 = std::min(unsigned(floor((x[2] - dz) / h)), sz[2] - 1);
+
+  float a1 = ((x[0]-dx) - x0 * h) / h;
+  float b1 = ((x[1]-dy) - y0 * h) / h;
+  float c1 = ((x[2]-dz) - z0 * h) / h;
+
+  int x1 = std::min(x0 + 1, int(sz[0] - 1));
+  int y1 = std::min(y0 + 1, int(sz[1] - 1));
+  int z1 = std::min(z0 + 1, int(sz[2] - 1));
+
+  float a0 = 1.0 - a1;
+  float b0 = 1.0 - b1;
+  float c0 = 1.0 - c1;
+
+  float u000 = smoke(x0, y0, z0);
+  float u001 = smoke(x0, y0, z1);
+  float u010 = smoke(x0, y1, z0);
+  float u011 = smoke(x0, y1, z1);
+  float u100 = smoke(x1, y0, z0);
+  float u101 = smoke(x1, y0, z1);
+  float u110 = smoke(x1, y1, z0);
+  float u111 = smoke(x1, y1, z1);
 
   // X
   float u00 = (a0 * u000) + (a1 * u100);
