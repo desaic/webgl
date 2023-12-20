@@ -71,7 +71,7 @@ void Water::SetBoundary() {
       for (int k = 0; k < numCells[2]; ++k) {
         uint8_t val = 1;
         if (i == 0 || j == 0 || k == 0 || 
-            k == numCells[2] - 1 || j == numCells[1] - 1) 
+            i == numCells[0] - 1 || k == numCells[2] - 1 ) 
           val = 0;
         s(i, j, k) = val;
       }
