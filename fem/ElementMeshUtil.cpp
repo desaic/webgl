@@ -4,7 +4,9 @@
 #include <unordered_map>
 
 void ComputeSurfaceMesh(const ElementMesh& em, TrigMesh& m,
-                        std::vector<uint32_t>& meshToEMVert) {}
+                        std::vector<uint32_t>& meshToEMVert) {
+
+}
 
 struct hash_edge {
   size_t operator()(const Edge& e) const { return e.v[0] + 50951 * e.v[1]; }
