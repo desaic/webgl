@@ -54,3 +54,22 @@ void ElementMesh::LoadTxt(const std::string& file) {
               << " elements\n";
   }
 }
+
+void ElementMesh::SaveTxt(const std::string& file) {
+  std::ofstream out(file);
+  size_t numVerts = X.size();
+  size_t numElements = e.size();
+  out << "verts " << numVerts << "\n";
+  out << "elts " << numElements << "\n";
+  for (size_t i = 0; i < numVerts; i++) {
+    out << X[i][0] << " " << X[i][1] << " " << X[i][2] << "\n";
+  }
+  for (size_t i = 0; i < numElements; i++) {
+    unsigned nV = e[i]->NumVerts();
+    out << nV;
+    for (size_t j = 0; j < nV; j++) {
+      out << " " << (*e[i])[j];
+    }
+    out << "\n";
+  }
+}

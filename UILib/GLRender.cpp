@@ -254,16 +254,30 @@ int GLRender::Init(const std::string& vertShader,
   return 0;
 }
 
+int DeleteVAO(GLBuf& buf) {
+  std::cout << "delete vao " << buf.vao << "\n";
+  PrintGLError();
+  glDeleteBuffers(buf.NUM_BUF, buf.b.data());
+  PrintGLError();
+  glDeleteVertexArrays(1, &buf.vao);  
+  PrintGLError();
+  return 0;
+}
+
 int GLRender::AllocateMeshBuffer(size_t meshId) {
   if (meshId >= _bufs.size()) {
     return -1;
   }
-  GLBuf& buf = _bufs[meshId];  
+  GLBuf& buf = _bufs[meshId];
+  if (buf._allocated) {
+    DeleteVAO(buf);
+  }
   glGenVertexArrays(1, &buf.vao);
   glBindVertexArray(buf.vao);
   glGenBuffers(GLBuf::NUM_BUF, buf.b.data());
   buf._allocated = true;
-  UploadMeshData(meshId);
+  buf._needsUpdate = true;
+  buf._numTrigs = buf.mesh->GetNumTrigs();
   return 0;
 }
 
@@ -272,7 +286,7 @@ int GLRender::UploadMeshData(size_t meshId) {
     return -1;
   }
   GLBuf& buf = _bufs[meshId];
-  if (!buf._allocated) {
+  if (!buf._allocated || buf._numTrigs != buf.mesh->GetNumTrigs()) {
     AllocateMeshBuffer(meshId);
   }
 
@@ -281,7 +295,7 @@ int GLRender::UploadMeshData(size_t meshId) {
     mesh->ComputeTrigNormals();
   }
   const unsigned DIM = 3;
-  buf._numTrigs = mesh->t.size() / 3;
+  buf._numTrigs = mesh->GetNumTrigs();
   size_t numVerts = mesh->t.size();
   size_t numFloats = DIM * numVerts;
   size_t numUV = 2 * numVerts;

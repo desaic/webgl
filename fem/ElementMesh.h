@@ -18,6 +18,8 @@ class ElementMesh {
   //load a mesh stored in plain text
   //removes existing mesh.
   void LoadTxt(const std::string & file);
+
+  void SaveTxt(const std::string& file);
 };
 
 #endif
