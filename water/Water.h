@@ -17,6 +17,7 @@ class Water {
   int SolveP();
   int AdvectPhi();
   int AdvectSmoke();
+  int UpdateDistanceField();
 
   int Allocate(unsigned sx, unsigned sy, unsigned sz);
   void SetBoundary();
@@ -35,6 +36,9 @@ class Water {
 
   const Array3D<float>& Smoke() const { return smoke; }
   Array3D<float>& Smoke() { return smoke; }  
+
+  const Array3D<uint8_t>& SmokeBoundary() const { return smokeBoundary; }
+  Array3D<uint8_t>& SmokeBoundary() { return smokeBoundary; }  
  private:
   // Boundary
   Array3D<uint8_t> s;
@@ -47,6 +51,8 @@ class Water {
   // smoke
   Array3D<float> smoke;
   Array3D<float> smokeTemp;
+  Array3D<uint8_t> smokeBoundary;
+  Array3D<short> smokeSDF;
 
   //defined on vertices
   //size is +1 of voxel grid size.

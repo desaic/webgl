@@ -281,6 +281,35 @@ void DrawScalar(const Water& water, Array2D4b& image, float vScale) {
   }
 }
 
+void DrawSmokeBoundary(const Water& water, Array2D4b& image) {
+  Vec3u gridSize = water.U().GetSize();
+  if (gridSize[0] == 0 || gridSize[1] == 0 || gridSize[2] == 0) {
+    return;
+  }
+  unsigned z = gridSize[2] / 2;
+  Vec2u imageSize = image.GetSize();
+  int spacing = 10;
+  unsigned maxX = std::min(spacing*(gridSize[0] - 1), imageSize[0]);
+  unsigned maxY = std::min(spacing * (gridSize[1] - 1), imageSize[1]);
+  for (unsigned y = 0; y < maxY; y++) {
+    for (unsigned x = 0; x < maxX; x++) {
+      unsigned ox = x;
+      unsigned oy = y;
+      unsigned sx = x / spacing;
+      unsigned sy = y / spacing;
+      uint8_t smokeVal = water.SmokeBoundary()(sx, sy, z); // 0 or 1
+
+      if (smokeVal) {
+        uint8_t c = 150;
+        Vec4b color(c, c, c, 255);
+
+        image(ox, oy) = color;      
+      }
+
+    }
+  }
+}
+
 class WaterApp {
  public:
   WaterApp(UILib* ui) : _ui(ui) { Init(); }
@@ -313,6 +342,7 @@ class WaterApp {
     }
     _image.Fill(Vec4b(10, 10, 10, 255));
     DrawScalar(_water, _image, vScale);
+    DrawSmokeBoundary(_water, _image);
     DrawVecs(_water, _image, vScale);
     _ui->SetImageData(_imageId, _image);
   }

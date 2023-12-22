@@ -2,6 +2,7 @@
 #include <cmath>
 #include <iostream>
 #include <algorithm>
+#include "FastSweep.h"
 
 // @sx/@sy/@sz -> number of cells in each dimension
 int Water::Allocate(unsigned sx, unsigned sy, unsigned sz) {
@@ -12,12 +13,13 @@ int Water::Allocate(unsigned sx, unsigned sy, unsigned sz) {
   uTmp.Allocate(numX, numY, numZ);
   smoke.Allocate(numX, numY, numZ);
   smokeTemp.Allocate(numX, numY, numZ);
+  smokeBoundary.Allocate(numX, numY, numZ);
   phi.Allocate(numX+1, numY+1, numZ+1);  // Initialize phi?
   p.Allocate(numX, numY, numZ);
   numCells = Vec3u(numX, numY, numZ);
   SetBoundary();
   SetInitialSmoke();
-  SetInitialVelocity();
+  //SetInitialVelocity();
 
   return 0;
 }
@@ -46,22 +48,6 @@ void Water::SetInitialSmoke() {
       smoke(0, y, z) = 0.0f;
     }
   }
-
-  //const int x0 = numCells[0] / 4;
-  //const int y0 = numCells[1] / 4;
-  //const int z0 = numCells[2] / 4;
-
-  //const int x1 = numCells[0] / 2;
-  //const int y1 = numCells[1] / 2;
-  //const int z1 = numCells[2] / 2;
-
-  //for (int x = x0; x < x1; ++x) {
-  //  for (int y = y0; y < y1; ++y) {
-  //    for (int z = z0; z < z1; ++z) {
-  //      smoke(x,y,z) = 1.0f;
-  //    }
-  //  }
-  //}
 }
 
 void Water::SetBoundary() {
@@ -251,11 +237,54 @@ int Water::SolveP() {
     return 0;
 }
 
+int Water::UpdateDistanceField() {
+  const float threshold = 0.5f;
+  Array3D<short> smokeShort(numCells[0], numCells[1], numCells[2]);
+  for (int x = 1; x < numCells[0] - 1; ++x) {
+    for (int y = 1; y < numCells[1] - 1; ++y) {
+      for (int z = 1; z < numCells[2] - 1; ++z) {
+        if (smoke(x, y, z) > threshold) {
+          smokeBoundary(x,y,z) = 0;
+        } else {
+          uint8_t isBoundary = 0;
+          for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+              for (int dz = -1; dz <= 1; dz++) {
+                if (dx == 0 && dy == 0 && dz == 0) continue;
+                //dz = 0; // FOR DEBUGGING in 2D
+                if (smoke(x+dx, y+dx, 1) > threshold) {
+                  isBoundary = 1;     
+                }
+              } 
+            } 
+          }
+          smokeBoundary(x,y,z) = isBoundary;
+        }
+      }
+    }  
+  }
+
+  FastSweep(smokeShort, h, 1, 5, smokeBoundary);
+
+  for (int x = 0; x < numCells[0]; ++x) {
+    for (int y = 0; y < numCells[1]; ++y) {
+      for (int z = 0; z < numCells[2]; ++z) {
+        if (smokeShort(x,y,z) > 0) {
+          std::cout << x << " " << y << " " << z << std::endl;
+        }
+      }
+    }
+  }
+        
+  return 0;
+}
+
 int Water::Step() {
   AddBodyForce();
   SolveP();
   AdvectU();
   AdvectSmoke();
+  UpdateDistanceField();
   //AdvectPhi();
   return 0;
 }
