@@ -3,6 +3,17 @@
 #include <iostream>
 #include <sstream>
 
+double ElementMesh::GetElasticEnergyEle(int eId) const {
+}
+
+double ElementMesh::GetElasticEnergy() const {
+  double ene;
+  for (size_t i = 0; i < e.size(); i++) {
+    ene += GetElasticEnergyEle(i);
+  }
+  return ene;
+}
+
 void ElementMesh::LoadTxt(const std::string& file) {
   std::ifstream in(file);
   std::string line;

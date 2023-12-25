@@ -5,7 +5,9 @@
 
 void ComputeSurfaceMesh(const ElementMesh& em, TrigMesh& m,
                         std::vector<uint32_t>& meshToEMVert) {
-
+  for (size_t i = 0; i < em.e.size(); i++) {
+    const Element* ele = em.e[i].get();
+  }
 }
 
 struct hash_edge {
