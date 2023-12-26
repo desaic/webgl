@@ -4,6 +4,8 @@
 #include <vector>
 #include "Vec3.h"
 
+enum class QUADRATURE_TYPE {NONE, GAUSS2};
+
 class Quadrature
 {
 public:
