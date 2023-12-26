@@ -19,6 +19,8 @@ class Matrix3f {
   Matrix3f(const Matrix3f& rm);             // copy constructor
   Matrix3f& operator=(const Matrix3f& rm);  // assignment operator
   Matrix3f& operator+=(const Matrix3f& rm);
+  //negation operator
+  Matrix3f operator-() const;  
   // no destructor necessary
 
   const float& operator()(int i, int j) const;
@@ -49,6 +51,7 @@ class Matrix3f {
                               float m11, float m12, float m20, float m21,
                               float m22);
 
+  static Matrix3f Diag(float m00,float m11, float m22);
   static Matrix3f ones();
   static Matrix3f Zero();
   static Matrix3f identity();

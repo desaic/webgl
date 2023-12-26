@@ -65,6 +65,14 @@ Matrix3f& Matrix3f::operator+=(const Matrix3f& rm) {
   return *this;
 }
 
+Matrix3f Matrix3f::operator-() const { 
+  Matrix3f m;
+  for (unsigned i = 0; i < 9; i++) {
+    m.m_elements[i] = -m_elements[i];
+  }
+  return m; 
+}
+
 const float& Matrix3f::operator()(int i, int j) const {
   return m_elements[j * 3 + i];
 }
@@ -198,6 +206,17 @@ float Matrix3f::determinant3x3(float m00, float m01, float m02, float m10,
                                float m22) {
   return (m00 * (m11 * m22 - m12 * m21) - m01 * (m10 * m22 - m12 * m20) +
           m02 * (m10 * m21 - m11 * m20));
+}
+
+Matrix3f Matrix3f::Diag(float m00, float m11, float m22) {
+  Matrix3f m;
+  for (int i = 1; i < 8; ++i) {
+    m.m_elements[i] = 0;
+  }
+  m.m_elements[0] = m00;
+  m.m_elements[4] = m11;
+  m.m_elements[8] = m22;
+  return m;
 }
 
 // static

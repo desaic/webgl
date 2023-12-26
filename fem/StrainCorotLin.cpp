@@ -1,16 +1,14 @@
-#include "StrainCorotLin.hpp"
-#include <Eigen/Dense>
+#include "StrainCorotLin.h"
+#include "Matrix3fSVD.h"
 #include <vector>
 
-#include <iostream>
-
-std::vector<Eigen::Matrix3d> initEp3();
+std::vector<Matrix3f> initEp3();
 //3D Levi-Civita symbol
-std::vector<Eigen::Matrix3d> Ep3=initEp3();
+std::vector<Matrix3f> Ep3=initEp3();
 
-std::vector<Eigen::Matrix3d> initEp3()
+std::vector<Matrix3f> initEp3()
 {
-  std::vector<Eigen::Matrix3d> Ep3(3, Eigen::Matrix3d::Zero());
+  std::vector<Matrix3f> Ep3(3, Matrix3f::Zero());
   Ep3[0](1, 2) = 1;
   Ep3[0](2, 1) = -1;
 
@@ -23,7 +21,7 @@ std::vector<Eigen::Matrix3d> initEp3()
   return Ep3;
 }
 
-double dot(Eigen::Matrix3d m1, Eigen::Matrix3d m2){
+double dot(Matrix3f m1, Matrix3f m2){
   double prod = 0;
   for (int ii = 0; ii < 3; ii++){
     for (int jj = 0; jj < 3; jj++){
@@ -40,35 +38,34 @@ StrainCorotLin::StrainCorotLin()
   param[1] = 10;
 }
 
-double StrainCorotLin::getEnergy(const Eigen::Matrix3d &F)
+double StrainCorotLin::getEnergy(const Matrix3f &F)
 {
-  Eigen::JacobiSVD<Eigen::Matrix3d> svd(F);
-  Eigen::Vector3d Sigma = svd.singularValues() - Eigen::Vector3d(1,1,1);
+  Matrix3f U, V;
+  Vec3f Sigma = SVD(F, U, V) - Vec3f(1, 1, 1);
   double mu = param[0];
   double lambda = param[1];
-  Eigen::Matrix3d I = Eigen::Matrix3d::Identity();
+  Matrix3f I = Matrix3f::identity();
   double t = Sigma[0] + Sigma[1] + Sigma[2];
   double Psi = mu*(Sigma[0] * Sigma[0] + Sigma[1] * Sigma[1] + Sigma[2] * Sigma[2]) + 0.5f * lambda * t * t;
   return Psi;
 }
 
-Eigen::Matrix3d StrainCorotLin::getPK1(const Eigen::Matrix3d & F)
+Matrix3f StrainCorotLin::getPK1(const Matrix3f & F)
 {
-  Eigen::JacobiSVD<Eigen::Matrix3d> svd(F, Eigen::ComputeFullU | Eigen::ComputeFullV);
-  Eigen::Matrix3d U = svd.matrixU();
-  Eigen::Matrix3d V = svd.matrixV();
-  Eigen::Matrix3d R = U * V.transpose();
+  Matrix3f U, V;
+  Vec3f Sigma = SVD(F, U, V);
+  Matrix3f R = U * V.transposed();
   double mu = param[0];
   double lambda = param[1];
-  Eigen::Matrix3d I = Eigen::Matrix3d::Identity();
-  Eigen::Matrix3d P = 2*mu*(F-R) + lambda * (R.transpose() * F - I).trace() * R;
+  Matrix3f I = Matrix3f::identity();
+  Matrix3f P = 2*mu*(F-R) + lambda * (R.transposed() * F - I).trace() * R;
 
   return P;
 }
 
-Eigen::Matrix3d crossProdMat(const Eigen::Vector3d & v)
+Matrix3f crossProdMat(const Vec3f & v)
 {
-  Eigen::Matrix3d A = Eigen::Matrix3d::Zero();
+  Matrix3f A = Matrix3f::Zero();
   A(0, 1) = -v[2];
   A(0, 2) = v[1];
   A(1, 0) = v[2];
@@ -78,18 +75,15 @@ Eigen::Matrix3d crossProdMat(const Eigen::Vector3d & v)
   return A;
 }
 
-std::vector<Eigen::Matrix3d>
-StrainCorotLin::getdPdx(const Eigen::Matrix3d & F, const Eigen::Vector3d &_dF
-                        , int dim)
-{
-  Eigen::JacobiSVD<Eigen::Matrix3d> svd(F, Eigen::ComputeFullU | Eigen::ComputeFullV);
-  Eigen::Matrix3d U = svd.matrixU();
-  Eigen::Matrix3d V = svd.matrixV();
-  Eigen::Matrix3d R = U * V.transpose();
-  Eigen::Matrix3d Sigma = svd.singularValues().asDiagonal();
-  Eigen::Matrix3d S = V*Sigma*V.transpose();
-  Eigen::Matrix3d I = Eigen::Matrix3d::Identity();
-  Eigen::Matrix3d SI = (S.trace()*I - S).inverse();
+std::vector<Matrix3f> StrainCorotLin::getdPdx(const Matrix3f& F,
+                                              const Vec3f& _dF, int dim) {
+  Matrix3f U, V;
+  Vec3f sVec = SVD(F, U, V);
+  Matrix3f R = U * V.transposed();
+  Matrix3f Sigma = Matrix3f::Diag(sVec[0],sVec[1],sVec[2]);
+  Matrix3f S = V*Sigma*V.transposed();
+  Matrix3f I = Matrix3f::identity();
+  Matrix3f SI = (S.trace()*I - S).inverse();
 
   //debug dR computation
   //double h = 0.01;
@@ -105,17 +99,17 @@ StrainCorotLin::getdPdx(const Eigen::Matrix3d & F, const Eigen::Vector3d &_dF
   double mu = param[0];
   double lambda = param[1];
 
-  std::vector<Eigen::Matrix3d> dP(dim);
+  std::vector<Matrix3f> dP(dim);
 
   for(int ii =0 ; ii<dim; ii++){
-    Eigen::Matrix3d dF=Eigen::Matrix3d::Zero();
-    dF.row(ii) = _dF;
-    Eigen::Matrix3d W = R.transpose()*dF;
-    Eigen::Vector3d w;
+    Matrix3f dF=Matrix3f::Zero();
+    dF.setRow(ii, _dF);
+    Matrix3f W = R.transposed()*dF;
+    Vec3f w;
     w[0] = W(1, 2) - W(2, 1);
     w[1] = W(2, 0) - W(0, 2);
     w[2] = W(0, 1) - W(1, 0);
-    Eigen::Matrix3d dR = -R*crossProdMat(SI*w);
+    Matrix3f dR = -R*crossProdMat(SI*w);
     dP[ii] = 2 * mu*dF + lambda*W.trace()*R +(lambda*(S - I).trace() - 2 * mu)*dR;
   }
   return dP;

@@ -1,16 +1,14 @@
-#ifndef STRAINCOROTLIN_HPP
-#define STRAINCOROTLIN_HPP
-#include "StrainLin.hpp"
-
-#include <Eigen/Dense>
+#ifndef STRAINCOROTLIN_H
+#define STRAINCOROTLIN_H
+#include "StrainLin.h"
 
 class StrainCorotLin :public StrainLin{
 public:
   StrainCorotLin();
-  virtual double getEnergy(const Eigen::Matrix3d & F);
-  virtual Eigen::Matrix3d getPK1(const Eigen::Matrix3d & F);
-  virtual std::vector<Eigen::Matrix3d>
-    getdPdx(const Eigen::Matrix3d & F, const Eigen::Vector3d & dF, int dim=3);
+  virtual double getEnergy(const Matrix3f & F);
+  virtual Matrix3f getPK1(const Matrix3f & F);
+  virtual std::vector<Matrix3f>
+    getdPdx(const Matrix3f & F, const Vec3f & dF, int dim=3);
 
 };
 

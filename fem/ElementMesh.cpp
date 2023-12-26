@@ -4,10 +4,12 @@
 #include <sstream>
 
 double ElementMesh::GetElasticEnergyEle(int eId) const {
+  double ene = 0;
+  return ene;
 }
 
 double ElementMesh::GetElasticEnergy() const {
-  double ene;
+  double ene = 0;
   for (size_t i = 0; i < e.size(); i++) {
     ene += GetElasticEnergyEle(i);
   }
