@@ -127,30 +127,7 @@ class FemApp {
   int _wireframeId = -1;
 };
 
-#include "Matrix3fSVD.h"
-void PrintMat(const Matrix3f& mat, std::ostream& out) {
-  for (unsigned i = 0; i < 3; i++) {
-    for (unsigned j = 0; j < 3; j++) {
-      out << mat(i, j) << " ";
-    }
-    out << "\n";
-  }
-}
-void TestSVD() {
-  Matrix3f mat(1,0,2,0,0,3,0,2,0);
-  Vec3f s;
-  Matrix3f U, V;
-  s = SVD(mat, U, V);
-  std::cout << s[0] << " " << s[1] << " " << s[2] << "\n";
-  std::cout << "\n";
-  PrintMat(U, std::cout);
-  std::cout << "\n";
-  PrintMat(V, std::cout);
-  std::cout << "\n";
-}
-
 int main(int, char**) {
-  TestSVD();
   UILib ui;
   FemApp app(&ui);
   ui.SetFontsDir("./fonts");

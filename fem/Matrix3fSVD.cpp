@@ -1,5 +1,6 @@
 #include "Matrix3fSVD.h"
 #include "svd3.h"
+#include <iostream>
 
 Vec3f SVD(const Matrix3f& a, Matrix3f& U, Matrix3f& V) {
   Vec3f s;
@@ -22,4 +23,39 @@ Vec3f SVD(const Matrix3f& a, Matrix3f& U, Matrix3f& V) {
     );
   // clang-format on
   return s;
+}
+
+void PrintMat(const Matrix3f& mat, std::ostream& out) {
+  for (unsigned i = 0; i < 3; i++) {
+    for (unsigned j = 0; j < 3; j++) {
+      out << mat(i, j) << " ";
+    }
+    out << "\n";
+  }
+}
+
+void TestSVD() {
+  Matrix3f mat(1, 0, 2, 0, 1, 3, 0, 2, 4);
+  Vec3f s;
+  Matrix3f U, V;
+  s = SVD(mat, U, V);
+  std::cout << s[0] << " " << s[1] << " " << s[2] << "\n";
+  std::cout << "\n";
+  PrintMat(U, std::cout);
+  std::cout << "\n";
+  PrintMat(V, std::cout);
+  std::cout << "\n";
+
+  Matrix3f sdiag = Matrix3f::Diag(s[0], s[1], s[2]);
+  Matrix3f prod = U * sdiag * V.transposed();
+  PrintMat(prod, std::cout);
+  std::cout << "\n";
+
+  Matrix3f UUT = U * U.transposed();
+  PrintMat(UUT, std::cout);
+  std::cout << "\n";
+
+  Matrix3f VVT = V * V.transposed();
+  PrintMat(VVT, std::cout);
+  std::cout << "\n";
 }
