@@ -5,6 +5,7 @@
 #include <vector>
 #include <memory>
 
+#include "MaterialModel.h"
 #include "Element.h"
 #include "Vec3.h"
 #include "Array2D.h"
@@ -16,7 +17,8 @@ class ElementMesh {
   //deformed positions. initialized to X.
   std::vector<Vec3f> x;
   std::vector<std::unique_ptr<Element> > e;
-
+  //material model for each element
+  std::vector<MaterialModel> m;
   //external force
   std::vector<Vec3f> fe;
 
