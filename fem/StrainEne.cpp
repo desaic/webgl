@@ -10,9 +10,9 @@ StrainEne::~StrainEne() {}
 
 ///@param E array of 2 doubles. E and nu
 ///@param mu array of size 2. mu and lambda.
-void Young2Lame(double * E, double * mu){
-  mu[0] = E[0] / (2*(1+E[1]));
-  mu[1] = E[0] * E[1]/((1+E[1])*(1-2*E[1]));
+void Young2Lame(double E, double nu, double* mu) {
+  mu[0] = E / (2 * (1 + nu));
+  mu[1] = E * nu / ((1 + nu) * (1 - 2 * nu));
 }
 
 std::vector < StrainEne* > loadMaterials(std::istream & in, std::vector<double> & densities)
@@ -37,19 +37,19 @@ std::vector < StrainEne* > loadMaterials(std::istream & in, std::vector<double> 
     case StrainEne::LIN:
       ene = new StrainLin();
       ene->param.resize(2);
-      Young2Lame( param.data(), ene->param.data() );
+      Young2Lame( param[0], param[1], ene->param.data() );
       break;
 
     case StrainEne::COROT:
       ene = new StrainCorotLin();
       ene->param.resize(2);
-      Young2Lame( param.data(), ene->param.data() );
+      Young2Lame(param[0], param[1], ene->param.data());
       break;
 
     case StrainEne::NEO:
       ene = new StrainEneNeo();
       ene->param.resize(2);
-      Young2Lame( param.data(), ene->param.data() );
+      Young2Lame(param[0], param[1], ene->param.data());
       break;
     default:
       std::cout<<"Unrecognized material type "<<matType<<"\n";

@@ -1,7 +1,10 @@
 #include "ElementMesh.h"
+#include "femError.h"
 #include <fstream>
 #include <iostream>
 #include <sstream>
+
+int fem_error = 0;
 
 double ElementMesh::GetElasticEnergyEle(int eId) const {
   double ene = 0;
@@ -14,6 +17,15 @@ double ElementMesh::GetElasticEnergy() const {
     ene += GetElasticEnergyEle(i);
   }
   return ene;
+}
+
+void ElementMesh::InitElements() {
+  if (m.size() != e.size()) {
+    m.resize(e.size());
+  }
+  for (size_t i = 0; i < e.size(); i++) {
+    e[i]->InitJacobian(m[i].quadType, X);
+  }
 }
 
 void ElementMesh::LoadTxt(const std::string& file) {
@@ -66,6 +78,8 @@ void ElementMesh::LoadTxt(const std::string& file) {
     std::cout << "only found " << e.size() << " out of " << numElements
               << " elements\n";
   }
+
+  InitElements();
 }
 
 void ElementMesh::SaveTxt(const std::string& file) {

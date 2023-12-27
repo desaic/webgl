@@ -33,6 +33,9 @@ class ElementMesh {
   //removes existing mesh.
   void LoadTxt(const std::string & file);
   void SaveTxt(const std::string& file);  
+
+  //has to be called before sim
+  void InitElements();
 };
 
 #endif
