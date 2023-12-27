@@ -17,5 +17,5 @@ public:
 
   static const Quadrature Gauss2;
 };
-
+Quadrature makeGauss2();
 #endif

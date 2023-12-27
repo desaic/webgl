@@ -81,6 +81,8 @@ class FETrigMesh{
   bool _showWireFrame = true;
 };
 
+const float MToMM = 1000;
+
 class FemApp {
  public:
   FemApp(UILib* ui) : _ui(ui) {
@@ -125,9 +127,18 @@ class FemApp {
   int _hexInputId = -1;
   int _meshId = -1;
   int _wireframeId = -1;
+  float _DrawingScale = MToMM;
 };
 
+void TestFEM() {
+  ElementMesh em;
+  em.LoadTxt("F:/github/webgl/fem/data/hex_m.txt");
+  float ene = em.GetElasticEnergy();
+  std::cout << "E: " << ene << "\n";
+}
+
 int main(int, char**) {
+  TestFEM(); 
   UILib ui;
   FemApp app(&ui);
   ui.SetFontsDir("./fonts");

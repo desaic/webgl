@@ -18,10 +18,23 @@ Vec3f Element::GetDisp(const Vec3f& p, const std::vector<Vec3f>& X,
 unsigned HexEdges[12][2] = {{0, 4}, {2, 6}, {1, 5}, {3, 7}, {0, 2}, {4, 6},
                             {1, 3}, {5, 7}, {0, 1}, {2, 3}, {4, 5}, {6, 7}};
 
-/// cached shape function gradient for the combination of hex element and 
-/// 2-point gaussian quadrature.
-Vec3f HexGrauss2Grad[8][8];
-
+class ElementGlobals {
+ public:
+  ElementGlobals() {
+    const auto q = makeGauss2();
+    HexElement hex;
+    for (int qq = 0; qq < q.x.size(); qq++) {
+      for (int ii = 0; ii < 8; ii++) {
+        HexGrauss2Grad[qq][ii] = hex.shapeFunGrad(ii, q.x[qq]);
+      }
+    }    
+  }
+  /// precomputed shape function gradient for the combination of hex element and
+  /// 2-point gaussian quadrature.
+  Vec3f HexGrauss2Grad[8][8];
+};
+ElementGlobals elementGlobals;
+    
 void HexElement::Edge(unsigned ei, unsigned& v1, unsigned& v2) const {
   if (ei < 12) {
     v1 = _v[HexEdges[ei][0]];
@@ -80,7 +93,8 @@ Matrix3f HexElement::DefGradGauss2(int qi, const std::vector<Vec3f>& X,
                        const std::vector<Vec3f>& x) const {
   Matrix3f F = Matrix3f::Zero();
   for (int ii = 0; ii < NumVerts(); ii++) {
-    F += OuterProd(x[_v[ii]], HexGrauss2Grad[qi][ii]);
+    const Vec3f& gradN = elementGlobals.HexGrauss2Grad[qi][ii];
+    F += OuterProd(x[_v[ii]], gradN);
   }
   return F * _Jinv[qi];
 }
@@ -94,7 +108,8 @@ void HexElement::InitJacobian(QUADRATURE_TYPE qtype,
     for (int qq = 0; qq < q.x.size(); qq++) {
       Matrix3f J = Matrix3f::Zero();
       for (int ii = 0; ii < NumVerts(); ii++) {
-        J += OuterProd(X[_v[ii]], HexGrauss2Grad[qq][ii]);
+        const Vec3f& gradN = elementGlobals.HexGrauss2Grad[qq][ii];
+        J += OuterProd(X[_v[ii]], gradN);
       }
       _Jinv[qq] = J.inverse();
       _detJ[qq] = J.determinant();

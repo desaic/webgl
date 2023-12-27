@@ -11,7 +11,7 @@ class MaterialModel {
  public:
   MaterialModel();
   MaterialModel(std::shared_ptr<StrainEne> ene) : enePtr(ene) {}
-  float GetEnergy(int eidx, ElementMesh* mesh) const;
+  float GetEnergy(size_t eidx, const ElementMesh& mesh) const;
 
   QUADRATURE_TYPE quadType = QUADRATURE_TYPE::GAUSS2;
 

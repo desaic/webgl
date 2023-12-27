@@ -9,8 +9,5 @@ class StrainEneNeo : public StrainEne {
   Matrix3f getPK1(const Matrix3f& F);
   std::vector<Matrix3f> getdPdx(const Matrix3f& F, const Vec3f& dF,
                                 int dim = 3);
-
-  Matrix3f cacheFinvT;
-  double c1 = 0;
 };
 #endif

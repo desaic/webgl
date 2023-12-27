@@ -11,7 +11,7 @@
 ///deformation gradient also computes derivatives
 class StrainEne {
  public:
-  StrainEne() : cacheF(0) {}
+  StrainEne() {}
   virtual double getEnergy(const Matrix3f& F) = 0;
   virtual Matrix3f getPK1(const Matrix3f& F) = 0;
   virtual std::vector<Matrix3f> getdPdx(const Matrix3f& F, const Vec3f& dF,
@@ -21,9 +21,6 @@ class StrainEne {
   std::vector<double> param;
 
   enum MaterialModel { LIN, COROT, NEO };
-
-  ///@brief cache quantities determined by F.
-  bool cacheF;
 };
 
 std::vector<StrainEne*> loadMaterials(std::istream& in,

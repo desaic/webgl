@@ -7,7 +7,8 @@
 int fem_error = 0;
 
 double ElementMesh::GetElasticEnergyEle(int eId) const {
-  double ene = 0;
+  const auto& mat = m[eId];
+  double ene = mat.GetEnergy(eId, *this);
   return ene;
 }
 
