@@ -37,16 +37,17 @@ void LogToUI(const std::string& str, UILib& ui, int statusLabel) {
 class FETrigMesh{
  public:
   FETrigMesh() {}
-  void UpdateMesh(ElementMesh* em) {
+  void UpdateMesh(ElementMesh* em, float drawingScale) {
     if (!em) {
       return;
     }
+    _drawingScale = drawingScale;
     _em = em;
     _mesh = std::make_shared<TrigMesh>();
     if (_showWireFrame) {
-      ComputeWireframeMesh(*_em, *_mesh, _edges);      
+      ComputeWireframeMesh(*_em, *_mesh, _edges, _drawingScale);      
     } else {
-      ComputeSurfaceMesh(*_em, *_mesh, _meshToEMVert);
+      ComputeSurfaceMesh(*_em, *_mesh, _meshToEMVert, _drawingScale);
     }
   }
 
@@ -56,7 +57,7 @@ class FETrigMesh{
       return;
     }
     if (_showWireFrame) {
-      UpdateWireframePosition(*_em, *_mesh, _edges);
+      UpdateWireframePosition(*_em, *_mesh, _edges, _drawingScale);
       return;
     }
     for (size_t i = 0; i < _meshToEMVert.size(); i++) {
@@ -70,7 +71,7 @@ class FETrigMesh{
   void ShowWireFrame(bool b) {
     if (b != _showWireFrame) {
       _showWireFrame = b;
-      UpdateMesh(_em);
+      UpdateMesh(_em, _drawingScale);
     }
   }
 
@@ -79,6 +80,7 @@ class FETrigMesh{
   std::vector<uint32_t> _meshToEMVert;
   std::vector<Edge> _edges;
   bool _showWireFrame = true;
+  float _drawingScale = 1;
 };
 
 const float MToMM = 1000;
@@ -86,6 +88,10 @@ const float MToMM = 1000;
 class FemApp {
  public:
   FemApp(UILib* ui) : _ui(ui) {
+    floor = std::make_shared<TrigMesh>();
+    *floor = MakePlane(Vec3f(-100, -0.1, -100), Vec3f(100, -0.1, 100),
+                      Vec3f(0, 1, 0));
+    _ui->AddMesh(floor);
     _hexInputId = _ui->AddWidget(std::make_shared<InputText>("mesh file", "./hex.txt"));
     _ui->AddButton("Load Hex mesh", [&] {
       std::string file = GetMeshFileName();
@@ -107,7 +113,7 @@ class FemApp {
   }
 
   void UpdateRenderMesh() {
-    _renderMesh.UpdateMesh(&_em);
+    _renderMesh.UpdateMesh(&_em, _drawingScale);
     if (_meshId < 0) {
       _meshId = _ui->AddMesh(_renderMesh._mesh);
     }
@@ -127,7 +133,8 @@ class FemApp {
   int _hexInputId = -1;
   int _meshId = -1;
   int _wireframeId = -1;
-  float _DrawingScale = MToMM;
+  float _drawingScale = MToMM;
+  std::shared_ptr<TrigMesh> floor;
 };
 
 void TestFEM() {

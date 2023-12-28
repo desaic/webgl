@@ -99,4 +99,6 @@ class TrigMesh {
 
 TrigMesh SubSet(const TrigMesh& m, const std::vector<size_t>& trigs);
 TrigMesh MakeCube(const Vec3f& mn, const Vec3f& mx);
+TrigMesh MakePlane(const Vec3f& mn, const Vec3f& mx, const Vec3f& n);
+
 #endif

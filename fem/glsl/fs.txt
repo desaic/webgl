@@ -11,12 +11,12 @@ uniform sampler2D texSampler;
 void main()
 {
 	float ambient = 0.02;
-    vec3 L = vec3(10.0, 100, 300.0) - pos;
+    vec3 L = vec3(0, 50, 0.0) - pos;
 	float lightDist = length(L);
 	L = (1.0/lightDist) * L;
 	lightDist = lightDist+0.5;
 	lightDist = min(300,lightDist);
-	lightDist = min(1, 50000/lightDist/lightDist);
+	lightDist = min(1, 50000/lightDist);
 	vec3 N = normalize(normal);
 	float diffuse = max(0, dot(L, N));
 	vec3 V = -normalize(pos);

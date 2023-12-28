@@ -10,10 +10,11 @@
 #include "Vec3.h"
 
 void ComputeSurfaceMesh(const ElementMesh& em, TrigMesh& m,
-                        std::vector<uint32_t>& meshToEMVert);
+                        std::vector<uint32_t>& meshToEMVert,
+                        float drawingScale);
 
 void ComputeWireframeMesh(const ElementMesh& em, TrigMesh& m,
-                          std::vector<Edge>& edges);
+                          std::vector<Edge>& edges, float drawingScale);
 void UpdateWireframePosition(const ElementMesh& em, TrigMesh& m,
-                             std::vector<Edge>& edges);
+                             std::vector<Edge>& edges, float drawingScale);
 #endif

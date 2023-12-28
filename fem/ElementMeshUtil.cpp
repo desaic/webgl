@@ -4,7 +4,8 @@
 #include <unordered_map>
 
 void ComputeSurfaceMesh(const ElementMesh& em, TrigMesh& m,
-                        std::vector<uint32_t>& meshToEMVert) {
+                        std::vector<uint32_t>& meshToEMVert,
+                        float drawingScale) {
   for (size_t i = 0; i < em.e.size(); i++) {
     const Element* ele = em.e[i].get();
   }
@@ -15,7 +16,7 @@ struct hash_edge {
 };
 
 void ComputeWireframeMesh(const ElementMesh& em, TrigMesh& m,
-                          std::vector<Edge>& edges) {
+                          std::vector<Edge>& edges, float drawingScale) {
   std::unordered_set<Edge, hash_edge> edgeSet;
   for (size_t i = 0; i < em.e.size(); i++) {
     const Element* ele = em.e[i].get();
@@ -46,18 +47,18 @@ void ComputeWireframeMesh(const ElementMesh& em, TrigMesh& m,
       m.t[3 * tIdx + 2] = v0Idx + PRISM_TRIGS[ti][2];
     }
   }
-  UpdateWireframePosition(em, m, edges);
+  UpdateWireframePosition(em, m, edges, drawingScale);
 }
 
 void UpdateWireframePosition(const ElementMesh& em, TrigMesh& m,
-                             std::vector<Edge>& edges) {
+                             std::vector<Edge>& edges, float drawingScale) {
   const float PRISM_VERTS[3][2] = {
       {0.5, -0.2887}, {-0.5, -0.2887}, {0, 0.5774}};
   float beamThickness = 0.5f;
   const float EPS = 1e-6;
   for (unsigned i = 0; i < edges.size(); i++) {
-    Vec3f v1 = em.x[edges[i].v[0]];
-    Vec3f v2 = em.x[edges[i].v[1]];
+    Vec3f v1 = drawingScale * em.x[edges[i].v[0]];
+    Vec3f v2 = drawingScale * em.x[edges[i].v[1]];
     Vec3f eVec = v2 - v1;
     float len = eVec.norm();
     // 4   5
