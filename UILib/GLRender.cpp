@@ -7,6 +7,7 @@
 #include "GLFW/glfw3.h"
 #include "Matrix4f.h"
 #include "Matrix3f.h"
+#include "Vec4.h"
 
 void PrintGLError() {
   GLenum error = glGetError();
@@ -32,7 +33,7 @@ std::string GLRender::GLInfo() const {
   return s + " glsl: " + glslStr;
 }
 
-GLRender::GLRender() {}
+GLRender::GLRender():_lights(MAX_NUM_LIGHTS) {}
 
 GLRender::~GLRender() {
   // delete texture and framebuffer object
@@ -128,6 +129,22 @@ void GLRender::KeyPressed(KeyboardInput& input) {
   }
 }
 
+int GLRender::UploadLights() { 
+  unsigned numLights = _lights.NumLights();
+  Matrix4f viewMat = _camera.view * _camera.proj;
+  for (unsigned i = 0; i < numLights; i++) {
+    Vec3f worldPos = _lights.world_pos[i];
+    Vec4f p(worldPos[0],worldPos[1],worldPos[2], 1.0f);
+    p = viewMat * p;
+    _lights.pos[i] = Vec3f(p[0], p[1], p[2]);
+  }
+  glUniform3fv(_lights._pos_loc, _lights.pos.size(),
+               (GLfloat*)_lights.pos.data());
+  glUniform3fv(_lights._color_loc, _lights.color.size(),
+               (GLfloat*)_lights.color.data());
+  return 0; 
+}
+
 /// renders once
 void GLRender::Render() {
   if (!_initialized) {
@@ -135,7 +152,6 @@ void GLRender::Render() {
   }
   Matrix4f v, mvp, mvit;
   _camera.update();
-
   glUseProgram(_program);
   glBindFramebuffer(GL_FRAMEBUFFER, _fbo);
   glViewport(0, 0, _width, _height);
@@ -150,6 +166,8 @@ void GLRender::Render() {
   glUniformMatrix4fv(_mvp_loc, matCount, noTranspose, (const GLfloat*)vp);
   _camera.VIT(vit);
   glUniformMatrix4fv(_mvit_loc, matCount, noTranspose, (const GLfloat*)vit);
+  UploadLights();
+
   for (size_t i = 0; i < _bufs.size(); i++) {
     DrawMesh(i);
   }
@@ -175,10 +193,10 @@ int checkShaderError(GLuint shader) {
 }
 
 void GLRender::ResetCam() {
-  _camera.eye = Vec3f(0, 50, 100);
+  _camera.eye = Vec3f(0, 50, 200);
   _camera.at = Vec3f(0, 0, 0);
   _camera.near = 1;
-  _camera.far = 500;
+  _camera.far = 1000;
   _camera.update();
 }
 
@@ -190,7 +208,12 @@ int GLRender::Init(const std::string& vertShader,
   const char* vs_pointer = _vs_string.data();
   const char* fs_pointer = _fs_string.data();
   ResetCam();
-
+  _lights.SetLightPos(0, 0, 200, -100);
+  _lights.SetLightColor(0, 0.8, 0.7, 0.6);
+  _lights.SetLightPos(1, 0, 200, 0);
+  _lights.SetLightColor(1, 0.8, 0.8, 0.8);
+  _lights.SetLightPos(2, 0, 200, 100);
+  _lights.SetLightColor(2, 0.6, 0.7, 0.8);
   unsigned err = 0;
   _vertex_shader = glCreateShader(GL_VERTEX_SHADER);
   glShaderSource(_vertex_shader, 1, &vs_pointer, NULL);
@@ -228,8 +251,9 @@ int GLRender::Init(const std::string& vertShader,
   glUseProgram(_program);
   _mvp_loc = glGetUniformLocation(_program, "MVP");
   _mvit_loc = glGetUniformLocation(_program, "MVIT");
+  _lights._pos_loc = glGetUniformLocation(_program, "lightpos");
+  _lights._color_loc = glGetUniformLocation(_program, "lightcolor");
   _tex_loc = glGetUniformLocation(_program, "texSampler");
-    
   glGenFramebuffers(1, &_fbo);
   glBindFramebuffer(GL_FRAMEBUFFER, _fbo);  
   glGenTextures(1, &_render_tex);

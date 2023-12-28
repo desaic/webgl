@@ -85,13 +85,37 @@ class FETrigMesh{
 
 const float MToMM = 1000;
 
+void MakeCheckerPatternRGBA(Array2D8u& out) {
+  unsigned numCells = 4;
+  unsigned cellSize = 4;
+  unsigned width = numCells * cellSize;
+  out.Allocate(width*4, width);
+  out.Fill(255);
+  for (size_t i = 0; i < width; i++) {
+    for (size_t j = 0; j < width; j++) {
+      if ( (i/cellSize + j/cellSize) % 2 == 0) {
+        continue;
+      }
+      for (unsigned chan = 0; chan < 3; chan++) {
+        out(4 * i + chan, j) = 0;
+      }
+    }
+  }
+}
+
 class FemApp {
  public:
   FemApp(UILib* ui) : _ui(ui) {
     floor = std::make_shared<TrigMesh>();
     *floor = MakePlane(Vec3f(-100, -0.1, -100), Vec3f(100, -0.1, 100),
                       Vec3f(0, 1, 0));
-    _ui->AddMesh(floor);
+    for (size_t i = 0; i < floor->uv.size(); i++) {
+      floor->uv[i] *= 800;
+    }
+    Array2D8u checker;
+    MakeCheckerPatternRGBA(checker);
+    _floorMeshId = _ui->AddMesh(floor);
+    _ui->SetMeshTex(_floorMeshId, checker, 4);
     _hexInputId = _ui->AddWidget(std::make_shared<InputText>("mesh file", "./hex.txt"));
     _ui->AddButton("Load Hex mesh", [&] {
       std::string file = GetMeshFileName();
@@ -135,6 +159,7 @@ class FemApp {
   int _wireframeId = -1;
   float _drawingScale = MToMM;
   std::shared_ptr<TrigMesh> floor;
+  int _floorMeshId = -1;
 };
 
 void TestFEM() {

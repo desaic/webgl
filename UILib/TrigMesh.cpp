@@ -383,6 +383,14 @@ TrigMesh MakePlane(const Vec3f& mn, const Vec3f& mx, const Vec3f & n) {
       m.t.push_back(PlANE_TRIG[t][d]);
     }
   }
+  m.uv.resize(6);
+  m.uv[0] = Vec2f(0, 0);
+  m.uv[1] = Vec2f(1, 0);
+  m.uv[2] = Vec2f(1, 1);
+  m.uv[3] = Vec2f(0, 0);
+  m.uv[4] = Vec2f(1, 1);
+  m.uv[5] = Vec2f(0, 1);
+  
   m.ComputeTrigNormals();
   return m;
 }
