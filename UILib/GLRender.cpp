@@ -150,11 +150,15 @@ void GLRender::KeyPressed(KeyboardInput& input) {
 int GLRender::UploadLights() { 
   unsigned numLights = _lights.NumLights();
   Matrix4f viewMat = _camera.view * _camera.proj;
+  const float eps = 1e-6;
   for (unsigned i = 0; i < numLights; i++) {
     Vec3f worldPos = _lights.world_pos[i];
     Vec4f p(worldPos[0],worldPos[1],worldPos[2], 1.0f);
     p = viewMat * p;
-    _lights.pos[i] = Vec3f(p[0], p[1], p[2]);
+    if (std::abs(p[3]) < eps) {
+      p[3] = eps;
+    }
+    _lights.pos[i] = Vec3f(p[0] / p[3], p[1] / p[3], p[2] / p[3]);
   }
   glUniform3fv(_lights._pos_loc, _lights.pos.size(),
                (GLfloat*)_lights.pos.data());
@@ -219,8 +223,8 @@ int checkShaderError(GLuint shader) {
 }
 
 void GLRender::ResetCam() {
-  _camera.eye = Vec3f(0, 50, 200);
-  _camera.at = Vec3f(0, 0, 0);
+  _camera.eye = Vec3f(20, 100, 200);
+  _camera.at = Vec3f(20, 0, 0);
   _camera.near = 1;
   _camera.far = 1000;
   _camera.update();
@@ -234,11 +238,11 @@ int GLRender::Init(const std::string& vertShader,
   const char* vs_pointer = _vs_string.data();
   const char* fs_pointer = _fs_string.data();
   ResetCam();
-  _lights.SetLightPos(0, 0, 200, -100);
+  _lights.SetLightPos(0, 0, 400, -100);
   _lights.SetLightColor(0, 0.8, 0.7, 0.6);
-  _lights.SetLightPos(1, 0, 200, 0);
+  _lights.SetLightPos(1, 0, 400, 0);
   _lights.SetLightColor(1, 0.8, 0.8, 0.8);
-  _lights.SetLightPos(2, 0, 200, 100);
+  _lights.SetLightPos(2, 0, 400, 100);
   _lights.SetLightColor(2, 0.6, 0.7, 0.8);
   unsigned err = 0;
   _vertex_shader = glCreateShader(GL_VERTEX_SHADER);
