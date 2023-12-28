@@ -107,10 +107,10 @@ class FemApp {
  public:
   FemApp(UILib* ui) : _ui(ui) {
     floor = std::make_shared<TrigMesh>();
-    *floor = MakePlane(Vec3f(-100, -0.1, -100), Vec3f(100, -0.1, 100),
+    *floor = MakePlane(Vec3f(-200, -0.1, -200), Vec3f(200, -0.1, 200),
                       Vec3f(0, 1, 0));
     for (size_t i = 0; i < floor->uv.size(); i++) {
-      floor->uv[i] *= 800;
+      floor->uv[i] *= 50;
     }
     Array2D8u checker;
     MakeCheckerPatternRGBA(checker);
