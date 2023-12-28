@@ -79,7 +79,7 @@ class GLRender {
 
   unsigned Width() const { return _width; }
   unsigned Height() const { return _height; }
-  unsigned TexId() const { return _render_tex; }
+  unsigned TexId() const { return _resolve_tex; }
 
   int AddMesh(std::shared_ptr<TrigMesh> mesh);
 
@@ -105,10 +105,14 @@ class GLRender {
   const static unsigned MAX_NUM_LIGHTS = 8;
  private:
   
+   //rendered
    unsigned _fbo = 0;
+   //resolving multisampling
+  unsigned _fbo_resolve = 0;
   /// renders to this texture.
   /// because renders from gpu, the cpu buffer in it is unused and empty.
   unsigned _render_tex = 0;
+  unsigned _resolve_tex = 0;
   unsigned _depth_buffer = 0;
   Scene scene;
 

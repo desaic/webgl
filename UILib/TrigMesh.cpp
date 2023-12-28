@@ -374,7 +374,7 @@ TrigMesh MakePlane(const Vec3f& mn, const Vec3f& mx, const Vec3f & n) {
   TrigMesh m;
   for (size_t v = 0; v < 4; v++) {
     for (size_t d = 0; d < 3; d++) {
-      float f = PLANE_VERT[v][d] * (mx[d] - mn[d]) + mn[d];
+      float f = PLANE_VERT[v][d];
       m.v.push_back(f);
     }
   }

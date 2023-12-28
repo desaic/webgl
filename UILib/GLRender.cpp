@@ -46,14 +46,32 @@ void GLRender::Resize(unsigned int width, unsigned int height) {
   }
   _width = width;
   _height = height;
-  glBindTexture(GL_TEXTURE_2D, _render_tex);
+  //glBindTexture(GL_TEXTURE_2D, _render_tex);
+  glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, _render_tex);
   unsigned format = GL_RGBA;
   unsigned type = GL_UNSIGNED_BYTE;
-  glTexImage2D(GL_TEXTURE_2D, 0, format, _width, _height, 0, format, type,
-               nullptr);
+  //glTexImage2D(GL_TEXTURE_2D, 0, format, _width, _height, 0, format, type,
+               //nullptr);
+
+  glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, format, _width,
+                          _height, true);
   glBindRenderbuffer(GL_RENDERBUFFER, _depth_buffer);
   glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, _width, _height);
   _camera.aspect = width / (float)height;
+
+
+  glBindTexture(GL_TEXTURE_2D, _resolve_tex);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, _width, _height, 0, GL_RGBA,
+               GL_UNSIGNED_BYTE, nullptr);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+  glBindTexture(GL_TEXTURE_2D_MULTISAMPLE,
+                _depth_buffer);
+  glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, GL_DEPTH_COMPONENT24,
+                          _width, _height, GL_TRUE);
 }
 
 int GLRender::DrawMesh(size_t meshId) {
@@ -167,13 +185,21 @@ void GLRender::Render() {
   _camera.VIT(vit);
   glUniformMatrix4fv(_mvit_loc, matCount, noTranspose, (const GLfloat*)vit);
   UploadLights();
-
+  glEnable(GL_MULTISAMPLE);
   for (size_t i = 0; i < _bufs.size(); i++) {
     DrawMesh(i);
   }
 
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glDisable(GL_MULTISAMPLE);
   glUseProgram(0);
+
+  		// Resolved multisampling
+  glBindFramebuffer(GL_READ_FRAMEBUFFER, _fbo);
+  glBindFramebuffer(GL_DRAW_FRAMEBUFFER, _fbo_resolve);
+  glBlitFramebuffer(0, 0, _width, _height, 0, 0, _width, _height,
+                    GL_COLOR_BUFFER_BIT, GL_NEAREST);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 int checkShaderError(GLuint shader) {
@@ -255,24 +281,37 @@ int GLRender::Init(const std::string& vertShader,
   _lights._color_loc = glGetUniformLocation(_program, "lightcolor");
   _tex_loc = glGetUniformLocation(_program, "texSampler");
   glGenFramebuffers(1, &_fbo);
+  glGenFramebuffers(1, &_fbo_resolve);
   glBindFramebuffer(GL_FRAMEBUFFER, _fbo);  
   glGenTextures(1, &_render_tex);
-  glGenRenderbuffers(1, &_depth_buffer);
+  glGenTextures(1, &_resolve_tex);
+  glGenTextures(1, &_depth_buffer);
   Resize(INIT_WIDTH, INIT_HEIGHT);
-  glBindTexture(GL_TEXTURE_2D, _render_tex);
+  //glBindTexture(GL_TEXTURE_2D, _render_tex);
+
+  glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, _render_tex);
+
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-  glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
-                            GL_RENDERBUFFER, _depth_buffer);
-  glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, _render_tex, 0);
+
+  glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                       _render_tex, 0);
+  glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+                       _depth_buffer, 0);
   GLenum DrawBuffers[1] = {GL_COLOR_ATTACHMENT0};
   glDrawBuffers(1, DrawBuffers);
   ret = glCheckFramebufferStatus(GL_FRAMEBUFFER);
   if (ret != GL_FRAMEBUFFER_COMPLETE) {
     std::cout << "incomplete frame buffer error " << ret << "\n";
   }
+
+  glBindFramebuffer(GL_FRAMEBUFFER, _fbo_resolve);
+  glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                       _resolve_tex, 0);
+  glDrawBuffers(1, DrawBuffers);
+
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   _initialized = true;
   return 0;
