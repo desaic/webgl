@@ -103,17 +103,84 @@ void MakeCheckerPatternRGBA(Array2D8u& out) {
   }
 }
 
+void Add(std::vector<Vec3f>& dst, std::vector<Vec3f>& src) {
+  for (size_t i = 0; i < dst.size(); i++) {
+    dst[i] += src[i];
+  }
+}
+
+std::vector<Vec3f> operator*(float c, const std::vector<Vec3f>& v) {
+  std::vector<Vec3f> out(v.size());
+  for (size_t i = 0; i < out.size(); i++) {
+    out[i] = c * v[i];
+  }
+  return out;
+}
+
+void Fix(std::vector<Vec3f>& dx, const std::vector<bool> fixedDOF) {
+  for (size_t i = 0; i < dx.size(); i++) {
+    for (size_t j = 0; j < 3; j++) {
+      if (fixedDOF[3*i+j]) {
+        dx[i][j] = 0;
+      }
+    }
+  }
+}
+
+Vec3f MaxAbs(const std::vector<Vec3f>& v) { 
+  if (v.size() == 0) {
+    return Vec3f(0, 0, 0);
+  }
+
+  Vec3f ma = v[0]; 
+
+  for (size_t i = 1; i < v.size(); i++) {
+    for (size_t j = 0; j < 3; j++) {
+      ma[j] = std::max(ma[j], std::abs(v[i][j]));
+    }
+  }
+  return ma;
+}
+
 class Simulator {
  public:
   void Step(ElementMesh& em) {
     if (em.X.empty()) {
       return;
     }
-    if (em.x[10][1] < 0.1) {
-      em.x[10] += Vec3f(0, 0.001f, 0);
-    }
+    std::vector<Vec3f> force = em.GetForce();
+    Vec3f maxAbsForce = MaxAbs(force);
+    std::cout << "max abs(force) " << maxAbsForce[0] << " " << maxAbsForce[1]
+              << " " << maxAbsForce[2] << "\n";
+    Add(force, em.fe);
+    float h = 0.001f;
+    std::vector<Vec3f> dx = h * force;
+    Fix(dx, em.fixedDOF);
+    Add(em.x, dx);
   }
 };
+
+void PullRight(const Vec3f& force, float dist, ElementMesh& em) {
+  BBox box;
+  ComputeBBox(em.X, box);
+  for (size_t i = 0; i < em.X.size(); i++) {
+    if (box.vmax[0] - em.X[i][0] < dist) {
+      em.fe[i] = force;
+    }
+  }
+}
+
+void FixLeft(float dist, ElementMesh& em) {
+  BBox box;
+  ComputeBBox(em.X, box);
+  for (size_t i = 0; i < em.X.size(); i++) {
+    if (em.X[i][0] - box.vmin[0] < dist) {
+      em.fixedDOF[3 * i] = true;
+      em.fixedDOF[3 * i + 1] = true;
+      em.fixedDOF[3 * i + 2] = true;
+    }
+  }
+}
 
 class FemApp {
  public:
@@ -143,9 +210,17 @@ class FemApp {
     return file;
   }
 
+  void InitExternalForce() { 
+    _em.fe= std::vector<Vec3f>(_em.X.size());
+    _em.fixedDOF=std::vector<bool>(_em.X.size() * 3, false);
+    PullRight(Vec3f(0, -1, 0), 0.001, _em);
+    FixLeft(0.001, _em);
+  }
+
   void LoadElementMesh(const std::string& file) {
     _em.LoadTxt(file);
     UpdateRenderMesh();
+    InitExternalForce(); 
   }
 
   void UpdateRenderMesh() {
@@ -178,6 +253,33 @@ class FemApp {
   Simulator sim;
 };
 
+std::vector<Vec3f> CentralDiffForce(ElementMesh & em, float h) {
+  std::vector<Vec3f> f(em.x.size()); 
+  for (size_t i = 0; i < em.x.size(); i++) {
+    for (size_t j = 0; j < 3; j++) {
+      em.x[i][j] -= h;
+      float negEne = em.GetElasticEnergy();
+      
+      em.x[i][j] += h;
+      float posEne = em.GetElasticEnergy();
+
+      float force = -(posEne - negEne) / (2*h);
+      f[i][j] = force;
+      em.x[i][j] -= h;
+    }
+  }
+  return f;
+}
+
+void PrintMat3(const Matrix3f& m, std::ostream& out) {
+  for (int i = 0; i < 3; i++) {
+    for (int j = 0; j < 3; j++) {
+      out << m(i, j) << " ";
+    }
+    out << "\n";
+  }
+}
+
 void TestFEM() {
   ElementMesh em;
   em.LoadTxt("F:/github/webgl/fem/data/hex_m.txt");
@@ -191,12 +293,35 @@ void TestFEM() {
   float ene = em.GetElasticEnergy();
   std::vector<Vec3f> force = em.GetForce();
 
+  std::cout << "E: " << ene << "\n";
+  em.fe = std::vector<Vec3f>(em.X.size());
+  em.fixedDOF = std::vector<bool>(em.X.size() * 3, false);
+
+  PullRight(Vec3f(0, -1, 0), 0.001, em);
+  float h = 0.001;
+  std::vector<Vec3f> dx = h * em.fe;
+  Add(em.x, dx);
+  force = em.GetForce();
+  std::vector<Vec3f> refForce = CentralDiffForce(em, 0.00001f);
   for (size_t i = 0; i < force.size(); i++) {
-    std::cout << force[i][0] << " " << force[i][1] << " " << force[i][2]
-              << "\n";
+    std::cout << force[i][0] << " " << force[i][1] << " " << force[i][2]<<", ";
+    Vec3f diff = refForce[i] - force[i];
+    if (diff.norm() > 0.1) {
+      std::cout << refForce[i][0] << " " << refForce[i][1] << " "
+                << refForce[i][2] << " ";
+    }
+    if (em.fe[i][1] < 0) {
+      std::cout << " @";
+    }
+    std::cout          << "\n";
   }
 
-  std::cout << "E: " << ene << "\n";
+  Matrix3f F(0.8, -0.16, 0, 0.2, 0.99, 0.1, 0.2, 0.3, 1);
+  Matrix3f Finv = F.inverse();
+  Matrix3f prod = Finv * F;
+  PrintMat3(prod,std::cout);
+  std::cout << "\n";
+  std::cout << F.determinant() << " " << Finv.determinant() << "\n";
 }
 
 int main(int, char**) {

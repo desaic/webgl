@@ -21,6 +21,7 @@ class ElementMesh {
   std::vector<MaterialModel> m;
   //external force
   std::vector<Vec3f> fe;
+  std::vector<bool> fixedDOF;
 
   double GetElasticEnergyEle(int eId) const;
   double GetElasticEnergy() const;
