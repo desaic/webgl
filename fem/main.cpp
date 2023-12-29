@@ -260,7 +260,7 @@ std::vector<Vec3f> CentralDiffForce(ElementMesh & em, float h) {
       em.x[i][j] -= h;
       float negEne = em.GetElasticEnergy();
       
-      em.x[i][j] += h;
+      em.x[i][j] += 2*h;
       float posEne = em.GetElasticEnergy();
 
       float force = -(posEne - negEne) / (2*h);
@@ -302,7 +302,7 @@ void TestFEM() {
   std::vector<Vec3f> dx = h * em.fe;
   Add(em.x, dx);
   force = em.GetForce();
-  std::vector<Vec3f> refForce = CentralDiffForce(em, 0.00001f);
+  std::vector<Vec3f> refForce = CentralDiffForce(em, 0.0001f);
   for (size_t i = 0; i < force.size(); i++) {
     std::cout << force[i][0] << " " << force[i][1] << " " << force[i][2]<<", ";
     Vec3f diff = refForce[i] - force[i];
