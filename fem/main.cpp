@@ -103,6 +103,18 @@ void MakeCheckerPatternRGBA(Array2D8u& out) {
   }
 }
 
+class Simulator {
+ public:
+  void Step(ElementMesh& em) {
+    if (em.X.empty()) {
+      return;
+    }
+    if (em.x[10][1] < 0.1) {
+      em.x[10] += Vec3f(0, 0.001f, 0);
+    }
+  }
+};
+
 class FemApp {
  public:
   FemApp(UILib* ui) : _ui(ui) {
@@ -148,6 +160,9 @@ class FemApp {
   void Refresh() {
     bool wire = _ui->GetCheckBoxVal(_wireframeId);
     _renderMesh.ShowWireFrame(wire);
+    sim.Step(_em);
+    _renderMesh.UpdatePosition();
+    _ui->SetMeshNeedsUpdate(_meshId);
   }
 
  private:
@@ -160,6 +175,7 @@ class FemApp {
   float _drawingScale = MToMM;
   std::shared_ptr<TrigMesh> floor;
   int _floorMeshId = -1;
+  Simulator sim;
 };
 
 void TestFEM() {
@@ -173,6 +189,13 @@ void TestFEM() {
   }
   //em.SaveTxt("F:/dump/hex_m.txt");
   float ene = em.GetElasticEnergy();
+  std::vector<Vec3f> force = em.GetForce();
+
+  for (size_t i = 0; i < force.size(); i++) {
+    std::cout << force[i][0] << " " << force[i][1] << " " << force[i][2]
+              << "\n";
+  }
+
   std::cout << "E: " << ene << "\n";
 }
 

@@ -47,10 +47,14 @@ class Element {
                                  const std::vector<Vec3f>& x) const {
     return Matrix3f();
   }
+  virtual Vec3f ShapeFunGradGauss2(unsigned qi, unsigned vi) const {
+    return Vec3f(0, 0, 0);
+  }
   // called by ElementMesh::InitElements()
   virtual void InitJacobian(QUADRATURE_TYPE qtype,
                             const std::vector<Vec3f>& X) {}
   float DetJ(unsigned qi) const { return _detJ[qi]; }
+  const Matrix3f& Jinv(unsigned qi) const { return _Jinv[qi]; }
  protected:
   FixedArray<unsigned int> _v;
 
@@ -89,6 +93,7 @@ class HexElement : public Element {
 
   Matrix3f DefGradGauss2(int qi, const std::vector<Vec3f>& X,
                          const std::vector<Vec3f>& x) const override;
+  Vec3f ShapeFunGradGauss2(unsigned qi, unsigned vi) const override;
   void InitJacobian(QUADRATURE_TYPE qtype,
                     const std::vector<Vec3f>& X) override;
 };

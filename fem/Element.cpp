@@ -99,6 +99,10 @@ Matrix3f HexElement::DefGradGauss2(int qi, const std::vector<Vec3f>& X,
   return F * _Jinv[qi];
 }
 
+Vec3f HexElement::ShapeFunGradGauss2(unsigned qi, unsigned vi) const {
+  return elementGlobals.HexGrauss2Grad[qi][vi];
+}
+
 void HexElement::InitJacobian(QUADRATURE_TYPE qtype,
                               const std::vector<Vec3f>& X) {
   if (qtype == QUADRATURE_TYPE::GAUSS2) {

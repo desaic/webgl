@@ -20,6 +20,24 @@ double ElementMesh::GetElasticEnergy() const {
   return ene;
 }
 
+std::vector<Vec3f> ElementMesh::GetForceEle(int eId) const {
+  const auto& mat = m[eId];
+  std::vector<Vec3f> force= mat.GetForce(eId, *this);
+  return force;
+}
+
+std::vector<Vec3f> ElementMesh::GetForce() const {
+  std::vector<Vec3f> force(X.size(), Vec3f(0,0,0));
+  for (size_t i = 0; i < e.size(); i++) {
+    std::vector<Vec3f> eleForce = GetForceEle(i);
+    for (size_t j = 0; j < eleForce.size(); j++) {
+      size_t vertIdx = (*e[i])[j];
+      force[vertIdx] += eleForce[j];
+    }
+  }
+  return force;
+}
+
 void ElementMesh::InitElements() {
   if (m.size() != e.size()) {
     m.resize(e.size());
