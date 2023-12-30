@@ -29,9 +29,6 @@ std::vector<Vec3f> ElementMesh::GetForceEle(int eId) const {
 std::vector<Vec3f> ElementMesh::GetForce() const {
   std::vector<Vec3f> force(X.size(), Vec3f(0,0,0));
   for (size_t i = 0; i < e.size(); i++) {
-    if (i == 12) {
-      std::cout << "debug\n";
-    }
     std::vector<Vec3f> eleForce = GetForceEle(i);
     for (size_t j = 0; j < eleForce.size(); j++) {
       size_t vertIdx = (*e[i])[j];

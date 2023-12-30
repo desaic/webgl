@@ -103,7 +103,7 @@ void MakeCheckerPatternRGBA(Array2D8u& out) {
   }
 }
 
-void Add(std::vector<Vec3f>& dst, std::vector<Vec3f>& src) {
+void Add(std::vector<Vec3f>& dst, const std::vector<Vec3f>& src) {
   for (size_t i = 0; i < dst.size(); i++) {
     dst[i] += src[i];
   }
@@ -149,11 +149,16 @@ class Simulator {
       return;
     }
     std::vector<Vec3f> force = em.GetForce();
+
+    Add(force, em.fe);
     Vec3f maxAbsForce = MaxAbs(force);
     std::cout << "max abs(force) " << maxAbsForce[0] << " " << maxAbsForce[1]
               << " " << maxAbsForce[2] << "\n";
-    Add(force, em.fe);
-    float h = 0.001f;
+    float h = 0.0001f;
+    const float maxh = 0.0001f;
+    h = maxh / maxAbsForce.norm();
+    h = std::min(maxh, h);
+    std::cout << "h " << h << "\n";
     std::vector<Vec3f> dx = h * force;
     Fix(dx, em.fixedDOF);
     Add(em.x, dx);
@@ -213,7 +218,7 @@ class FemApp {
   void InitExternalForce() { 
     _em.fe= std::vector<Vec3f>(_em.X.size());
     _em.fixedDOF=std::vector<bool>(_em.X.size() * 3, false);
-    PullRight(Vec3f(0, -1, 0), 0.001, _em);
+    PullRight(Vec3f(0, -0.1, 0), 0.001, _em);
     FixLeft(0.001, _em);
   }
 

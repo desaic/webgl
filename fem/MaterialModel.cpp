@@ -46,9 +46,6 @@ std::vector<Vec3f> MaterialModel::GetForce(int eidx, const ElementMesh& mesh) co
         Vec3f gradN = ele.ShapeFunGradGauss2(jj, ii);
         Vec3f JdN = ele.Jinv(jj).transposed() * gradN;
         f[ii] -= ele.DetJ(jj) * q.w[jj] * (P[jj] * JdN);
-        if (f[ii].norm2() > 10000) {
-          std::cout << "debug\n";
-        }
       }
     }
   }
