@@ -1,0 +1,5 @@
+PROJECT (CSparse)
+cmake_minimum_required(VERSION 3.0.0)
+FILE(GLOB LIB_SRC "Source/*.c" )
+add_library(csparse STATIC ${LIB_SRC})
+target_include_directories(csparse PUBLIC Include)

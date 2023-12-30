@@ -15,6 +15,7 @@
 #include "lodepng.h"
 #include "ElementMesh.h"
 #include "ElementMeshUtil.h"
+#include "cs.h"
 
 void ShowGLInfo(UILib& ui, int label_id) {
   std::string info = ui.GetGLInfo();
@@ -327,6 +328,10 @@ void TestFEM() {
   PrintMat3(prod,std::cout);
   std::cout << "\n";
   std::cout << F.determinant() << " " << Finv.determinant() << "\n";
+}
+
+void TestSparse() {
+
 }
 
 int main(int, char**) {
