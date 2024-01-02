@@ -15,7 +15,7 @@
 #include "lodepng.h"
 #include "ElementMesh.h"
 #include "ElementMeshUtil.h"
-#include "cs.h"
+#include "CSparseMat.h"
 
 void ShowGLInfo(UILib& ui, int label_id) {
   std::string info = ui.GetGLInfo();
@@ -331,11 +331,14 @@ void TestFEM() {
 }
 
 void TestSparse() {
-
+  CSparseMat mat;
+  ElementMesh em;
+  em.LoadTxt("F:/github/webgl/fem/data/hex_m.txt");
+  em.InitStiffnessPattern();
 }
 
 int main(int, char**) {
-  TestFEM(); 
+  TestSparse();
   UILib ui;
   FemApp app(&ui);
   ui.SetFontsDir("./fonts");

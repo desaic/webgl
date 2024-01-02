@@ -110,7 +110,7 @@ int cg_rc ( int n, double b[], double x[], double r[], double z[],
   double beta;
   int i;
   static int iter;
-  int job_next;
+  int job_next=0;
   double pdotq;
   static double rho;
   static double rho_old;

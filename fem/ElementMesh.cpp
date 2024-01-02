@@ -3,6 +3,8 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <vector>
+#include <map>
 
 int fem_error = 0;
 
@@ -44,6 +46,52 @@ void ElementMesh::InitElements() {
   }
   for (size_t i = 0; i < e.size(); i++) {
     e[i]->InitJacobian(m[i].quadType, X);
+  }
+}
+
+void ElementMesh::InitStiffnessPattern() {
+  edgeToSparse.clear();      
+  // for each vertex, map from a neighboring vertex to index in vals array in 
+  // sparse mat.
+  edgeToSparse.resize(X.size());
+  size_t edgeCount = 0;
+  for (size_t i = 0; i < e.size(); i++) {
+    for (size_t j = 0; j < e[i]->NumVerts(); j++) {
+      unsigned vj = (*e[i])[j];
+      std::map<unsigned, size_t>& verts = edgeToSparse[vj];
+      for (size_t k = 0; k < e[i]->NumVerts(); k++) {
+        unsigned vk = (*e[i])[k];
+        auto it = verts.find(vk);
+        if (it == verts.end()) {
+          verts[vk] = edgeCount;
+          edgeCount++;        
+        }
+      }
+    }
+  }
+
+  std::cout << "edge count " << edgeCount << "\n";
+
+  size_t numCols = 3 * X.size(); 
+  size_t nnz = 9 * edgeCount;
+  //square matrix
+  K.Allocate(numCols, numCols, 9 * edgeCount);
+  
+  K.colStart[0] = 0;
+  for (size_t i = 0; i < edgeToSparse.size(); i++) {
+    std::map<unsigned, size_t>& verts = edgeToSparse[i];
+    for (unsigned d = 0; d < 3; d++) {
+      unsigned col = 3 * i + d;
+      unsigned colStart = K.colStart[col];
+      K.colStart[col + 1] = K.colStart[col] + 3 * verts.size();
+      unsigned count = 0;
+      for (auto it : edgeToSparse[i]) {
+        K.rowIdx[colStart + count] = 3 * (it.second);
+        K.rowIdx[colStart + count + 1] = 3 * (it.second) + 1;
+        K.rowIdx[colStart + count + 2] = 3 * (it.second) + 2;
+        count+=3;
+      }
+    }
   }
 }
 

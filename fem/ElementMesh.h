@@ -3,12 +3,14 @@
 
 #include <string>
 #include <vector>
+#include <map>
 #include <memory>
 
 #include "MaterialModel.h"
 #include "Element.h"
 #include "Vec3.h"
 #include "Array2D.h"
+#include "CSparseMat.h"
 
 class ElementMesh {
  public:
@@ -23,6 +25,12 @@ class ElementMesh {
   std::vector<Vec3f> fe;
   std::vector<bool> fixedDOF;
 
+  //stiffness matrix.
+  CSparseMat K;
+  
+  //index from pair of verts to sparse value index.
+  std::vector<std::map<unsigned, size_t> > edgeToSparse;
+
   double GetElasticEnergyEle(int eId) const;
   double GetElasticEnergy() const;
   // nodal elastic forces for one element
@@ -30,6 +38,8 @@ class ElementMesh {
   std::vector<Vec3f> GetForce() const;
   Array2Df GetStiffnessEle(int eId) const;
  
+  void InitStiffnessPattern();
+
   //load a mesh stored in plain text
   //removes existing mesh.
   void LoadTxt(const std::string & file);
