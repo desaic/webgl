@@ -3,6 +3,7 @@ set(BIN "FemUI")
 PROJECT (FemUI)
 add_subdirectory("../UILib" "ui")
 include_directories(.)
+add_subdirectory("CSparse")
 FILE(GLOB EXE_SRC "*.cpp" "*.c")
 set(CMAKE_CXX_STANDARD 17)
 include_directories("../UILib/inc/")
@@ -17,7 +18,7 @@ if (USE_NANOVDB)
 endif()
 
 add_executable(${BIN} ${EXE_SRC} resource/icons.rc)
-target_link_libraries(${BIN} UILib imgui glfw3 opengl32 glew32s)
+target_link_libraries(${BIN} UILib imgui glfw3 opengl32 glew32s csparse)
 
 set(FONT_FOLDER fonts)
 add_custom_command(TARGET ${BIN} POST_BUILD

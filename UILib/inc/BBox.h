@@ -32,3 +32,4 @@ void UpdateBBox(const std::vector<float>& verts, BBox& box);
 
 void ComputeBBox(const std::vector<float>& verts, BBox& box);
 void ComputeBBox(Vec3f v0, Vec3f v1, Vec3f v2, BBox& box);
+void ComputeBBox(const std::vector<Vec3f>& verts, BBox& box);

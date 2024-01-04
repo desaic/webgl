@@ -27,6 +27,22 @@ void ComputeBBox(const std::vector<float>& verts, BBox& box)
   UpdateBBox(verts, box);
 }
 
+void ComputeBBox(const std::vector<Vec3f>& verts, BBox& box) {
+  if (verts.size() == 0) {
+    return;
+  }
+  box.vmin = verts[0];
+  box.vmax = verts[0];
+  const unsigned dim = 3;
+  for (size_t i = 0; i < verts.size(); i++) {
+    for (unsigned j = 0; j < dim; j++) {
+      box.vmin[j] = std::min(box.vmin[j], verts[i][j]);
+      box.vmax[j] = std::max(box.vmax[j], verts[i][j]);
+    }
+  }
+  box._init = true;
+}
+
 void ComputeBBox(Vec3f v0, Vec3f v1, Vec3f v2, BBox& box) {
   const unsigned dim = 3;
   box.vmin = v0;

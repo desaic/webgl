@@ -3,10 +3,14 @@
 
 #include <string>
 #include <vector>
+#include <map>
 #include <memory>
 
+#include "MaterialModel.h"
 #include "Element.h"
 #include "Vec3.h"
+#include "Array2D.h"
+#include "CSparseMat.h"
 
 class ElementMesh {
  public:
@@ -15,9 +19,34 @@ class ElementMesh {
   //deformed positions. initialized to X.
   std::vector<Vec3f> x;
   std::vector<std::unique_ptr<Element> > e;
+  //material model for each element
+  std::vector<MaterialModel> m;
+  //external force
+  std::vector<Vec3f> fe;
+  std::vector<bool> fixedDOF;
+
+  //stiffness matrix.
+  CSparseMat K;
+  
+  //index from pair of verts to sparse value index.
+  std::vector<std::map<unsigned, size_t> > edgeToSparse;
+
+  double GetElasticEnergyEle(int eId) const;
+  double GetElasticEnergy() const;
+  // nodal elastic forces for one element
+  std::vector<Vec3f> GetForceEle(int eId) const;
+  std::vector<Vec3f> GetForce() const;
+  Array2Df GetStiffnessEle(int eId) const;
+ 
+  void InitStiffnessPattern();
+
   //load a mesh stored in plain text
   //removes existing mesh.
   void LoadTxt(const std::string & file);
+  void SaveTxt(const std::string& file);  
+
+  //has to be called before sim
+  void InitElements();
 };
 
 #endif

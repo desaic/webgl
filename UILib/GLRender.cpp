@@ -7,6 +7,7 @@
 #include "GLFW/glfw3.h"
 #include "Matrix4f.h"
 #include "Matrix3f.h"
+#include "Vec4.h"
 
 void PrintGLError() {
   GLenum error = glGetError();
@@ -32,7 +33,7 @@ std::string GLRender::GLInfo() const {
   return s + " glsl: " + glslStr;
 }
 
-GLRender::GLRender() {}
+GLRender::GLRender():_lights(MAX_NUM_LIGHTS) {}
 
 GLRender::~GLRender() {
   // delete texture and framebuffer object
@@ -45,14 +46,32 @@ void GLRender::Resize(unsigned int width, unsigned int height) {
   }
   _width = width;
   _height = height;
-  glBindTexture(GL_TEXTURE_2D, _render_tex);
+  //glBindTexture(GL_TEXTURE_2D, _render_tex);
+  glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, _render_tex);
   unsigned format = GL_RGBA;
   unsigned type = GL_UNSIGNED_BYTE;
-  glTexImage2D(GL_TEXTURE_2D, 0, format, _width, _height, 0, format, type,
-               nullptr);
+  //glTexImage2D(GL_TEXTURE_2D, 0, format, _width, _height, 0, format, type,
+               //nullptr);
+
+  glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, format, _width,
+                          _height, true);
   glBindRenderbuffer(GL_RENDERBUFFER, _depth_buffer);
   glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, _width, _height);
   _camera.aspect = width / (float)height;
+
+
+  glBindTexture(GL_TEXTURE_2D, _resolve_tex);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, _width, _height, 0, GL_RGBA,
+               GL_UNSIGNED_BYTE, nullptr);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+  glBindTexture(GL_TEXTURE_2D_MULTISAMPLE,
+                _depth_buffer);
+  glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, GL_DEPTH_COMPONENT24,
+                          _width, _height, GL_TRUE);
 }
 
 int GLRender::DrawMesh(size_t meshId) {
@@ -128,6 +147,26 @@ void GLRender::KeyPressed(KeyboardInput& input) {
   }
 }
 
+int GLRender::UploadLights() { 
+  unsigned numLights = _lights.NumLights();
+  Matrix4f viewMat = _camera.view * _camera.proj;
+  const float eps = 1e-6;
+  for (unsigned i = 0; i < numLights; i++) {
+    Vec3f worldPos = _lights.world_pos[i];
+    Vec4f p(worldPos[0],worldPos[1],worldPos[2], 1.0f);
+    p = viewMat * p;
+    if (std::abs(p[3]) < eps) {
+      p[3] = eps;
+    }
+    _lights.pos[i] = Vec3f(p[0] / p[3], p[1] / p[3], p[2] / p[3]);
+  }
+  glUniform3fv(_lights._pos_loc, _lights.pos.size(),
+               (GLfloat*)_lights.pos.data());
+  glUniform3fv(_lights._color_loc, _lights.color.size(),
+               (GLfloat*)_lights.color.data());
+  return 0; 
+}
+
 /// renders once
 void GLRender::Render() {
   if (!_initialized) {
@@ -135,7 +174,6 @@ void GLRender::Render() {
   }
   Matrix4f v, mvp, mvit;
   _camera.update();
-
   glUseProgram(_program);
   glBindFramebuffer(GL_FRAMEBUFFER, _fbo);
   glViewport(0, 0, _width, _height);
@@ -150,12 +188,22 @@ void GLRender::Render() {
   glUniformMatrix4fv(_mvp_loc, matCount, noTranspose, (const GLfloat*)vp);
   _camera.VIT(vit);
   glUniformMatrix4fv(_mvit_loc, matCount, noTranspose, (const GLfloat*)vit);
+  UploadLights();
+  glEnable(GL_MULTISAMPLE);
   for (size_t i = 0; i < _bufs.size(); i++) {
     DrawMesh(i);
   }
 
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glDisable(GL_MULTISAMPLE);
   glUseProgram(0);
+
+  		// Resolved multisampling
+  glBindFramebuffer(GL_READ_FRAMEBUFFER, _fbo);
+  glBindFramebuffer(GL_DRAW_FRAMEBUFFER, _fbo_resolve);
+  glBlitFramebuffer(0, 0, _width, _height, 0, 0, _width, _height,
+                    GL_COLOR_BUFFER_BIT, GL_NEAREST);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 int checkShaderError(GLuint shader) {
@@ -175,10 +223,10 @@ int checkShaderError(GLuint shader) {
 }
 
 void GLRender::ResetCam() {
-  _camera.eye = Vec3f(0, 50, 100);
-  _camera.at = Vec3f(0, 0, 0);
+  _camera.eye = Vec3f(20, 100, 200);
+  _camera.at = Vec3f(20, 0, 0);
   _camera.near = 1;
-  _camera.far = 500;
+  _camera.far = 1000;
   _camera.update();
 }
 
@@ -190,7 +238,12 @@ int GLRender::Init(const std::string& vertShader,
   const char* vs_pointer = _vs_string.data();
   const char* fs_pointer = _fs_string.data();
   ResetCam();
-
+  _lights.SetLightPos(0, 0, 400, -100);
+  _lights.SetLightColor(0, 0.8, 0.7, 0.6);
+  _lights.SetLightPos(1, 0, 400, 0);
+  _lights.SetLightColor(1, 0.8, 0.8, 0.8);
+  _lights.SetLightPos(2, 0, 400, 100);
+  _lights.SetLightColor(2, 0.6, 0.7, 0.8);
   unsigned err = 0;
   _vertex_shader = glCreateShader(GL_VERTEX_SHADER);
   glShaderSource(_vertex_shader, 1, &vs_pointer, NULL);
@@ -228,29 +281,53 @@ int GLRender::Init(const std::string& vertShader,
   glUseProgram(_program);
   _mvp_loc = glGetUniformLocation(_program, "MVP");
   _mvit_loc = glGetUniformLocation(_program, "MVIT");
+  _lights._pos_loc = glGetUniformLocation(_program, "lightpos");
+  _lights._color_loc = glGetUniformLocation(_program, "lightcolor");
   _tex_loc = glGetUniformLocation(_program, "texSampler");
-    
   glGenFramebuffers(1, &_fbo);
+  glGenFramebuffers(1, &_fbo_resolve);
   glBindFramebuffer(GL_FRAMEBUFFER, _fbo);  
   glGenTextures(1, &_render_tex);
-  glGenRenderbuffers(1, &_depth_buffer);
+  glGenTextures(1, &_resolve_tex);
+  glGenTextures(1, &_depth_buffer);
   Resize(INIT_WIDTH, INIT_HEIGHT);
-  glBindTexture(GL_TEXTURE_2D, _render_tex);
+  //glBindTexture(GL_TEXTURE_2D, _render_tex);
+
+  glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, _render_tex);
+
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-  glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
-                            GL_RENDERBUFFER, _depth_buffer);
-  glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, _render_tex, 0);
+
+  glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                       _render_tex, 0);
+  glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+                       _depth_buffer, 0);
   GLenum DrawBuffers[1] = {GL_COLOR_ATTACHMENT0};
   glDrawBuffers(1, DrawBuffers);
   ret = glCheckFramebufferStatus(GL_FRAMEBUFFER);
   if (ret != GL_FRAMEBUFFER_COMPLETE) {
     std::cout << "incomplete frame buffer error " << ret << "\n";
   }
+
+  glBindFramebuffer(GL_FRAMEBUFFER, _fbo_resolve);
+  glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                       _resolve_tex, 0);
+  glDrawBuffers(1, DrawBuffers);
+
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   _initialized = true;
+  return 0;
+}
+
+int DeleteVAO(GLBuf& buf) {
+  std::cout << "delete vao " << buf.vao << "\n";
+  PrintGLError();
+  glDeleteBuffers(buf.NUM_BUF, buf.b.data());
+  PrintGLError();
+  glDeleteVertexArrays(1, &buf.vao);  
+  PrintGLError();
   return 0;
 }
 
@@ -258,12 +335,16 @@ int GLRender::AllocateMeshBuffer(size_t meshId) {
   if (meshId >= _bufs.size()) {
     return -1;
   }
-  GLBuf& buf = _bufs[meshId];  
+  GLBuf& buf = _bufs[meshId];
+  if (buf._allocated) {
+    DeleteVAO(buf);
+  }
   glGenVertexArrays(1, &buf.vao);
   glBindVertexArray(buf.vao);
   glGenBuffers(GLBuf::NUM_BUF, buf.b.data());
   buf._allocated = true;
-  UploadMeshData(meshId);
+  buf._needsUpdate = true;
+  buf._numTrigs = buf.mesh->GetNumTrigs();
   return 0;
 }
 
@@ -272,7 +353,7 @@ int GLRender::UploadMeshData(size_t meshId) {
     return -1;
   }
   GLBuf& buf = _bufs[meshId];
-  if (!buf._allocated) {
+  if (!buf._allocated || buf._numTrigs != buf.mesh->GetNumTrigs()) {
     AllocateMeshBuffer(meshId);
   }
 
@@ -281,7 +362,7 @@ int GLRender::UploadMeshData(size_t meshId) {
     mesh->ComputeTrigNormals();
   }
   const unsigned DIM = 3;
-  buf._numTrigs = mesh->t.size() / 3;
+  buf._numTrigs = mesh->GetNumTrigs();
   size_t numVerts = mesh->t.size();
   size_t numFloats = DIM * numVerts;
   size_t numUV = 2 * numVerts;
