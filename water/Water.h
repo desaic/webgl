@@ -2,6 +2,7 @@
 #define WATER_H
 #include "Array3D.h"
 #include "Vec3.h"
+#include "b3Clock.h"
 
 enum class Axis {
   X = 0,
@@ -17,7 +18,8 @@ class Water {
   int SolveP();
   int AdvectPhi();
   int AdvectSmoke();
-  int UpdateDistanceField();
+  int UpdateSDF();
+  int MarchSmoke();
 
   int Allocate(unsigned sx, unsigned sy, unsigned sz);
   void SetBoundary();
@@ -29,7 +31,6 @@ class Water {
   float InterpPhi(const Vec3f& x);
   float InterpSmoke(Vec3f& x);
 
-
   const Array3D<Vec3f>& U() const { return u; }
   Array3D<Vec3f>& U() { return u; }
   const Array3D<float>& P() { return p; }
@@ -39,6 +40,9 @@ class Water {
 
   const Array3D<uint8_t>& SmokeBoundary() const { return smokeBoundary; }
   Array3D<uint8_t>& SmokeBoundary() { return smokeBoundary; }  
+
+  const Array3D<short>& SmokeSDF() const { return smokeSDF; }
+  Array3D<short>& SmokeSDF() { return smokeSDF; }  
  private:
   // Boundary
   Array3D<uint8_t> s;
@@ -53,6 +57,8 @@ class Water {
   Array3D<float> smokeTemp;
   Array3D<uint8_t> smokeBoundary;
   Array3D<short> smokeSDF;
+  const float SDFLevel = 2.5;
+  const float SDFUnit = 1e-3;
 
   //defined on vertices
   //size is +1 of voxel grid size.
@@ -62,10 +68,12 @@ class Water {
   float dt = 0.01666667f;
   float h = 0.02f;
   float density = 1000.f; // reasonable value?
-  int nIterations = 200; // reasonable value?
+  int nIterations = 100; // reasonable value?
   float overrelaxation = 1.9f;
   float gravity = 0.f; //-9.81f;
   Vec3u numCells;
+  size_t steps = 0;
+  b3Clock clock;
   
   float AvgU_y(unsigned i, unsigned j, unsigned k);
   float AvgU_z(unsigned i, unsigned j, unsigned k);

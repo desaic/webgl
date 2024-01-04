@@ -1,6 +1,6 @@
 #ifndef FAST_SWEEP_H
 #define FAST_SWEEP_H
-#include "Math/Array3D.h"
+#include "Array3D.h"
 #include "FixedGrid3D.h"
 
 void CloseExterior(Array3D<short>& dist, short far);
