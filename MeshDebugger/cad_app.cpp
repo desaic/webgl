@@ -1,5 +1,6 @@
 #include "cad_app.h"
 #include "ImageUtils.h"
+
 void cad_app::Init(UILib* ui) {
   _ui = ui;
   _floor = std::make_shared<TrigMesh>();
@@ -12,6 +13,8 @@ void cad_app::Init(UILib* ui) {
   MakeCheckerPatternRGBA(checker);
   _floorMeshId = _ui->AddMesh(_floor);
   _ui->SetMeshTex(_floorMeshId, checker, 4);
+
+  _ui->SetShowImage(false);
 }
 
 void cad_app::Refresh() {

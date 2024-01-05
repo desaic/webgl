@@ -229,6 +229,8 @@ class UILib {
 
   void SetShowGL(bool show) { _showGL = show; }
 
+  void SetShowImage(bool show) { _showImage = show; }
+
   void ShowFileOpen(bool multi, const std::string& startingDir) {    
     _openMultiple = multi;
     _showFileOpen = true;
@@ -289,6 +291,7 @@ class UILib {
   std::string _title;
 
   std::string imageWindowTitle_="Images";
+  bool _showImage = true;
   bool _running = false;
 
   bool _showGL = true;

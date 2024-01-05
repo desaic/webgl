@@ -448,8 +448,8 @@ void UILib::UILoop() {
     ImGui::NewFrame();
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.8f, 0.8f, 0.8f, 0.5f)); 
 
-    ImGui::SetNextWindowPos(ImVec2(20, 0), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(800, 800), ImGuiCond_FirstUseEver);
+    //ImGui::SetNextWindowPos(ImVec2(20, 0), ImGuiCond_FirstUseEver);
+    //ImGui::SetNextWindowSize(ImVec2(800, 800), ImGuiCond_FirstUseEver);
     KeyboardInput keyboardInput = ReadKeys(io);
     if (keyboardInput.hasKey() && _keyboardCb) {
       _keyboardCb(keyboardInput);
@@ -457,11 +457,10 @@ void UILib::UILoop() {
     
     if (_showGL) {
 
-      ImGui::Begin("GL view", 0, ImGuiWindowFlags_NoBringToFrontOnFocus);
-      ImVec2 windowsize = ImGui::GetContentRegionAvail();
+      //ImVec2 windowsize = ImGui::GetContentRegionAvail();
+      ImVec2 windowsize = ImGui::GetMainViewport()->Size;
       _glRender.Resize(uint32_t(windowsize[0]), uint32_t(windowsize[1]));
-      if (io.WantCaptureMouse && ImGui::IsWindowHovered() &&
-              ImGui::IsWindowFocused()) {
+      if (!io.WantCaptureMouse) {
         bool left = false, mid = false, right = false;
         for (int i = 0; i < IM_ARRAYSIZE(io.MouseDown); i++) {
           if (ImGui::IsMouseDown(i)) {
@@ -483,50 +482,54 @@ void UILib::UILoop() {
         }
       }
       _glRender.Render();
-      ImGui::Image(
-          (ImTextureID)(size_t(_glRender.TexId())),
-                   ImVec2(float(_glRender.Width()), float(_glRender.Height())),
-                   {0, 1}, {1, 0});
-      ImGui::End();
+      ImGui::GetBackgroundDrawList()->AddImage(
+          (ImTextureID)(size_t(_glRender.TexId())), ImVec2(0, 0),
+          ImVec2(float(_glRender.Width()), float(_glRender.Height())), {0, 1},
+          {1, 0}, 0xffffffffu);
+      //ImGui::Image(
+      //    (ImTextureID)(size_t(_glRender.TexId())),
+      //             ImVec2(float(_glRender.Width()), float(_glRender.Height())),
+      //             {0, 1}, {1, 0});      
+    }
+    if (_showImage) {
+      // image viewer
+      ImGui::SetNextWindowPos(ImVec2(_initImagePosX, _initImagePosY),
+                              ImGuiCond_FirstUseEver);
+      ImGui::SetNextWindowSize(ImVec2(300, 300), ImGuiCond_FirstUseEver);
+      ImGuiWindowFlags image_window_flags = 0;
+      image_window_flags |= ImGuiWindowFlags_AlwaysHorizontalScrollbar;
+      std::string imageWinTitle;
 
+      {
+        std::lock_guard<std::mutex> lock(_widgetsLock);
+        imageWinTitle = imageWindowTitle_;
+      }
+      ImGui::Begin(imageWinTitle.c_str(), 0, image_window_flags);
+      ImVec2 pos = ImGui::GetWindowPos();
+      if (pos.x < 0) {
+        pos.x = 0;
+      }
+      if (pos.y < 0) {
+        pos.y = 0;
+      }
+      ImGui::SetWindowPos(pos);
+      // no padding
+      ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+      {
+        std::lock_guard<std::mutex> lock(_imagesLock);
+        DrawImages();
+      }
+      DrawFloatingTexts();
+      ImGui::PopStyleVar();
+      ImGui::End();
     }
-    //image viewer
-    ImGui::SetNextWindowPos(ImVec2(_initImagePosX, _initImagePosY),
-                            ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(300, 300), ImGuiCond_FirstUseEver);
-    ImGuiWindowFlags image_window_flags = 0;
-    image_window_flags |= ImGuiWindowFlags_AlwaysHorizontalScrollbar;
-    std::string imageWinTitle;
-    
-    {
-      std::lock_guard<std::mutex> lock(_widgetsLock);
-      imageWinTitle = imageWindowTitle_;
-    }
-    ImGui::Begin(imageWinTitle.c_str(), 0, image_window_flags);
-    ImVec2 pos = ImGui::GetWindowPos();
-    if (pos.x < 0) {
-      pos.x = 0;
-    }
-    if (pos.y < 0) {
-      pos.y = 0;
-    }
-    ImGui::SetWindowPos(pos);
-    //no padding
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-    {
-      std::lock_guard<std::mutex> lock(_imagesLock);
-      DrawImages();
-    }
-    DrawFloatingTexts();
-    ImGui::PopStyleVar();
-    ImGui::End();
     //menu and buttons
     ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(100, 200), ImGuiCond_FirstUseEver);
     ImGuiWindowFlags control_window_flags = 0;
     control_window_flags |= ImGuiWindowFlags_MenuBar;
     ImGui::Begin("Controls", nullptr, control_window_flags);   
-    pos = ImGui::GetWindowPos();
+    ImVec2 pos = ImGui::GetWindowPos();
     if (pos.x < 0) {
       pos.x= 0;
     }
