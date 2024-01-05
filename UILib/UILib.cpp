@@ -392,9 +392,9 @@ void UILib::UILoop() {
   if (!glfwInit()) {
     return ;
   }
-  const char* glsl_version = "#version 330";
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+  const char* glsl_version = "#version 450";
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
   // Create window with graphics context
   _window = glfwCreateWindow(_width, _height, _title.c_str(), NULL, NULL);
   if (_window == NULL) {
