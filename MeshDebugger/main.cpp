@@ -12,14 +12,10 @@
 #include "UIConf.h"
 #include "UILib.h"
 
-void OnChangeDir(std::string dir, UIConf& conf) {
-  conf.workingDir = dir;
-  conf.Save();
-}
-
 void LogToUI(const std::string & str, UILib&ui, int statusLabel) {
   ui.SetLabelText(statusLabel, str);
 }
+
 void ShowGLInfo(UILib& ui, int label_id) {
   std::string info = ui.GetGLInfo();
   ui.SetLabelText(label_id, info);
