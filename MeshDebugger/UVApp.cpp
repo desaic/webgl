@@ -1,5 +1,13 @@
 #include "UVApp.h"
+#include "ImageIO.h"
+#include "ImageUtils.h"
+#include "StringUtil.h"
+#include <math.h>
+#include <fstream>
+#include <iostream>
+#include <sstream>
 std::vector<Vec3b> generateRainbowPalette(int numColors);
+void FillRainbowColor(Array2D8u& image);
 DebuggerState::DebuggerState() {
     trigLabelImage.Allocate(4096, 1024);
     FillRainbowColor(trigLabelImage);

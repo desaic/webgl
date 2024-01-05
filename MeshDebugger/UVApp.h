@@ -37,24 +37,14 @@ struct UVState {
 };
 
 struct DebuggerState {
-  DebuggerState() {
-    trigLabelImage.Allocate(4096, 1024);
-    FillRainbowColor(trigLabelImage);
-    trigLabelImage(0, 0) = 255;
-    trigLabelImage(1, 0) = 0;
-    trigLabelImage(2, 0) = 0;
-  }
+  DebuggerState();
   unsigned displayTrigLevel = 50;
   int sliderId = 0;
   std::shared_ptr<Slideri> levelSlider;
   std::shared_ptr<CheckBox> trigLabelCheckBox;
   std::vector<Vec2f> uv;
   UVState uvState;
-  void SetMesh(TrigMesh* m) {
-    uvState.mesh = m;
-    uvState.Init();
-    uv = m->uv;
-  }
+  void SetMesh(TrigMesh* m);
   Array2D8u trigLabelImage;
   Array2D8u texImage;
   bool showTrigLabels = false;
@@ -63,37 +53,9 @@ struct DebuggerState {
   int meshId = 0;
   void Refresh();
   void LevelSliderChanged();
-  void InitUI(UILib* ui_in) { ui = ui_in;
-    sliderId = ui->AddSlideri("trig level", 20, 0, 9999);
-    levelSlider =
-        std::dynamic_pointer_cast<Slideri>(ui->GetWidget(sliderId));
-    int boxId = ui->AddCheckBox("Show Trig Label", false);
-    trigLabelCheckBox =
-        std::dynamic_pointer_cast<CheckBox>(ui->GetWidget(boxId));
-    ui->SetKeyboardCb(std::bind(&DebuggerState::HandleKeys, this, std::placeholders::_1));
-  }
+  void InitUI(UILib* ui_in);
 
-  void HandleKeys(KeyboardInput input) {
-    std::vector<std::string> keys = input.splitKeys();
-    for (const auto& key : keys) {
-      bool sliderChange = false;
-      int sliderVal = 0;
-      if (key == "LeftArrow") {
-        sliderChange = true;
-        sliderVal = levelSlider->GetVal();
-        sliderVal--;
-      } else if (key == "RightArrow") {
-        sliderVal = levelSlider->GetVal();
-        sliderVal++;
-        sliderChange = true;
-      }
-
-      if (sliderChange) {
-        levelSlider->SetVal(sliderVal);
-        LevelSliderChanged();
-      }
-    }
-  }
+  void HandleKeys(KeyboardInput input);
 };
 
 void DebugUV(UILib & ui);

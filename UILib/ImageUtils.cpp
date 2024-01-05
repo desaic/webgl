@@ -67,3 +67,22 @@ void RGBToGrey(uint32_t& c) {
   }
   c=uint32_t(grey);
 }
+
+
+void MakeCheckerPatternRGBA(Array2D8u& out) {
+  unsigned numCells = 4;
+  unsigned cellSize = 4;
+  unsigned width = numCells * cellSize;
+  out.Allocate(width * 4, width);
+  out.Fill(200);
+  for (size_t i = 0; i < width; i++) {
+    for (size_t j = 0; j < width; j++) {
+      if ((i / cellSize + j / cellSize) % 2 == 0) {
+        continue;
+      }
+      for (unsigned chan = 0; chan < 3; chan++) {
+        out(4 * i + chan, j) = 50;
+      }
+    }
+  }
+}

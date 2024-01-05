@@ -1,17 +1,13 @@
 #pragma once
 #include "UILib.h"
+#include "Array3D.h"
+#include "UIConf.h"
 //info for voxelizing
 //multi-material interface connector designs
 struct ConnectorVox {
   void LoadMeshes();
   void VoxelizeMeshes();
-  void Log(const std::string& str) const {
-    if (LogCb) {
-      LogCb(str);
-    } else {
-      std::cout << str << "\n";
-    }
-  }
+  void Log(const std::string& str) const;
   void Refresh(UILib& ui);
 
   std::function<void(const std::string&)> LogCb;
