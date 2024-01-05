@@ -1,6 +1,7 @@
 #include "cad_app.h"
 #include "ImageUtils.h"
-
+#include "StringUtil.h"
+#include <algorithm>
 void cad_app::Init(UILib* ui) {
   _conf.Load(_conf._confFile);
   _ui = ui;
@@ -32,12 +33,39 @@ void cad_app::OnChangeDir(std::string dir) {
   _confChanged = true;
 }
 
+int LoadMeshFile(const std::string& path, TrigMesh& mesh) {
+  std::string suffix = get_suffix(path);
+  std::transform(suffix.begin(), suffix.end(), suffix.begin(),
+                        std::tolower);
+  if(suffix=="obj"){
+    mesh.LoadObj(path);
+    return 0;
+  } else if (suffix == "stl") {
+    mesh.LoadStl(path);
+    return 0;
+  }
+  return -1;
+}
+
 void cad_app::OpenFiles(const std::vector<std::string>& files) {
+  if (files.size() == 0) {
+    return;
+  }
   Part p;
+  p.id = _parts.size();
+  p.name = get_file_name(files[0]);
   for (size_t i = 0; i < files.size(); i++) {
     std::cout << files[i] << "\n";
-    
+    std::shared_ptr<TrigMesh> meshPtr = std::make_shared<TrigMesh>();
+    int ret = LoadMeshFile(files[i], *meshPtr);
+    if (ret < 0) {
+      continue;
+    }
+    int id = _ui->AddMesh(meshPtr);
+    p._meshIds.push_back(id);
+    p.meshes.push_back(meshPtr);
   }
+  _parts.push_back(p);
 }
 
 void cad_app::QueueOpenFiles(const std::vector<std::string>& files) {

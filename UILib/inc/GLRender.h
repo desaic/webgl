@@ -1,5 +1,6 @@
 #pragma once
 
+#include <mutex>
 #include <string>
 #include <memory>
 
@@ -136,4 +137,5 @@ class GLRender {
   bool _initialized = false;
 
   KeyboardInput _keyboardInput;
+  std::mutex meshLock;
 };

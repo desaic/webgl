@@ -6,6 +6,7 @@
 
 struct Part {
   std::vector<std::shared_ptr<TrigMesh> > meshes;
+  std::vector<int> _meshIds;
   std::string name;
   int id = 0;
 };

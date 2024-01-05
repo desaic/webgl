@@ -75,6 +75,7 @@ void GLRender::Resize(unsigned int width, unsigned int height) {
 }
 
 int GLRender::DrawMesh(size_t meshId) {
+  std::lock_guard<std::mutex> lock(meshLock);
   if (meshId >= _bufs.size()) {
     return -1;
   }
@@ -416,6 +417,7 @@ int GLRender::UploadMeshData(size_t meshId) {
 }
 
 int GLRender::AddMesh(std::shared_ptr<TrigMesh> mesh) {
+  std::lock_guard<std::mutex> lock(meshLock);
   int meshId = int(_bufs.size());
   _bufs.push_back(mesh);
   return meshId;
