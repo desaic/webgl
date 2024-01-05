@@ -9,6 +9,7 @@ include_directories("../UILib/inc/")
 link_directories("../UILib/extern/glfw3.3.8")
 link_directories("../UILib/extern/glew-2.1.0")
 add_executable(${BIN} ${EXE_SRC} resource/icons.rc )
+
 target_link_libraries(${BIN} UILib imgui glfw3 opengl32 glew32s ws2_32.lib)
 set(FONT_FOLDER fonts)
 add_custom_command(TARGET ${BIN} POST_BUILD

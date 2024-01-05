@@ -2,6 +2,10 @@
 #include <cmath>
 #include <iostream>
 #include <algorithm>
+#include "FileWriter.h"
+#include "sdf/MarchingCubes.h"
+#include "sdf/FastSweep.h"
+#include "TrigMesh.h"
 
 // @sx/@sy/@sz -> number of cells in each dimension
 int Water::Allocate(unsigned sx, unsigned sy, unsigned sz) {
@@ -12,12 +16,14 @@ int Water::Allocate(unsigned sx, unsigned sy, unsigned sz) {
   uTmp.Allocate(numX, numY, numZ);
   smoke.Allocate(numX, numY, numZ);
   smokeTemp.Allocate(numX, numY, numZ);
+  smokeBoundary.Allocate(numX, numY, numZ);
+  smokeSDF.Allocate(numX, numY, numZ);
   phi.Allocate(numX+1, numY+1, numZ+1);  // Initialize phi?
   p.Allocate(numX, numY, numZ);
   numCells = Vec3u(numX, numY, numZ);
   SetBoundary();
   SetInitialSmoke();
-  SetInitialVelocity();
+  //SetInitialVelocity();
 
   return 0;
 }
@@ -46,22 +52,6 @@ void Water::SetInitialSmoke() {
       smoke(0, y, z) = 0.0f;
     }
   }
-
-  //const int x0 = numCells[0] / 4;
-  //const int y0 = numCells[1] / 4;
-  //const int z0 = numCells[2] / 4;
-
-  //const int x1 = numCells[0] / 2;
-  //const int y1 = numCells[1] / 2;
-  //const int z1 = numCells[2] / 2;
-
-  //for (int x = x0; x < x1; ++x) {
-  //  for (int y = y0; y < y1; ++y) {
-  //    for (int z = z0; z < z1; ++z) {
-  //      smoke(x,y,z) = 1.0f;
-  //    }
-  //  }
-  //}
 }
 
 void Water::SetBoundary() {
@@ -251,12 +241,101 @@ int Water::SolveP() {
     return 0;
 }
 
+int Water::UpdateSDF() {
+  const float threshold = 0.5f;
+  for (int x = 1; x < numCells[0] - 1; ++x) {
+    for (int y = 1; y < numCells[1] - 1; ++y) {
+      for (int z = 1; z < numCells[2] - 1; ++z) {
+        if (smoke(x, y, z) > threshold) {
+          smokeBoundary(x,y,z) = 0;
+        } else {
+          uint8_t isBoundary = 0;
+          for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+              for (int dz = -1; dz <= 1; dz++) {
+                if (dx == 0 && dy == 0 && dz == 0) continue;
+                // FOR DEBUGGING in 2D
+                if (smoke(x+dx, y+dx, z+dz) > threshold) {
+                  isBoundary = 1;     
+                }
+              } 
+            } 
+          }
+          smokeBoundary(x,y,z) = isBoundary;
+        }
+      }
+    }  
+  }
+
+  smokeSDF.Fill(10/SDFUnit); // far distance?
+
+  for (int x = 1; x < numCells[0] - 1; ++x) {
+    for (int y = 1; y < numCells[1] - 1; ++y) {
+      for (int z = 1; z < numCells[2] - 1; ++z) {
+        if (smoke(x,y,z) == 1) {
+          smokeSDF(x,y,z) = 0; // 0 distance on the boundary
+        } else { 
+          smokeSDF(x,y,z) = -1.0f * smoke(x,y,z) / SDFUnit;
+        }
+      }
+    }
+  }
+
+  FastSweep(smokeSDF, h, SDFUnit, 5, smokeBoundary);
+
+  return 0;
+}
+
+int Water::MarchSmoke() {
+  TrigMesh mesh;
+  for (int x = 1; x < numCells[0] - 1; ++x) {
+    for (int y = 1; y < numCells[1] - 1; ++y) {
+      for (int z = 1; z < numCells[2] - 1; ++z) {
+        MarchOneCube<short>(x, y, z, smokeSDF, SDFLevel/SDFUnit, &mesh, h/SDFUnit);
+      }
+    }
+  }
+
+  steps++;
+  if (steps == 50 || steps == 100 || steps == 200) {
+    std::string filename = "C:\\Data\\stls\\debug_water" + std::to_string(steps) + ".obj";
+    mesh.SaveObj(filename);
+  }
+        
+  return 0;
+}
+
 int Water::Step() {
+  clock.reset();
   AddBodyForce();
+  unsigned long bodyForceTime = clock.getTimeMilliseconds();
+  clock.reset();
+
   SolveP();
+  unsigned long solvePTime = clock.getTimeMilliseconds();
+  clock.reset();
+
   AdvectU();
+  unsigned long advectUTime = clock.getTimeMilliseconds();
+  clock.reset();
+
   AdvectSmoke();
+  unsigned long advectSmokeTime = clock.getTimeMilliseconds();
+  clock.reset();
+
+  UpdateSDF();
+  unsigned long updateSDFTime = clock.getTimeMilliseconds();
+  clock.reset();
+
+  MarchSmoke();
+  unsigned long marchingCubesTime = clock.getTimeMilliseconds();
+  clock.reset();
+
+
   //AdvectPhi();
+
+  std::cout << "Took " << bodyForceTime << ", " << solvePTime << ", " << advectUTime << ", " << advectSmokeTime << ", " << updateSDFTime <<
+    ", " << marchingCubesTime << " milliseconds" << std::endl;
   return 0;
 }
 
@@ -313,84 +392,6 @@ float Water::AvgW_y(unsigned i, unsigned j, unsigned k) {
     u(i,   j+1, k-1)[1]
   );
 }
-
-//float Water::AvgU_y(unsigned i, unsigned j, unsigned k) {
-//  return 0.125f * ( 
-//    u(i,   j,   k  )[1] +
-//    u(i-1, j,   k  )[1] +
-//    u(i,   j+1, k  )[1] +
-//    u(i-1, j+1, k  )[1] +
-//    u(i,   j,   k+1)[1] +
-//    u(i-1, j,   k+1)[1] + 
-//    u(i,   j+1, k+1)[1] +
-//    u(i-1, j+1, k+1)[1]
-//  );
-//}
-//
-//float Water::AvgU_z(unsigned i, unsigned j, unsigned k) {
-//  return 0.125f * ( 
-//    u(i,   j,   k  )[2] +
-//    u(i-1, j,   k  )[2] +
-//    u(i,   j,   k+1)[2] +
-//    u(i-1, j,   k+1)[2] +
-//    u(i,   j+1, k  )[2] +
-//    u(i-1, j+1, k  )[2] +
-//    u(i,   j+1, k+1)[2] +
-//    u(i-1, j+1, k+1)[2]
-//  );
-//}
-//
-//float Water::AvgV_x(unsigned i, unsigned j, unsigned k) {
-//  return 0.125f * ( 
-//    u(i,   j,   k  )[0] +
-//    u(i,   j-1, k  )[0] +
-//    u(i+1, j,   k  )[0] +
-//    u(i+1, j-1, k  )[0] +
-//    u(i,   j,   k+1)[0] +
-//    u(i,   j-1, k+1)[0] +
-//    u(i+1, j,   k+1)[0] +
-//    u(i+1, j-1, k+1)[0]
-//  );
-//}
-//
-//float Water::AvgV_z(unsigned i, unsigned j, unsigned k) {
-//  return 0.125f * ( 
-//    u(i,   j,   k  )[2] +
-//    u(i,   j-1, k  )[2] +
-//    u(i,   j,   k+1)[2] +
-//    u(i,   j-1, k+1)[2] +
-//    u(i+1, j,   k  )[2] +
-//    u(i+1, j-1, k  )[2] +
-//    u(i+1, j,   k+1)[2] +
-//    u(i+1, j-1, k+1)[2]
-//  );
-//}
-//
-//float Water::AvgW_x(unsigned i, unsigned j, unsigned k) {
-//  return 0.125f * ( 
-//    u(i,   j,   k  )[0] +
-//    u(i+1, j,   k  )[0] +
-//    u(i,   j,   k-1)[0] +
-//    u(i+1, j,   k-1)[0] +
-//    u(i,   j+1, k  )[0] +
-//    u(i+1, j+1, k  )[0] +
-//    u(i,   j+1, k-1)[0] +
-//    u(i+1, j+1, k-1)[0]
-//  );
-//}
-//
-//float Water::AvgW_y(unsigned i, unsigned j, unsigned k) {
-//  return 0.125f * ( 
-//    u(i,   j,   k  )[0] +
-//    u(i,   j+1, k  )[0] +
-//    u(i,   j,   k-1)[0] +
-//    u(i,   j+1, k-1)[0] +
-//    u(i+1, j,   k  )[0] +
-//    u(i+1, j+1, k  )[0] +
-//    u(i+1, j,   k-1)[0] +
-//    u(i+1, j+1, k-1)[0]
-//  );
-//}
 
 float Water::InterpU(Vec3f& x, Axis axis) { 
   const Vec3u& sz = u.GetSize();
