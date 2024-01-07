@@ -12,13 +12,13 @@ void main()
 {
 	float ambient = 0.02;
 	vec3 c = vec3(ambient,ambient,ambient);
-	for(int li = 0;li<10; li++){
+	for(int li = 0;li<8; li++){
 	    vec3 L = lightpos[li] - pos;
 		float lightDist = length(L);
 		L = (1.0/lightDist) * L;
 		lightDist = lightDist+0.5;
 		lightDist = min(300,lightDist);
-		lightDist = min(1, 300/lightDist);
+		lightDist = min(1, 100/lightDist);
 		vec3 N = normalize(normal);
 		vec3 diffuse = max(0, dot(L, N)) * lightcolor[li];
 		vec3 V = -normalize(pos);

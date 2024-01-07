@@ -57,7 +57,7 @@ struct GLLightArray {
   // If your fragment shader does not use the input, it will
   // optimized away with loc = -1
   int _color_loc=-1;
-  unsigned NumLights() const { return pos.size() / 3; }
+  unsigned NumLights() const { return pos.size(); }
 };
 
 class GLRender {
