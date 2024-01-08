@@ -17,7 +17,7 @@ void main()
 		float lightDist = length(L);
 		L = (1.0/lightDist) * L;
 		lightDist = lightDist+0.5;
-		lightDist = min(300,lightDist);
+		lightDist = min(200,lightDist);
 		lightDist = min(1, 100/lightDist);
 		vec3 N = normalize(normal);
 		vec3 diffuse = max(0, dot(L, N)) * lightcolor[li];
@@ -27,7 +27,9 @@ void main()
 		float alpha=4;
 		float specular = max(0,dot(N,H));
 		specular = 0.5* pow(specular, alpha);
-		c += lightDist* diffuse;
+		//c += lightDist * (diffuse + specular * lightcolor[li]);
+		//diffuse only
+		c += lightDist * diffuse;
 	}
 
 	vec4 texColor = vec4(c,1.0) * texture( texSampler, UV );

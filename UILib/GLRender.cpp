@@ -148,7 +148,7 @@ void GLRender::KeyPressed(KeyboardInput& input) {
   }
 }
 
-int GLRender::UploadLights() { 
+int GLRender::UploadLights() {
   unsigned numLights = _lights.NumLights();
   const float eps = 1e-6;
   for (unsigned i = 0; i < numLights; i++) {
