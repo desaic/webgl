@@ -152,8 +152,6 @@ int GLRender::UploadLights() {
   unsigned numLights = _lights.NumLights();
   Matrix4f viewMat = _camera.proj * _camera.view;
   const float eps = 1e-6;
-  Vec3f viewDir = (_camera.at - _camera.eye).normalizedCopy();
-  //_lights.world_pos[0] = _camera.eye + Vec3f(0,1,0) - 10.0f* viewDir;
   for (unsigned i = 0; i < numLights; i++) {
     Vec3f worldPos = _lights.world_pos[i];
     Vec4f p(worldPos[0],worldPos[1],worldPos[2], 1.0f);

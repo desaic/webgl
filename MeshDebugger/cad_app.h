@@ -41,6 +41,8 @@ class cad_app {
 
   void QueueCommand(CadCmdPtr cmd);
   void QueueOpenFiles(const std::vector<std::string>& files);
+
+  void MakeHelix();
  protected:
   UILib* _ui;
   std::shared_ptr<TrigMesh> _floor;

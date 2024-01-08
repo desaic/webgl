@@ -26,7 +26,11 @@ void cad_app::Init(UILib* ui) {
   });
 
   _ui->SetChangeDirCb(std::bind(&cad_app::OnChangeDir, this, std::placeholders::_1));
+
+  _ui->AddButton("Helix", std::bind(&cad_app::MakeHelix, this));
 }
+
+void cad_app::MakeHelix() {}
 
 void cad_app::OnChangeDir(std::string dir) {
   _conf.workingDir = dir;
