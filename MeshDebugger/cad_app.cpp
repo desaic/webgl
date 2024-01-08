@@ -1,7 +1,32 @@
 #include "cad_app.h"
 #include "ImageUtils.h"
 #include "StringUtil.h"
+#include "imgui.h"
 #include <algorithm>
+
+class HelixWidget : public UIWidget {
+ public:
+  void Draw() override {
+    if (ImGui::TreeNode("Helix")) {
+      ImGui::InputFloat("inner r", &_h.inner_radius);
+      ImGui::InputFloat("outer r", &_h.inner_radius);
+      ImGui::InputFloat("length", &_h.length);
+      ImGui::InputFloat("pitch", &_h.pitch);
+      ImGui::InputFloat("inner width", &_h.inner_width);
+      ImGui::InputFloat("outer width", &_h.outer_width);
+      ImGui::Checkbox("rod", &_h.rod);
+      ImGui::Checkbox("tube", &_h.tube);      
+      bool gen = ImGui::Button("Generate");
+      if (gen && _genHelixFun) {
+        _genHelixFun(_h);
+      }
+      ImGui::TreePop();
+    }
+  }
+  HelixSpec _h;
+  std::function<void(const HelixSpec&)> _genHelixFun;
+};
+
 void cad_app::Init(UILib* ui) {
   _conf.Load(_conf._confFile);
   _ui = ui;
@@ -27,10 +52,26 @@ void cad_app::Init(UILib* ui) {
 
   _ui->SetChangeDirCb(std::bind(&cad_app::OnChangeDir, this, std::placeholders::_1));
 
-  _ui->AddButton("Helix", std::bind(&cad_app::MakeHelix, this));
+  auto helixWidget = std::make_shared<HelixWidget>();
+  helixWidget->_genHelixFun =
+      std::bind(&cad_app::QueueHelix, this, std::placeholders::_1);
+  _ui->AddWidget(helixWidget);
 }
 
-void cad_app::MakeHelix() {}
+struct HelixCommand : public CadCommand {
+  HelixCommand(const HelixSpec& spec) : CadCommand("helix"), _spec(spec) {}
+  HelixSpec _spec;
+  void Run(cad_app& app) override { app.MakeHelix(_spec); }
+};
+
+void cad_app::QueueHelix(const HelixSpec& spec) {
+  std::shared_ptr<HelixCommand> cmd = std::make_shared<HelixCommand>(spec);
+  QueueCommand(cmd);
+}
+
+void cad_app::MakeHelix(const HelixSpec& spec) {
+  std::cout << "make helix " << spec.inner_width << "\n";
+}
 
 void cad_app::OnChangeDir(std::string dir) {
   _conf.workingDir = dir;

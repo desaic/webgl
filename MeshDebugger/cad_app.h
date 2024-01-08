@@ -29,6 +29,17 @@ struct OpenCommand : public CadCommand {
 
 typedef std::shared_ptr<CadCommand> CadCmdPtr;
 
+struct HelixSpec {
+  float inner_radius = 2;
+  float outer_radius = 3;
+  float length = 10;
+  float pitch = 3;
+  float inner_width = 1.5;
+  float outer_width = 0.5;
+  bool rod = true;
+  bool tube = false;
+};
+
 class cad_app {
  public:
   void Init(UILib* ui);
@@ -42,7 +53,8 @@ class cad_app {
   void QueueCommand(CadCmdPtr cmd);
   void QueueOpenFiles(const std::vector<std::string>& files);
 
-  void MakeHelix();
+  void QueueHelix(const HelixSpec& spec);
+  void MakeHelix(const HelixSpec& spec);
  protected:
   UILib* _ui;
   std::shared_ptr<TrigMesh> _floor;
