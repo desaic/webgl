@@ -150,12 +150,11 @@ void GLRender::KeyPressed(KeyboardInput& input) {
 
 int GLRender::UploadLights() { 
   unsigned numLights = _lights.NumLights();
-  Matrix4f viewMat = _camera.proj * _camera.view;
   const float eps = 1e-6;
   for (unsigned i = 0; i < numLights; i++) {
     Vec3f worldPos = _lights.world_pos[i];
     Vec4f p(worldPos[0],worldPos[1],worldPos[2], 1.0f);
-    //p = viewMat * p;
+    p = _camera.view * p;
     if (std::abs(p[3]) < eps) {
       p[3] = eps;
     }
@@ -184,9 +183,11 @@ void GLRender::Render() {
   glEnable(GL_DEPTH_TEST);
   const GLsizei matCount = 1;
   const GLboolean noTranspose = GL_FALSE;
-  float vp[16], vit[16];
-  _camera.VP(vp);
-  glUniformMatrix4fv(_mvp_loc, matCount, noTranspose, (const GLfloat*)vp);
+  float vit[16];
+  glUniformMatrix4fv(_vmat_loc, matCount, noTranspose,
+                     (const GLfloat*)_camera.view);
+  glUniformMatrix4fv(_pmat_loc, matCount, noTranspose,
+                     (const GLfloat*)_camera.proj);
   _camera.VIT(vit);
   glUniformMatrix4fv(_mvit_loc, matCount, noTranspose, (const GLfloat*)vit);
   UploadLights();
@@ -199,7 +200,7 @@ void GLRender::Render() {
   glDisable(GL_MULTISAMPLE);
   glUseProgram(0);
 
-  		// Resolved multisampling
+  // Resolved multisampling
   glBindFramebuffer(GL_READ_FRAMEBUFFER, _fbo);
   glBindFramebuffer(GL_DRAW_FRAMEBUFFER, _fbo_resolve);
   glBlitFramebuffer(0, 0, _width, _height, 0, 0, _width, _height,
@@ -280,7 +281,8 @@ int GLRender::Init(const std::string& vertShader,
   glDeleteShader(_vertex_shader);
   glDeleteShader(_fragment_shader);
   glUseProgram(_program);
-  _mvp_loc = glGetUniformLocation(_program, "MVP");
+  _vmat_loc = glGetUniformLocation(_program, "View");
+  _pmat_loc = glGetUniformLocation(_program, "Proj");
   _mvit_loc = glGetUniformLocation(_program, "MVIT");
   _lights._pos_loc = glGetUniformLocation(_program, "lightpos");
   _lights._color_loc = glGetUniformLocation(_program, "lightcolor");

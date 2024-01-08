@@ -118,9 +118,9 @@ class GLRender {
   Scene scene;
 
   unsigned int _vertex_shader = 0, _fragment_shader = 0, _program = 0;
-  /// mvp model view projection.
+  /// view and projection matrix 
   /// mvit model view inverse transpose.
-  unsigned int _mvp_loc = 0, _mvit_loc = 0, _light_loc = 0;
+  unsigned int _vmat_loc = 0,_pmat_loc=0, _mvit_loc = 0, _light_loc = 0;
   unsigned int _tex_loc = 0;
   Camera _camera;
   GLLightArray _lights;
