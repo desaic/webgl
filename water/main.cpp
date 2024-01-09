@@ -297,8 +297,17 @@ void DrawSmokeSDF(const Water& water, Array2D4b& image, float vScale) {
       unsigned oy = y;
       unsigned sx = x / spacing;
       unsigned sy = y / spacing;
-      short distance = water.SmokeSDF()(sx, sy, z); // 0 or 1
-      uint8_t c = 5*(distance * vScale);
+
+      const float unit = 0.001f;
+      const int band = 5; 
+      const float h = 0.02;
+      const int maxVal = ceil(band * h / unit);
+
+      float distance = water.SmokeSDF()(sx, sy, z) ; // [0, maxVal]
+      if (distance > maxVal) continue;
+
+      uint8_t c = (255.0/maxVal) * (distance); // [0, 255]
+
       Vec4b color(c, c, c, 255);
       image(ox, oy) = color;      
     }
@@ -324,8 +333,8 @@ void DrawSmokeBoundary(const Water& water, Array2D4b& image) {
       uint8_t smokeVal = water.SmokeBoundary()(sx, sy, z); // 0 or 1
 
       if (smokeVal) {
-        uint8_t c = 150;
-        Vec4b color(c, c, c, 255);
+        uint8_t c = 255;
+        Vec4b color(c, 0, 0, 255);
 
         image(ox, oy) = color;      
       }
@@ -365,9 +374,9 @@ class WaterApp {
       vScale = slider->GetVal() / 10.0f;
     }
     _image.Fill(Vec4b(10, 10, 10, 255));
-    DrawScalar(_water, _image, vScale);
-    //DrawSmokeBoundary(_water, _image);
+    //DrawScalar(_water, _image, vScale);
     DrawSmokeSDF(_water, _image, vScale);
+    DrawSmokeBoundary(_water, _image);
     DrawVecs(_water, _image, vScale);
     _ui->SetImageData(_imageId, _image);
   }

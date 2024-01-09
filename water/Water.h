@@ -57,8 +57,9 @@ class Water {
   Array3D<float> smokeTemp;
   Array3D<uint8_t> smokeBoundary;
   Array3D<short> smokeSDF;
-  const float SDFLevel = 2.5;
-  const float SDFUnit = 1e-3;
+  const float SDFLevel = 1;
+  const float SDFUnit = 0.001;
+  const unsigned SDFBand = 5;
 
   //defined on vertices
   //size is +1 of voxel grid size.

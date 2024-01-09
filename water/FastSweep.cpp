@@ -140,9 +140,9 @@ void FastSweep(Array3D<short>& dist, float voxSize, float unit, float band,
   if (gridSize[0] == 0 || gridSize[1] == 0 || gridSize[2] == 0) {
     return;
   }
-  if (frozen.Empty()) {
-    frozen.Allocate(gridSize, 0); 
-  }
+  //if (frozen.Empty()) {
+  //  frozen.Allocate(gridSize, 0); 
+  //}
   //cells initialized with dist < h are frozen
   //const std::vector<short>& src = dist.GetData();
   //std::vector<uint8_t>& dst = frozen.GetData();

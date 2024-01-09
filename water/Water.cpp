@@ -242,20 +242,21 @@ int Water::SolveP() {
 }
 
 int Water::UpdateSDF() {
-  const float threshold = 0.5f;
+  const float smokeThreshold = 0.5f; // smoke voxels are below the threshold
+
+  // voxel is on the smoke boundary if it's not smoke itself but has a smoke neighbor
   for (int x = 1; x < numCells[0] - 1; ++x) {
     for (int y = 1; y < numCells[1] - 1; ++y) {
       for (int z = 1; z < numCells[2] - 1; ++z) {
-        if (smoke(x, y, z) > threshold) {
-          smokeBoundary(x,y,z) = 0;
+        if (smoke(x, y, z) > smokeThreshold) { 
+          smokeBoundary(x,y,z) = 0; 
         } else {
           uint8_t isBoundary = 0;
           for (int dx = -1; dx <= 1; dx++) {
             for (int dy = -1; dy <= 1; dy++) {
               for (int dz = -1; dz <= 1; dz++) {
                 if (dx == 0 && dy == 0 && dz == 0) continue;
-                // FOR DEBUGGING in 2D
-                if (smoke(x+dx, y+dx, z+dz) > threshold) {
+                if (smoke(x+dx, y+dx, z+dz) > smokeThreshold) {
                   isBoundary = 1;     
                 }
               } 
@@ -267,30 +268,33 @@ int Water::UpdateSDF() {
     }  
   }
 
-  smokeSDF.Fill(10/SDFUnit); // far distance?
+  const float MaxDistanceMM = h * (SDFBand + 1);
+
+  smokeSDF.Fill(round(MaxDistanceMM/SDFUnit)); // far distance?
 
   for (int x = 1; x < numCells[0] - 1; ++x) {
     for (int y = 1; y < numCells[1] - 1; ++y) {
       for (int z = 1; z < numCells[2] - 1; ++z) {
-        if (smoke(x,y,z) == 1) {
-          smokeSDF(x,y,z) = 0; // 0 distance on the boundary
-        } else { 
-          smokeSDF(x,y,z) = -1.0f * smoke(x,y,z) / SDFUnit;
+        float smokeVal = smoke(x,y,z);
+        if (smokeVal < smokeThreshold) {
+          smokeSDF(x,y,z) = 0;
+        } else {
+          smokeSDF(x,y,z) = smokeVal / SDFUnit;
         }
       }
     }
   }
 
-  FastSweep(smokeSDF, h, SDFUnit, 5, smokeBoundary);
+  FastSweep(smokeSDF, h, SDFUnit, SDFBand, smokeBoundary);
 
   return 0;
 }
 
 int Water::MarchSmoke() {
   TrigMesh mesh;
-  for (int x = 1; x < numCells[0] - 1; ++x) {
-    for (int y = 1; y < numCells[1] - 1; ++y) {
-      for (int z = 1; z < numCells[2] - 1; ++z) {
+  for (int x = 0; x < numCells[0] - 1; ++x) {
+    for (int y = 0; y < numCells[1] - 1; ++y) {
+      for (int z = 0; z < numCells[2] - 1; ++z) {
         MarchOneCube<short>(x, y, z, smokeSDF, SDFLevel/SDFUnit, &mesh, h/SDFUnit);
       }
     }
@@ -331,11 +335,8 @@ int Water::Step() {
   unsigned long marchingCubesTime = clock.getTimeMilliseconds();
   clock.reset();
 
-
-  //AdvectPhi();
-
-  std::cout << "Took " << bodyForceTime << ", " << solvePTime << ", " << advectUTime << ", " << advectSmokeTime << ", " << updateSDFTime <<
-    ", " << marchingCubesTime << " milliseconds" << std::endl;
+  //std::cout << "Took " << bodyForceTime << ", " << solvePTime << ", " << advectUTime << ", " << advectSmokeTime << ", " << updateSDFTime <<
+  //  ", " << marchingCubesTime << " milliseconds" << std::endl;
   return 0;
 }
 
