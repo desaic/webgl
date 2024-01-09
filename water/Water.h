@@ -57,7 +57,7 @@ class Water {
   Array3D<float> smokeTemp;
   Array3D<uint8_t> smokeBoundary;
   Array3D<short> smokeSDF;
-  const float SDFLevel = 1;
+  const float SDFLevel = 0.1;
   const float SDFUnit = 0.001;
   const unsigned SDFBand = 5;
 
