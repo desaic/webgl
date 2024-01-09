@@ -75,6 +75,7 @@ void GLRender::Resize(unsigned int width, unsigned int height) {
 }
 
 int GLRender::DrawMesh(size_t meshId) {
+  std::lock_guard<std::mutex> lock(meshLock);
   if (meshId >= _bufs.size()) {
     return -1;
   }
@@ -147,14 +148,13 @@ void GLRender::KeyPressed(KeyboardInput& input) {
   }
 }
 
-int GLRender::UploadLights() { 
+int GLRender::UploadLights() {
   unsigned numLights = _lights.NumLights();
-  Matrix4f viewMat = _camera.view * _camera.proj;
   const float eps = 1e-6;
   for (unsigned i = 0; i < numLights; i++) {
     Vec3f worldPos = _lights.world_pos[i];
     Vec4f p(worldPos[0],worldPos[1],worldPos[2], 1.0f);
-    p = viewMat * p;
+    p = _camera.view * p;
     if (std::abs(p[3]) < eps) {
       p[3] = eps;
     }
@@ -183,9 +183,11 @@ void GLRender::Render() {
   glEnable(GL_DEPTH_TEST);
   const GLsizei matCount = 1;
   const GLboolean noTranspose = GL_FALSE;
-  float vp[16], vit[16];
-  _camera.VP(vp);
-  glUniformMatrix4fv(_mvp_loc, matCount, noTranspose, (const GLfloat*)vp);
+  float vit[16];
+  glUniformMatrix4fv(_vmat_loc, matCount, noTranspose,
+                     (const GLfloat*)_camera.view);
+  glUniformMatrix4fv(_pmat_loc, matCount, noTranspose,
+                     (const GLfloat*)_camera.proj);
   _camera.VIT(vit);
   glUniformMatrix4fv(_mvit_loc, matCount, noTranspose, (const GLfloat*)vit);
   UploadLights();
@@ -198,7 +200,7 @@ void GLRender::Render() {
   glDisable(GL_MULTISAMPLE);
   glUseProgram(0);
 
-  		// Resolved multisampling
+  // Resolved multisampling
   glBindFramebuffer(GL_READ_FRAMEBUFFER, _fbo);
   glBindFramebuffer(GL_DRAW_FRAMEBUFFER, _fbo_resolve);
   glBlitFramebuffer(0, 0, _width, _height, 0, 0, _width, _height,
@@ -238,11 +240,11 @@ int GLRender::Init(const std::string& vertShader,
   const char* vs_pointer = _vs_string.data();
   const char* fs_pointer = _fs_string.data();
   ResetCam();
-  _lights.SetLightPos(0, 0, 400, -100);
+  _lights.SetLightPos(0, 0, 100, -100);
   _lights.SetLightColor(0, 0.8, 0.7, 0.6);
-  _lights.SetLightPos(1, 0, 400, 0);
+  _lights.SetLightPos(1, 0, 100, 0);
   _lights.SetLightColor(1, 0.8, 0.8, 0.8);
-  _lights.SetLightPos(2, 0, 400, 100);
+  _lights.SetLightPos(2, 0, 100, 100);
   _lights.SetLightColor(2, 0.6, 0.7, 0.8);
   unsigned err = 0;
   _vertex_shader = glCreateShader(GL_VERTEX_SHADER);
@@ -279,7 +281,8 @@ int GLRender::Init(const std::string& vertShader,
   glDeleteShader(_vertex_shader);
   glDeleteShader(_fragment_shader);
   glUseProgram(_program);
-  _mvp_loc = glGetUniformLocation(_program, "MVP");
+  _vmat_loc = glGetUniformLocation(_program, "View");
+  _pmat_loc = glGetUniformLocation(_program, "Proj");
   _mvit_loc = glGetUniformLocation(_program, "MVIT");
   _lights._pos_loc = glGetUniformLocation(_program, "lightpos");
   _lights._color_loc = glGetUniformLocation(_program, "lightcolor");
@@ -416,6 +419,7 @@ int GLRender::UploadMeshData(size_t meshId) {
 }
 
 int GLRender::AddMesh(std::shared_ptr<TrigMesh> mesh) {
+  std::lock_guard<std::mutex> lock(meshLock);
   int meshId = int(_bufs.size());
   _bufs.push_back(mesh);
   return meshId;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <mutex>
 #include <string>
 #include <memory>
 
@@ -56,7 +57,7 @@ struct GLLightArray {
   // If your fragment shader does not use the input, it will
   // optimized away with loc = -1
   int _color_loc=-1;
-  unsigned NumLights() const { return pos.size() / 3; }
+  unsigned NumLights() const { return pos.size(); }
 };
 
 class GLRender {
@@ -117,9 +118,9 @@ class GLRender {
   Scene scene;
 
   unsigned int _vertex_shader = 0, _fragment_shader = 0, _program = 0;
-  /// mvp model view projection.
+  /// view and projection matrix 
   /// mvit model view inverse transpose.
-  unsigned int _mvp_loc = 0, _mvit_loc = 0, _light_loc = 0;
+  unsigned int _vmat_loc = 0,_pmat_loc=0, _mvit_loc = 0, _light_loc = 0;
   unsigned int _tex_loc = 0;
   Camera _camera;
   GLLightArray _lights;
@@ -136,4 +137,5 @@ class GLRender {
   bool _initialized = false;
 
   KeyboardInput _keyboardInput;
+  std::mutex meshLock;
 };

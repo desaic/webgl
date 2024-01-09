@@ -11,3 +11,5 @@ void DrawLine(Array2D4b& img, Vec2f p0, Vec2f p1, Vec4b color);
 void ConvertChan3To4(const Array2D8u& rgb, Array2D8u& rgba);
 
 void RGBToGrey(uint32_t& c);
+
+void MakeCheckerPatternRGBA(Array2D8u& out);
