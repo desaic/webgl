@@ -58,7 +58,8 @@ class Water {
   Array3D<uint8_t> smokeBoundary;
   Array3D<short> smokeSDF;
   const float SDFLevel = 0.1;
-  const float SDFUnit = 0.001;
+  // 0.1mm
+  const float SDFUnit = 0.0001;
   const unsigned SDFBand = 5;
 
   //defined on vertices
@@ -67,6 +68,7 @@ class Water {
   //intermediate variable pressure.
   Array3D<float> p;
   float dt = 0.01666667f;
+  //meters? 2cm
   float h = 0.02f;
   float density = 1000.f; // reasonable value?
   int nIterations = 100; // reasonable value?

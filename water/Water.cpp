@@ -268,41 +268,58 @@ int Water::UpdateSDF() {
     }  
   }
 
-  const float MaxDistanceMM = h * (SDFBand + 1);
+  const float MaxDistanceM = 2 * h * (SDFBand + 1);
 
-  smokeSDF.Fill(round(MaxDistanceMM/SDFUnit)); // far distance?
+  smokeSDF.Fill(round(MaxDistanceM/SDFUnit)); // far distance?
 
   for (int x = 1; x < numCells[0] - 1; ++x) {
     for (int y = 1; y < numCells[1] - 1; ++y) {
       for (int z = 1; z < numCells[2] - 1; ++z) {
         float smokeVal = smoke(x,y,z);
+        if (smokeBoundary(x, y, z)) {
+          smokeSDF(x, y, z) = 0;
+        }else
         if (smokeVal < smokeThreshold) {
-          smokeSDF(x,y,z) = 0;
+          smokeSDF(x, y, z) = smokeVal / SDFUnit;
         } else {
-          smokeSDF(x,y,z) = smokeVal / SDFUnit;
+          smokeSDF(x, y, z) = -smokeVal / SDFUnit;          
         }
       }
     }
   }
 
+  //for (int x = 1; x < numCells[0] - 1; ++x) {
+  //  for (int y = 1; y < numCells[1] - 1; ++y) {
+  //    std::cout << smokeSDF(x, y, 12) << " ";
+  //  }
+  //  std::cout << "\n";
+  //}
+  //std::cout << "\n";
   FastSweep(smokeSDF, h, SDFUnit, SDFBand, smokeBoundary);
-
+  //for (int x = 1; x < numCells[0] - 1; ++x) {
+  //  for (int y = 1; y < numCells[1] - 1; ++y) {
+  //    std::cout << smokeSDF(x, y, 12) << " ";
+  //  }
+  //  std::cout << "\n";
+  //}
+  //std::cout << "\n";
   return 0;
 }
 
 int Water::MarchSmoke() {
-  TrigMesh mesh;
-  for (int x = 0; x < numCells[0] - 1; ++x) {
-    for (int y = 0; y < numCells[1] - 1; ++y) {
-      for (int z = 0; z < numCells[2] - 1; ++z) {
-        MarchOneCube<short>(x, y, z, smokeSDF, SDFLevel/SDFUnit, &mesh, h/SDFUnit);
-      }
-    }
-  }
 
   steps++;
   if (steps == 50 || steps == 100 || steps == 200) {
-    std::string filename = "C:\\Data\\stls\\debug_water" + std::to_string(steps) + ".obj";
+    TrigMesh mesh;
+    for (int x = 0; x < numCells[0] - 1; ++x) {
+      for (int y = 0; y < numCells[1] - 1; ++y) {
+        for (int z = 0; z < numCells[2] - 1; ++z) {
+          MarchOneCube<short>(x, y, z, smokeSDF, SDFLevel / SDFUnit, &mesh,
+                              h / SDFUnit);
+        }
+      }
+    }
+    std::string filename = "F:/dump/debug_water" + std::to_string(steps) + ".obj";
     mesh.SaveObj(filename);
   }
         
