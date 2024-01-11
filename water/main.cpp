@@ -4,6 +4,7 @@
 #include "ImageUtils.h"
 #include "TrigMesh.h"
 #include "Water.h"
+#include "WaterMPM.h"
 #include "UILib.h"
 #include <cassert>
 
@@ -374,9 +375,9 @@ class WaterApp {
       vScale = slider->GetVal() / 10.0f;
     }
     _image.Fill(Vec4b(10, 10, 10, 255));
-    //DrawScalar(_water, _image, vScale);
-    DrawSmokeSDF(_water, _image, vScale);
-    DrawSmokeBoundary(_water, _image);
+    DrawScalar(_water, _image, vScale);
+    //DrawSmokeSDF(_water, _image, vScale);
+    //DrawSmokeBoundary(_water, _image);
     DrawVecs(_water, _image, vScale);
     _ui->SetImageData(_imageId, _image);
   }

@@ -307,7 +307,6 @@ int Water::UpdateSDF() {
 }
 
 int Water::MarchSmoke() {
-
   steps++;
   if (steps == 50 || steps == 100 || steps == 200) {
     TrigMesh mesh;
@@ -319,7 +318,14 @@ int Water::MarchSmoke() {
         }
       }
     }
+
+    bool debugHarrison = true;
     std::string filename = "F:/dump/debug_water" + std::to_string(steps) + ".obj";
+
+    if (debugHarrison) {
+      filename = "C:\\Data\\objs\\debug_water" + std::to_string(steps) + ".obj";
+    }
+
     mesh.SaveObj(filename);
   }
         
