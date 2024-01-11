@@ -274,7 +274,9 @@ Mesh parseObj(const char* path, double& reindex)
 	}
 
 	reindex = timestamp();
-
+	vin.clear();
+	t.clear();
+	faceVerts.clear();
 	Mesh result;
 
 	std::vector<unsigned int> remap(total_indices);
