@@ -13,7 +13,8 @@
 #include "Vec3.h"
 #define SDEFL_IMPLEMENTATION
 #include "../extern/sdefl.h"
-
+#include <fstream>
+#include <sstream>
 // This file uses assert() to verify algorithm correctness
 #undef NDEBUG
 #include <assert.h>
@@ -131,10 +132,70 @@ std::vector<std::array<unsigned , 3> > TriangulatePolygon(const std::vector<std:
 	return out;
 }
 
+int LoadOBJFile(std::string filename, std::vector<uint32_t>& t, std::vector<float>& v,
+	std::vector<uint16_t> & faceVerts, uint32_t & faceCount)
+{
+	std::ifstream file(filename);
+
+	if (!file.is_open())
+	{
+		return -1;
+	}
+	t.clear();
+	v.clear();
+	std::string curline;
+	faceCount= 0;
+	while (std::getline(file, curline))
+	{
+		auto iss = std::istringstream(curline);
+		std::string first_token;
+		iss >> first_token;
+		if (first_token == "v")
+		{
+			for (int i = 0; i < 3; i++)
+			{
+				float vf;
+				iss >> vf;
+				v.push_back(vf);
+			}
+			if ((v.size() / 3) % 1000000 == 0)
+			{
+				std::cout << v.size() << "\n";
+			}
+		}
+		else if (first_token == "f")
+		{
+			uint16_t vCount = 0;
+			std::string idxs;
+			while(iss>>idxs)
+			{
+				std::istringstream idxss(idxs);
+				std::string idx;
+				std::getline(idxss, idx, '/');
+				t.push_back(std::stoi(idx) - 1);
+				vCount++;
+			}
+			faceVerts.push_back(vCount);
+			faceCount++;
+			if (faceCount % 1000000 == 0)
+			{
+				std::cout << faceCount << "\n";
+			}
+		}
+	}
+	std::cout << "#V #T "<< v.size() << " " << faceCount << "\n";
+	return 0;
+}
+
 Mesh parseObj(const char* path, double& reindex)
 {
-	fastObjMesh* obj = fast_obj_read(path);
-	if (!obj)
+	std::vector<uint32_t> t;
+	std::vector<float> vin;
+	std::vector<uint16_t> faceVerts;
+	std::string filename(path);
+	uint32_t faceCount = 0;
+	int ret = LoadOBJFile(filename, t, vin, faceVerts, faceCount);
+	if (ret<0)
 	{
 		printf("Error loading %s: file not found\n", path);
 		return Mesh();
@@ -142,33 +203,29 @@ Mesh parseObj(const char* path, double& reindex)
 
 	size_t total_indices = 0;
 
-	for (unsigned int i = 0; i < obj->face_count; ++i)
-		total_indices += 3 * (obj->face_vertices[i] - 2);
+	for (unsigned int i = 0; i < faceCount; ++i)
+		total_indices += 3 * (faceVerts[i] - 2);
 
 	std::vector<Vertex> vertices(total_indices);
 
 	size_t vertex_offset = 0;
 	size_t index_offset = 0;
 
-	for (unsigned int i = 0; i < obj->face_count; ++i)
+	for (unsigned int i = 0; i < faceCount; ++i)
 	{
-		if (obj->face_vertices[i] == 3)
+		if (faceVerts[i] == 3)
 		{
-			for (unsigned int j = 0; j < obj->face_vertices[i]; ++j)
+			for (unsigned int j = 0; j < faceVerts[i]; ++j)
 			{
 				// std::cout << obj->indices[3 * i + j].p << " ";
-				fastObjIndex gi = obj->indices[index_offset + j];
+				uint32_t gi = t[index_offset + j];
 
 				Vertex v =
 				    {
-				        obj->positions[gi.p * 3 + 0],
-				        obj->positions[gi.p * 3 + 1],
-				        obj->positions[gi.p * 3 + 2],
-				        obj->normals[gi.n * 3 + 0],
-				        obj->normals[gi.n * 3 + 1],
-				        obj->normals[gi.n * 3 + 2],
-				        obj->texcoords[gi.t * 2 + 0],
-				        obj->texcoords[gi.t * 2 + 1],
+				        vin[gi * 3 + 0],
+				        vin[gi * 3 + 1],
+				        vin[gi * 3 + 2],
+				        0,0,0,0,0
 				    };
 				vertices[vertex_offset] = v;
 				vertex_offset++;
@@ -176,22 +233,18 @@ Mesh parseObj(const char* path, double& reindex)
 		}
 		else
 		{
-			std::vector<std::array<float,3> > points(obj->face_vertices[i]);
-			for (unsigned int j = 0; j < obj->face_vertices[i]; ++j)
+			std::vector<std::array<float,3> > points(faceVerts[i]);
+			for (unsigned int j = 0; j < faceVerts[i]; ++j)
 			{
 				// std::cout << obj->indices[3 * i + j].p << " ";
-				fastObjIndex gi = obj->indices[index_offset + j];
+				uint32_t gi = t[index_offset + j];
 
 				Vertex v =
 				    {
-				        obj->positions[gi.p * 3 + 0],
-				        obj->positions[gi.p * 3 + 1],
-				        obj->positions[gi.p * 3 + 2],
-				        obj->normals[gi.n * 3 + 0],
-				        obj->normals[gi.n * 3 + 1],
-				        obj->normals[gi.n * 3 + 2],
-				        obj->texcoords[gi.t * 2 + 0],
-				        obj->texcoords[gi.t * 2 + 1],
+					        vin[gi * 3 + 0],
+					        vin[gi * 3 + 1],
+					        vin[gi * 3 + 2],
+					        0, 0, 0, 0, 0
 				    };
 				points[j][0] = v.px;
 				points[j][1] = v.py;
@@ -203,28 +256,22 @@ Mesh parseObj(const char* path, double& reindex)
 			{
 				for (size_t j = 0; j < 3; j++)
 				{
-					fastObjIndex gi = obj->indices[index_offset + trigs[ti][j]];
+					uint32_t gi = t[index_offset + trigs[ti][j]];
 
 					Vertex v =
 					    {
-					        obj->positions[gi.p * 3 + 0],
-					        obj->positions[gi.p * 3 + 1],
-					        obj->positions[gi.p * 3 + 2],
-					        obj->normals[gi.n * 3 + 0],
-					        obj->normals[gi.n * 3 + 1],
-					        obj->normals[gi.n * 3 + 2],
-					        obj->texcoords[gi.t * 2 + 0],
-					        obj->texcoords[gi.t * 2 + 1],
+					        vin[gi * 3 + 0],
+					        vin[gi * 3 + 1],
+					        vin[gi * 3 + 2],
+					        0, 0, 0, 0, 0
 					    };
 					vertices[vertex_offset] = v;
 					vertex_offset++;
 				}
 			}			
 		}
-		index_offset += obj->face_vertices[i];
+		index_offset += faceVerts[i];
 	}
-
-	fast_obj_destroy(obj);
 
 	reindex = timestamp();
 
@@ -1375,7 +1422,7 @@ int main(int argc, char** argv)
 {
 	std::string inFile;
 	std::string outFile;
-	float target_error=0.002f;
+	float target_error=0.1f;
 	float target_count_frac = 0.2f;
 	if (argc < 2)
 	{
