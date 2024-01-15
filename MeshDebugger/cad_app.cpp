@@ -2,18 +2,19 @@
 #include "ImageUtils.h"
 #include "StringUtil.h"
 #include "imgui.h"
+#include "MakeHelix.h"
 #include <algorithm>
 
 class HelixWidget : public UIWidget {
  public:
   void Draw() override {
     if (ImGui::TreeNode("Helix")) {
-      ImGui::InputFloat("inner r", &_h.inner_radius);
-      ImGui::InputFloat("outer r", &_h.inner_radius);
-      ImGui::InputFloat("length", &_h.length);
-      ImGui::InputFloat("pitch", &_h.pitch);
-      ImGui::InputFloat("inner width", &_h.inner_width);
-      ImGui::InputFloat("outer width", &_h.outer_width);
+      ImGui::InputFloat("inner d", &_h.inner_diam, 0.1, 1, "%.2f");
+      ImGui::InputFloat("outer d", &_h.outer_diam, 0.1, 1, "%.2f");
+      ImGui::InputFloat("length", &_h.length, 0.1, 1, "%.2f");
+      ImGui::InputFloat("pitch", &_h.pitch, 0.01, 0.1, "%.4f");
+      ImGui::InputFloat("inner width", &_h.inner_width, 0.1, 1, "%.2f");
+      ImGui::InputFloat("outer width", &_h.outer_width, 0.1, 1, "%.2f");
       ImGui::Checkbox("rod", &_h.rod);
       ImGui::Checkbox("tube", &_h.tube);      
       bool gen = ImGui::Button("Generate");
@@ -56,12 +57,22 @@ void cad_app::Init(UILib* ui) {
   helixWidget->_genHelixFun =
       std::bind(&cad_app::QueueHelix, this, std::placeholders::_1);
   _ui->AddWidget(helixWidget);
+
+  _ui->AddButton("export mesh", [&] {
+    for (const auto& p : _parts) {
+      
+      for(size_t i = 0;i<p.meshes.size();i++){
+        std::string file = p.name + "_" + std::to_string(i) + ".obj";
+        p.meshes[i]->SaveObj(file);
+      }
+    }
+  });
 }
 
 struct HelixCommand : public CadCommand {
   HelixCommand(const HelixSpec& spec) : CadCommand("helix"), _spec(spec) {}
   HelixSpec _spec;
-  void Run(cad_app& app) override { app.MakeHelix(_spec); }
+  void Run(cad_app& app) override { app.AddHelix(_spec); }
 };
 
 void cad_app::QueueHelix(const HelixSpec& spec) {
@@ -69,8 +80,17 @@ void cad_app::QueueHelix(const HelixSpec& spec) {
   QueueCommand(cmd);
 }
 
-void cad_app::MakeHelix(const HelixSpec& spec) {
+void cad_app::AddHelix(const HelixSpec& spec) {
   std::cout << "make helix " << spec.inner_width << "\n";
+  Part p;
+  p.id = _parts.size();
+  p.name = "helix" + std::to_string(p.id);
+  std::shared_ptr<TrigMesh> meshPtr = std::make_shared<TrigMesh>();
+  int ret = MakeHelix(spec, *meshPtr);
+  int id = _ui->AddMesh(meshPtr);
+  p._meshIds.push_back(id);
+  p.meshes.push_back(meshPtr);
+  _parts.push_back(p);
 }
 
 void cad_app::OnChangeDir(std::string dir) {

@@ -84,7 +84,7 @@ class TrigMesh {
   unsigned GetIndex(unsigned tIdx, unsigned jIdx) const;
   Vec3f GetVertex(unsigned vIdx) const;
   Vec3f GetTriangleVertex(unsigned tIdx, unsigned jIdx) const;
-
+  void AddVert(float x, float y, float z);
   void scale(float s);
   void translate(float dx, float dy, float dz);
   void append(const TrigMesh& m);

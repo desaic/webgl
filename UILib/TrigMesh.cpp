@@ -246,6 +246,12 @@ Vec3f TrigMesh::GetTriangleVertex(unsigned tIdx, unsigned jIdx) const {
   return GetVertex(GetIndex(tIdx, jIdx));
 }
 
+void TrigMesh::AddVert(float x, float y, float z) {
+  v.push_back(x);
+  v.push_back(y);
+  v.push_back(z);
+}
+
 void TrigMesh::scale(float s) {
   for (size_t i = 0; i < v.size(); i++) {
     for (unsigned d = 0; d < 3; d++) {
