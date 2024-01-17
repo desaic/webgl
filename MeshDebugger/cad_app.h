@@ -54,4 +54,6 @@ class cad_app {
   std::vector<Part> _parts;
   const static size_t MAX_COMMAND_QUEUE_SIZE = 10;
   threadsafe_queue<CadCmdPtr> _commandQueue;
+
+  std::shared_ptr<InputText> _outDirWidget;
 };

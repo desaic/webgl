@@ -127,6 +127,10 @@ int UIConf::Load(const std::string& confFile) {
       i++;
       std::string val(&str[t[i].start], t[i].end - t[i].start);
       outputFile = val;
+    } else if (key == "outDir") {
+      i++;
+      std::string val(&str[t[i].start], t[i].end - t[i].start);
+      outDir = unescape_json_string(val);
     }
     else if (key == "workingDir") {
       i++;
@@ -173,6 +177,7 @@ int UIConf::Save() {
   const bool LAST_ITEM = true;
   out << "{\n";
   PrintJson("outputFile", outputFile, out);
+  PrintJson("outDir", outDir, out);
   PrintJson("workingDir", workingDir, out);
   PrintJson("voxResMM", voxResMM, out);
   PrintJson("absoluteZero", -273.15f, out, LAST_ITEM);

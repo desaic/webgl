@@ -57,12 +57,13 @@ void cad_app::Init(UILib* ui) {
   helixWidget->_genHelixFun =
       std::bind(&cad_app::QueueHelix, this, std::placeholders::_1);
   _ui->AddWidget(helixWidget);
-
+  _outDirWidget = std::make_shared<InputText>("out dir", _conf.outDir);
+  _ui->AddWidget(_outDirWidget);
   _ui->AddButton("export mesh", [&] {
-    for (const auto& p : _parts) {
-      
+    std::string outDir = _outDirWidget->GetString();
+    for (const auto& p : _parts) {      
       for(size_t i = 0;i<p.meshes.size();i++){
-        std::string file = p.name + "_" + std::to_string(i) + ".obj";
+        std::string file = outDir + "/" + p.name + "_" + std::to_string(i) + ".obj";
         p.meshes[i]->SaveObj(file);
       }
     }
@@ -141,6 +142,10 @@ void cad_app::QueueOpenFiles(const std::vector<std::string>& files) {
 
 void cad_app::Refresh() {
   ExeCommands();
+  if (_outDirWidget->_entered) {
+    _conf.outDir = _outDirWidget->GetString();
+    _confChanged = true;
+  }
   if (_confChanged) {
     _conf.Save();
   }

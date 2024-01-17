@@ -14,5 +14,6 @@ class UIConf {
   std::string outputFile = "grid.txt";
   float voxResMM = 0.032f;
   std::string workingDir = "./";
+  std::string outDir = "./";
 };
 #endif
