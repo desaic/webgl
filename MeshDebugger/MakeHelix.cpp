@@ -2,6 +2,7 @@
 #include <cmath>
 
 #include "MakeHelix.h"
+#include "MeshUtil.h"
 #include  <algorithm>
 
 /// <summary>
@@ -47,21 +48,56 @@ void AddVerts(const std::vector<Vec3f>& vec, TrigMesh& mesh) {
   }
 }
 
-struct VertCol {
-  bool hasVert[4] = {};
-  Vec3f verts[4];
-};
-
-std::vector<VertCol> GroupIntoCols(const std::vector<Vec3f>& v0, const std::vector<Vec3f>& v1,
-                   const std::vector<Vec3f>& v2, const std::vector<Vec3f>& v3,
-  const unsigned * startIdx) {
-  size_t numCols = startIdx[3] + v3.size();
-  std::vector<VertCol> cols;
-  for (size_t i = 0; i < numCols; i++) {
-    VertCol col;
-    cols.push_back(col);
+//assume start0 > start1
+void FillRow(const std::vector<Vec3f>& h0, const std::vector<Vec3f>& h1, int start0,
+        int start1, TrigMesh & mesh, float ymax) {
+  unsigned maxCol = start0 + h0.size();
+  if (h0.size() < 2 || h1.size() <2) {
+    return;
   }
-  return cols;
+
+  unsigned vCountOld = mesh.GetNumVerts();
+  unsigned vCount = vCountOld + h0.size() + h1.size();
+  AddVerts(h0, mesh);
+  AddVerts(h1, mesh);
+  //radius in xz plane
+  float r0 = std::sqrt(h0[0][0] * h0[0][0] + h0[0][2] * h0[0][2]);
+  float r1 = std::sqrt(h1[0][0] * h1[0][0] + h1[0][2] * h1[0][2]);
+  float dyPerStep = h1[1][1] - h1[0][1];
+  //number of added vertices at y=0.
+  unsigned y0Count = 0;
+  // at ymax
+  unsigned ymaxCount = 0;
+  //create missing vertices
+  for (unsigned col = start1; col < maxCol; col++) {
+    unsigned i1 = col - start1;
+    if (col < start0) {
+      float y0 = -h0[0][1] + (start0 - col) * dyPerStep;
+      float y1 = h1[i1][1];
+      float radIntersection = r1 + y0 / (y0 + y1) * (r0 - r1);
+      //make a new vertex connecting h1[i1] to y=0.
+      unsigned v0Idx = vCount;
+      Vec3f v0 = (radIntersection / r1) * h1[i1];
+      v0[1] = 0;
+      vCount++;
+      mesh.AddVert(v0[0], v0[1], v0[2]);
+      y0Count++;
+    }
+  }
+  for (unsigned col = start1; col < maxCol; col++) {
+    if (col >= start1 + h1.size()) {
+      unsigned i0 = col - start0;
+      float y0 = ymax - h0[i0][1];
+      float y1 = h1[0][1] + (col - start1) * dyPerStep - ymax;
+      float radIntersection = r1 + y0 / (y0 + y1) * r0;
+      // make a new vertex connecting h0[i0] to y=0.
+      unsigned v0Idx = vCount;
+      Vec3f v0 = (radIntersection / r1) * h0[i0];
+      vCount++;
+      mesh.AddVert(v0[0], v0[1], v0[2]);
+      ymaxCount++;
+    }
+  }
 }
 
 //   y      v3
@@ -84,22 +120,20 @@ int MakeHelix(const HelixSpec& spec, TrigMesh& mesh) {
   float r1 = spec.outer_diam / 2;
   float slopeWidth = std::abs(spec.inner_width - spec.outer_width) / 2;
   unsigned startIdx[4] = {};
-  std::vector<Vec3f> h0 = MakeOneHelix(ymin, y0, y1, r0, spec.divs, spec.pitch, startIdx[0]);
+  std::vector<Vec3f> helixes[4];
+  helixes[0] = MakeOneHelix(ymin, y0, y1, r0, spec.divs, spec.pitch, startIdx[0]);
   y0 = -spec.inner_width + slopeWidth;
-  std::vector<Vec3f> h1 =
+  helixes[1] =
       MakeOneHelix(ymin, y0, y1, r1, spec.divs, spec.pitch, startIdx[1]);
   y0 = -slopeWidth;
-  std::vector<Vec3f> h2 =
+  helixes[2] =
       MakeOneHelix(ymin, y0, y1, r1, spec.divs, spec.pitch, startIdx[2]);
   y0 = 0;
-  std::vector<Vec3f> h3 =
+  helixes[3] =
       MakeOneHelix(ymin, y0, y1, r0, spec.divs, spec.pitch, startIdx[3]);
-  AddVerts(h0, mesh);
-  AddVerts(h1, mesh);
-  AddVerts(h2, mesh);
-  AddVerts(h3, mesh);
-
-  std::vector<VertCol> cols = GroupIntoCols(h0, h1, h2, h3, startIdx);
-
+  for (unsigned i = 0; i < 3; i++) {
+    FillRow(helixes[i], helixes[i + 1], startIdx[i], startIdx[i + 1], mesh, y1);
+  }
+  MergeCloseVertices(mesh);
   return 0;
 }
