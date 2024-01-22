@@ -1,6 +1,8 @@
 #define _USE_MATH_DEFINES
 #include <cmath>
 
+#include "cgal_wrapper.h"
+
 #include "MakeHelix.h"
 #include "MeshUtil.h"
 #include  <algorithm>

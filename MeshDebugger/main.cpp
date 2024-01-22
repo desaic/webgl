@@ -9,12 +9,9 @@
 #include "BBox.h"
 
 #include "cad_app.h"
+#include "VoxApp.h"
 #include "UIConf.h"
 #include "UILib.h"
-
-void LogToUI(const std::string & str, UILib&ui, int statusLabel) {
-  ui.SetLabelText(statusLabel, str);
-}
 
 void ShowGLInfo(UILib& ui, int label_id) {
   std::string info = ui.GetGLInfo();
@@ -24,6 +21,7 @@ void ShowGLInfo(UILib& ui, int label_id) {
 int main(int, char**) {
   UILib ui;
   cad_app app;
+  //ConnectorVox app;
   app.Init(&ui);
   ui.SetFontsDir("./fonts");
 

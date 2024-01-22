@@ -10,6 +10,7 @@
 #include <iostream>
 #include <fstream>
 #include <filesystem>
+#include <sstream>
 
 //info for voxelizing
 //multi-material interface connector designs
@@ -137,6 +138,19 @@ void ConnectorVox::VoxelizeMeshes() {
     ComputeBBox(m.v, mbox);
     box.Merge(mbox);
   }
+  Vec3f boxCenter = 0.5f*(box.vmax + box.vmin);
+  for (size_t mi = 0; mi < meshes.size();mi++) {
+    auto& m = meshes[mi];
+    for (size_t i = 0; i < m.GetNumVerts(); i++) {
+      m.v[3 * i] -= boxCenter[0];
+      m.v[3 * i+1] -= boxCenter[1];
+      m.v[3 * i+2] -= boxCenter[2];
+    }
+    std::string outdir = conf.workingDir;
+    m.SaveObj(outdir + "/" + std::to_string(mi) + ".obj");
+  }
+  box.vmin = box.vmin - boxCenter;
+  box.vmax = box.vmax - boxCenter;
   float voxRes = conf.voxResMM;
   voxconf vconf;
   vconf.unit = Vec3f(voxRes, voxRes, voxRes);
@@ -149,7 +163,7 @@ void ConnectorVox::VoxelizeMeshes() {
   Vec3f count = (box.vmax - box.vmin) / vconf.unit;
   vconf.gridSize = Vec3u(count[0] + 1, count[1] + 1, count[2] + 1);
   grid.Allocate(count[0], count[1], count[2]);
-
+  grid.Fill(0);
   for (unsigned i = 0; i < meshes.size(); i++) {
     VoxelizeMesh(uint8_t(i + 1), box, voxRes, meshes[i], grid); 
   }
@@ -167,14 +181,14 @@ void ConnectorVox::VoxelizeMeshes() {
 
 bool FloatEq(float a, float b, float eps) { return std::abs(a - b) < eps; }
 
-void ConnectorVox::Refresh(UILib & ui) {
+void ConnectorVox::Refresh() {
   //update configs
   bool confChanged = false;
   const float EPS = 5e-5f;
   const float umToMM=0.001f;
   if (_voxResId >= 0) {
     std::shared_ptr<InputInt> input =
-        std::dynamic_pointer_cast<InputInt>(ui.GetWidget(_voxResId));
+        std::dynamic_pointer_cast<InputInt>(_ui->GetWidget(_voxResId));
     float uiVoxRes = conf.voxResMM;
     if (input &&input->_entered) {
       uiVoxRes = float(input->_value * umToMM);      
@@ -187,7 +201,7 @@ void ConnectorVox::Refresh(UILib & ui) {
   }
   if (_outPrefixId >= 0) {
     std::shared_ptr<InputText> input =
-        std::dynamic_pointer_cast<InputText>(ui.GetWidget(_outPrefixId));
+        std::dynamic_pointer_cast<InputText>(_ui->GetWidget(_outPrefixId));
     if (input && input->_entered) {
       input->_entered = false;
     }
@@ -208,15 +222,75 @@ void ConnectorVox::Refresh(UILib & ui) {
   }
 }
 
-ConnectorVox connector;
-
-void OnOpenConnectorMeshes(const std::vector<std::string>& files) {
-  connector.filenames = files;
-  connector._fileLoaded = false;
-  connector._hasFileNames = true;
+  
+void OnChangeDir(std::string dir, UIConf& conf) {
+  conf.workingDir = dir;
+  conf.Save();
 }
 
-void OpenConnectorMeshes(UILib& ui, const UIConf & conf) {
-  ui.SetMultipleFilesOpenCb(OnOpenConnectorMeshes);
+void LogToUI(const std::string& str, UILib& ui, int statusLabel) {
+  ui.SetLabelText(statusLabel, str);
+}
+
+void ConnectorVox::Init(UILib* ui) { 
+  _ui = ui;
+  conf.Load(conf._confFile);
+  _ui->AddButton("Open Meshes", [&] { this->OpenMeshes(*_ui, conf); });
+  _ui->SetChangeDirCb(
+      [&](const std::string& dir) { OnChangeDir(dir, conf); });
+  _statusLabel = ui->AddLabel("status");
+  LogCb =
+      std::bind(LogToUI, std::placeholders::_1, std::ref(*_ui), _statusLabel);
+  _voxResId =
+      _ui->AddWidget(std::make_shared<InputInt>("vox res um", 32));
+  _outPrefixId =
+      _ui->AddWidget(std::make_shared<InputText>("output file", "grid.txt"));
+}
+
+void ConnectorVox::OnOpenMeshes(const std::vector<std::string>& files) {
+  filenames = files;
+  _fileLoaded = false;
+  _hasFileNames = true;
+}
+
+void ConnectorVox::OpenMeshes(UILib& ui, const UIConf& conf) {
+  ui.SetMultipleFilesOpenCb(std::bind(&ConnectorVox::OnOpenMeshes, this, std::placeholders::_1));
   ui.ShowFileOpen(true, conf.workingDir);
+}
+
+void FlipGrid(const std::string& name) {
+  Array3D<uint8_t> grid;
+  std::ifstream in(name);
+  int numHeaders = 8;
+  std::vector<std::string> headers(numHeaders);
+
+  for (int i = 0; i < numHeaders; i++) {
+    std::getline(in, headers[i]);
+  }
+  std::istringstream iss(headers.back());
+  Vec3u gridSize;
+  iss >> gridSize[0] >> gridSize[1] >> gridSize[2];
+  grid.Allocate(gridSize[0], gridSize[1], gridSize[2]);
+
+  for (unsigned z = 0; z < gridSize[2]; z++) {
+    unsigned dstz = gridSize[2] - z - 1;
+    for (unsigned y = 0; y < gridSize[1]; y++) {
+      for (unsigned x = 0; x < gridSize[0]; x++) {
+        in >> grid(x, y, dstz);
+      }
+    }
+  }
+
+  std::ofstream out("grid_flipz.txt");
+  for (int i = 0; i < numHeaders; i++) {
+    out << headers[i] << "\n";
+  }
+  for (unsigned z = 0; z < gridSize[2]; z++) {
+    for (unsigned y = 0; y < gridSize[1]; y++) {
+      for (unsigned x = 0; x < gridSize[0]; x++) {
+        out << grid(x, y, z) << " ";
+      }
+      out << "\n";
+    }
+  }
 }

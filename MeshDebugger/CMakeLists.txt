@@ -15,8 +15,17 @@ if (USE_NANOVDB)
   include_directories(${NANOVDB_INC_DIR})
   add_compile_definitions(USE_NANOVDB)
 endif()
-
+ 
+include_directories("../cgal_wrapper/")
 add_executable(${BIN} ${EXE_SRC} resource/icons.rc)
+
+target_link_directories(${BIN} PRIVATE "../cgal_wrapper/build/")
+if(CMAKE_BUILD_TYPE MATCHES "Debug")
+  target_link_libraries(${BIN} cgal_wrapperd)
+else()
+  target_link_libraries(${BIN} cgal_wrapper)
+endif()
+
 target_link_libraries(${BIN} UILib imgui glfw3 opengl32 glew32s)
 
 set(FONT_FOLDER fonts)

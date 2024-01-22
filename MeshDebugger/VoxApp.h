@@ -5,11 +5,13 @@
 //info for voxelizing
 //multi-material interface connector designs
 struct ConnectorVox {
+  void Init(UILib* ui);
   void LoadMeshes();
   void VoxelizeMeshes();
   void Log(const std::string& str) const;
-  void Refresh(UILib& ui);
-
+  void Refresh();
+  void OnOpenMeshes(const std::vector<std::string>& files);
+  void OpenMeshes(UILib& ui, const UIConf& conf);
   std::function<void(const std::string&)> LogCb;
 
   std::vector<std::string> filenames;
@@ -19,8 +21,9 @@ struct ConnectorVox {
   bool _voxelized = false;
   int _voxResId = -1;
   int _outPrefixId = -1;
+  int _statusLabel = -1;
   std::vector<TrigMesh> meshes;
   Array3D8u grid;
-
+  UILib * _ui;
   UIConf conf;
 };
