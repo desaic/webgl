@@ -6,99 +6,76 @@
 #include "MakeHelix.h"
 #include "MeshUtil.h"
 #include  <algorithm>
+#include <fstream>
+
+struct FrameR3 {
+  Vec3f p;
+  Vec3f T;
+  Vec3f N;
+  // Binormal B= TxN
+};
+
+struct FramedCurve {
+  std::vector<FrameR3> frames;
+  bool closed = false;
+};
 
 /// <summary>
 /// 
 /// </summary>
-/// <param name="ymin"></param>
 /// <param name="y0"></param>
 /// <param name="y1"></param>
 /// <param name="r"></param>
 /// <param name="divs"></param>
 /// <param name="pitch"></param>
-/// <param name="startingIdx">index of the first vertex included in the helix</param>
 /// <returns></returns>
-std::vector<Vec3f> MakeOneHelix(float ymin, float y0, float y1, float r, unsigned divs,
-                                float pitch, unsigned & startingIdx) {
+FramedCurve MakeHelixCurve(float y0, float y1, float r, unsigned divs, float pitch) {
   float y = y0;
   float dyPerStep = pitch / divs;
-  std::vector<Vec3f> points;
+  FramedCurve curve;
   unsigned vCount = 0;
   bool started = false;
+  float dydTheta = pitch / (2 * 3.14159265f);
   while (y < y1) {
     float phase = vCount % divs / float(divs);
     float theta = phase * (2 * M_PI);
-    float x = r * std::sin(theta);
-    float z = r * std::cos(theta);
+    float st = std::sin(theta);
+    float x = r * st;
+    float ct = std::cos(theta);
+    float z = r * ct;
     y = y0 + dyPerStep * vCount;
-    if (y >= ymin) {
-      if (!started) {
-        startingIdx = vCount;
-        started = true;
-      }
-      // only add verts above ground
-      points.push_back(Vec3f(x, y, z));
-    }
+    FrameR3 frame;
+    frame.p = Vec3f(x, y, z);
+    frame.N = Vec3f(st, 0, ct);
+    frame.T = Vec3f(z, dydTheta, -x);
+    frame.T.normalize();
+    curve.frames.push_back(frame);
     vCount++;
   }
-  return points;
+  return curve;
+}
+
+void SaveCurveObj(const std::string & file, const FramedCurve& curve, float vecLen) {
+  std::ofstream out(file);
+  for (size_t i = 0; i < curve.frames.size(); i++) {
+    unsigned v0 = 3 * i;
+    const FrameR3& f = curve.frames[i];
+    out << "v " << f.p[0] << " " << f.p[1] << " " << f.p[2] << "\n";
+    Vec3f N = f.p + vecLen * f.N;
+    Vec3f T = f.p + vecLen * f.T;
+    out << "v " << N[0] << " " << N[1] << " " << N[2] << "\n";
+    out << "v " << T[0] << " " << T[1] << " " << T[2] << "\n";
+    out << "l " << (v0 + 1) << " " << (v0 + 2) << "\n";
+    out << "l " << (v0 + 1) << " " << (v0 + 3) << "\n";
+    if (i >= 1) {
+      out << "l " << (v0 + 1) << " " << (v0 - 2) << "\n";
+    }
+  }
 }
 
 void AddVerts(const std::vector<Vec3f>& vec, TrigMesh& mesh) {
   for (const auto v : vec) {
     mesh.AddVert(v[0], v[1], v[2]);
-  }
-}
-
-//assume start0 > start1
-void FillRow(const std::vector<Vec3f>& h0, const std::vector<Vec3f>& h1, int start0,
-        int start1, TrigMesh & mesh, float ymax) {
-  unsigned maxCol = start0 + h0.size();
-  if (h0.size() < 2 || h1.size() <2) {
-    return;
-  }
-
-  unsigned vCountOld = mesh.GetNumVerts();
-  unsigned vCount = vCountOld + h0.size() + h1.size();
-  AddVerts(h0, mesh);
-  AddVerts(h1, mesh);
-  //radius in xz plane
-  float r0 = std::sqrt(h0[0][0] * h0[0][0] + h0[0][2] * h0[0][2]);
-  float r1 = std::sqrt(h1[0][0] * h1[0][0] + h1[0][2] * h1[0][2]);
-  float dyPerStep = h1[1][1] - h1[0][1];
-  //number of added vertices at y=0.
-  unsigned y0Count = 0;
-  // at ymax
-  unsigned ymaxCount = 0;
-  //create missing vertices
-  for (unsigned col = start1; col < maxCol; col++) {
-    unsigned i1 = col - start1;
-    if (col < start0) {
-      float y0 = -h0[0][1] + (start0 - col) * dyPerStep;
-      float y1 = h1[i1][1];
-      float radIntersection = r1 + y0 / (y0 + y1) * (r0 - r1);
-      //make a new vertex connecting h1[i1] to y=0.
-      unsigned v0Idx = vCount;
-      Vec3f v0 = (radIntersection / r1) * h1[i1];
-      v0[1] = 0;
-      vCount++;
-      mesh.AddVert(v0[0], v0[1], v0[2]);
-      y0Count++;
-    }
-  }
-  for (unsigned col = start1; col < maxCol; col++) {
-    if (col >= start1 + h1.size()) {
-      unsigned i0 = col - start0;
-      float y0 = ymax - h0[i0][1];
-      float y1 = h1[0][1] + (col - start1) * dyPerStep - ymax;
-      float radIntersection = r1 + y0 / (y0 + y1) * r0;
-      // make a new vertex connecting h0[i0] to y=0.
-      unsigned v0Idx = vCount;
-      Vec3f v0 = (radIntersection / r1) * h0[i0];
-      vCount++;
-      mesh.AddVert(v0[0], v0[1], v0[2]);
-      ymaxCount++;
-    }
   }
 }
 
@@ -113,29 +90,13 @@ int MakeHelix(const HelixSpec& spec, TrigMesh& mesh) {
   //helix is cut off from below this value
   float ymin = 0;
   float y1 = spec.length;
-  unsigned numV0 = 0, numV1 = 0, numV2 = 0, numV3 = 0;
-  //v3 starts at y = 0.
-  float y0 = -spec.inner_width;
-  unsigned vCount = 0;
   unsigned divs = std::min(spec.divs, MAX_DIVS_PER_REV);
   float r0 = spec.inner_diam / 2;
   float r1 = spec.outer_diam / 2;
   float slopeWidth = std::abs(spec.inner_width - spec.outer_width) / 2;
-  unsigned startIdx[4] = {};
-  std::vector<Vec3f> helixes[4];
-  helixes[0] = MakeOneHelix(ymin, y0, y1, r0, spec.divs, spec.pitch, startIdx[0]);
-  y0 = -spec.inner_width + slopeWidth;
-  helixes[1] =
-      MakeOneHelix(ymin, y0, y1, r1, spec.divs, spec.pitch, startIdx[1]);
-  y0 = -slopeWidth;
-  helixes[2] =
-      MakeOneHelix(ymin, y0, y1, r1, spec.divs, spec.pitch, startIdx[2]);
-  y0 = 0;
-  helixes[3] =
-      MakeOneHelix(ymin, y0, y1, r0, spec.divs, spec.pitch, startIdx[3]);
-  for (unsigned i = 0; i < 3; i++) {
-    FillRow(helixes[i], helixes[i + 1], startIdx[i], startIdx[i + 1], mesh, y1);
-  }
+  FramedCurve helix;
+  helix = MakeHelixCurve(0, y1, r0, divs, spec.pitch);
+  SaveCurveObj("F:/dump/helix_curve.obj", helix, 0.5);
   MergeCloseVertices(mesh);
   return 0;
 }
