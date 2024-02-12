@@ -15,9 +15,20 @@ struct FrameR3 {
   // Binormal B= TxN
 };
 
+//closed. v_0 connects to v_n-1
+struct SimplePolygon {
+  std::vector<Vec3f> p;
+  size_t size() const { return p.size(); }
+  const Vec3f& operator[](size_t i) const { return p[i]; }
+  Vec3f& operator[](size_t i) { return p[i]; }
+};
+
 struct FramedCurve {
   std::vector<FrameR3> frames;
   bool closed = false;
+  size_t size() const { return frames.size(); }
+  const FrameR3& operator[](size_t i) const { return frames[i]; }
+  FrameR3& operator[](size_t i) { return frames[i]; }
 };
 
 /// <summary>
@@ -79,6 +90,48 @@ void AddVerts(const std::vector<Vec3f>& vec, TrigMesh& mesh) {
   }
 }
 
+void SetVert(size_t vi, std::vector<float> & verts, const Vec3f & v) {
+  verts[3 * vi] = v[0];
+  verts[3 * vi + 1] = v[1];
+  verts[3 * vi + 2] = v[2];
+}
+
+//x in normal axis, y in binormal, z in tangent
+TrigMesh Sweep(const FramedCurve& fc, const SimplePolygon& poly) {
+  TrigMesh m;
+  if (fc.size() < 2) {
+    return m;
+  }
+
+  size_t numPt = fc.size() * poly.size();
+  m.v.resize(numPt * 3);
+  size_t vi = 0;
+  for (size_t i = 0; i < fc.size(); i++) {
+    Vec3f O = fc[i].p;
+    Vec3f B = fc[i].T.cross(fc[i].N);
+    for (size_t j = 0; j < poly.size(); j++) {
+      Vec3f x = O + poly[j][0] * fc[i].N + poly[j][1] * B + poly[j][2]*fc[i].T;
+      SetVert(vi, m.v, x);
+      vi++;
+    }
+  }
+  for (size_t i = 0; i < fc.size() - 1; i++) {
+    
+  }
+  return m;
+}
+
+SimplePolygon MakeTrapezoid(float l0, float l1, float h) {
+  SimplePolygon poly;
+  Vec3f v(0, -l0 / 2, 0);
+  poly.p.resize(4);
+  poly.p[0]= v;
+  poly.p[1] = Vec3f(h, -l1 / 2, 0);
+  poly.p[2] = Vec3f(h, l1 / 2, 0);
+  poly.p[3] = Vec3f(0, l0 / 2, 0);
+  return poly;
+}
+
 //   y      v3
 //  /|\    \  v2
 //   |      | 
@@ -96,7 +149,15 @@ int MakeHelix(const HelixSpec& spec, TrigMesh& mesh) {
   float slopeWidth = std::abs(spec.inner_width - spec.outer_width) / 2;
   FramedCurve helix;
   helix = MakeHelixCurve(0, y1, r0, divs, spec.pitch);
-  SaveCurveObj("F:/dump/helix_curve.obj", helix, 0.5);
+  SimplePolygon poly;
+  float l0 = spec.inner_width;
+  float l1 = spec.outer_width;
+  float h = r1 - r0;
+  poly = MakeTrapezoid(l0, l1, h);
+  //SaveCurveObj("F:/dump/helix_curve.obj", helix, 0.5);
+
+  TrigMesh m = Sweep(helix, poly);
+  m.SaveObj("F:/dump/helix_pt.obj");
   MergeCloseVertices(mesh);
   return 0;
 }
