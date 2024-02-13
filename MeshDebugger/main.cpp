@@ -12,10 +12,18 @@
 #include "VoxApp.h"
 #include "UIConf.h"
 #include "UILib.h"
+#include "TriangulateContour.h"
 
 void ShowGLInfo(UILib& ui, int label_id) {
   std::string info = ui.GetGLInfo();
   ui.SetLabelText(label_id, info);
+}
+
+void TestCDT() { 
+  TrigMesh mesh; 
+  std::vector<float> v(8);
+  mesh = TriangulateLoop(v.data(), v.size()/2);
+  mesh.SaveObj("F:/dump/loop_trigs.obj");
 }
 
 int main(int, char**) {

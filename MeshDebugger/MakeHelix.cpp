@@ -5,6 +5,7 @@
 
 #include "MakeHelix.h"
 #include "MeshUtil.h"
+#include "TriangulateContour.h"
 #include  <algorithm>
 #include <fstream>
 
