@@ -13,33 +13,45 @@
 #include "UIConf.h"
 #include "UILib.h"
 
-void ShowGLInfo(UILib& ui, int label_id) {
-  std::string info = ui.GetGLInfo();
-  ui.SetLabelText(label_id, info);
-}
-
-int main(int, char**) {
+void VoxApp() {
   UILib ui;
-  cad_app app;
-  //ConnectorVox app;
+  ConnectorVox app;
   app.Init(&ui);
   ui.SetFontsDir("./fonts");
-
-  int buttonId = ui.AddButton("GLInfo", {});
-  int gl_info_id = ui.AddLabel(" ");
-  std::function<void()> showGLInfoFunc =
-      std::bind(&ShowGLInfo, std::ref(ui), gl_info_id);
-  ui.SetButtonCallback(buttonId, showGLInfoFunc);
 
   int statusLabel = ui.AddLabel("status");
 
   ui.Run();
-  
+
   const unsigned PollFreqMs = 20;
 
   while (ui.IsRunning()) {
     app.Refresh();
     std::this_thread::sleep_for(std::chrono::milliseconds(PollFreqMs));
+  }
+}
+
+void CadApp() {
+  UILib ui;
+  cad_app app;
+  app.Init(&ui);
+  ui.SetFontsDir("./fonts");
+  int statusLabel = ui.AddLabel("status");
+  ui.Run();
+
+  const unsigned PollFreqMs = 20;
+
+  while (ui.IsRunning()) {
+    app.Refresh();
+    std::this_thread::sleep_for(std::chrono::milliseconds(PollFreqMs));
+  }
+}
+
+int main(int argc, char**argv) {
+  if (argc > 1 && argv[1][0] == 'c') {
+    CadApp();
+  } else {
+    VoxApp();
   }
   return 0;
 }
