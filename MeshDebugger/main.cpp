@@ -12,6 +12,7 @@
 #include "VoxApp.h"
 #include "UIConf.h"
 #include "UILib.h"
+#include "TriangulateContour.h"
 
 void VoxApp() {
   UILib ui;
@@ -29,6 +30,13 @@ void VoxApp() {
     app.Refresh();
     std::this_thread::sleep_for(std::chrono::milliseconds(PollFreqMs));
   }
+}
+
+void TestCDT() {
+  TrigMesh mesh;
+  std::vector<float> v(8);
+  mesh = TriangulateLoop(v.data(), v.size() / 2);
+  mesh.SaveObj("F:/dump/loop_trigs.obj");
 }
 
 void CadApp() {
