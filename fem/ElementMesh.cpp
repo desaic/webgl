@@ -40,6 +40,13 @@ std::vector<Vec3f> ElementMesh::GetForce() const {
   return force;
 }
 
+Array2Df ElementMesh::GetStiffnessEle(int eId) const {
+  Array2Df K;
+  const auto& material = m[eId];
+  material.GetForce
+  return K;
+}
+
 void ElementMesh::InitElements() {
   if (m.size() != e.size()) {
     m.resize(e.size());

@@ -35,6 +35,7 @@ class ElementMesh {
   double GetElasticEnergy() const;
   // nodal elastic forces for one element
   std::vector<Vec3f> GetForceEle(int eId) const;
+  // get elastic forces. external forces are stored in fe.
   std::vector<Vec3f> GetForce() const;
   Array2Df GetStiffnessEle(int eId) const;
  

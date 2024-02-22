@@ -8,6 +8,7 @@
 #include "Array3D.h"
 #include "BBox.h"
 #include "ImageIO.h"
+#include "ImageUtils.h"
 #include "Timer.h"
 #include "TrigMesh.h"
 #include "UIConf.h"
@@ -268,7 +269,7 @@ void PrintMat3(const Matrix3f& m, std::ostream& out) {
   }
 }
 
-void TestFEM() {
+void TestForceFiniteDiff() {
   ElementMesh em;
   em.LoadTxt("F:/github/webgl/fem/data/hex_m.txt");
 
@@ -301,7 +302,7 @@ void TestFEM() {
     if (em.fe[i][1] < 0) {
       std::cout << " @";
     }
-    std::cout          << "\n";
+    std::cout<< "\n";
   }
 
   Matrix3f F(0.8, -0.16, 0, 0.2, 0.99, 0.1, 0.2, 0.3, 1);
@@ -310,6 +311,29 @@ void TestFEM() {
   PrintMat3(prod,std::cout);
   std::cout << "\n";
   std::cout << F.determinant() << " " << Finv.determinant() << "\n";
+}
+void TestStiffnessFiniteDiff() {
+  ElementMesh em;
+  em.LoadTxt("F:/github/webgl/fem/data/hex_m.txt");
+
+  BBox box;
+  ComputeBBox(em.X, box);
+  for (size_t i = 0; i < em.X.size(); i++) {
+    em.X[i] -= box.vmin;
+  }
+  // em.SaveTxt("F:/dump/hex_m.txt");
+  float ene = em.GetElasticEnergy();
+  std::vector<Vec3f> force = em.GetForce();
+
+  std::cout << "E: " << ene << "\n";
+  em.fe = std::vector<Vec3f>(em.X.size());
+  em.fixedDOF = std::vector<bool>(em.X.size() * 3, false);
+
+  PullRight(Vec3f(0, -1, 0), 0.001, em);
+  float h = 0.001;
+  std::vector<Vec3f> dx = h * em.fe;
+  Add(em.x, dx);
+  
 }
 
 void TestSparse() {
@@ -320,16 +344,10 @@ void TestSparse() {
 }
 
 int main(int, char**) {
-  TestSparse();
+  TestStiffnessFiniteDiff();
   UILib ui;
   FemApp app(&ui);
   ui.SetFontsDir("./fonts");
-  ui.SetWindowSize(1280, 800);
-  int buttonId = ui.AddButton("GLInfo", {});
-  int gl_info_id = ui.AddLabel(" ");
-  std::function<void()> showGLInfoFunc =
-      std::bind(&ShowGLInfo, std::ref(ui), gl_info_id);
-  ui.SetButtonCallback(buttonId, showGLInfoFunc);
   ui.SetWindowSize(1280, 800);
   ui.SetKeyboardCb(HandleKeys);
   int statusLabel = ui.AddLabel("status");
