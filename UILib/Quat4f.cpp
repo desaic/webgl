@@ -254,12 +254,6 @@ void Quat4f::setAxisAngle(float radians, const Vec3f& axis) {
 	m_elements[ 3 ] = axis[2] * sinHalfTheta * reciprocalVectorNorm;
 }
 
-void Quat4f::print()
-{
-	printf( "< %.4f + %.4f i + %.4f j + %.4f k >\n",
-		m_elements[ 0 ], m_elements[ 1 ], m_elements[ 2 ], m_elements[ 3 ] );
-}
-
 // static
 float Quat4f::dot( const Quat4f& q0, const Quat4f& q1 )
 {

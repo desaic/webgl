@@ -52,3 +52,8 @@ std::vector<Vec3f> MaterialModel::GetForce(int eidx, const ElementMesh& mesh) co
 
   return f;
 }
+
+Array2Df MaterialModel::GetStiffness(int eidx, const ElementMesh& mesh) const{
+  Array2Df K;
+  return K;
+}

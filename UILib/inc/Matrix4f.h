@@ -55,8 +55,6 @@ class Matrix4f {
   operator float*();              // automatic type conversion for GL
   operator const float*() const;  // automatic type conversion for GL
 
-  void print();
-
   static Matrix4f ones();
   static Matrix4f identity();
   static Matrix4f translation(float x, float y, float z);

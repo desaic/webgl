@@ -1,6 +1,7 @@
 #ifndef MATERIAL_MODEL_H
 #define MATERIAL_MODEL_H
 
+#include "Array2D.h"
 #include "Quadrature.h"
 #include "StrainEne.h"
 #include <memory>

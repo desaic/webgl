@@ -60,8 +60,7 @@ public:
 	void setAxisAngle( float radians, const Vec3f& axis );
 
 	// ---- Utility ----
-	void print();
- 
+
 	 // quaternion dot product (a la vector)
 	static float dot( const Quat4f& q0, const Quat4f& q1 );	
 	
