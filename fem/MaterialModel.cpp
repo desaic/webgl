@@ -55,5 +55,40 @@ std::vector<Vec3f> MaterialModel::GetForce(int eidx, const ElementMesh& mesh) co
 
 Array2Df MaterialModel::GetStiffness(int eidx, const ElementMesh& mesh) const{
   Array2Df K;
+  const Element* ele = mesh.e[eidx].get();
+  if (quadType == QUADRATURE_TYPE::GAUSS2) {
+    const auto& q = Quadrature::Gauss2;
+    for (unsigned qi = 0; qi < q.x.size(); qi++) {
+      Array2Df Kq = Stiffness(qi, ele, mesh);
+      K += (ele->DetJ(qi) * q.w[qi]) * Kq;
+    }
+  }
+  return K;
+}
+
+Array2Df MaterialModel::Stiffness(unsigned qi, const Element* ele,
+                   const ElementMesh& em) const {
+  Array2Df K;
+  unsigned nV = ele->NumVerts();
+  Matrix3f F = ele->DefGradGauss2(qi, em.X, em.x);
+  const unsigned dim = 3;
+  std::vector<Vec3f> JdN(nV);
+  for (unsigned ii = 0; ii < nV; ii++) {
+    Vec3f gradN = ele->ShapeFunGradGauss2(qi, ii);
+    JdN[ii] = ele->Jinv(qi).transposed() * gradN;
+  }
+  for (unsigned ii = 0; ii < nV; ii++) {
+    enePtr->CacheF(F);
+    std::vector<Matrix3f> dP = enePtr->getdPdx(F, JdN[ii]);
+    for (unsigned vv = 0; vv < nV; vv++) {
+      for (unsigned jj = 0; jj < dim; jj++) {
+        Vec3f dfdxi = dP[jj] * JdN[vv];
+        for (unsigned kk = 0; kk < dim; kk++) {
+          K(vv * dim + kk, ii * dim + jj) = dfdxi[kk];
+          K(ii * dim + jj, vv * dim + kk) = dfdxi[kk];
+        }
+      }
+    }
+  }
   return K;
 }

@@ -71,6 +71,11 @@ bool operator==(const Vec2<T>& v0, const Vec2<T>& v1) {
 }
 
 template <typename T>
+bool operator!=(const Vec2<T>& v0, const Vec2<T>& v1) {
+  return v0[0] != v1[0] || v0[1] != v1[1];
+}
+
+template <typename T>
 Vec2<T> operator-(const Vec2<T>& v0, const Vec2<T>& v1) {
   return Vec2<T>(v0[0] - v1[0], v0[1] - v1[1]);
 }

@@ -38,7 +38,8 @@ class ElementMesh {
   // get elastic forces. external forces are stored in fe.
   std::vector<Vec3f> GetForce() const;
   Array2Df GetStiffnessEle(int eId) const;
- 
+  // stores result in this->K.
+  void ComputeStiffness();
   void InitStiffnessPattern();
 
   //load a mesh stored in plain text

@@ -16,6 +16,7 @@ class StrainEne {
   virtual Matrix3f getPK1(const Matrix3f& F) = 0;
   virtual std::vector<Matrix3f> getdPdx(const Matrix3f& F, const Vec3f& dF,
                                         int dim = 3) = 0;
+  virtual void CacheF(const Matrix3f& F) {}
   virtual ~StrainEne();
 
   std::vector<double> param;

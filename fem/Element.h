@@ -8,6 +8,8 @@
 #include "Quadrature.h"
 #include "Vec3.h"
 
+// computes geometric information about an element.
+// no material model involved.
 class Element {
  public:
   Element(unsigned numVerts = 4) : _v(numVerts) {}

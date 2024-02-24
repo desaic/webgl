@@ -56,6 +56,23 @@ class Array2D {
 
   bool Empty()const { return data.size() == 0; }
 
+  Array2D<T>& operator+=(const Array2D<T>& a1) {
+    if (a1.GetSize() != GetSize()) {
+      return *this;
+    }
+    for (size_t i = 0; i < data.size(); i++) {
+      data[i] += a1.GetData()[i];
+    }
+    return *this;
+  }
+
+  Array2D<T>& operator*=(T rhs) {
+    for (size_t i = 0; i < data.size(); i++) {
+      data[i] *= rhs;
+    }
+    return *this;
+  }
+
  private:
   Vec2u size;
   std::vector<T> data;
@@ -72,4 +89,28 @@ void flipY(Slice& slice);
 void scale(float scalex, float scaley, Slice& slice);
 
 void addMargin(Array2D<uint8_t>* arr, const Vec2i& margin);
+
+
+/// scalar multiplication
+template <typename T>
+inline Array2D<T> operator*(T s, const Array2D<T>& v) {
+  Array2D<T> a(v.GetSize()[0],v.GetSize()[1]);
+  for (size_t i = 0; i < a.GetData().size(); i++) {
+    a.GetData()[i] = s * a.GetData()[i];
+  }
+  return a;
+}
+
+template <typename T>
+Array2D<T> operator+(const Array2D<T>& a0, const Array2D<T>& a1) {
+  Array2D<T> sum;
+  if (a0.GetSize() != a1.GetSize()) {
+    return sum;
+  }
+  for (size_t i = 0; i < a0.GetData().size(); i++) {
+    sum.GetData()[i] = a0.GetData()[i] + a1.GetData()[i];
+  }
+  return sum;
+}
+
 #endif
