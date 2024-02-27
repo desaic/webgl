@@ -59,9 +59,10 @@ void ElementMesh::CopyStiffnessEleToSparse(unsigned ei, const Array2Df& Ke,
       unsigned vj = ele[j];
       unsigned sparseRow = DIM * sparseBlockIdx[vi][vj];
       for (unsigned dim_i = 0; dim_i < DIM; dim_i++) {
-        size_t start = K.colStart[3 * vi + dim_i];
+        size_t start = K.colStart[DIM * vi + dim_i];
         for (unsigned dim_j = 0; dim_j < DIM; dim_j++) {
-          K.vals[start + 3 * sparseRow + dim_j] = Ke(3 * i + dim_i, 3*j+dim_j);
+          K.vals[start + sparseRow + dim_j] =
+              Ke(DIM * i + dim_i, DIM * j + dim_j);
         }
       }
     }
