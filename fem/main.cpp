@@ -337,14 +337,17 @@ void TestStiffnessFiniteDiff() {
 }
 
 void TestSparse() {
-  CSparseMat mat;
+  CSparseMat K;
   ElementMesh em;
   em.LoadTxt("F:/github/webgl/fem/data/hex_m.txt");
   em.InitStiffnessPattern();
+  em.CopyStiffnessPattern(K);
+  em.ComputeStiffness(K);
 }
 
 int main(int, char**) {
-  TestStiffnessFiniteDiff();
+  //TestStiffnessFiniteDiff();
+  TestSparse();
   UILib ui;
   FemApp app(&ui);
   ui.SetFontsDir("./fonts");

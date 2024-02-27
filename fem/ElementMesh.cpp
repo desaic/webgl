@@ -5,6 +5,7 @@
 #include <sstream>
 #include <vector>
 #include <map>
+#include <set>
 
 int fem_error = 0;
 
@@ -40,15 +41,23 @@ std::vector<Vec3f> ElementMesh::GetForce() const {
   return force;
 }
 
-Array2Df ElementMesh::GetStiffnessEle(int eId) const {
+Array2Df ElementMesh::GetStiffnessEle(unsigned eId) const {
   Array2Df K;
   const auto& material = m[eId];
   K = material.GetStiffness(eId, *this);
   return K;
 }
 
-void ElementMesh::ComputeStiffness() {
-  
+void ElementMesh::CopyStiffnessEleToSparse(unsigned ei, const Array2Df& Ke,
+                                           CSparseMat& K) {
+
+}
+
+void ElementMesh::ComputeStiffness(CSparseMat& K) {
+  for (unsigned ei = 0; ei<e.size();ei++){
+    Array2Df Ke = GetStiffnessEle(ei);
+    CopyStiffnessEleToSparse(ei, Ke, K);
+  }
 }
 
 void ElementMesh::InitElements() {
@@ -61,46 +70,59 @@ void ElementMesh::InitElements() {
 }
 
 void ElementMesh::InitStiffnessPattern() {
-  edgeToSparse.clear();      
+  sparseBlockIdx.clear();      
   // for each vertex, map from a neighboring vertex to index in vals array in 
   // sparse mat.
-  edgeToSparse.resize(X.size());
-  size_t edgeCount = 0;
+  sparseBlockIdx.resize(X.size());
+  std::vector<std::set<unsigned, unsigned> > incidence(X.size());
   for (size_t i = 0; i < e.size(); i++) {
     for (size_t j = 0; j < e[i]->NumVerts(); j++) {
       unsigned vj = (*e[i])[j];
-      std::map<unsigned, size_t>& verts = edgeToSparse[vj];
+      auto& verts = incidence[vj];
       for (size_t k = 0; k < e[i]->NumVerts(); k++) {
         unsigned vk = (*e[i])[k];
-        auto it = verts.find(vk);
-        if (it == verts.end()) {
-          verts[vk] = edgeCount;
-          edgeCount++;        
-        }
+        verts.insert(vk);
       }
     }
   }
+  for(size_t vi = 0; vi<incidence.size(); vi++){
+    const auto& vset = incidence[vi];
+    auto& vmap = sparseBlockIdx[vi];
+    unsigned sparseIdx = 0;
+    for (auto vk : vset){
+      vmap[vk] = sparseIdx;
+      sparseIdx++;
+    }
+  }
+}
 
+void ElementMesh::CopyStiffnessPattern(CSparseMat & K) {
+  size_t edgeCount = 0;
+  for (size_t vi = 0; vi < sparseBlockIdx.size(); vi++) {
+    const auto& vmap = sparseBlockIdx[vi];
+    edgeCount += vmap.size();
+  }
   std::cout << "edge count " << edgeCount << "\n";
 
-  size_t numCols = 3 * X.size(); 
+  size_t numCols = 3 * X.size();
   size_t nnz = 9 * edgeCount;
-  //square matrix
+  // square matrix
   K.Allocate(numCols, numCols, 9 * edgeCount);
-  
   K.colStart[0] = 0;
-  for (size_t i = 0; i < edgeToSparse.size(); i++) {
-    std::map<unsigned, size_t>& verts = edgeToSparse[i];
+  for (size_t i = 0; i < sparseBlockIdx.size(); i++) {
+    const std::map<unsigned, unsigned>& verts = sparseBlockIdx[i];
+    // same column pattern repeats 3 times for each vertex
     for (unsigned d = 0; d < 3; d++) {
       unsigned col = 3 * i + d;
       unsigned colStart = K.colStart[col];
       K.colStart[col + 1] = K.colStart[col] + 3 * verts.size();
       unsigned count = 0;
-      for (auto it : edgeToSparse[i]) {
+      for (auto it : verts) {
+        // 3 consecutive values for each neighboring vertex
         K.rowIdx[colStart + count] = 3 * (it.second);
         K.rowIdx[colStart + count + 1] = 3 * (it.second) + 1;
         K.rowIdx[colStart + count + 2] = 3 * (it.second) + 2;
-        count+=3;
+        count += 3;
       }
     }
   }

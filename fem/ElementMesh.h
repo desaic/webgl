@@ -25,11 +25,8 @@ class ElementMesh {
   std::vector<Vec3f> fe;
   std::vector<bool> fixedDOF;
 
-  //stiffness matrix.
-  CSparseMat K;
-  
-  //index from pair of verts to sparse value index.
-  std::vector<std::map<unsigned, size_t> > edgeToSparse;
+  //for vertex i, map from neighbor index j to sparse index 
+  std::vector<std::map<unsigned, unsigned> > sparseBlockIdx;
 
   double GetElasticEnergyEle(int eId) const;
   double GetElasticEnergy() const;
@@ -37,11 +34,11 @@ class ElementMesh {
   std::vector<Vec3f> GetForceEle(int eId) const;
   // get elastic forces. external forces are stored in fe.
   std::vector<Vec3f> GetForce() const;
-  Array2Df GetStiffnessEle(int eId) const;
-  // stores result in this->K.
-  void ComputeStiffness();
+  Array2Df GetStiffnessEle(unsigned eId) const;
+  void CopyStiffnessEleToSparse(unsigned ei, const Array2Df& Ke, CSparseMat& K);
+  void ComputeStiffness(CSparseMat & K);
   void InitStiffnessPattern();
-
+  void CopyStiffnessPattern(CSparseMat& K);
   //load a mesh stored in plain text
   //removes existing mesh.
   void LoadTxt(const std::string & file);
