@@ -392,6 +392,15 @@ void TestSparse() {
       }
     }
   }
+
+  std::vector<float> displacement(rows, 0);
+  displacement[0] = 0.001;
+  std::vector<float> prod = K.MultSimple(displacement.data());
+  std::cout << prod[0] << " " << prod[1] << " " << prod[2] << "\n";
+
+  em.x[0][0] += displacement[0];
+  std::vector<Vec3f> force = em.GetForce();
+  std::cout << force[0][0] << " " << force[0][1] << " " << force[0][2] << "\n";
 }
 
 int main(int, char**) {

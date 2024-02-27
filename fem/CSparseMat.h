@@ -18,6 +18,8 @@ class CSparseMat {
   unsigned Cols() const { return csMat.n; }
   size_t NNZ() const { return csMat.nzmax; }
 
+  std::vector<float> MultSimple(const float * v) const;
+
   //for debugging
   int ToDense(float* matOut) const;
 

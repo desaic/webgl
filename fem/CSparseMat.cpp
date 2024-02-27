@@ -16,6 +16,21 @@ void CSparseMat::Allocate(unsigned rows, unsigned cols, unsigned nz) {
   csMat.nz = -1;
 }
 
+std::vector<float> CSparseMat::MultSimple(const float* v) const {
+  std::vector<float> prod(Rows(), 0);
+  for (unsigned col = 0; col < Cols(); col++) {
+    float vcol = v[col];
+    size_t st = colStart[col];
+    size_t nnz = colStart[col + 1] - colStart[col];
+    for (unsigned i = 0; i < nnz; i++) {
+      unsigned row = rowIdx[st + i];
+      float val = vals[st + i];
+      prod[row] += vcol * val;
+    }
+  }
+  return prod;
+}
+
 int CSparseMat::ToDense(float* matOut) const {
   if (matOut == nullptr) {
     return -1;
