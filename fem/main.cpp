@@ -1,6 +1,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
 
@@ -343,6 +344,25 @@ void TestSparse() {
   em.InitStiffnessPattern();
   em.CopyStiffnessPattern(K);
   em.ComputeStiffness(K);
+  unsigned rows = K.Rows();
+  unsigned cols = K.Cols();
+  unsigned nnz = K.NNZ();
+  std::cout << "K " << rows << " x " << cols << " , " << nnz << "\n";
+  Array2Df dense(cols, rows);
+  int ret = K.ToDense(dense.DataPtr());
+  
+  Array2Df Kref;
+  em.ComputeStiffnessDense(Kref);
+
+  for (unsigned row = 0; row < rows; row++) {
+    for (unsigned col = 0; col < cols; col++) {
+      float diff = std::abs(Kref(col, row) - dense(col, row));
+      if (diff > 0.1f) {
+        std::cout << row << " " << col << " " << dense(col, row) << " "
+                  << Kref(col, row) << "\n";
+      }
+    }
+  }
 }
 
 int main(int, char**) {

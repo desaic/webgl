@@ -93,10 +93,10 @@ void addMargin(Array2D<uint8_t>* arr, const Vec2i& margin);
 
 /// scalar multiplication
 template <typename T>
-inline Array2D<T> operator*(T s, const Array2D<T>& v) {
+Array2D<T> operator*(T s, const Array2D<T>& v) {
   Array2D<T> a(v.GetSize()[0],v.GetSize()[1]);
   for (size_t i = 0; i < a.GetData().size(); i++) {
-    a.GetData()[i] = s * a.GetData()[i];
+    a.GetData()[i] = s * v.GetData()[i];
   }
   return a;
 }

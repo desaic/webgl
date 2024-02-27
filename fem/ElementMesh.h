@@ -37,6 +37,8 @@ class ElementMesh {
   Array2Df GetStiffnessEle(unsigned eId) const;
   void CopyStiffnessEleToSparse(unsigned ei, const Array2Df& Ke, CSparseMat& K);
   void ComputeStiffness(CSparseMat & K);
+  //for debugging matrix assembly
+  void ComputeStiffnessDense(Array2Df& K);
   void InitStiffnessPattern();
   void CopyStiffnessPattern(CSparseMat& K);
   //load a mesh stored in plain text

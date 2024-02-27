@@ -61,7 +61,7 @@ void ElementMesh::CopyStiffnessEleToSparse(unsigned ei, const Array2Df& Ke,
       for (unsigned dim_i = 0; dim_i < DIM; dim_i++) {
         size_t start = K.colStart[DIM * vi + dim_i];
         for (unsigned dim_j = 0; dim_j < DIM; dim_j++) {
-          K.vals[start + sparseRow + dim_j] =
+          K.vals[start + sparseRow + dim_j] +=
               Ke(DIM * i + dim_i, DIM * j + dim_j);
         }
       }
@@ -73,6 +73,30 @@ void ElementMesh::ComputeStiffness(CSparseMat& K) {
   for (unsigned ei = 0; ei < e.size(); ei++) {
     Array2Df Ke = GetStiffnessEle(ei);
     CopyStiffnessEleToSparse(ei, Ke, K);
+  }
+}
+
+void ElementMesh::ComputeStiffnessDense(Array2Df& K) {
+  size_t nV = X.size();
+  K.Allocate(3 * nV, 3 * nV);
+  K.Fill(0);
+  const unsigned DIM = 3;
+  for (unsigned ei = 0; ei < e.size(); ei++) {
+    Array2Df Ke = GetStiffnessEle(ei);
+    const Element& ele = *e[ei];
+    unsigned eV = ele.NumVerts();
+    for (unsigned i = 0; i < eV; i++) {
+      unsigned vi = ele[i];
+      for (unsigned j = 0; j < eV; j++) {
+        unsigned vj = ele[j];
+        for (unsigned dim_i = 0; dim_i < DIM; dim_i++) {         
+          for (unsigned dim_j = 0; dim_j < DIM; dim_j++) {
+            K(DIM * vi + dim_i, DIM * vj + dim_j) +=
+                Ke(DIM * i + dim_i, DIM * j + dim_j);
+          }
+        }
+      }
+    }
   }
 }
 
@@ -135,9 +159,9 @@ void ElementMesh::CopyStiffnessPattern(CSparseMat & K) {
       unsigned count = 0;
       for (auto it : verts) {
         // 3 consecutive values for each neighboring vertex
-        K.rowIdx[colStart + count] = 3 * (it.second);
-        K.rowIdx[colStart + count + 1] = 3 * (it.second) + 1;
-        K.rowIdx[colStart + count + 2] = 3 * (it.second) + 2;
+        K.rowIdx[colStart + count] = 3 * (it.first);
+        K.rowIdx[colStart + count + 1] = 3 * (it.first) + 1;
+        K.rowIdx[colStart + count + 2] = 3 * (it.first) + 2;
         count += 3;
       }
     }

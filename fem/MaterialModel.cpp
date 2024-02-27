@@ -62,7 +62,8 @@ Array2Df MaterialModel::GetStiffness(int eidx, const ElementMesh& mesh) const{
     const auto& q = Quadrature::Gauss2;
     for (unsigned qi = 0; qi < q.x.size(); qi++) {
       Array2Df Kq = Stiffness(qi, ele, mesh);
-      K += (ele->DetJ(qi) * q.w[qi]) * Kq;
+      Kq *= (ele->DetJ(qi) * q.w[qi]);
+      K += Kq;
     }
   }
   return K;
