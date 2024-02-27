@@ -56,6 +56,8 @@ std::vector<Vec3f> MaterialModel::GetForce(int eidx, const ElementMesh& mesh) co
 Array2Df MaterialModel::GetStiffness(int eidx, const ElementMesh& mesh) const{
   Array2Df K;
   const Element* ele = mesh.e[eidx].get();
+  K.Allocate(3 * ele->NumVerts(), 3 * ele->NumVerts());
+  K.Fill(0);
   if (quadType == QUADRATURE_TYPE::GAUSS2) {
     const auto& q = Quadrature::Gauss2;
     for (unsigned qi = 0; qi < q.x.size(); qi++) {
@@ -69,7 +71,9 @@ Array2Df MaterialModel::GetStiffness(int eidx, const ElementMesh& mesh) const{
 Array2Df MaterialModel::Stiffness(unsigned qi, const Element* ele,
                    const ElementMesh& em) const {
   Array2Df K;
+  
   unsigned nV = ele->NumVerts();
+  K.Allocate(3 * nV, 3 * nV);
   Matrix3f F = ele->DefGradGauss2(qi, em.X, em.x);
   const unsigned dim = 3;
   std::vector<Vec3f> JdN(nV);

@@ -50,11 +50,26 @@ Array2Df ElementMesh::GetStiffnessEle(unsigned eId) const {
 
 void ElementMesh::CopyStiffnessEleToSparse(unsigned ei, const Array2Df& Ke,
                                            CSparseMat& K) {
-
+  const Element& ele = *e[ei];
+  unsigned nV = ele.NumVerts();
+  const unsigned DIM = 3;
+  for (unsigned i = 0; i < nV; i++) {
+    unsigned vi = ele[i];
+    for (unsigned j = 0; j < nV; j++) {
+      unsigned vj = ele[j];
+      unsigned sparseRow = DIM * sparseBlockIdx[vi][vj];
+      for (unsigned dim_i = 0; dim_i < DIM; dim_i++) {
+        size_t start = K.colStart[3 * vi + dim_i];
+        for (unsigned dim_j = 0; dim_j < DIM; dim_j++) {
+          K.vals[start + 3 * sparseRow + dim_j] = Ke(3 * i + dim_i, 3*j+dim_j);
+        }
+      }
+    }
+  }
 }
 
 void ElementMesh::ComputeStiffness(CSparseMat& K) {
-  for (unsigned ei = 0; ei<e.size();ei++){
+  for (unsigned ei = 0; ei < e.size(); ei++) {
     Array2Df Ke = GetStiffnessEle(ei);
     CopyStiffnessEleToSparse(ei, Ke, K);
   }
@@ -74,7 +89,7 @@ void ElementMesh::InitStiffnessPattern() {
   // for each vertex, map from a neighboring vertex to index in vals array in 
   // sparse mat.
   sparseBlockIdx.resize(X.size());
-  std::vector<std::set<unsigned, unsigned> > incidence(X.size());
+  std::vector<std::set<unsigned> > incidence(X.size());
   for (size_t i = 0; i < e.size(); i++) {
     for (size_t j = 0; j < e[i]->NumVerts(); j++) {
       unsigned vj = (*e[i])[j];
