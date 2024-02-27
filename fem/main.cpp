@@ -363,6 +363,35 @@ void TestSparse() {
       }
     }
   }
+
+  unsigned ei = 10;
+  unsigned i = 4;
+  float h = 1e-4;
+  
+  const Element& ele = *em.e[ei];
+  unsigned vi = ele[i];
+  const unsigned DIM = 3;
+  std::vector<Vec3f> fm, fp;
+  for (unsigned d = 0; d < DIM; d++) {
+    unsigned col = DIM * vi + d;
+    em.x[vi][d] -= h;
+    fm = em.GetForce();
+    em.x[vi][d] += 2 * h;
+    fp = em.GetForce();
+    em.x[vi][d] -= h;
+    for (size_t j = 0; j < fp.size(); j++) {
+      fp[j] -= fm[j];
+      fp[j] /= (2 * h);
+    }
+    
+    for (unsigned row = 0; row < rows; row++) {
+      float central = fp[row / 3][row % 3];
+      float diff = std::abs(central + Kref(col, row));
+      if (diff > 0.5f) {
+        std::cout << row << " " << central << " " << Kref(col, row) << "\n";
+      }
+    }
+  }
 }
 
 int main(int, char**) {
