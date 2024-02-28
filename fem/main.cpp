@@ -340,7 +340,22 @@ void TestStiffnessFiniteDiff() {
   
 }
 
-void TestSparseCG(const CSparseMat &K) {
+void TestSparseCG(const CSparseMat& K) {
+  std::vector<double> x, b,prod;
+  
+  unsigned cols = K.Cols();
+  x.resize(cols, 0);
+  b.resize(cols, 0);
+  prod.resize(cols, 0);
+  for (size_t col = 0; col < cols; col++) {
+    b[col] = 1+ col%11;
+  }
+  int ret = CG(K, x, b, 1000);
+  
+  K.MultSimple(x.data(), prod.data());
+  for (size_t i = 0; i < prod.size(); i++) {
+    std::cout << "(" << prod[i] << " " << b[i] << ") ";
+  }
 
 }
 
@@ -474,9 +489,9 @@ void TestSparse() {
   std::cout << force[0][0] << " " << force[0][1] << " " << force[0][2] << "\n";
   FixLeft(0.001, em);
   FixDOF(em.fixedDOF,K, 1000);
-  K.ToDense(dense.DataPtr());
-  dlmwrite("F:/dump/Kfix.txt", dense);
-  TestModes(em);
+  //K.ToDense(dense.DataPtr());
+  //dlmwrite("F:/dump/Kfix.txt", dense);
+  //TestModes(em);
   TestSparseCG(K);
 }
 
