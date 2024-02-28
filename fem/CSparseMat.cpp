@@ -1,4 +1,5 @@
 #include "CSparseMat.h"
+
 void CSparseMat::Allocate(unsigned rows, unsigned cols, unsigned nz) {
   csMat.nzmax = nz;
   csMat.m = rows;
@@ -55,4 +56,31 @@ int CSparseMat::ToDense(float* matOut) const {
     }
   }
   return 0;
+}
+
+void FixDOF(std::vector<bool>& fixedDOF, CSparseMat& K, float scale) {
+
+  unsigned rows = K.Rows();
+  unsigned cols = K.Cols();
+  for (unsigned col = 0; col < cols; col++) {
+    size_t st = K.colStart[col];
+    size_t numRows = K.colStart[col+1] - st;
+    if (fixedDOF[col]) {
+      for (unsigned i = 0; i < numRows; i++) {
+        unsigned row = K.rowIdx[st + i];
+        if (row == col) {
+          K.vals[st + i] = scale;
+        } else {
+          K.vals[st + i] = 0;
+        }
+      }
+    } else {
+      for (unsigned i = 0; i < numRows; i++) {
+        unsigned row = K.rowIdx[st + i];
+        if (fixedDOF[row]) {
+          K.vals[st + i] = 0;
+        }
+      }
+    }
+  }
 }

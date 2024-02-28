@@ -48,7 +48,7 @@ class FETrigMesh{
     _em = em;
     _mesh = std::make_shared<TrigMesh>();
     if (_showWireFrame) {
-      ComputeWireframeMesh(*_em, *_mesh, _edges, _drawingScale);      
+      ComputeWireframeMesh(*_em, *_mesh, _edges, _drawingScale, _beamThickness);      
     } else {
       ComputeSurfaceMesh(*_em, *_mesh, _meshToEMVert, _drawingScale);
     }
@@ -60,7 +60,8 @@ class FETrigMesh{
       return;
     }
     if (_showWireFrame) {
-      UpdateWireframePosition(*_em, *_mesh, _edges, _drawingScale);
+      UpdateWireframePosition(*_em, *_mesh, _edges, _drawingScale,
+                              _beamThickness);
       return;
     }
     for (size_t i = 0; i < _meshToEMVert.size(); i++) {
@@ -84,6 +85,7 @@ class FETrigMesh{
   std::vector<Edge> _edges;
   bool _showWireFrame = true;
   float _drawingScale = 1;
+  float _beamThickness = 0.5f;
 };
 
 const float MToMM = 1000;
@@ -353,6 +355,59 @@ void dlmwrite(const std::string& file, const Array2Df& mat) {
   }
 }
 
+Array2Df dlmread(const std::string& file) {
+  std::ifstream in(file);
+  std::string line;
+  std::vector<std::vector<float> > rows;
+  size_t minLen = 10000000000ull;
+  while (std::getline(in, line)) {
+    std::istringstream iss(line);
+    std::vector<float> row;
+    float val;
+    std::string token;
+    while (std::getline(iss,token,',')) {
+      try {
+        val = stof(token);
+      } catch (const std::exception& e) {
+        break;
+      }
+      row.push_back(val);
+    }
+    if (row.size() > 0) {
+      minLen = std::min(minLen, row.size());
+      rows.push_back(row);
+    } else {
+      break;
+    }
+  }
+  if (rows.size() == 0) {
+    return Array2Df();
+  }
+  Array2Df out(minLen, rows.size());
+  Vec2u size = out.GetSize();
+  for (unsigned row = 0; row < size[1]; row++) {
+    for (unsigned col = 0; col < size[0]; col++) {
+      out(col, row) = rows[row][col];
+    }
+  }
+  return out;
+}
+
+void TestModes(ElementMesh & em) { 
+  Array2Df dx = dlmread("F:/dump/modes.txt");
+  Vec2u size = dx.GetSize();
+  unsigned mode = 11;
+  for (unsigned i = 0; i < size[0]; i+=3) {
+    unsigned vi = i / 3;
+    em.x[vi] = em.X[vi] + 0.01f * Vec3f(dx(i,mode), dx(i+1,mode), dx(i+2,mode));
+  }
+  TrigMesh wire;
+  std::vector<Edge> edges;
+  ComputeWireframeMesh(em, wire, edges, 1, 0.001);
+  
+  wire.SaveObj("F:/dump/mode0.obj");
+}
+
 void TestSparse() {
   CSparseMat K;
   ElementMesh em;
@@ -417,7 +472,11 @@ void TestSparse() {
   em.x[0][0] += displacement[0];
   std::vector<Vec3f> force = em.GetForce();
   std::cout << force[0][0] << " " << force[0][1] << " " << force[0][2] << "\n";
-  //dlmwrite("F:/dump/K.txt", dense);
+  FixLeft(0.001, em);
+  FixDOF(em.fixedDOF,K, 1000);
+  K.ToDense(dense.DataPtr());
+  dlmwrite("F:/dump/Kfix.txt", dense);
+  TestModes(em);
   TestSparseCG(K);
 }
 

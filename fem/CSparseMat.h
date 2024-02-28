@@ -1,6 +1,8 @@
 #pragma once
+
 #include <vector>
 
+#include "Array2D.h"
 #include "cs.h"
 /// c++ interface for csparse struct.
 /// not copyable because of pointers and laziness.
@@ -18,9 +20,9 @@ class CSparseMat {
   unsigned Cols() const { return csMat.n; }
   size_t NNZ() const { return csMat.nzmax; }
 
-  std::vector<float> MultSimple(const float * v) const;
+  std::vector<float> MultSimple(const float* v) const;
 
-  //for debugging
+  // for debugging
   int ToDense(float* matOut) const;
 
   // where does column i start in rowIdx and vals.
@@ -39,3 +41,7 @@ class CSparseMat {
   // csparse struct
   struct cs_sparse csMat = {};
 };
+
+/// The diagonal entries in K must be present
+/// otherwise will not work properly.
+void FixDOF(std::vector<bool> & fixedDOF, CSparseMat & K, float scale);

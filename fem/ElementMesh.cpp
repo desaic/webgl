@@ -104,6 +104,9 @@ void ElementMesh::InitElements() {
   if (m.size() != e.size()) {
     m.resize(e.size());
   }
+  if (fixedDOF.size() != 3 * X.size()) {
+    fixedDOF.resize(3 * X.size());
+  }
   for (size_t i = 0; i < e.size(); i++) {
     e[i]->InitJacobian(m[i].quadType, X);
   }

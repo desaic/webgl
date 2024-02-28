@@ -16,7 +16,9 @@ struct hash_edge {
 };
 
 void ComputeWireframeMesh(const ElementMesh& em, TrigMesh& m,
-                          std::vector<Edge>& edges, float drawingScale) {
+                          std::vector<Edge>& edges,
+                          float drawingScale,
+  float beamThickness) {
   std::unordered_set<Edge, hash_edge> edgeSet;
   for (size_t i = 0; i < em.e.size(); i++) {
     const Element* ele = em.e[i].get();
@@ -47,14 +49,15 @@ void ComputeWireframeMesh(const ElementMesh& em, TrigMesh& m,
       m.t[3 * tIdx + 2] = v0Idx + PRISM_TRIGS[ti][2];
     }
   }
-  UpdateWireframePosition(em, m, edges, drawingScale);
+  UpdateWireframePosition(em, m, edges, drawingScale,
+                          beamThickness);
 }
 
 void UpdateWireframePosition(const ElementMesh& em, TrigMesh& m,
-                             std::vector<Edge>& edges, float drawingScale) {
+                             std::vector<Edge>& edges, float drawingScale,
+                             float beamThickness) {
   const float PRISM_VERTS[3][2] = {
       {0.5, -0.2887}, {-0.5, -0.2887}, {0, 0.5774}};
-  float beamThickness = 0.5f;
   const float EPS = 1e-6;
   for (unsigned i = 0; i < edges.size(); i++) {
     Vec3f v1 = drawingScale * em.x[edges[i].v[0]];
@@ -84,12 +87,12 @@ void UpdateWireframePosition(const ElementMesh& em, TrigMesh& m,
     yAxis = eVec.cross(xAxis);
 
     for (unsigned vi = 0; vi < 3; vi++) {
-      Vec3f pos = v1 + beamThickness * (eVec + xAxis * PRISM_VERTS[vi][0] +
+      Vec3f pos = v1 + beamThickness * (0.2f*eVec + xAxis * PRISM_VERTS[vi][0] +
                                         yAxis * PRISM_VERTS[vi][1]);
       unsigned vIdx = v0Idx + vi;
       *(Vec3f*)(&m.v[3 * vIdx]) = pos;
 
-      Vec3f pos1 = pos + (len - 2 * beamThickness) * eVec;
+      Vec3f pos1 = pos + (len - 0.2f * beamThickness) * eVec;
       *(Vec3f*)(&m.v[3 * (vIdx + 3)]) = pos1;
     }
   }
