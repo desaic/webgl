@@ -313,6 +313,7 @@ void TestForceFiniteDiff() {
   std::cout << "\n";
   std::cout << F.determinant() << " " << Finv.determinant() << "\n";
 }
+
 void TestStiffnessFiniteDiff() {
   ElementMesh em;
   em.LoadTxt("F:/github/webgl/fem/data/hex_m.txt");
@@ -335,6 +336,21 @@ void TestStiffnessFiniteDiff() {
   std::vector<Vec3f> dx = h * em.fe;
   Add(em.x, dx);
   
+}
+
+void TestSparseCG(const CSparseMat &K) {
+
+}
+
+void dlmwrite(const std::string& file, const Array2Df& mat) {
+  std::ofstream out(file);
+  Vec2u size = mat.GetSize();
+  for (unsigned row = 0; row < size[1]; row++) {
+    for (unsigned col = 0; col < size[0]-1; col++) {
+      out << mat(col, row) << ",";
+    }
+    out << mat(size[0] - 1, row)<<"\n";
+  }
 }
 
 void TestSparse() {
@@ -401,6 +417,8 @@ void TestSparse() {
   em.x[0][0] += displacement[0];
   std::vector<Vec3f> force = em.GetForce();
   std::cout << force[0][0] << " " << force[0][1] << " " << force[0][2] << "\n";
+  //dlmwrite("F:/dump/K.txt", dense);
+  TestSparseCG(K);
 }
 
 int main(int, char**) {
