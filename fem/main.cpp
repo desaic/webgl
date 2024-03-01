@@ -143,7 +143,7 @@ class Simulator {
     h = maxh / maxAbsForce.norm();
     h = std::min(maxh, h);
     std::cout << "h " << h << "\n";
-    std::vector<Vec3f> dx = h * force;
+    //std::vector<Vec3f> dx = h * force;
   }
   
   void InitCG(ElementMesh& em, SimState& state) { 
@@ -448,7 +448,58 @@ void TestSparse() {
   TestSparseCG(K);
 }
 
+
+#include <filesystem>
+namespace fs = std::filesystem;
+void CenterMeshes() {
+  std::string dir = "F:/dolphin/meshes/20240301-V8-0-fix/mmp/";
+  int starti = 3, endi = 80;
+  for (int i = starti; i <= endi; i++) {
+    std::string istr = std::to_string(i);
+    std::string modelDir = dir + istr + "/models/";
+    if (!std::filesystem::exists(modelDir)) {
+      continue;
+    }
+    std::string cageFile = modelDir + "cage.obj";
+    if (!std::filesystem::exists(cageFile)) {
+      continue;
+    }
+
+    std::string originalStl = modelDir + "0.STL";
+    fs::path directory_path(modelDir);
+
+    // Create an iterator pointing to the directory
+    fs::directory_iterator it(directory_path);
+    std::vector<fs::path> stls;
+    // Iterate through the directory entries
+    for (const auto& entry : it) {
+      // Check if it's a regular file
+      if (entry.is_regular_file()) {
+        std::string ext = entry.path().extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+        if (ext == ".stl") {
+          stls.push_back(entry.path());
+        }
+      }
+    }
+    for (const auto& path : stls) {
+     TrigMesh mesh;
+      mesh.LoadStl(path.string());
+     BBox box;
+      ComputeBBox(mesh.v,box);
+     Vec3f center = 0.5f * (box.vmax + box.vmin);
+      for (size_t i = 0; i < mesh.v.size(); i += 3) {
+        mesh.v[i] -= center[0];
+        mesh.v[i+1] -= center[1];
+        mesh.v[i+2] -= center[2];
+      }
+      mesh.SaveStlTxt(path.string());
+    }
+  }
+}
+
 int main(int, char**) {
+  CenterMeshes();
   //TestStiffnessFiniteDiff();
   TestSparse();
   UILib ui;

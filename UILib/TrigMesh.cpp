@@ -27,6 +27,24 @@ int TrigMesh::LoadStl(const std::string& meshFile) {
   // ComputePseudoNormals();
   return 0;
 }
+int TrigMesh::SaveStlTxt(const std::string& filename) {
+  std::ofstream out(filename);
+  size_t numTrig = t.size() / 3;
+  out << "solid stl by TrigMesh\n";
+  for (size_t i = 0; i < numTrig; i ++ ) {
+    Vec3f n = GetTrigNormal(i);
+    out << "  facet normal " << n[0] << " " << n[1] << " " << n[2] << "\n";
+    out << "    outer loop\n";
+    for (unsigned j = 0; j < 3; j++) {
+      Vec3f v = GetTriangleVertex(i, j);
+      out<<"      vertex "<<v[0]<<" "<<v[1]<<" "<<v[2]<<"\n";
+    }
+    out << "    endloop\n";
+    out << "  endfacet\n";
+  }
+  out << "endsolid gg\n";
+  return 0;
+}
 
 int TrigMesh::LoadObj(const std::string& meshFile) {
   LoadOBJFile(meshFile, t, v, uv);

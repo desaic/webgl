@@ -9,7 +9,6 @@ set(CMAKE_CXX_STANDARD 17)
 include_directories("../UILib/inc/")
 link_directories("../UILib/extern/glfw3.3.8")
 link_directories("../UILib/extern/glew-2.1.0")
-
 option(USE_NANOVDB "test openvdb" OFF)
 if (USE_NANOVDB)
   set(NANOVDB_INC_DIR "F:/github/openvdb/nanovdb/")
