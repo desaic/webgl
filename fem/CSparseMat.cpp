@@ -1,4 +1,5 @@
 #include "CSparseMat.h"
+#include "ArrayUtil.h"
 #include "cg_rc.h"
 #include <fstream>
 
@@ -118,49 +119,6 @@ void FixDOF(std::vector<bool>& fixedDOF, CSparseMat& K, float scale) {
   }
 }
 
-void ptwiseProd(const std::vector<double>& a, const std::vector<double>& b,
-                std::vector<double>& c) {
-  for (size_t i = 0; i < c.size(); i++) {
-    c[i] = a[i] * b[i];
-  }
-} 
-
-void sub(std::vector<double>& src, const std::vector<double>& b) {
-  for (size_t i = 0; i < src.size(); i++) {
-    src[i] -= b[i];
-  }
-}
-
-std::vector<double> ToDouble(const std::vector<float>& a) {
-  std::vector<double> v(a.size());
-  for (size_t i = 0; i < a.size(); i++) {
-    v[i] = a[i];
-  }
-  return v;
-}
-
-double Linf(const std::vector<double>& R) {
-  if (R.size() == 0) {
-    return 0;
-  }
-  double m = R[0];
-  for (size_t i = 0; i < R.size(); i++) {
-    m = std::max(m, std::abs(R[i]));
-  }
-  return m;
-}
-
-double L2(const std::vector<double>& R) {
-  if (R.size() == 0) {
-    return 0;
-  }
-  double sum=0;
-  for (size_t i = 0; i < R.size(); i++) {
-    sum += R[i] * R[i];   
-  }
-  sum = std::sqrt(sum);
-  return sum;
-}
 
 int CG(const CSparseMat& K, std::vector<double> & x, const std::vector<double>& b,
        int maxIter) {

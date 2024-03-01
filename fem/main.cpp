@@ -7,6 +7,7 @@
 
 #include "Array2D.h"
 #include "Array3D.h"
+#include "ArrayUtil.h"
 #include "BBox.h"
 #include "ImageIO.h"
 #include "ImageUtils.h"
@@ -90,48 +91,14 @@ class FETrigMesh{
 
 const float MToMM = 1000;
 
-void Add(std::vector<Vec3f>& dst, const std::vector<Vec3f>& src) {
-  for (size_t i = 0; i < dst.size(); i++) {
-    dst[i] += src[i];
-  }
-}
-
-std::vector<Vec3f> operator*(float c, const std::vector<Vec3f>& v) {
-  std::vector<Vec3f> out(v.size());
-  for (size_t i = 0; i < out.size(); i++) {
-    out[i] = c * v[i];
-  }
-  return out;
-}
-
-void Fix(std::vector<Vec3f>& dx, const std::vector<bool> fixedDOF) {
-  for (size_t i = 0; i < dx.size(); i++) {
-    for (size_t j = 0; j < 3; j++) {
-      if (fixedDOF[3*i+j]) {
-        dx[i][j] = 0;
-      }
-    }
-  }
-}
-
-Vec3f MaxAbs(const std::vector<Vec3f>& v) { 
-  if (v.size() == 0) {
-    return Vec3f(0, 0, 0);
-  }
-
-  Vec3f ma = v[0]; 
-
-  for (size_t i = 1; i < v.size(); i++) {
-    for (size_t j = 0; j < 3; j++) {
-      ma[j] = std::max(ma[j], std::abs(v[i][j]));
-    }
-  }
-  return ma;
-}
+//things helpful to be stored across time steps
+struct SimState {
+  CSparseMat K;
+};
 
 class Simulator {
  public:
-  void Step(ElementMesh& em) {
+  void StepGrad(ElementMesh& em) {
     if (em.X.empty()) {
       return;
     }
@@ -149,6 +116,39 @@ class Simulator {
     std::vector<Vec3f> dx = h * force;
     Fix(dx, em.fixedDOF);
     Add(em.x, dx);
+  }
+  
+  void StepCG(ElementMesh& em, SimState& state) {
+    if (em.X.empty()) {
+      return;
+    }
+    std::vector<Vec3f> force = em.GetForce();
+    Add(force, em.fe);
+    Vec3f maxAbsForce = MaxAbs(force);
+    std::cout << "max abs(force) " << maxAbsForce[0] << " " << maxAbsForce[1]
+              << " " << maxAbsForce[2] << "\n";
+    float h = 0.0001f;
+    const float maxh = 0.0001f;
+
+    std::vector<double> dx, b;
+    for (size_t i = 0; i < em.fixedDOF.size();i++) {
+      if (em.fixedDOF[i]) {
+      
+      } else {
+      
+      }
+    }
+    CG(state.K, dx, b, 400);
+
+    h = maxh / maxAbsForce.norm();
+    h = std::min(maxh, h);
+    std::cout << "h " << h << "\n";
+    std::vector<Vec3f> dx = h * force;
+  }
+  
+  void InitCG(ElementMesh& em, SimState& state) { 
+    em.InitStiffnessPattern();
+    em.CopyStiffnessPattern(state.K);
   }
 };
 
@@ -213,6 +213,7 @@ class FemApp {
     _em.LoadTxt(file);
     UpdateRenderMesh();
     InitExternalForce(); 
+    _sim.InitCG(_em, _simState);
   }
 
   void UpdateRenderMesh() {
@@ -227,7 +228,7 @@ class FemApp {
   void Refresh() {
     bool wire = _ui->GetCheckBoxVal(_wireframeId);
     _renderMesh.ShowWireFrame(wire);
-    sim.Step(_em);
+    _sim.StepCG(_em, _simState);
     _renderMesh.UpdatePosition();
     _ui->SetMeshNeedsUpdate(_meshId);
   }
@@ -242,7 +243,8 @@ class FemApp {
   float _drawingScale = MToMM;
   std::shared_ptr<TrigMesh> floor;
   int _floorMeshId = -1;
-  Simulator sim;
+  Simulator _sim;
+  SimState _simState;
 };
 
 std::vector<Vec3f> CentralDiffForce(ElementMesh & em, float h) {
@@ -357,55 +359,6 @@ void TestSparseCG(const CSparseMat& K) {
     std::cout << "(" << prod[i] << " " << b[i] << ") ";
   }
 
-}
-
-void dlmwrite(const std::string& file, const Array2Df& mat) {
-  std::ofstream out(file);
-  Vec2u size = mat.GetSize();
-  for (unsigned row = 0; row < size[1]; row++) {
-    for (unsigned col = 0; col < size[0]-1; col++) {
-      out << mat(col, row) << ",";
-    }
-    out << mat(size[0] - 1, row)<<"\n";
-  }
-}
-
-Array2Df dlmread(const std::string& file) {
-  std::ifstream in(file);
-  std::string line;
-  std::vector<std::vector<float> > rows;
-  size_t minLen = 10000000000ull;
-  while (std::getline(in, line)) {
-    std::istringstream iss(line);
-    std::vector<float> row;
-    float val;
-    std::string token;
-    while (std::getline(iss,token,',')) {
-      try {
-        val = stof(token);
-      } catch (const std::exception& e) {
-        break;
-      }
-      row.push_back(val);
-    }
-    if (row.size() > 0) {
-      minLen = std::min(minLen, row.size());
-      rows.push_back(row);
-    } else {
-      break;
-    }
-  }
-  if (rows.size() == 0) {
-    return Array2Df();
-  }
-  Array2Df out(minLen, rows.size());
-  Vec2u size = out.GetSize();
-  for (unsigned row = 0; row < size[1]; row++) {
-    for (unsigned col = 0; col < size[0]; col++) {
-      out(col, row) = rows[row][col];
-    }
-  }
-  return out;
 }
 
 void TestModes(ElementMesh & em) { 
