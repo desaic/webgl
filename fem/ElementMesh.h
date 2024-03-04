@@ -30,6 +30,10 @@ class ElementMesh {
 
   double GetElasticEnergyEle(int eId) const;
   double GetElasticEnergy() const;
+  //potential energy from external forces.
+  double GetExternalEnergy() const;
+  //elastic energy plus potential energy from external forces
+  double GetPotentialEnergy() const;
   // nodal elastic forces for one element
   std::vector<Vec3f> GetForceEle(int eId) const;
   // get elastic forces. external forces are stored in fe.

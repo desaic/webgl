@@ -58,6 +58,15 @@ void Add(std::vector<Vec3f>& dst, const std::vector<Vec3f>& src) {
   }
 }
 
+void AddTimes(std::vector<Vec3f>& dst, const std::vector<double>& src,
+              float c) {
+  for (size_t i = 0; i < dst.size(); i++) {
+    dst[i][0] += c * src[3 * i];
+    dst[i][1] += c * src[3 * i + 1];
+    dst[i][2] += c * src[3 * i + 2];
+  }
+}
+
 std::vector<Vec3f> operator*(float c, const std::vector<Vec3f>& v) {
   std::vector<Vec3f> out(v.size());
   for (size_t i = 0; i < out.size(); i++) {

@@ -124,25 +124,41 @@ class Simulator {
     }
     std::vector<Vec3f> force = em.GetForce();
     Add(force, em.fe);
-    Vec3f maxAbsForce = MaxAbs(force);
-    std::cout << "max abs(force) " << maxAbsForce[0] << " " << maxAbsForce[1]
-              << " " << maxAbsForce[2] << "\n";
-    float h = 0.0001f;
-    const float maxh = 0.0001f;
-
-    std::vector<double> dx, b;
+    size_t numDOF = em.x.size() * 3;
+    std::vector<double> dx(numDOF, 0), b(numDOF);
     for (size_t i = 0; i < em.fixedDOF.size();i++) {
       if (em.fixedDOF[i]) {
-      
+        b[i] = 0;
       } else {
-      
+        b[i] = force[i / 3][i % 3];
       }
     }
+    float identityScale = 1000;
+    em.ComputeStiffness(state.K);
+    FixDOF(em.fixedDOF, state.K, identityScale);
     CG(state.K, dx, b, 400);
-
-    h = maxh / maxAbsForce.norm();
-    h = std::min(maxh, h);
-    std::cout << "h " << h << "\n";
+    const float h0 = 1.0f;
+    const unsigned MAX_LINE_SEARCH = 10;
+    double E0 = em.GetPotentialEnergy();
+    
+    double newE = E0;
+    auto oldx = em.x;
+    float h = h0;
+    bool updated = false;
+    for (unsigned li = 0;li<MAX_LINE_SEARCH;li++){
+      em.x = oldx;
+      AddTimes(em.x, dx, h);
+      newE = em.GetPotentialEnergy();
+      std::cout << newE << "\n";
+      if (newE < E0) {
+        updated = true;
+        break;
+      }
+      h /= 2;
+    }
+    if (!updated) {
+      em.x = oldx;
+    }
     //std::vector<Vec3f> dx = h * force;
   }
   
@@ -205,7 +221,7 @@ class FemApp {
   void InitExternalForce() { 
     _em.fe= std::vector<Vec3f>(_em.X.size());
     _em.fixedDOF=std::vector<bool>(_em.X.size() * 3, false);
-    PullRight(Vec3f(0, -0.1, 0), 0.001, _em);
+    PullRight(Vec3f(0, -1, 0), 0.001, _em);
     FixLeft(0.001, _em);
   }
 
@@ -499,9 +515,6 @@ void CenterMeshes() {
 }
 
 int main(int, char**) {
-  CenterMeshes();
-  //TestStiffnessFiniteDiff();
-  TestSparse();
   UILib ui;
   FemApp app(&ui);
   ui.SetFontsDir("./fonts");

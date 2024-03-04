@@ -23,6 +23,23 @@ double ElementMesh::GetElasticEnergy() const {
   return ene;
 }
 
+double ElementMesh::GetExternalEnergy() const {
+  double E = 0;
+  if (fe.size() != x.size()) {
+    return E;
+  }
+  for (size_t i = 0; i < fe.size(); i++) {
+    E -= fe[i].dot(x[i]);
+  }
+  return E;
+}
+
+double ElementMesh::GetPotentialEnergy() const {
+  double E = GetElasticEnergy();
+  E += GetExternalEnergy();
+  return E;
+}
+
 std::vector<Vec3f> ElementMesh::GetForceEle(int eId) const {
   const auto& mat = m[eId];
   std::vector<Vec3f> force= mat.GetForce(eId, *this);
