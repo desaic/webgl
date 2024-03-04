@@ -28,6 +28,7 @@ TrigMesh TriangulateContours(const float* vIn, unsigned nV,
       out.t[3 * i + j] = trigs[i].vertices[j];
     }
   }
+  return out;
 }
 
 TrigMesh TriangulateLoop(const float* verts, unsigned nV) {
