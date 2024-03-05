@@ -97,6 +97,12 @@ void SetVert(size_t vi, std::vector<float> & verts, const Vec3f & v) {
   verts[3 * vi + 2] = v[2];
 }
 
+void AddTrig(std::vector<unsigned>& t, unsigned t0, unsigned t1, unsigned t2) {
+  t.push_back(t0);
+  t.push_back(t1);
+  t.push_back(t2);
+}
+
 //x in normal axis, y in binormal, z in tangent
 TrigMesh Sweep(const FramedCurve& fc, const SimplePolygon& poly) {
   TrigMesh m;
@@ -116,8 +122,16 @@ TrigMesh Sweep(const FramedCurve& fc, const SimplePolygon& poly) {
       vi++;
     }
   }
+  size_t numCols = poly.size();
   for (size_t i = 0; i < fc.size() - 1; i++) {
-    
+    for (size_t j = 0; j < numCols - 1; j++) {
+      unsigned v0 = i * numCols + j;
+      unsigned v1 = v0 + numCols;
+      unsigned v2 = v0 + 1;
+      unsigned v3 = v1 + 1;
+      AddTrig(m.t, v0, v2, v1);
+      AddTrig(m.t, v1, v2, v3);
+    }
   }
   return m;
 }
@@ -140,7 +154,6 @@ SimplePolygon MakeTrapezoid(float l0, float l1, float h) {
 //   |     v0
 int MakeHelix(const HelixSpec& spec, TrigMesh& mesh) {
   unsigned MAX_DIVS_PER_REV = 180;
-  mesh = MakeCube(Vec3f(0, 0, 0), Vec3f(1, 1, 1));
   //helix is cut off from below this value
   float ymin = 0;
   float y1 = spec.length;
@@ -157,8 +170,8 @@ int MakeHelix(const HelixSpec& spec, TrigMesh& mesh) {
   poly = MakeTrapezoid(l0, l1, h);
   //SaveCurveObj("F:/dump/helix_curve.obj", helix, 0.5);
 
-  TrigMesh m = Sweep(helix, poly);
-  m.SaveObj("F:/dump/helix_pt.obj");
+  mesh = Sweep(helix, poly);
+  mesh.SaveObj("F:/dump/helix_pt.obj");
   MergeCloseVertices(mesh);
   return 0;
 }
