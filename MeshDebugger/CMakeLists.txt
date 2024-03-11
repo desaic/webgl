@@ -17,6 +17,7 @@ if (USE_NANOVDB)
 endif()
  
 include_directories("../cgal_wrapper/")
+include_directories("../cdt/")
 add_executable(${BIN} ${EXE_SRC} resource/icons.rc)
 
 target_link_directories(${BIN} PRIVATE "../cgal_wrapper/build/")

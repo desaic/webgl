@@ -221,7 +221,7 @@ class FemApp {
   void InitExternalForce() { 
     _em.fe= std::vector<Vec3f>(_em.X.size());
     _em.fixedDOF=std::vector<bool>(_em.X.size() * 3, false);
-    PullRight(Vec3f(0, -1, 0), 0.001, _em);
+    PullRight(Vec3f(0, 1, 0), 0.001, _em);
     FixLeft(0.001, _em);
   }
 
@@ -468,8 +468,8 @@ void TestSparse() {
 #include <filesystem>
 namespace fs = std::filesystem;
 void CenterMeshes() {
-  std::string dir = "F:/dolphin/meshes/20240301-V8-0-fix/mmp/";
-  int starti = 3, endi = 80;
+  std::string dir = "F:/dolphin/meshes/20240304-V8-01/mmp/";
+  int starti = 4, endi = 60;
   for (int i = starti; i <= endi; i++) {
     std::string istr = std::to_string(i);
     std::string modelDir = dir + istr + "/models/";
@@ -515,6 +515,7 @@ void CenterMeshes() {
 }
 
 int main(int, char**) {
+ // CenterMeshes();
   UILib ui;
   FemApp app(&ui);
   ui.SetFontsDir("./fonts");

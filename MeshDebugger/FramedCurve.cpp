@@ -1,4 +1,5 @@
 #include "FramedCurve.h"
+#include "CDT.h"
 #include <fstream>
 void SaveCurveObj(const std::string& file, const FramedCurve& curve,
                   float vecLen) {
@@ -59,14 +60,22 @@ TrigMesh Sweep(const FramedCurve& fc, const SimplePolygon& poly) {
   }
   size_t numCols = poly.size();
   for (size_t i = 0; i < fc.size() - 1; i++) {
-    for (size_t j = 0; j < numCols - 1; j++) {
+    for (size_t j = 0; j < numCols; j++) {
+      unsigned col1 = (j + 1) % numCols;
       unsigned v0 = i * numCols + j;
       unsigned v1 = v0 + numCols;
-      unsigned v2 = v0 + 1;
-      unsigned v3 = v1 + 1;
+      unsigned v2 = i*numCols + col1;
+      unsigned v3 = (i+1)*numCols + col1;
       AddTrig(m.t, v0, v2, v1);
       AddTrig(m.t, v1, v2, v3);
     }
   }
+  return m;
+}
+
+TrigMesh TriangulatePolygon(const SimplePolygon& poly) {
+  TrigMesh m;
+
+
   return m;
 }

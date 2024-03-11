@@ -33,3 +33,5 @@ void SaveCurveObj(const std::string& file, const FramedCurve& curve,
 
 // x in normal axis, y in binormal, z in tangent
 TrigMesh Sweep(const FramedCurve& fc, const SimplePolygon& poly);
+//calls cdt
+TrigMesh TriangulatePolygon(const SimplePolygon& poly);

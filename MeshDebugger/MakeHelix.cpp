@@ -7,7 +7,7 @@
 #include "MakeHelix.h"
 #include "MeshUtil.h"
 #include "TriangulateContour.h"
-#include  <algorithm>
+#include <algorithm>
 #include <fstream>
 
 /// <summary>
@@ -47,9 +47,8 @@ FramedCurve MakeHelixCurve(float y0, float y1, float r, unsigned divs, float pit
 
 SimplePolygon MakeTrapezoid(float l0, float l1, float h) {
   SimplePolygon poly;
-  Vec3f v(0, -l0 / 2, 0);
   poly.p.resize(4);
-  poly.p[0]= v;
+  poly.p[0] = Vec3f(0, -l0 / 2, 0);
   poly.p[1] = Vec3f(h, -l1 / 2, 0);
   poly.p[2] = Vec3f(h, l1 / 2, 0);
   poly.p[3] = Vec3f(0, l0 / 2, 0);
