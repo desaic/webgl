@@ -1,0 +1,17 @@
+cmake_minimum_required(VERSION 3.16)
+set(BIN "FannFit")
+PROJECT (FannFit)
+FILE(GLOB EXE_SRC "*.cpp" "*.c")
+set(CMAKE_CXX_STANDARD 17)
+include_directories(.)
+#include_directories("F:/github/fann/src/include/")
+#set(FANN_SRC_DIR "F:/github/fann/src/")
+#SET(fann_LIB_SRCS
+#        "${FANN_SRC_DIR}/floatfann.c"
+#        )
+#add_definitions("-DFANN_NO_DLL")
+#ADD_LIBRARY(fann_static STATIC ${fann_LIB_SRCS})
+FILE(GLOB EXE_SRC "*.cpp" "*.c")
+add_subdirectory("../Math" math)
+add_executable(${BIN} ${EXE_SRC})
+target_link_libraries(${BIN} MathLib)

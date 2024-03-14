@@ -14,7 +14,7 @@ add_compile_options("/std:c++latest")
 include_directories("inc")
 
 list(REMOVE_ITEM SRC "main.cpp")
-
+add_subdirectory("../Math/" math)
 add_library("UILib" ${SRC})
   
 add_executable(${BIN}
@@ -22,7 +22,7 @@ add_executable(${BIN}
   resource/icons.rc
 )
   
-target_link_libraries(${BIN} UILib imgui glfw3 opengl32 glew32s)
+target_link_libraries(${BIN} UILib imgui glfw3 opengl32 glew32s MathLib)
 
 # copy fonts over
 # @todo(mike) more consistent place for all this kind of stuff
