@@ -4,6 +4,8 @@
 #include <string>
 #include <memory>
 
+#include "Vec3.h"
+
 #include "Array2D.h"
 #include "Camera.h"
 #include "GLTex.h"

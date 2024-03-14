@@ -1,14 +1,10 @@
 #pragma once
-
+#ifndef WATER_MPM_H
+#define WATER_MPM_H
+#include "Axis.h"
 #include "Array3D.h"
 #include "Vec3.h"
 #include "b3Clock.h"
-
-enum class Axis {
-  X = 0,
-  Y,
-  Z
-};
 
 class Particle {
  public:

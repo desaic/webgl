@@ -1,14 +1,9 @@
 #ifndef WATER_H
 #define WATER_H
+#include "Axis.h"
 #include "Array3D.h"
 #include "Vec3.h"
 #include "b3Clock.h"
-
-enum class Axis {
-  X = 0,
-  Y,
-  Z
-};
 
 class Water {
  public:
