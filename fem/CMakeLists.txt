@@ -17,7 +17,7 @@ if (USE_NANOVDB)
 endif()
 
 add_executable(${BIN} ${EXE_SRC} resource/icons.rc)
-target_link_libraries(${BIN} UILib imgui glfw3 opengl32 glew32s csparse)
+target_link_libraries(${BIN} UILib imgui glfw3 opengl32 glew32s csparse MathLib)
 
 set(FONT_FOLDER fonts)
 add_custom_command(TARGET ${BIN} POST_BUILD
