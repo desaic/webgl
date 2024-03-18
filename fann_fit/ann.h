@@ -4,7 +4,8 @@
 #include <memory>
 #include <vector>
 #include <string>
-#include "../Math/Array2D.h"
+#include "Array2D.h"
+
 class Layer {
  public:
   Layer(unsigned numInput, unsigned numNodes)
@@ -17,8 +18,8 @@ class Layer {
   // derivative w.r.t weight. num weights cols x num output rows.
   virtual int dfdw(float* df, unsigned weightSize, unsigned outSize) = 0;
 
-  virtual unsigned NumOutput() const { return _numNodes; }
-  virtual unsigned NumWeights() const { return _weights.size(); }
+  virtual unsigned NumOutput(unsigned inputSize) const { return _numNodes; }
+  virtual unsigned NumWeights() const { return _weights.GetData().size(); }
 
   unsigned _numInput = 1;
   unsigned _numNodes = 1;
@@ -34,7 +35,7 @@ class DenseLinearLayer : public Layer {
   DenseLinearLayer(unsigned numInput, unsigned numOutput)
       : Layer(numInput, numOutput) {
     //+1 for bias weight.
-    _weights.resize( (numInput + 1) * numOutput);
+    _weights.Allocate( numInput + 1 , numOutput);
   }
   virtual int f(const float* input, unsigned inputSize, float* output,
                 unsigned outSize);
@@ -72,7 +73,7 @@ class Conv1DLayer : public Layer {
               unsigned numOutput)
       : Layer(window, numOutput), _stride(stride), _pad(pad) {
     //+1 for weight for bias input.
-    _weights.resize( (window + 1) * numOutput);
+    _weights.Allocate( window + 1, numOutput);
   }
   virtual int f(const float* input, unsigned inputSize, float* output,
                 unsigned outSize) override;
@@ -81,14 +82,16 @@ class Conv1DLayer : public Layer {
   // derivative w.r.t weight. num weights cols x num output rows.
   virtual int dfdw(float* df, unsigned weightSize, unsigned outSize) override;
 
-  unsigned NumOutput() const override { return _numNodes * NumWindows(); }
+  unsigned NumOutput(unsigned inputSize) const override {
+    return _numNodes * NumWindows(inputSize);
+  }
 
-  unsigned NumWindows() const {
+  unsigned NumWindows(unsigned inputSize) const {
     unsigned window = _numInput;
-    if (_inputSize + 2 * _pad < window) {
+    if (inputSize + 2 * _pad < window) {
       return 1;
     }
-    return (_inputSize + 2 * _pad - window) / _stride + 1;
+    return (inputSize + 2 * _pad - window) / _stride + 1;
   }
 
   unsigned _pad = 0;

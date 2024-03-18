@@ -10,10 +10,10 @@ int DenseLinearLayer::f(const float* input, unsigned inputSize, float* output,
   for (size_t col = 0; col < inputSize; col++) {
     _cache[col] = input[col];
   }
-  unsigned weightCols = _numInput + 1;
+  unsigned weightCols = _weights.GetSize()[0];
   for (size_t row = 0; row < _numNodes; row++) {
-    output[row] = _weights[(row + 1) * weightCols - 1];
-    const float* w = (const float*)_weights.data() + row * weightCols;
+    output[row] = _weights(weightCols-1, row);
+    const float* w = (const float*)_weights.DataPtr() + row * weightCols;
     for (size_t col = 0; col < inputSize; col++) {
       output[row] += input[col] * w[col];
     }
@@ -28,7 +28,7 @@ int DenseLinearLayer::dfdx(float* df, unsigned inputSize, unsigned outSize) {
   }
   for (size_t row = 0; row < _numNodes; row++) {
     for (size_t col = 0; col < _numInput; col++) {
-      df[col + row * _numInput] = _weights[col + row * _numInput];
+      df[col + row * _numInput] = _weights(col, row);
     }
   }
   return 0;
@@ -116,24 +116,25 @@ int ActivationLayer::dfdw(float* df, unsigned weightSize, unsigned outSize) {
 int Conv1DLayer::f(const float* input, unsigned inputSize, float* output,
                    unsigned outSize) {
   unsigned rows = _numNodes;
-  unsigned cols = NumWindows();
-  if (outSize != rows * cols) {
+  unsigned outputCols = NumWindows(inputSize);
+  if (outSize != rows * outputCols) {
     return -1;
   }
   if (_pad > 0) {
   
   }
   //for each filter
+  unsigned weightCols = _weights.GetSize()[0];
   for (unsigned row = 0; row < rows; row++) {
-    const float* w = _weights.data() + row * _numInput;
+    const float* w = _weights.DataPtr() + row * weightCols;
     //compute convolution
-    for (unsigned col = 0; col < cols; col++) {
-      float sum = _bias[row];
+    for (unsigned col = 0; col < outputCols; col++) {
+      float sum = w[weightCols-1];
       unsigned i0 = col * _stride;
       for (unsigned i = 0; i < _numInput; i++) {
         sum += w[i] * input[i0 + i];
       }
-      output[row * cols + col] = sum;
+      output[row * outputCols + col] = sum;
     }
   }
   //input values are cached
@@ -153,9 +154,26 @@ int Conv1DLayer::dfdw(float* df, unsigned weightSize, unsigned outSize) {
   return 0;
 }
 
-
 int ANN::f(const float* input, unsigned inputSize, float* output,
            unsigned outSize) {
+  std::vector<float> layerIn(inputSize), layerOut;
+  for (size_t i = 0; i < inputSize; i++) {
+    layerIn[i] = input[i];
+  }
+  for (size_t i = 0; i < _layers.size(); i++) {
+    Layer& l = *_layers[i];
+    unsigned outSize = l.NumOutput(inputSize);    
+    layerOut.resize(outSize);
+    _layers[i]->f(input, inputSize, layerOut.data(), outSize);
+    layerIn = layerOut;
+  }
+  if (layerOut.size() != outSize) {
+    return -1;
+  }
+  
+  for (size_t i = 0; i < outSize; i++) {
+    output[i] = layerOut[i];
+  }
   return 0;
 }
 
@@ -168,7 +186,7 @@ std::vector<float> ANN::GetWeights() const {
   std::vector<float> weights;
   for (size_t i = 0; i < _layers.size(); i++) {
     const Layer& l = *_layers[i];
-    weights.insert(weights.end(), l._weights.begin(), l._weights.end());
+    weights.insert(weights.end(), l._weights.GetData().begin(), l._weights.GetData().end());
   }
   return weights;
 }
@@ -177,8 +195,8 @@ void ANN::SetWeights(const std::vector<float>& weights) {
   size_t wIdx = 0;
   for (size_t i = 0; i < _layers.size(); i++) {
     Layer& l = *_layers[i];
-    for (size_t j = 0; j < l._weights.size(); j++) {
-      l._weights[j] = weights[wIdx];
+    for (size_t j = 0; j < l._weights.GetData().size(); j++) {
+      l._weights.GetData()[j] = weights[wIdx];
       wIdx++;
     }
   }

@@ -54,5 +54,8 @@ int main(int argc, char* argv[]) {
     weights[i] = (i % 97) / 100.0f;
   }
   ann.SetWeights(weights);
+  const DataPoint& dp = data[0];
+  float y = 0;
+  ann.f(dp.x.data(), dp.x.size(), &y, 1);
   return 0;
 }
