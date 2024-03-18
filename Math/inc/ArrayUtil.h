@@ -9,6 +9,8 @@ void dlmwrite(const std::string& outfile, const Array2Df& mat);
 
 void Add(std::vector<Vec3f>& dst, const std::vector<Vec3f>& src);
 
+void Add(std::vector<float>& dst, const std::vector<float>& src);
+
 void AddTimes(std::vector<Vec3f>& dst, const std::vector<double>& src, float c);
 
 std::vector<Vec3f> operator*(float c, const std::vector<Vec3f>& v);

@@ -58,6 +58,6 @@ int main(int argc, char* argv[]) {
   float y = 0;
   train.CenterInput();
   train._ann->f(dp.x.data(), dp.x.size(), &y, 1);
-
+  int ret = train.GradStep();
   return 0;
 }

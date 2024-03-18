@@ -75,6 +75,8 @@ class Conv1DLayer : public Layer {
     //+1 for weight for bias input.
     _weights.Allocate( window + 1, numOutput);
   }
+  //output is organized such that for each output pixel, the 
+  //value convolved with each filter are stored next to each other.
   virtual int f(const float* input, unsigned inputSize, float* output,
                 unsigned outSize) override;
   // derivative w.r.t input. num input cols x num output rows

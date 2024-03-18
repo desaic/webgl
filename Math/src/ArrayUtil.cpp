@@ -58,6 +58,12 @@ void Add(std::vector<Vec3f>& dst, const std::vector<Vec3f>& src) {
   }
 }
 
+void Add(std::vector<float>& dst, const std::vector<float>& src) {
+  for (size_t i = 0; i < dst.size(); i++) {
+    dst[i] += src[i];
+  }
+}
+
 void AddTimes(std::vector<Vec3f>& dst, const std::vector<double>& src,
               float c) {
   for (size_t i = 0; i < dst.size(); i++) {

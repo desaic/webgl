@@ -115,9 +115,9 @@ int ActivationLayer::dfdw(float* df, unsigned weightSize, unsigned outSize) {
 
 int Conv1DLayer::f(const float* input, unsigned inputSize, float* output,
                    unsigned outSize) {
-  unsigned rows = _numNodes;
-  unsigned outputCols = NumWindows(inputSize);
-  if (outSize != rows * outputCols) {
+  unsigned outputCols = _numNodes;
+  unsigned outputRows = NumWindows(inputSize);
+  if (outSize != outputCols * outputRows) {
     return -1;
   }
   if (_pad > 0) {
@@ -125,16 +125,19 @@ int Conv1DLayer::f(const float* input, unsigned inputSize, float* output,
   }
   //for each filter
   unsigned weightCols = _weights.GetSize()[0];
-  for (unsigned row = 0; row < rows; row++) {
-    const float* w = _weights.DataPtr() + row * weightCols;
+  unsigned numFilters = _weights.GetSize()[1];
+
+  for (unsigned f = 0; f < numFilters; f++) {
+    const float* w = _weights.DataPtr() + f * weightCols;
+    unsigned outCol = f;
     //compute convolution
-    for (unsigned col = 0; col < outputCols; col++) {
+    for (unsigned outRow = 0; outRow < outputRows; outRow++) {
       float sum = w[weightCols-1];
-      unsigned i0 = col * _stride;
+      unsigned i0 = outRow * _stride;
       for (unsigned i = 0; i < _numInput; i++) {
         sum += w[i] * input[i0 + i];
       }
-      output[row * outputCols + col] = sum;
+      output[outRow * outputCols + outCol] = sum;
     }
   }
   //input values are cached
@@ -164,9 +167,9 @@ int ANN::f(const float* input, unsigned inputSize, float* output,
   }
   for (size_t i = 0; i < _layers.size(); i++) {
     Layer& l = *_layers[i];
-    unsigned outSize = l.NumOutput(inputSize);    
+    unsigned outSize = l.NumOutput(layerIn.size());    
     layerOut.resize(outSize);
-    _layers[i]->f(input, inputSize, layerOut.data(), outSize);
+    _layers[i]->f(layerIn.data(), layerIn.size(), layerOut.data(), outSize);
     layerIn = layerOut;
   }
   if (layerOut.size() != outSize) {
@@ -180,7 +183,11 @@ int ANN::f(const float* input, unsigned inputSize, float* output,
 }
 
 int ANN::dfdw(const float* input, unsigned inputSize, float* output,
-         unsigned outSize) {
+         unsigned outSize) {  
+  for (int i = int(_layers.size()) - 1; i >= 0; i--) {
+    std::shared_ptr<Layer> l = _layers[size_t(i)];
+    
+  }
   return 0;
 }
 
