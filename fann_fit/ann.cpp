@@ -140,7 +140,9 @@ int Conv1DLayer::f(const float* input, unsigned inputSize, float* output,
   //input values are cached
   _inputSize = inputSize;
   _cache.resize(_inputSize);
-
+  for (size_t i = 0; i < _inputSize; i++) {
+    _cache[i] = input[i];
+  }
   return 0;
 }
 

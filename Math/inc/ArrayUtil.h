@@ -22,6 +22,13 @@ void ptwiseProd(const std::vector<double>& a, const std::vector<double>& b,
 
 void sub(std::vector<double>& src, const std::vector<double>& b);
 
+/// <summary>
+/// subtract a constant from src
+/// </summary>
+void AddConstant(std::vector<float>& src, float b);
+
+float Sum(const std::vector<float>& v);
+
 std::vector<double> ToDouble(const std::vector<float>& a);
 
 double Linf(const std::vector<double>& R);

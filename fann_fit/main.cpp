@@ -45,17 +45,19 @@ void MakeDiamondNetwork(ANN& ann) {
 }
 
 int main(int argc, char* argv[]) {
-  std::vector<DataPoint> data;
-  ReadDataSet(data);
-  ANN ann;
-  MakeDiamondNetwork(ann);
-  std::vector<float> weights = ann.GetWeights();
+  ANNTrain train;
+  ReadDataSet(train._data);
+  train._ann= std::make_shared<ANN>();
+  MakeDiamondNetwork(*train._ann);
+  std::vector<float> weights = train._ann->GetWeights();
   for (size_t i = 0; i < weights.size(); i++) {
     weights[i] = (i % 97) / 100.0f;
   }
-  ann.SetWeights(weights);
-  const DataPoint& dp = data[0];
+  train._ann->SetWeights(weights);
+  const DataPoint& dp = train._data[0];
   float y = 0;
-  ann.f(dp.x.data(), dp.x.size(), &y, 1);
+  train.CenterInput();
+  train._ann->f(dp.x.data(), dp.x.size(), &y, 1);
+
   return 0;
 }

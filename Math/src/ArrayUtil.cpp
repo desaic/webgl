@@ -113,6 +113,16 @@ void sub(std::vector<double>& src, const std::vector<double>& b) {
   }
 }
 
+void AddConstant(std::vector<float>& src, float b) {
+  for (float& f : src) { f += b; }
+}
+
+float Sum(const std::vector<float>& v) {
+  float sum = 0;
+  for (auto f : v) { sum += f; }
+  return sum;
+}
+
 std::vector<double> ToDouble(const std::vector<float>& a) {
   std::vector<double> v(a.size());
   for (size_t i = 0; i < a.size(); i++) {
