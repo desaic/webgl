@@ -6,7 +6,7 @@
 #include "ann_train.h"
 
 void ReadDataSet(std::vector<DataPoint>& data) {
-  std::string dataRoot = "H:/ml/diamond_offset/data/";
+  std::string dataRoot = "H:/ml/diamond_offset/train/";
   std::string folders[7] = {dataRoot + "v7_0213/",   dataRoot + "v7_0213_2/",
                             dataRoot + "v7_0724/",   dataRoot + "v7_1012_1/",
                             dataRoot + "v7_1012_2/", dataRoot + "v8_0305/",

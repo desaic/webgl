@@ -107,8 +107,8 @@ class ANN {
   int f(const float* input, unsigned inputSize, float* output,
         unsigned outSize);
 
-  int dfdw(const float* input, unsigned inputSize, float* output,
-           unsigned outSize);
+  int dfdw(const float* input, unsigned inputSize, float* dw,
+           unsigned wSize);
 
   void AddLayer(std::shared_ptr<Layer> layer) { _layers.push_back(layer); }
   //weights of all layers ordered from input to output.

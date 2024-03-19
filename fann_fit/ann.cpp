@@ -182,11 +182,12 @@ int ANN::f(const float* input, unsigned inputSize, float* output,
   return 0;
 }
 
-int ANN::dfdw(const float* input, unsigned inputSize, float* output,
-         unsigned outSize) {  
+int ANN::dfdw(const float* input, unsigned inputSize, float* dw,
+         unsigned wSize) {
   for (int i = int(_layers.size()) - 1; i >= 0; i--) {
     std::shared_ptr<Layer> l = _layers[size_t(i)];
-    
+    unsigned outSize = l->NumOutput();
+    l->dfdw(dw, wSize, outSize);
   }
   return 0;
 }
