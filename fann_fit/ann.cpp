@@ -37,11 +37,9 @@ int DenseLinearLayer::dodw(Array2Df& dw, const Array2Df& dody, unsigned oi) {
   dw.Allocate(_weights.GetSize());
   for (unsigned row = 0; row < _weights.Rows(); row++) {
     float doidy = dody(row, oi);
-    for (unsigned col = 0; col < _weights.Cols() - 1; col++) {
+    for (unsigned col = 0; col < _weights.Cols(); col++) {
       dw(col, row) = _cache[col] * doidy;
     }
-    //bias term
-    dw(_weights.Cols() - 1, row) = doidy;
   }
   return 0;
 }
@@ -49,10 +47,12 @@ int DenseLinearLayer::dodw(Array2Df& dw, const Array2Df& dody, unsigned oi) {
 void DenseLinearLayer::UpdateCache(const float* input, unsigned inputSize,
                                    const float* output, unsigned outSize) {
   _inputSize = inputSize;
-  _cache.resize(_inputSize);
+  //+1 for bias 
+  _cache.resize(_inputSize + 1);
   for (size_t col = 0; col < _inputSize; col++) {
     _cache[col] = input[col];
   }
+  _cache[_inputSize] = 1;
 }
 
 void ActivationLayer::ApplyRelu(const float* input, unsigned inputSize,
@@ -96,27 +96,32 @@ int ActivationLayer::f_imp(const float* input, unsigned inputSize,
 }
 
 int ActivationLayer::dodx(Array2Df& dx, const Array2Df& dody) {
-  float c = param.size() > 0 ? param[0] : 0.01;
-  switch (_fun) {
-    case Relu:
-      for (size_t i = 0; i < _numInput; i++) {
-        dx[i] = (_cache < 0) ? 0 : 1;
-      }
-      break;
-    case LRelu:
-      for (size_t i = 0; i < _numInput; i++) {
-        dx[i] = (_cache[i] < 0) ? c : 1;
-      }
-      break;
-    default:
-      break;
+  float c = 0;
+  dx.Allocate(_numInput, dody.Rows());
+  if (_fun == LRelu) {
+    c = param.size() > 0 ? param[0] : 0.01;
+  }  
+  for (unsigned row = 0; row < dody.Rows(); row++) {
+    for (size_t i = 0; i < _numInput; i++) {
+      dx(row, i) = (_cache[i] < 0) ? c : 1;
+      dx(row, i) *= dody(i, row);
+    }
   }
   return 0;
 }
 
-int ActivationLayer::dfdw(float* dw, const Array2Df& dody) {
+int ActivationLayer::dodw(Array2Df& dw, const Array2Df& dody, unsigned oi) {
   //fixed function. no weights.
   return 0;
+}
+
+void ActivationLayer::UpdateCache(const float* input, unsigned inputSize,
+                                   const float* output, unsigned outSize) {
+  _inputSize = inputSize;
+  _cache.resize(_inputSize);
+  for (size_t col = 0; col < _inputSize; col++) {
+    _cache[col] = input[col];
+  }
 }
 
 int Conv1DLayer::f_imp(const float* input, unsigned inputSize, float* output,
@@ -156,12 +161,14 @@ int Conv1DLayer::f_imp(const float* input, unsigned inputSize, float* output,
 }
 
 // derivative of each output w.r.t input. num input cols x num output rows
-int Conv1DLayer::dfdx(float* dx, const Array2Df& dody) {
+int Conv1DLayer::dodx(Array2Df& dx, const Array2Df& dody) {
+  
   return 0;
 }
 
 // derivative w.r.t weight. num weights cols x num output rows.
-int Conv1DLayer::dfdw(float* dw, const Array2Df& dody) {
+int Conv1DLayer::dodw(Array2Df & dw, const Array2Df& dody, unsigned oi) {
+  
   return 0;
 }
 
@@ -201,7 +208,8 @@ int ANN::dfdw(const float* input, unsigned inputSize, float* dw,
   for (int i = int(_layers.size()) - 1; i >= 0; i--) {
     std::shared_ptr<Layer> l = _layers[size_t(i)];
     unsigned outSize = l->NumOutput(l->InputSizeCached());
-    l->dfdw(dw,dody);
+    Array2Df dwi;
+    l->dodw(dwi, dody, 0);
   }
   return 0;
 }
