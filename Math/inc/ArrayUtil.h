@@ -19,6 +19,18 @@ void Fix(std::vector<Vec3f>& dx, const std::vector<bool> fixedDOF);
 
 Vec3f MaxAbs(const std::vector<Vec3f>& v);
 
+/// <summary>
+/// Matrix vector product
+/// </summary>
+void MVProd(const Array2Df& M, const float* v, unsigned vsize, float* out,
+  unsigned outSize);
+
+/// <summary>
+/// M^T*v
+/// </summary>
+void MTVProd(const Array2Df& M, const float* v, unsigned vsize, float* out,
+  unsigned outSize);
+
 void ptwiseProd(const std::vector<double>& a, const std::vector<double>& b,
                 std::vector<double>& c);
 

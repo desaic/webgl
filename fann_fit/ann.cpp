@@ -1,53 +1,58 @@
 #include "ann.h"
-
-int DenseLinearLayer::f(const float* input, unsigned inputSize, float* output,
-                       unsigned outSize) {
-  if (inputSize != _numInput) {
+#include "ArrayUtil.h"
+int DenseLinearLayer::f_imp(const float* input, unsigned inputSize,
+                            float* output, unsigned outSize) {
+  if (inputSize != _numInput || outSize != _weights.Rows()) {
     return -1;
   }
-
-  _cache.resize(_numInput);
-  for (size_t col = 0; col < inputSize; col++) {
-    _cache[col] = input[col];
-  }
-  unsigned weightCols = _weights.GetSize()[0];
-  for (size_t row = 0; row < _numNodes; row++) {
-    output[row] = _weights(weightCols-1, row);
-    const float* w = (const float*)_weights.DataPtr() + row * weightCols;
-    for (size_t col = 0; col < inputSize; col++) {
-      output[row] += input[col] * w[col];
-    }
+  MVProd(_weights, input, inputSize, output, outSize);
+  // add bias
+  for (unsigned row = 0; row < _weights.Rows(); row++) {
+    output[row] += _weights(_weights.Cols() - 1, row);
   }
   return 0;
 }
 
 // derivative w.r.t input. num input cols x num output rows
-int DenseLinearLayer::dfdx(float* df, unsigned inputSize, unsigned outSize) {
-  if (inputSize != _numInput || outSize != _numNodes) {
+// y = Wx + b. dy/dx = W. do/dx = do/dy * dy/dx 
+int DenseLinearLayer::dodx(Array2Df& dx, const Array2Df& dody) {
+  //TODO: implement
+  unsigned oSize = dody.Rows();
+  unsigned inSize = _inputSize;
+  dx.Allocate(inSize, oSize);
+  if (_weights.Rows() < dody.Cols()) {
     return -1;
   }
-  for (size_t row = 0; row < _numNodes; row++) {
-    for (size_t col = 0; col < _numInput; col++) {
-      df[col + row * _numInput] = _weights(col, row);
-    }
+  for (unsigned row = 0; row < oSize; row++) {
+    const float* srcRow = dody.DataPtr() + row * dody.Cols();
+    float* dstRow = dx.DataPtr() + row * dx.Cols();
+    MTVProd(_weights, srcRow, dody.Cols(), dstRow, dx.Cols());
   }
   return 0;
 }
 
 // derivative w.r.t weight. num weights cols x num output rows.
-int DenseLinearLayer::dfdw(float* df, unsigned weightSize, unsigned outSize) {
-  size_t numWeights = NumWeights();
-  if (numWeights != weightSize) {
-    return -1;
-  }
-  for (size_t row = 0; row < outSize; row++) {
-    for (size_t col = 0; col < numWeights - 1; col++) {
-      df[col + row * numWeights] = _cache[col];
+// do/dw = do/dy * dy/dw. dyi/dwij = xj
+int DenseLinearLayer::dodw(Array2Df& dw, const Array2Df& dody, unsigned oi) {
+  dw.Allocate(_weights.GetSize());
+  for (unsigned row = 0; row < _weights.Rows(); row++) {
+    float doidy = dody(row, oi);
+    for (unsigned col = 0; col < _weights.Cols() - 1; col++) {
+      dw(col, row) = _cache[col] * doidy;
     }
-    // derivative for bias
-    df[numWeights - 1 + row * numWeights] = 1;
+    //bias term
+    dw(_weights.Cols() - 1, row) = doidy;
   }
   return 0;
+}
+
+void DenseLinearLayer::UpdateCache(const float* input, unsigned inputSize,
+                                   const float* output, unsigned outSize) {
+  _inputSize = inputSize;
+  _cache.resize(_inputSize);
+  for (size_t col = 0; col < _inputSize; col++) {
+    _cache[col] = input[col];
+  }
 }
 
 void ActivationLayer::ApplyRelu(const float* input, unsigned inputSize,
@@ -64,7 +69,8 @@ void ActivationLayer::ApplyLRelu(const float* input, unsigned inputSize,
   }
 }
 
-int ActivationLayer::f(const float* input, unsigned inputSize, float* output,
+int ActivationLayer::f_imp(const float* input, unsigned inputSize,
+                           float* output,
                        unsigned outSize) {
   float c = param.size() > 0 ? param[0] : 0.01;
   if (inputSize != _numInput || outSize != _numNodes || inputSize != outSize) {
@@ -89,17 +95,17 @@ int ActivationLayer::f(const float* input, unsigned inputSize, float* output,
   return 0;
 }
 
-int ActivationLayer::dfdx(float* df, unsigned inputSize, unsigned outSize) {
+int ActivationLayer::dodx(Array2Df& dx, const Array2Df& dody) {
   float c = param.size() > 0 ? param[0] : 0.01;
   switch (_fun) {
     case Relu:
       for (size_t i = 0; i < _numInput; i++) {
-        df[i] = (_cache[i] < 0) ? 0 : 1;
+        dx[i] = (_cache < 0) ? 0 : 1;
       }
       break;
     case LRelu:
       for (size_t i = 0; i < _numInput; i++) {
-        df[i] = (_cache[i] < 0) ? c : 1;
+        dx[i] = (_cache[i] < 0) ? c : 1;
       }
       break;
     default:
@@ -108,12 +114,12 @@ int ActivationLayer::dfdx(float* df, unsigned inputSize, unsigned outSize) {
   return 0;
 }
 
-int ActivationLayer::dfdw(float* df, unsigned weightSize, unsigned outSize) {
+int ActivationLayer::dfdw(float* dw, const Array2Df& dody) {
   //fixed function. no weights.
   return 0;
 }
 
-int Conv1DLayer::f(const float* input, unsigned inputSize, float* output,
+int Conv1DLayer::f_imp(const float* input, unsigned inputSize, float* output,
                    unsigned outSize) {
   unsigned outputCols = _numNodes;
   unsigned outputRows = NumWindows(inputSize);
@@ -150,12 +156,12 @@ int Conv1DLayer::f(const float* input, unsigned inputSize, float* output,
 }
 
 // derivative of each output w.r.t input. num input cols x num output rows
-int Conv1DLayer::dfdx(float* df, unsigned inputSize, unsigned outSize) {
+int Conv1DLayer::dfdx(float* dx, const Array2Df& dody) {
   return 0;
 }
 
 // derivative w.r.t weight. num weights cols x num output rows.
-int Conv1DLayer::dfdw(float* df, unsigned weightSize, unsigned outSize) {
+int Conv1DLayer::dfdw(float* dw, const Array2Df& dody) {
   return 0;
 }
 
@@ -169,7 +175,7 @@ int ANN::f(const float* input, unsigned inputSize, float* output,
     Layer& l = *_layers[i];
     unsigned outSize = l.NumOutput(layerIn.size());    
     layerOut.resize(outSize);
-    _layers[i]->f(layerIn.data(), layerIn.size(), layerOut.data(), outSize);
+    _layers[i]->F(layerIn.data(), layerIn.size(), layerOut.data(), outSize);
     layerIn = layerOut;
   }
   if (layerOut.size() != outSize) {
@@ -184,10 +190,18 @@ int ANN::f(const float* input, unsigned inputSize, float* output,
 
 int ANN::dfdw(const float* input, unsigned inputSize, float* dw,
          unsigned wSize) {
+  if (_layers.empty()) {
+    return 0;
+  }
+  auto lastLayer = _layers.back();
+  unsigned lastNumOutput = lastLayer->NumOutput(lastLayer->InputSizeCached());
+  Array2Df dodyEnd(lastNumOutput, 1);
+  dodyEnd.Fill(1);
+  Array2Df dody = dodyEnd;
   for (int i = int(_layers.size()) - 1; i >= 0; i--) {
     std::shared_ptr<Layer> l = _layers[size_t(i)];
-    unsigned outSize = l->NumOutput();
-    l->dfdw(dw, wSize, outSize);
+    unsigned outSize = l->NumOutput(l->InputSizeCached());
+    l->dfdw(dw,dody);
   }
   return 0;
 }

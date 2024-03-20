@@ -47,7 +47,8 @@ void MakeDiamondNetwork(ANN& ann) {
 int main(int argc, char* argv[]) {
   ANNTrain train;
   ReadDataSet(train._data);
-  train._ann= std::make_shared<ANN>();
+  unsigned inputSize = train._data[0].x.size();
+  train._ann = std::make_shared<ANN>(inputSize);
   MakeDiamondNetwork(*train._ann);
   std::vector<float> weights = train._ann->GetWeights();
   for (size_t i = 0; i < weights.size(); i++) {

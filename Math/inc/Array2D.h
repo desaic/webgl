@@ -27,6 +27,10 @@ class Array2D {
     data.resize(width * size_t(height));
   }
 
+  void Allocate(Vec2u size) {
+    Allocate(size[0], size[1]);
+  }
+
   void Allocate(unsigned width, unsigned height, const T& initVal) {
     size[0] = width;
     size[1] = height;
@@ -71,6 +75,13 @@ class Array2D {
       data[i] *= rhs;
     }
     return *this;
+  }
+
+  unsigned Rows()const {
+    return size[1];
+  }
+  unsigned Cols() const {
+    return size[0];
   }
 
  private:

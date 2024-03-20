@@ -106,6 +106,37 @@ Vec3f MaxAbs(const std::vector<Vec3f>& v) {
   return ma;
 }
 
+void MVProd(const Array2Df& M, const float* v, unsigned vsize, float* out,
+  unsigned outSize) {
+  if (outSize != M.Rows() || vsize > M.Cols()) {
+    return;
+  }
+  for (unsigned row = 0; row < M.Rows(); row++) {
+    double sum = 0;
+    for (unsigned col = 0; col < vsize; col++) {
+      sum += v[col] * M(col, row);
+    }
+    out[row] = float(sum);
+  }
+}
+
+void MTVProd(const Array2Df& M, const float* v, unsigned vsize, float* out,
+  unsigned outSize)
+{
+  if (outSize > M.Cols() || vsize > M.Rows()) {
+    return;
+  }
+  for (unsigned i = 0; i < outSize; i++) {
+    out[i] = 0;
+  }
+
+  for (unsigned row = 0; row < M.Rows(); row++) {
+    for (unsigned col = 0; col < vsize; col++) {
+      out[col] += v[row] * M(col, row);
+    }
+  }
+}
+
 void ptwiseProd(const std::vector<double>& a, const std::vector<double>& b,
                 std::vector<double>& c) {
   for (size_t i = 0; i < c.size(); i++) {

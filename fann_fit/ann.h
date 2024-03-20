@@ -11,20 +11,40 @@ class Layer {
   Layer(unsigned numInput, unsigned numNodes)
       : _numInput(numInput), _numNodes(numNodes) {
   }
-  virtual int f(const float* input, unsigned inputSize, float* output,
-                unsigned outSize) = 0;
-  // derivative w.r.t input. num input cols x num output rows
-  virtual int dfdx(float* df, unsigned inputSize, unsigned outSize) = 0;
-  // derivative w.r.t weight. num weights cols x num output rows.
-  virtual int dfdw(float* df, unsigned weightSize, unsigned outSize) = 0;
+  int F(const float* input, unsigned inputSize, float* output,
+        unsigned outSize) {
+    int ret = f_imp(input, inputSize, output, outSize);
+    UpdateCache(input, inputSize, output, outSize);
+    return ret;
+  }
+
+  virtual int f_imp(const float* input, unsigned inputSize, float* output,
+        unsigned outSize) = 0;
+  /// derivative w.r.t input. num input cols x num output rows
+  /// uses cached _inputSize and values
+  /// @param dx output. row vector of do/dx
+  /// @param dody do/dy output of the whole network w.r.t each output.
+  virtual int dodx(Array2Df& dx, const Array2Df& dody) = 0;
+  /// derivative of the ith network output w.r.t weight.
+  /// num weights cols x num output rows.
+  /// uses cached _inputSize and values  
+  virtual int dodw(Array2Df& dw, const Array2Df& dody, unsigned oi) = 0;
 
   virtual unsigned NumOutput(unsigned inputSize) const { return _numNodes; }
   virtual unsigned NumWeights() const { return _weights.GetData().size(); }
+
+  virtual unsigned InputSizeCached() const { return _inputSize; }
+
+  /// update cached states.
+  virtual void UpdateCache(const float* input, unsigned inputSize,
+                           const float* output, unsigned outSize) = 0;
 
   unsigned _numInput = 1;
   unsigned _numNodes = 1;
   std::vector<float> _cache;
   Array2Df _weights;
+  //state that updates depending on calls to f() 
+  unsigned _inputSize = 0;
 };
 
 // weights are stored in numOutput Rows x numInput cols.
@@ -37,14 +57,15 @@ class DenseLinearLayer : public Layer {
     //+1 for bias weight.
     _weights.Allocate( numInput + 1 , numOutput);
   }
-  virtual int f(const float* input, unsigned inputSize, float* output,
+  virtual int f_imp(const float* input, unsigned inputSize, float* output,
                 unsigned outSize);
   // derivative w.r.t input. num input cols x num output rows
-  virtual int dfdx(float* df, unsigned inputSize, unsigned outSize);
+  virtual int dodx(Array2Df& dx, const Array2Df& dody);
   // derivative w.r.t weight. num weights cols x num output rows.
-  virtual int dfdw(float* df, unsigned weightSize, unsigned outSize);
+  virtual int dodw(Array2Df& dx, const Array2Df& dody, unsigned oi);
 
-  unsigned NumWeights() const override { return 0; }
+  void UpdateCache(const float* input, unsigned inputSize, const float* output,
+                   unsigned outSize) override;
 };
 
 class ActivationLayer : public Layer {
@@ -57,13 +78,16 @@ class ActivationLayer : public Layer {
 
   void ApplyRelu(const float* input, unsigned inputSize, float* output);
   void ApplyLRelu(const float* input, unsigned inputSize, float* output, float c);
-  virtual int f(const float* input, unsigned inputSize, float* output,
+  virtual int f_imp(const float* input, unsigned inputSize, float* output,
                 unsigned outSize) override;
   // derivative w.r.t input. num input cols x num output rows
-  virtual int dfdx(float* df, unsigned inputSize, unsigned outSize) override;
+  virtual int dodx(Array2Df& dx, const Array2Df& dody) override;
   // derivative w.r.t weight. num weights cols x num output rows.
-  virtual int dfdw(float* df, unsigned weightSize, unsigned outSize) override;
-
+  virtual int dodw(Array2Df& dw, const Array2Df& dody, unsigned oi) override;
+  void UpdateCache(const float* input, unsigned inputSize, const float* output,
+                   unsigned outSize) override {
+    _inputSize = inputSize;
+  }
   std::vector<float> param;
 };
 
@@ -77,13 +101,16 @@ class Conv1DLayer : public Layer {
   }
   //output is organized such that for each output pixel, the 
   //value convolved with each filter are stored next to each other.
-  virtual int f(const float* input, unsigned inputSize, float* output,
+  virtual int f_imp(const float* input, unsigned inputSize, float* output,
                 unsigned outSize) override;
   // derivative w.r.t input. num input cols x num output rows
-  virtual int dfdx(float* df, unsigned inputSize, unsigned outSize) override;
+  virtual int dodx(Array2Df& dx, const Array2Df& dody) override;
   // derivative w.r.t weight. num weights cols x num output rows.
-  virtual int dfdw(float* df, unsigned weightSize, unsigned outSize) override;
-
+  virtual int dodw(Array2Df& dw, const Array2Df& dody, unsigned oi) override;
+  void UpdateCache(const float* input, unsigned inputSize, const float* output,
+                   unsigned outSize) override {
+    _inputSize = inputSize;
+  }
   unsigned NumOutput(unsigned inputSize) const override {
     return _numNodes * NumWindows(inputSize);
   }
@@ -98,12 +125,12 @@ class Conv1DLayer : public Layer {
 
   unsigned _pad = 0;
   unsigned _stride = 1;
-  // state that updates depending on input
-  unsigned _inputSize = 1;
+
 };
 
 class ANN {
  public:
+  ANN(unsigned inputSize) : _inputSize(inputSize) {}
   int f(const float* input, unsigned inputSize, float* output,
         unsigned outSize);
 
@@ -116,6 +143,7 @@ class ANN {
   void SetWeights(const std::vector<float>& weights);
 
   std::vector<std::shared_ptr<Layer> > _layers;
+  unsigned _inputSize = 1;
 };
 
 #endif
