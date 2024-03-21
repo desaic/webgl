@@ -85,9 +85,8 @@ class ActivationLayer : public Layer {
   // derivative w.r.t weight. num weights cols x num output rows.
   virtual int dodw(Array2Df& dw, const Array2Df& dody, unsigned oi) override;
   void UpdateCache(const float* input, unsigned inputSize, const float* output,
-                   unsigned outSize) override {
-    _inputSize = inputSize;
-  }
+                   unsigned outSize) override;
+  
   std::vector<float> param;
 };
 

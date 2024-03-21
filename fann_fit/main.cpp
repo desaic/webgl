@@ -5,6 +5,9 @@
 #include "ann.h"
 #include "ann_train.h"
 
+#include <chrono>
+#include <thread>
+
 void ReadDataSet(std::vector<DataPoint>& data) {
   std::string dataRoot = "H:/ml/diamond_offset/train/";
   std::string folders[7] = {dataRoot + "v7_0213/",   dataRoot + "v7_0213_2/",

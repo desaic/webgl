@@ -16,7 +16,6 @@ int DenseLinearLayer::f_imp(const float* input, unsigned inputSize,
 // derivative w.r.t input. num input cols x num output rows
 // y = Wx + b. dy/dx = W. do/dx = do/dy * dy/dx 
 int DenseLinearLayer::dodx(Array2Df& dx, const Array2Df& dody) {
-  //TODO: implement
   unsigned oSize = dody.Rows();
   unsigned inSize = _inputSize;
   dx.Allocate(inSize, oSize);
@@ -205,11 +204,14 @@ int ANN::dfdw(const float* input, unsigned inputSize, float* dw,
   Array2Df dodyEnd(lastNumOutput, 1);
   dodyEnd.Fill(1);
   Array2Df dody = dodyEnd;
+  std::vector<Array2Df> layerDw(_layers.size());
   for (int i = int(_layers.size()) - 1; i >= 0; i--) {
     std::shared_ptr<Layer> l = _layers[size_t(i)];
     unsigned outSize = l->NumOutput(l->InputSizeCached());
-    Array2Df dwi;
-    l->dodw(dwi, dody, 0);
+    l->dodw(layerDw[i], dody, 0);
+    Array2Df dx;
+    l->dodx(dx, dody);
+    dody = dx;
   }
   return 0;
 }

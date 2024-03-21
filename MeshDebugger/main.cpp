@@ -326,7 +326,7 @@ void MakeXYPairs() {
 }
 
 int main(int argc, char**argv) {
-  MakeXYPairs();
+  //MakeXYPairs();
   if (argc > 1 && argv[1][0] == 'c') {
     CadApp();
   } else {
