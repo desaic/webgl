@@ -131,7 +131,7 @@ void MTVProd(const Array2Df& M, const float* v, unsigned vsize, float* out,
   }
 
   for (unsigned row = 0; row < M.Rows(); row++) {
-    for (unsigned col = 0; col < vsize; col++) {
+    for (unsigned col = 0; col < outSize; col++) {
       out[col] += v[row] * M(col, row);
     }
   }

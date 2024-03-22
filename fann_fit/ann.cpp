@@ -102,8 +102,8 @@ int ActivationLayer::dodx(Array2Df& dx, const Array2Df& dody) {
   }  
   for (unsigned row = 0; row < dody.Rows(); row++) {
     for (size_t i = 0; i < _numInput; i++) {
-      dx(row, i) = (_cache[i] < 0) ? c : 1;
-      dx(row, i) *= dody(i, row);
+      dx(i, row) = (_cache[i] < 0) ? c : 1;
+      dx(i, row) *= dody(i, row);
     }
   }
   return 0;
@@ -161,14 +161,70 @@ int Conv1DLayer::f_imp(const float* input, unsigned inputSize, float* output,
 
 // derivative of each output w.r.t input. num input cols x num output rows
 int Conv1DLayer::dodx(Array2Df& dx, const Array2Df& dody) {
-  
+  if (_inputSize == 0 || _cache.size() != _inputSize) {
+    return -1;
+  }
+  unsigned outputCols = _numNodes;
+  unsigned outputRows = NumWindows(_inputSize);
+  // for each filter
+  unsigned numFilters = _weights.GetSize()[1];
+  dx.Allocate(_inputSize, dody.Rows());
+  dx.Fill(0);
+
+  for (unsigned o = 0; o < dody.Rows(); o++) {
+    for (unsigned f = 0; f < numFilters; f++) {
+      const float* w = _weights.DataPtr() + f * _weights.Cols();
+      // compute convolution
+      for (unsigned outRow = 0; outRow < outputRows; outRow++) {
+        unsigned i0 = outRow * _stride;
+        unsigned yi = outRow * outputCols + f;
+        for (unsigned i = 0; i < _numInput; i++) {
+          unsigned xi = i0 + i;
+          dx(xi, o) += _weights(i,f) * dody(yi, o);
+        }
+      }
+    }
+  }
   return 0;
 }
 
 // derivative w.r.t weight. num weights cols x num output rows.
 int Conv1DLayer::dodw(Array2Df & dw, const Array2Df& dody, unsigned oi) {
+  if (_inputSize == 0 || _cache.size() != _inputSize) {
+    return -1;
+  }
+  unsigned outputCols = _numNodes;
+  unsigned outputRows = NumWindows(_inputSize);
+  // for each filter
+  unsigned numFilters = _weights.GetSize()[1];
+  dw.Allocate(_weights.GetSize());
+  dw.Fill(0);
+
+  for (unsigned f = 0; f < numFilters; f++) {
+    const float* w = _weights.DataPtr() + f * _weights.Cols();
+    // compute convolution
+    for (unsigned outRow = 0; outRow < outputRows; outRow++) {
+      unsigned i0 = outRow * _stride;
+      unsigned yi = outRow * outputCols + f;
+      for (unsigned i = 0; i < _numInput; i++) {
+        unsigned xi = i0 + i;
+        dw(i, f) += _cache[xi] * dody(yi, oi);
+      }
+      //bias gradient
+      dw(_weights.Cols() - 1, f) += dody(yi, oi);
+    }
+  }
   
   return 0;
+}
+
+void Conv1DLayer::UpdateCache(const float* input, unsigned inputSize,
+                              const float* output, unsigned outSize) {
+  _inputSize = inputSize;
+  _cache.resize(_inputSize);
+  for (size_t i = 0; i < _inputSize; i++) {
+    _cache[i] = input[i];
+  }
 }
 
 int ANN::f(const float* input, unsigned inputSize, float* output,
