@@ -129,16 +129,25 @@ class Conv1DLayer : public Layer {
 class ANN {
  public:
   ANN(unsigned inputSize) : _inputSize(inputSize) {}
+  void SaveWeights(std::ostream& out) const;
   int f(const float* input, unsigned inputSize, float* output,
         unsigned outSize);
-
-  int dfdw(const float* input, unsigned inputSize, float* dw,
-           unsigned wSize);
+  /// <summary>
+  /// need to call f() first, so that input
+  /// and intermediate values of each layer are computed.
+  /// </summary>
+  /// <param name="dw">output weight gradient for each layer</param>
+  /// <param name="dOut">derivative of output w.r.t objective func</param>  
+  /// <returns>0 on success</returns>
+  int dfdw(std::vector<Array2Df> & dw, const Array2Df & dOut);
 
   void AddLayer(std::shared_ptr<Layer> layer) { _layers.push_back(layer); }
   //weights of all layers ordered from input to output.
   std::vector<float> GetWeights() const;
   void SetWeights(const std::vector<float>& weights);
+
+  std::vector<Array2Df> GetWeightsLayers() const;
+  void SetWeightsLayers(const std::vector<Array2Df>& weights);
 
   std::vector<std::shared_ptr<Layer> > _layers;
   unsigned _inputSize = 1;

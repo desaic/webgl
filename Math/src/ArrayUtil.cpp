@@ -64,12 +64,46 @@ void Add(std::vector<float>& dst, const std::vector<float>& src) {
   }
 }
 
+void AddTimes(Array2Df& dst, const Array2Df& src, float c) {
+  if (dst.GetSize() != src.GetSize()) {
+    dst.Allocate(src.GetSize());
+    for (size_t i = 0; i < dst.GetData().size(); i++) {
+      dst.GetData()[i] = c * src.GetData()[i];
+    }
+    return;
+  }
+  for (size_t i = 0; i < dst.GetData().size(); i++) {
+    dst.GetData()[i] += c * src.GetData()[i];
+  }
+}
+
+void AddTimes(std::vector<Array2Df>& dst, const std::vector<Array2Df>& src, float c) {
+  if (dst.size() != src.size()) {
+    return;
+  }
+  for (size_t mi = 0; mi < dst.size(); mi++) {
+    AddTimes(dst[mi], src[mi],c);
+  }
+}
+
 void AddTimes(std::vector<Vec3f>& dst, const std::vector<double>& src,
               float c) {
   for (size_t i = 0; i < dst.size(); i++) {
     dst[i][0] += c * src[3 * i];
     dst[i][1] += c * src[3 * i + 1];
     dst[i][2] += c * src[3 * i + 2];
+  }
+}
+
+void Scale(Array2Df& dst, float s) {
+  for (auto& f : dst.GetData()) {
+    f *= s;
+  }
+}
+
+void Scale(std::vector<Array2Df>& dst, float s) {
+  for (size_t i = 0; i < dst.size(); i++) {
+    Scale(dst[i], s);
   }
 }
 

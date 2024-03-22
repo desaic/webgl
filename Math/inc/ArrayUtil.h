@@ -10,8 +10,12 @@ void dlmwrite(const std::string& outfile, const Array2Df& mat);
 void Add(std::vector<Vec3f>& dst, const std::vector<Vec3f>& src);
 
 void Add(std::vector<float>& dst, const std::vector<float>& src);
-
+void AddTimes(Array2Df& dst, const Array2Df& src, float c);
+void AddTimes(std::vector<Array2Df>& dst, const std::vector<Array2Df>& src, float c);
 void AddTimes(std::vector<Vec3f>& dst, const std::vector<double>& src, float c);
+
+void Scale(Array2Df& dst, float s);
+void Scale(std::vector<Array2Df>& dst, float s);
 
 std::vector<Vec3f> operator*(float c, const std::vector<Vec3f>& v);
 

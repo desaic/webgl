@@ -48,63 +48,7 @@ void MakeDiamondNetwork(ANN& ann) {
   ann.AddLayer(dense);
 }
 
-void TestMVProd() {
-  Array2Df mat(4, 2);
-  mat(0, 0) = 1;
-  mat(1, 0) = 2;
-  mat(2, 0) = 3;
-  mat(3, 0) = 1;
-  mat(0, 1) = 5;
-  mat(1, 1) = 8;
-  mat(2, 1) = 13;
-  mat(3, 1) = 1;
-  std::vector<float> x = {2, 4, 6};
-  std::vector<float> y = {3,5};
-  std::vector<float> prodx(2), prody(3);
-  MVProd(mat, x.data(), x.size(), prodx.data(), prodx.size());
-  MTVProd(mat, y.data(), y.size(), prody.data(), prody.size());
-  for (auto f : prodx) {
-    std::cout << f << " ";
-  }
-  std::cout << "\n";
-
-  for (auto f : prody) {
-    std::cout << f << " ";
-  }
-  std::cout << "\n";
-}
-
-void TestConvGrad() {
-  Conv1DLayer conv1d(20, 20, 0, 3);
-  std::vector<float> x(100), y(15);
-  Array2Df dody(15, 1);
-  for (size_t j = 0; j < conv1d._weights.Rows();j++) {
-    for (size_t i = 0; i < conv1d._weights.Cols();i++) {
-      conv1d._weights(i, j) = j*21+i;
-    }
-  }
-  for (size_t i = 0; i < x.size(); i++) {
-    x[i] = i + 1;
-  }
-  
-  for (size_t i = 0; i < dody.Cols(); i++) {
-    dody(i, 0) = i + 1;
-  }
-  conv1d.F(x.data(),x.size(), y.data(), y.size());
-  Array2Df dx;
-  conv1d.dodx(dx, dody);
-  Array2Df dw;
-  conv1d.dodw(dw, dody, 0);
-  for (size_t i = 0; i < dw.Rows(); i++) {
-    for (size_t j = 0; j < dw.Cols(); j++) {
-      std::cout << dw(j, i) << " ";
-    }
-    std::cout << "\n";
-  }
-}
-
 int main(int argc, char* argv[]) {
-  TestConvGrad();
   ANNTrain train;
   ReadDataSet(train._data);
   unsigned inputSize = train._data[0].x.size();
@@ -119,6 +63,21 @@ int main(int argc, char* argv[]) {
   float y = 0;
   train.CenterInput();
   train._ann->f(dp.x.data(), dp.x.size(), &y, 1);
-  int ret = train.GradStep();
+  const int NUM_STEPS = 1000;
+  for (int i = 0; i < NUM_STEPS; i++) {
+    int ret = train.GradStep();
+    if (ret < 0) {
+      std::cout << "can't reduce objective\n";
+      break;
+    }
+  }
+  std::ofstream out("F:/dump/diamond.model");
+  train._ann->SaveWeights(out);
+  for (size_t i = 0; i < train._data.size(); i++) {
+    const DataPoint& d = train._data[i];
+    float out = 0;
+    train._ann->f(d.x.data(), d.x.size(), &out, 1);
+    std::cout << "label & pred: " << d.y[0] << " " << out << "\n";
+  }
   return 0;
 }
