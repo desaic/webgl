@@ -28,7 +28,7 @@ float ANNTrain::Objective() {
 }
 
 float ANNTrain::LineSearch(const std::vector<Array2Df> & dw, float h0) {
-  const int MAX_TRIALS = 12;
+  const int MAX_TRIALS = 20;
   float h = h0;
   float obj0 = Objective();
   std::vector<Array2Df> w0 = _ann->GetWeightsLayers();
@@ -87,6 +87,9 @@ int ANNTrain::GradStep() {
   if (maxdw > 0 && maxw>1e-6f) {
     h0 = maxw / maxdw;
   }
+  if (h0 > _prev_h * 16) {
+   // h0 = _prev_h * 16;
+  }
   //negative gradient direction to minimize objective
   Scale(dw, -1);
   float h = LineSearch(dw, h0);
@@ -94,7 +97,7 @@ int ANNTrain::GradStep() {
     //could not decrease objective
     return -1;
   }
-
+  _prev_h = h;
   AddTimes(w, dw, h);
   _ann->SetWeightsLayers(w);
   float o = Objective();

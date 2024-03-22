@@ -54,15 +54,20 @@ int main(int argc, char* argv[]) {
   unsigned inputSize = train._data[0].x.size();
   train._ann = std::make_shared<ANN>(inputSize);
   MakeDiamondNetwork(*train._ann);
-  std::vector<float> weights = train._ann->GetWeights();
-  for (size_t i = 0; i < weights.size(); i++) {
-    weights[i] = (i % 97) / 100.0f;
-  }
-  train._ann->SetWeights(weights);
-  const DataPoint& dp = train._data[0];
-  float y = 0;
+  std::ifstream in("F:/dump/diamond6.model");
+  //std::vector<float> weights = train._ann->GetWeights();
+  //for (size_t i = 0; i < weights.size(); i++) {
+  //  weights[i] = (i % 97) / 100.0f;
+  //}
+  train._ann->LoadWeights(in);
+
+  //weights = train._ann->GetWeights();
+  //for (size_t i = 0; i < 7; i++) {
+  //  weights[i + 6] = 0;
+  //  weights[i + 33] = 0;
+  //}
+  //train._ann->SetWeights(weights);
   train.CenterInput();
-  train._ann->f(dp.x.data(), dp.x.size(), &y, 1);
   const int NUM_STEPS = 1000;
   for (int i = 0; i < NUM_STEPS; i++) {
     int ret = train.GradStep();
@@ -71,7 +76,7 @@ int main(int argc, char* argv[]) {
       break;
     }
   }
-  std::ofstream out("F:/dump/diamond.model");
+  std::ofstream out("F:/dump/diamond7.model");
   train._ann->SaveWeights(out);
   for (size_t i = 0; i < train._data.size(); i++) {
     const DataPoint& d = train._data[i];

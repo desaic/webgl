@@ -130,6 +130,7 @@ class ANN {
  public:
   ANN(unsigned inputSize) : _inputSize(inputSize) {}
   void SaveWeights(std::ostream& out) const;
+  void LoadWeights(std::istream& in);
   int f(const float* input, unsigned inputSize, float* output,
         unsigned outSize);
   /// <summary>

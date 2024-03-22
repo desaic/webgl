@@ -89,10 +89,6 @@ int ActivationLayer::f_imp(const float* input, unsigned inputSize,
       break;
   }
 
-  _cache.resize(inputSize);
-  for (size_t i = 0; i < inputSize; i++) {
-    _cache[i] = input[i];
-  }
   return 0;
 }
 
@@ -150,13 +146,7 @@ int Conv1DLayer::f_imp(const float* input, unsigned inputSize, float* output,
       }
       output[outRow * outputCols + outCol] = sum;
     }
-  }
-  // input values are cached
-  _inputSize = inputSize;
-  _cache.resize(_inputSize);
-  for (size_t i = 0; i < _inputSize; i++) {
-    _cache[i] = input[i];
-  }
+  } 
   return 0;
 }
 
@@ -263,9 +253,11 @@ int ANN::dfdw(std::vector<Array2Df>& dwLayer, const Array2Df& dOut) {
     std::shared_ptr<Layer> l = _layers[size_t(i)];
     unsigned outSize = l->NumOutput(l->InputSizeCached());
     l->dodw(dwLayer[i], dody, 0);
-    Array2Df dx;
-    l->dodx(dx, dody);
-    dody = dx;
+    if (i > 0) {
+      Array2Df dx;
+      l->dodx(dx, dody);
+      dody = dx;
+    }
   }
   return 0;
 }
@@ -319,5 +311,18 @@ void ANN::SaveWeights(std::ostream& out) const {
       out << "\n";
     }
     out<<"\n";
+  }
+}
+
+void ANN::LoadWeights(std::istream& in) {
+  for (size_t i = 0; i < _layers.size(); i++) {
+    Vec2u wSize;
+    in >> wSize[0] >> wSize[1];
+    Array2Df& w = _layers[i]->_weights;
+    for (unsigned row = 0; row < w.Rows(); row++) {
+      for (unsigned col = 0; col < w.Cols(); col++) {
+        in >> w(col, row);
+      }
+    }
   }
 }

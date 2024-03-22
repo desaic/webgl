@@ -1,6 +1,7 @@
 #include "ann.h"
 #include "Array2D.h"
 #include "ArrayUtil.h"
+#include "DataPoint.h"
 #include <iostream>
 void TestMVProd() {
   Array2Df mat(4, 2);
@@ -79,6 +80,37 @@ void TestAddTimes() {
       std::cout << "\n";
     }
 
+    std::cout << "\n";
+  }
+  std::cout << "\n";
+}
+
+void TestGrad(ANN& ann, const DataPoint& d) {
+  float y0 = 0;
+  ann.f(d.x.data(), d.x.size(), &y0, 1);
+  std::vector<Array2Df> dw, w0, dwNum;
+  Array2Df oneMat(1, 1);
+  oneMat.Fill(1);
+  ann.dfdw(dw, oneMat);
+  float h = 1e-2;
+  w0= ann.GetWeightsLayers();
+  dwNum = w0;
+  for (size_t i = 0; i < dw.size(); i++) {
+    for (unsigned row = 0; row < dw[i].Rows(); row++) {
+      for (unsigned col = 0; col < dw[i].Cols(); col++) {
+        w0[i](col, row) += h;
+        float yp = 0, ym = 0;
+        ann.SetWeightsLayers(w0);
+        ann.f(d.x.data(), d.x.size(), &yp, 1);
+        w0[i](col, row) -= 2 * h;
+        ann.SetWeightsLayers(w0);
+        ann.f(d.x.data(), d.x.size(), &ym, 1);
+        w0[i](col, row) += h;
+        dwNum[i](col, row) = (yp - ym) / (2 * h);
+        std::cout << dw[i](col, row) << " " << dwNum[i](col, row) << " | ";
+      }
+      std::cout << "\n";
+    }
     std::cout << "\n";
   }
   std::cout << "\n";

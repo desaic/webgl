@@ -20,4 +20,7 @@ class ANNTrain {
   std::shared_ptr<ANN> _ann;
   std::vector<DataPoint> _data;
   std::vector<float> _xCenter;
+
+  //temporary
+  float _prev_h = 1.0f;
 };
