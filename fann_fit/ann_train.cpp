@@ -67,6 +67,10 @@ int ANNTrain::GradStep() {
   std::vector<Array2Df> dw;
   for (size_t i = 0; i < _data.size(); i++) {
     float y = 0;
+    if (i == 88) {
+      std::cout << "debug\n"; 
+    }
+
     _ann->f(_data[i].x.data(), _data[i].x.size(), &y, 1);
     float yTruth = _data[i].y[0];
     float diff = y - yTruth;
@@ -85,10 +89,10 @@ int ANNTrain::GradStep() {
   float maxdw = MaxAbs(dw);
   float h0 = 0.1f;
   if (maxdw > 0 && maxw>1e-6f) {
-    h0 = maxw / maxdw;
+   // h0 = maxw / maxdw;
   }
   if (h0 > _prev_h * 16) {
-   // h0 = _prev_h * 16;
+    h0 = _prev_h * 16;
   }
   //negative gradient direction to minimize objective
   Scale(dw, -1);
