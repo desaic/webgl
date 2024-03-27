@@ -70,7 +70,7 @@ class DenseLinearLayer : public Layer {
 
 class ActivationLayer : public Layer {
  public:
-  enum ActFun { Relu, LRelu };
+  enum ActFun { Relu, LRelu, Tanh };
   //no weights. fixed function.
   ActivationLayer(unsigned numInput, enum ActFun type)
       : Layer(numInput, numInput), _fun(type) {}
@@ -78,6 +78,7 @@ class ActivationLayer : public Layer {
 
   void ApplyRelu(const float* input, unsigned inputSize, float* output);
   void ApplyLRelu(const float* input, unsigned inputSize, float* output, float c);
+  void ApplyTanh(const float* input, unsigned inputSize, float* output);
   virtual int f_imp(const float* input, unsigned inputSize, float* output,
                 unsigned outSize) override;
   // derivative w.r.t input. num input cols x num output rows

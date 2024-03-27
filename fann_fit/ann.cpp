@@ -71,6 +71,13 @@ void ActivationLayer::ApplyLRelu(const float* input, unsigned inputSize,
   }
 }
 
+void ActivationLayer::ApplyTanh(const float* input, unsigned inputSize,
+                                float* output) {
+  for (size_t i = 0; i < inputSize; i++) {
+    output[i] = std::tanhf(input[i]);
+  }
+}
+
 int ActivationLayer::f_imp(const float* input, unsigned inputSize,
                            float* output, unsigned outSize) {
   float c = param.size() > 0 ? param[0] : 0.01;
@@ -85,24 +92,39 @@ int ActivationLayer::f_imp(const float* input, unsigned inputSize,
     case LRelu:
       ApplyLRelu(input, inputSize, output, c);
       break;
+    case Tanh:
+      ApplyTanh(input, inputSize, output);
     default:
       break;
   }
-
   return 0;
 }
 
 int ActivationLayer::dodx(Array2Df& dx, const Array2Df& dody) {
   float c = 0;
   dx.Allocate(_numInput, dody.Rows());
-  if (_fun == LRelu) {
-    c = param.size() > 0 ? param[0] : 0.01;
-  }
-  for (unsigned row = 0; row < dody.Rows(); row++) {
-    for (size_t i = 0; i < _numInput; i++) {
-      dx(i, row) = (_cache[i] < 0) ? c : 1;
-      dx(i, row) *= dody(i, row);
-    }
+  switch (_fun) {
+    case Relu:
+    case LRelu:
+      if (_fun == LRelu) {
+        c = param.size() > 0 ? param[0] : 0.01;
+      }
+      for (unsigned row = 0; row < dody.Rows(); row++) {
+        for (size_t i = 0; i < _numInput; i++) {
+          dx(i, row) = (_cache[i] < 0) ? c : 1;
+          dx(i, row) *= dody(i, row);
+        }
+      }
+      break;
+    case Tanh:
+      for (unsigned row = 0; row < dody.Rows(); row++) {
+        for (size_t i = 0; i < _numInput; i++) {
+          float t = std::tanhf(_cache[i]);
+          dx(i, row) = 1 - t * t;
+          dx(i, row) *= dody(i, row);
+        }
+      }
+      break;
   }
   return 0;
 }
