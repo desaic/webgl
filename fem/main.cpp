@@ -790,7 +790,123 @@ int PngToGrid(int argc, char** argv) {
   return ret;
 }
 
+class VoxCb : public VoxCallback {
+ public:
+  void operator()(unsigned x, unsigned y, unsigned z,
+                  unsigned long long trigIdx) override {
+    Vec3u size = grid.GetSize();
+    if (x < size[0] && y < size[1] && z < size[2]) {
+      grid(x, y, z) = 1;
+    }
+  }
+  Array3D8u grid;
+};
+
+Vec3u linearToGrid(unsigned l, const Vec3u& size) {
+  Vec3u idx;
+  idx[2] = l / (size[0] * size[1]);
+  unsigned r = l - idx[2] * size[0] * size[1];
+  idx[1] = r / size[0];
+  idx[0] = l % (size[0]);
+  return idx;
+}
+
+unsigned linearIdx(const Vec3u& idx, const Vec3u& size) {
+  unsigned l;
+  l = idx[0] + idx[1] * size[0] + idx[2] * size[0] * size[1];
+  return l;
+}
+
+void VoxelizeMesh() {
+  voxconf conf;
+  conf.unit = Vec3f(2.7f, 2.7f, 2.7f);
+  conf.origin = Vec3f(0, 0, 0);
+  TrigMesh mesh;
+  std::string meshDir = "F:/dolphin/meshes/gasket/";
+  std::string meshFile = "gasket6080.obj";
+  mesh.LoadObj(meshDir + meshFile);
+  BBox box;
+  ComputeBBox(mesh.v, box);
+  size_t numVerts = mesh.GetNumVerts();
+  for (size_t i = 0; i < mesh.v.size(); i += 3) {
+    mesh.v[i] -= box.vmin[0];
+    mesh.v[i + 1] -= box.vmin[1];
+    mesh.v[i + 2] -= box.vmin[2];
+  }
+  box.vmax -= box.vmin;
+  mesh.SaveObj("F:/dump/gasket6080_in.obj");
+
+  box.vmin = Vec3f(0, 0, 0);
+  conf.gridSize[0] = unsigned(box.vmax[0] / conf.unit[0]) + 1;
+  conf.gridSize[1] = unsigned(box.vmax[1] / conf.unit[0]) + 1;
+  conf.gridSize[2] = unsigned(box.vmax[2] / conf.unit[0]) + 1;
+  VoxCb cb;
+  cb.grid.Allocate(conf.gridSize, 0);
+  mesh.ComputeTrigNormals();
+  cpu_voxelize_mesh(conf, &mesh, cb);
+  std::map<unsigned, unsigned> vertMap;
+  Vec3u vertSize = cb.grid.GetSize();
+  vertSize += Vec3u(1, 1, 1);
+  Vec3u voxSize = cb.grid.GetSize();
+  const std::vector<uint8_t>& v = cb.grid.GetData();
+  const size_t NUM_HEX_VERTS = 8;
+  unsigned HEX_VERTS[8][3] = {{0, 0, 0}, {0, 0, 1}, {0, 1, 0}, {0, 1, 1},
+                              {1, 0, 0}, {1, 0, 1}, {1, 1, 0}, {1, 1, 1}};
+  std::vector<std::array<unsigned, NUM_HEX_VERTS> > elts;
+  std::vector<unsigned> verts;
+  Vec3f origin (0,0,0);
+  SaveVolAsObjMesh("F:/dump/vox_6080.obj", cb.grid, (float*)(&conf.unit[0]),
+                   (float*)(&origin), 1);
+  for (size_t i = 0; i < v.size(); i++) {
+    if (!v[i]) {
+      continue;
+    }
+    Vec3u voxIdx = linearToGrid(i, voxSize);
+    std::array<unsigned, NUM_HEX_VERTS> ele;
+    for (size_t j = 0; j < NUM_HEX_VERTS; j++) {
+      Vec3u vi = voxIdx;
+      vi[0] += HEX_VERTS[j][0];
+      vi[1] += HEX_VERTS[j][1];
+      vi[2] += HEX_VERTS[j][2];
+      unsigned vl = linearIdx(vi, vertSize);
+      auto it = vertMap.find(vl);
+      unsigned vIdx;
+      if (it == vertMap.end()) {
+        vIdx = vertMap.size();
+        vertMap[vl] = vIdx;
+        verts.push_back(vl);
+      } else {
+        vIdx = vertMap[vl];
+      }
+      ele[j] = vIdx;
+    }
+    elts.push_back(ele);
+  }
+  std::ofstream out("F:/dump/vox6080.txt");
+  out << "verts " << vertMap.size() << "\n";
+  out << "elts " << elts.size() << "\n";
+  for (auto v : verts) {
+    unsigned l = v;
+    Vec3u vertIdx = linearToGrid(l, vertSize);
+    Vec3f coord;
+    coord[0] = float(vertIdx[0]) * conf.unit[0];
+    coord[1] = float(vertIdx[1]) * conf.unit[1];
+    coord[2] = float(vertIdx[2]) * conf.unit[2];
+    coord += box.vmin;
+    coord *= 1e-3f;
+    out << coord[0] << " " << coord[1] << " " << coord[2] << "\n";
+  }
+  for (size_t i = 0; i < elts.size(); i++) {
+    out << "8 ";
+    for (size_t j = 0; j < NUM_HEX_VERTS; j++) {
+      out << elts[i][j] << " ";
+    }
+    out << "\n";
+  }
+}
+
 int main(int argc, char** argv) {
+  VoxelizeMesh();
   // PngToGrid(argc, argv);
   // CenterMeshes();
   UILib ui;
