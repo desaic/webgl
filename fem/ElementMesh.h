@@ -25,6 +25,9 @@ class ElementMesh {
   std::vector<Vec3f> fe;
   std::vector<bool> fixedDOF;
 
+  //lower bound. needs to be same size as X
+  std::vector<Vec3f> lb;
+  
   //for vertex i, map from neighbor index j to sparse index 
   std::vector<std::map<unsigned, unsigned> > sparseBlockIdx;
 

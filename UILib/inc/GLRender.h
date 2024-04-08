@@ -92,13 +92,13 @@ class GLRender {
 
   void SetMouse(int x, int y, float wheel, bool left, bool mid, bool right);
 
-  void KeyPressed(KeyboardInput &keys);
+  void KeyPressed(KeyboardInput& keys);
 
   int SetNeedsUpdate(size_t meshId);
 
   int SetMeshTexture(size_t meshId, const Array2D8u& image, int numChannels);
 
-  //overwrites existing texture image
+  // overwrites existing texture image
   int SetSolidColor(size_t meshId, Vec3b color);
 
   int UploadLights();
@@ -106,11 +106,20 @@ class GLRender {
   int UploadMeshData(size_t meshId);
 
   const static unsigned MAX_NUM_LIGHTS = 8;
- private:
+
+  Camera* GetCamera() { return &_camera; }
   
-   //rendered
-   unsigned _fbo = 0;
-   //resolving multisampling
+  GLLightArray* GetLights() { return &_lights; }
+
+  void SetDefaultCameraView(const Vec3f& eye, const Vec3f& at) {
+    _eye0 = eye;
+    _at0 = at;
+  }
+
+ private:
+  // rendered
+  unsigned _fbo = 0;
+  // resolving multisampling
   unsigned _fbo_resolve = 0;
   /// renders to this texture.
   /// because renders from gpu, the cpu buffer in it is unused and empty.
@@ -120,9 +129,9 @@ class GLRender {
   Scene scene;
 
   unsigned int _vertex_shader = 0, _fragment_shader = 0, _program = 0;
-  /// view and projection matrix 
+  /// view and projection matrix
   /// mvit model view inverse transpose.
-  unsigned int _vmat_loc = 0,_pmat_loc=0, _mvit_loc = 0, _light_loc = 0;
+  unsigned int _vmat_loc = 0, _pmat_loc = 0, _mvit_loc = 0, _light_loc = 0;
   unsigned int _tex_loc = 0;
   Camera _camera;
   GLLightArray _lights;
@@ -131,6 +140,8 @@ class GLRender {
   float camSpeed = 0.4;
   float xRotSpeed = 4e-3f, yRotSpeed = 4e-3f;
   float zoomRatio = 1.25f;
+  Vec3f _eye0 = {500.0f, 100.0f, 400.0f};
+  Vec3f _at0 = {200.0f, 0.0f, 200.0f};
 
   std::string _vs_string, _fs_string;
   std::vector<GLBuf> _bufs;

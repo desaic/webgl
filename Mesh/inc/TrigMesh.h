@@ -1,5 +1,6 @@
 #pragma once
-
+#ifndef TRIG_MESH_H
+#define TRIG_MESH_H
 #include <string>
 #include <vector>
 
@@ -24,24 +25,30 @@ struct Edge {
     }
     return (v[0] == o.v[0] && v[1] < o.v[1]);
   }
+
+  bool operator==(const Edge& o) const {
+    return v[0] == o.v[0] && v[1] == o.v[1];
+  }
+
 };
 
 struct Triangle {
   Vec3f v[3];
+  const Vec3f& operator[](unsigned i) const { return v[i]; }
+  Vec3f& operator[](unsigned i) { return v[i]; }
 };
 
 class TrigMesh {
  public:
-  TrigMesh() = default;
+  TrigMesh();
   using TValue = float;
   using TIndex = unsigned;
+
   std::vector<TValue> v;
   std::vector<TIndex> t;
 
   // these are all needed just for SDF
   /// triangle edges
-  /// Triangle edges are stored in order so that
-  /// each edge ei starts with vertex vi
   std::vector<TIndex> te;
 
   /// normal of each triangle
@@ -60,8 +67,13 @@ class TrigMesh {
   size_t GetNumVerts() const { return v.size() / 3; }
   int LoadStl(const std::string& filename);
   int LoadObj(const std::string& filename);
+  int LoadStep(const std::string& filename);
+
   // can get face, edge or vertex normal depending on bary centric coord.
-  Vec3f GetNormal(unsigned tIdx, const Vec3f& bary) const;
+  Vec3f GetNormal(unsigned tIdx, const Vec3f& bary)const;
+  Vec3f GetTrigNormal(size_t tIdx)const;
+  Triangle GetTriangleVerts(size_t tIdx) const;
+  Vec2f GetTriangleUV(unsigned tIdx, unsigned j) const;
   // compute triangle area.
   float GetArea(unsigned tIdx) const;
   Vec3f GetRandomSample(const unsigned tIdx, const float r1,
@@ -76,12 +88,10 @@ class TrigMesh {
   void ComputePseudoNormals();
   void ComputeTrigEdges();
 
-  unsigned GetIndex(size_t tIdx, unsigned jIdx) const;
-  Vec3f GetVertex(size_t vIdx) const;
-  Vec3f GetTriangleVertex(size_t tIdx, unsigned jIdx) const;
-  Triangle GetTriangleVerts(size_t tIdx) const;
-  Vec3f GetTrigNormal(size_t tIdx) const;
-  
+  unsigned GetIndex(unsigned tIdx, unsigned jIdx) const;
+  Vec3f GetVertex(unsigned vIdx) const;
+  Vec3f GetTriangleVertex(unsigned tIdx, unsigned jIdx) const;
+  void AddVert(float x, float y, float z);
   void scale(float s);
   void translate(float dx, float dy, float dz);
   void append(const TrigMesh& m);
@@ -90,7 +100,12 @@ class TrigMesh {
   // save out a point cloud as obj.
   static void SaveObj(const std::string& filename,
                       const std::vector<Vec3f>& pts);
+  int SaveStlTxt(const std::string& filename);
+
 };
 
 TrigMesh SubSet(const TrigMesh& m, const std::vector<size_t>& trigs);
 TrigMesh MakeCube(const Vec3f& mn, const Vec3f& mx);
+TrigMesh MakePlane(const Vec3f& mn, const Vec3f& mx, const Vec3f& n);
+
+#endif

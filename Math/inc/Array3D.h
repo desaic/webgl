@@ -27,12 +27,12 @@ class Array3D
     size[2] = sizez;
     data.resize(sizex *size_t(sizey) * size_t(sizez));
 	}
-
+  void Allocate(const Vec3u &sizeIn, const T & initVal) {
+    size=sizeIn;
+    data.resize(size[0] * size_t(size[1]) * size_t(size[2]), initVal);
+  }
     void Allocate(unsigned sizex, unsigned sizey, unsigned sizez, const T& initVal){
-      size[0] = sizex;
-      size[1] = sizey;
-      size[2] = sizez;
-      data.resize(sizex * size_t(sizey) * size_t(sizez), initVal);
+      Allocate(Vec3u(sizex,sizey,sizez), initVal);
     }
 
     void Fill(const T& val){

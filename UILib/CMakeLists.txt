@@ -4,6 +4,8 @@ set(BIN ImguiExample)
 set(CMAKE_CXX_STANDARD 20)
 file(GLOB_RECURSE SRC "*.cpp" "*.h")
 include_directories("../Math/inc")
+include_directories("../Mesh/inc")
+
 include_directories("extern/imgui")
 include_directories("extern/glfw3.3.8")
 include_directories("extern/glew-2.1.0")
@@ -15,15 +17,18 @@ add_compile_options("/std:c++latest")
 include_directories("inc")
 
 list(REMOVE_ITEM SRC "main.cpp")
-add_subdirectory("../Math/" math)
 add_library("UILib" ${SRC})
-  
+if (NOT TARGET Mesh)
+  message(STATUS "add mesh lib")
+  add_subdirectory("../Mesh/" "Mesh")
+endif()
+
 add_executable(${BIN}
   "main.cpp"
   resource/icons.rc
 )
   
-target_link_libraries(${BIN} UILib imgui glfw3 opengl32 glew32s MathLib)
+target_link_libraries(${BIN} UILib imgui glfw3 opengl32 glew32s Mesh MathLib)
 
 # copy fonts over
 # @todo(mike) more consistent place for all this kind of stuff

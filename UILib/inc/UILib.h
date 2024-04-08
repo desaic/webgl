@@ -217,6 +217,8 @@ class UILib {
 
   std::string GetGLInfo() const { return _glRender.GLInfo(); }
 
+  GLRender* GetGLRender() { return &_glRender; }
+
   void SetShaderDir(const std::string& dir) { _shaderDir = dir; }
 
   /// @return mesh index

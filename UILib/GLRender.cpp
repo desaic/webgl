@@ -172,7 +172,6 @@ void GLRender::Render() {
   if (!_initialized) {
     return;
   }
-  Matrix4f v, mvp, mvit;
   _camera.update();
   glUseProgram(_program);
   glBindFramebuffer(GL_FRAMEBUFFER, _fbo);
@@ -225,8 +224,8 @@ int checkShaderError(GLuint shader) {
 }
 
 void GLRender::ResetCam() {
-  _camera.eye = Vec3f(20, 100, 200);
-  _camera.at = Vec3f(20, 0, 0);
+  _camera.eye = _eye0;
+  _camera.at = _at0;
   _camera.near = 1;
   _camera.far = 1000;
   _camera.update();
@@ -240,12 +239,6 @@ int GLRender::Init(const std::string& vertShader,
   const char* vs_pointer = _vs_string.data();
   const char* fs_pointer = _fs_string.data();
   ResetCam();
-  _lights.SetLightPos(0, 0, 100, -100);
-  _lights.SetLightColor(0, 0.8, 0.7, 0.6);
-  _lights.SetLightPos(1, 0, 100, 0);
-  _lights.SetLightColor(1, 0.8, 0.8, 0.8);
-  _lights.SetLightPos(2, 0, 100, 100);
-  _lights.SetLightColor(2, 0.6, 0.7, 0.8);
   unsigned err = 0;
   _vertex_shader = glCreateShader(GL_VERTEX_SHADER);
   glShaderSource(_vertex_shader, 1, &vs_pointer, NULL);

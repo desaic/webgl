@@ -1,5 +1,6 @@
 
 #include <filesystem>
+#include <algorithm>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -19,6 +20,11 @@
 #include "ElementMesh.h"
 #include "ElementMeshUtil.h"
 #include "CSparseMat.h"
+#include "cpu_voxelizer.h"
+
+#include "cpu_voxelizer.h"
+#include "VoxCallback.h"
+#include "MeshUtil.h"
 
 void ShowGLInfo(UILib& ui, int label_id) {
   std::string info = ui.GetGLInfo();
@@ -122,12 +128,27 @@ class Simulator {
     if (em.X.empty()) {
       return;
     }
+    //elastic and external force combined
     std::vector<Vec3f> force = em.GetForce();
     Add(force, em.fe);
     size_t numDOF = em.x.size() * 3;
     std::vector<double> dx(numDOF, 0), b(numDOF);
-    for (size_t i = 0; i < em.fixedDOF.size();i++) {
-      if (em.fixedDOF[i]) {
+    float boundaryTol = 1e-4f;
+    std::vector<bool> fixed = em.fixedDOF;
+    for (size_t i = 0; i < em.x.size(); i++) {
+
+      for (unsigned j = 0; j < 3; j++) {
+        unsigned l = 3 * i + j;
+        //within or under lower bound and the total force is not pulling it away
+        if (em.x[i][j] < em.lb[i][j] + boundaryTol ){//&& force[i][j]<0) {
+          fixed[l] = true;
+        }
+      }
+    }
+
+    em.fixedDOF = fixed;
+    for (size_t i = 0; i < fixed.size(); i++) {
+      if (fixed[i]) {
         b[i] = 0;
       } else {
         b[i] = force[i / 3][i % 3];
@@ -135,7 +156,7 @@ class Simulator {
     }
     float identityScale = 1000;
     em.ComputeStiffness(state.K);
-    FixDOF(em.fixedDOF, state.K, identityScale);
+    FixDOF(fixed, state.K, identityScale);
     CG(state.K, dx, b, 400);
     const float h0 = 1.0f;
     const unsigned MAX_LINE_SEARCH = 10;
@@ -173,8 +194,14 @@ void PullRight(const Vec3f& force, float dist, ElementMesh& em) {
   ComputeBBox(em.X, box);
   for (size_t i = 0; i < em.X.size(); i++) {
     if (box.vmax[0] - em.X[i][0] < dist) {
-      em.fe[i] = force;
+      em.fe[i] += force;
     }
+  }
+}
+
+void AddGravity(const Vec3f& G, ElementMesh& em) {
+  for (size_t i = 0; i < em.X.size(); i++) {
+    em.fe[i] += G;    
   }
 }
 
@@ -190,30 +217,110 @@ void FixLeft(float dist, ElementMesh& em) {
   }
 }
 
+void FixRight(float dist, ElementMesh& em) {
+  BBox box;
+  ComputeBBox(em.X, box);
+  for (size_t i = 0; i < em.X.size(); i++) {
+    if (box.vmax[0] - em.X[i][0] < dist) {
+      em.fixedDOF[3 * i] = true;
+      em.fixedDOF[3 * i + 1] = true;
+      em.fixedDOF[3 * i + 2] = true;
+    }
+  }
+}
+
+void FixFloorLeft(float ratio, ElementMesh& em) {
+  BBox box;
+  ComputeBBox(em.X, box);
+  float dist = ratio * (box.vmax[0] - box.vmin[0]);
+  for (size_t i = 0; i < em.X.size(); i++) {
+    if (em.X[i][0] - box.vmin[0] < dist) {
+      em.fixedDOF[3 * i + 1] = true;      
+    }
+  }
+}
+
+void SetFloorForRightSide(float y1, float ratio, ElementMesh& em) {
+  BBox box;
+  ComputeBBox(em.X, box);
+  float dist = ratio * (box.vmax[0] - box.vmin[0]);
+  for (size_t i = 0; i < em.X.size(); i++) {
+    if (box.vmax[0] - em.X[i][0] < dist) {
+      em.lb[i][1] = y1;
+    }
+  }
+}
+
+Vec3f Trilinear(const Element& hex,
+               const std::vector<Vec3f>& X, const std::vector<Vec3f>& x, Vec3f & v) {
+  
+  Vec3f out(0,0,0);
+  Vec3f X0 = X[hex[0]];
+  float h = X[hex[1]][2] - X0[2];
+  float w[3];
+  for (unsigned i = 0; i < 3; i++) {
+    w[i] = (v[i] - X0[i])/h;
+    w[i] = std::clamp(w[i], 0.0f, 1.0f);
+  }
+  Vec3f z00 =
+      (1 - w[2]) * (x[hex[0]] - X[hex[0]]) + w[2] * (x[hex[1]] - X[hex[1]]);
+  Vec3f z01 =
+      (1 - w[2]) * (x[hex[2]] - X[hex[2]]) + w[2] * (x[hex[3]] - X[hex[3]]);
+  Vec3f z10 =
+      (1 - w[2]) * (x[hex[4]] - X[hex[4]]) + w[2] * (x[hex[5]] - X[hex[5]]);
+  Vec3f z11 =
+      (1 - w[2]) * (x[hex[6]] - X[hex[6]]) + w[2] * (x[hex[7]] - X[hex[7]]);
+  Vec3f y0 = (1 - w[1]) * z00 + w[1] * z01;
+  Vec3f y1 = (1 - w[1]) * z10 + w[1] * z11;
+  Vec3f u = (1 - w[0]) * y0 + w[0] * y1;
+  out = v + u;
+  return out;
+}
+
 class FemApp {
  public:
   FemApp(UILib* ui) : _ui(ui) {
+    //EmbedMesh();
     floor = std::make_shared<TrigMesh>();
-    *floor = MakePlane(Vec3f(-200, -0.1, -200), Vec3f(200, -0.1, 200),
+    *floor = MakePlane(Vec3f(-0, -0.1, -0), Vec3f(500, -0.1, 500),
                       Vec3f(0, 1, 0));
     for (size_t i = 0; i < floor->uv.size(); i++) {
       floor->uv[i] *= 5;
     }
+    GLRender* gl = ui->GetGLRender();
+    gl->SetDefaultCameraView(Vec3f(250,100,500),Vec3f(200,0,250));
+    GLLightArray* lights = gl->GetLights();
+    lights->SetLightPos(0, 250, 100, 250);
+    lights->SetLightPos(1, 500, 100, 250);
+    lights->SetLightColor(0, 0.8, 0.7, 0.6);
+    lights->SetLightColor(1, 0.8, 0.8, 0.8);
+    lights->SetLightPos(2, 0, 100, 100);
+    lights->SetLightColor(2, 0.8, 0.7, 0.6);
     Array2D8u checker;
     MakeCheckerPatternRGBA(checker);
     _floorMeshId = _ui->AddMesh(floor);
     _ui->SetMeshTex(_floorMeshId, checker, 4);
-    _hexInputId = _ui->AddWidget(std::make_shared<InputText>("mesh file", "./hex.txt"));
+    _hexInputId = _ui->AddWidget(std::make_shared<InputText>("mesh file", "F:/dump/vox.txt"));
     _ui->AddButton("Load Hex mesh", [&] {
-      std::string file = GetMeshFileName();
+      std::string file = GetInputString(_hexInputId);
       LoadElementMesh(file);
+      
+    });
+    _ui->AddButton("Save x", [&] { _save_x = true; });
+    _ui->AddButton("Run sim", [&] { _runSim = true; });
+    _ui->AddButton("Stop sim", [&] { _runSim = false; });
+    _xInputId =
+        _ui->AddWidget(std::make_shared<InputText>("x file", "F:/dump/x_in.txt"));
+    _ui->AddButton("Load x", [&] {
+      std::string file = GetInputString(_xInputId);
+      LoadX(_em, file);
     });
     _wireframeId = _ui->AddCheckBox("showWireFrame", true);
   }
 
-  std::string GetMeshFileName() const {
-    std::shared_ptr<InputText> input =
-        std::dynamic_pointer_cast<InputText>(_ui->GetWidget(_hexInputId));
+  std::string GetInputString(int widgetId) const {
+    std::shared_ptr<InputText> input = std::dynamic_pointer_cast<InputText>(
+        _ui->GetWidget(widgetId));
     std::string file = input->GetString();
     return file;
   }
@@ -221,11 +328,20 @@ class FemApp {
   void InitExternalForce() { 
     _em.fe= std::vector<Vec3f>(_em.X.size());
     _em.fixedDOF=std::vector<bool>(_em.X.size() * 3, false);
-    PullRight(Vec3f(0, 1, 0), 0.001, _em);
-    FixLeft(0.001, _em);
+    //pull upwards
+    //PullRight(Vec3f(0, 0.01, 0), 0.03, _em);
+    //pull left
+    //PullRight(Vec3f(0.001, 0.0, 0), 0.06, _em);
+    FixLeft(0.03, _em);
+    FixRight(0.05, _em);
+    FixFloorLeft(0.4, _em);
+    _em.lb.resize(_em.X.size(), Vec3f(-1000, -1, -1000));
+    //SetFloorForRightSide(0.0055, 0.4, _em);
+   // AddGravity(Vec3f(0, -0.01, 0),_em);
   }
 
   void LoadElementMesh(const std::string& file) {
+    std::lock_guard<std::mutex> lock(_refresh_mutex);
     _em.LoadTxt(file);
     UpdateRenderMesh();
     InitExternalForce(); 
@@ -241,12 +357,129 @@ class FemApp {
     
   }
 
+  int LoadX(ElementMesh& em, const std::string& inFile) {
+    std::ifstream in(inFile);
+    size_t xSize = 0;
+    in >> xSize;
+    if (xSize != em.X.size()) {
+      std::cout << "mismatch x size vs mesh size.\n";
+      return -1;
+    }
+    em.x.resize(xSize);
+    for (size_t i = 0; i < em.x.size(); i++) {
+      in >> em.x[i][0] >> em.x[i][1] >> em.x[i][2];
+    }
+    return 0;
+  }
+  
+  void SaveX(const ElementMesh& em, const std::string& outFile) {
+    std::ofstream out(outFile);
+    out << em.x.size() << "\n";
+    for (size_t i = 0; i < em.x.size(); i++) {
+      out << em.x[i][0] << " " << em.x[i][1] << " " << em.x[i][2] << "\n";
+    }
+  }
+  
   void Refresh() {
+    std::lock_guard<std::mutex> lock(_refresh_mutex);
     bool wire = _ui->GetCheckBoxVal(_wireframeId);
     _renderMesh.ShowWireFrame(wire);
-    _sim.StepCG(_em, _simState);
-    _renderMesh.UpdatePosition();
-    _ui->SetMeshNeedsUpdate(_meshId);
+    if (_runSim) {
+      _sim.StepCG(_em, _simState);
+      _renderMesh.UpdatePosition();
+      _ui->SetMeshNeedsUpdate(_meshId);
+    }
+    if (_save_x) {
+      SaveX(_em,"F:/dump/x_out.txt");
+      _save_x = false;
+    }
+  }
+  
+  void EmbedMesh() { 
+    ElementMesh em;
+    em.LoadTxt("F:/dump/vox.txt");
+    LoadX(em, "F:/dump/x_5207.txt");
+    TrigMesh mesh;
+    mesh.LoadObj("F:/dolphin/meshes/gasket/g5207_remesh.obj");
+    const float meterTomm=1000.0f;
+    for (auto& X : em.X) {
+      X = meterTomm * X;
+    }
+    for (auto& x : em.x) {
+      x = meterTomm * x;
+    }
+    Vec3u gridSize;
+    float h = 2.7f;
+    Array3D<unsigned> grid;
+    BBox box;
+    ComputeBBox(em.X, box);
+    for (unsigned i = 0; i < 3; i++) {
+      gridSize[i] = unsigned((box.vmax[i] - box.vmin[i]) / h - 0.5f) + 1;
+    }
+    grid.Allocate(gridSize[0], gridSize[1], gridSize[2], ~0);
+    bool hasMax[3] = {0,0,0};
+    for (size_t i = 0; i < em.e.size(); i++) {
+      Vec3f center = em.X[(*em.e[i])[0]] + 0.5f * Vec3f(h, h, h);
+      unsigned ix = unsigned(center[0] / h);
+      unsigned iy = unsigned(center[1] / h);
+      unsigned iz = unsigned(center[2] / h);
+      grid(ix, iy, iz) = i;
+      if (ix == gridSize[0] - 1) {
+        hasMax[0] = true;
+      }
+      if (iy == gridSize[1] - 1) {
+        hasMax[1] = true;
+      }
+      if (iz == gridSize[2] - 1) {
+        hasMax[2] = true;
+      }
+    }
+    //for each surface mesh vertex, assign it to an element.
+    std::vector<unsigned> vertEle(mesh.GetNumVerts(), 0);
+    std::vector<float> newVerts(mesh.v.size(), 0);
+    Vec3f delta[6] = {{0, 0, -0.1f}, {0, 0, 0.1f},  {0, -0.1f, 0},
+                      {0, 0.1f, 0},  {-0.1f, 0, 0}, {0.1f, 0, 0}};
+    for (size_t i = 0; i < mesh.GetNumVerts(); i++) {
+      //find closest cuboid center
+      Vec3u gridIdx;
+      Vec3f v0 = *(Vec3f*)(&mesh.v[3*i]);
+      int intIndex[3];
+      for (unsigned j = 0; j < 3; j++) {
+        intIndex[j] = int(v0[j] / h);
+        intIndex[j] = std::clamp(intIndex[j], 0 , int(gridSize[j]) - 1);
+        gridIdx[j] = unsigned(intIndex[j]);
+      }
+      std::vector<Vec3u> candidates(7);
+      unsigned eidx=em.e.size();
+      candidates[0] = gridIdx;
+      for (unsigned c = 0; c < 6; c++) {
+        Vec3f v1 = v0 + delta[c];
+        for (unsigned j = 0; j < 3; j++) {
+          intIndex[j] = int(v1[j] / h);
+          intIndex[j] = std::clamp(intIndex[j], 0, int(gridSize[j]) - 1);
+          gridIdx[j] = unsigned(intIndex[j]);
+        }
+        candidates[c + 1] = gridIdx;
+      }
+      for (size_t c = 0; c < candidates.size(); c++) {
+        gridIdx = candidates[c];
+        unsigned ei = grid(gridIdx[0], gridIdx[1], gridIdx[2]);
+        if (ei < em.e.size()) {
+          eidx = ei;
+          break;
+        }
+      }
+      if (eidx >= em.e.size()) {
+        std::cout << i << " ";
+        std::cout << v0[0] << " " << v0[1] << " " << v0[2] << "\n";
+      }
+      Vec3f moved = Trilinear(*em.e[eidx], em.X, em.x, v0);
+      newVerts[3 * i] = moved[0];
+      newVerts[3 * i + 1] = moved[1];
+      newVerts[3 * i + 2] = moved[2];
+    }
+    mesh.v = newVerts;
+    mesh.SaveObj("F:/dump/deformed.obj");
   }
 
  private:
@@ -254,6 +487,7 @@ class FemApp {
   ElementMesh _em;
   FETrigMesh _renderMesh;
   int _hexInputId = -1;
+  int _xInputId = -1;
   int _meshId = -1;
   int _wireframeId = -1;
   float _drawingScale = MToMM;
@@ -261,6 +495,9 @@ class FemApp {
   int _floorMeshId = -1;
   Simulator _sim;
   SimState _simState;
+  std::mutex _refresh_mutex;
+  bool _save_x = false;
+  bool _runSim = false;
 };
 
 std::vector<Vec3f> CentralDiffForce(ElementMesh & em, float h) {
@@ -514,8 +751,48 @@ void CenterMeshes() {
   }
 }
 
-int main(int, char**) {
- // CenterMeshes();
+int PngToGrid(int argc, char** argv) {
+  if (argc < 2) {
+    return -1;
+  }
+  std::string pngFile = argv[1];
+  std::string outFile = "woodgrain.txt";
+  if (argc > 2) {
+    outFile = std::string(argv[2]);
+  }
+  Array2D8u image;
+  int ret = LoadPngGrey(pngFile, image);
+  if (ret < 0) {
+    return 0;
+  }
+  Vec2u imageSize= image.GetSize();
+  float res = 0.064f;
+  Vec3u gridSize(imageSize[0], imageSize[1], 30);
+  std::ofstream out(outFile);
+  out << "voxelSize\n0.064 0.064 0.064\nspacing\n0.2\ndirection\n0 0 1\ngrid\n";
+  out << gridSize[0]<<" "<<gridSize[1]<<" "<<gridSize[2]<<"\n";
+  for (size_t z = 0; z < gridSize[2]; z++) {
+    float h = float(z) / float(gridSize[2]);
+    
+    for (size_t y = 0; y < gridSize[1]; y++) {
+      for (size_t x = 0; x < gridSize[0]; x++) {
+        float pix = image(x, y) / 255.0f;
+        int val = 1;
+        if (h <= pix) {
+          val = 2;
+        }
+        out << val << " ";
+      }
+      out << "\n";
+    }
+    out << "\n";
+  }
+  return ret;
+}
+
+int main(int argc, char** argv) {
+  // PngToGrid(argc, argv);
+  // CenterMeshes();
   UILib ui;
   FemApp app(&ui);
   ui.SetFontsDir("./fonts");

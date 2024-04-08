@@ -70,7 +70,7 @@ float TrigMesh::GetArea(unsigned tIdx) const {
   return (e10.cross(e20)).norm() * 0.5f;
 }
 
-Vec3f TrigMesh::GetNormal(unsigned tIdx, const Vec3f& bary) {
+Vec3f TrigMesh::GetNormal(unsigned tIdx, const Vec3f& bary)const {
   Vec3f n;
   float eps = 1e-5;
   unsigned zeroCount = 0;
@@ -106,6 +106,14 @@ Vec3f TrigMesh::GetNormal(unsigned tIdx, const Vec3f& bary) {
 
 Vec3f TrigMesh::GetTrigNormal(size_t tIdx) const {
   return Vec3f(nt[3 * tIdx], nt[3 * tIdx + 1], nt[3 * tIdx + 2]);
+}
+
+Triangle TrigMesh::GetTriangleVerts(size_t tIdx) const {
+  Triangle trig;
+  trig.v[0] = *(Vec3f*)(&v[3 * t[3 * tIdx]]);
+  trig.v[1] = *(Vec3f*)(&v[3 * t[3 * tIdx + 1]]);
+  trig.v[2] = *(Vec3f*)(&v[3 * t[3 * tIdx + 2]]);
+  return trig;
 }
 
 Vec2f TrigMesh::GetTriangleUV(unsigned tIdx, unsigned j) const {
