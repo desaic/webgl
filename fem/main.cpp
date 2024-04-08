@@ -146,7 +146,6 @@ class Simulator {
       }
     }
 
-    em.fixedDOF = fixed;
     for (size_t i = 0; i < fixed.size(); i++) {
       if (fixed[i]) {
         b[i] = 0;
@@ -157,7 +156,7 @@ class Simulator {
     float identityScale = 1000;
     em.ComputeStiffness(state.K);
     FixDOF(fixed, state.K, identityScale);
-    CG(state.K, dx, b, 400);
+    CG(state.K, dx, b, 800);
     const float h0 = 1.0f;
     const unsigned MAX_LINE_SEARCH = 10;
     double E0 = em.GetPotentialEnergy();
@@ -199,6 +198,16 @@ void PullRight(const Vec3f& force, float dist, ElementMesh& em) {
   }
 }
 
+void PullLeft(const Vec3f& force, float dist, ElementMesh& em) {
+  BBox box;
+  ComputeBBox(em.X, box);
+  for (size_t i = 0; i < em.X.size(); i++) {
+    if (em.X[i][0] - box.vmin[0] < dist) {
+      em.fe[i] += force;
+    }
+  }
+}
+
 void AddGravity(const Vec3f& G, ElementMesh& em) {
   for (size_t i = 0; i < em.X.size(); i++) {
     em.fe[i] += G;    
@@ -229,6 +238,31 @@ void FixRight(float dist, ElementMesh& em) {
   }
 }
 
+void FixMiddle(float ratio, ElementMesh& em) {
+  BBox box;
+  ComputeBBox(em.X, box);
+  float dist = ratio * (box.vmax[0] - box.vmin[0]);
+  float midx = 0.5f*(box.vmax[0] + box.vmin[0]);
+  for (size_t i = 0; i < em.X.size(); i++) {
+    if ( std::abs(em.X[i][0] - midx) < dist) {
+      em.fixedDOF[3 * i] = true;
+      em.fixedDOF[3 * i + 1] = true;
+      em.fixedDOF[3 * i + 2] = true;
+    }
+  }
+}
+
+void PullMiddle(const Vec3f& force, float ratio, ElementMesh& em) {
+  BBox box;
+  ComputeBBox(em.X, box);
+  float dist = ratio * (box.vmax[0] - box.vmin[0]);
+  float midx = 0.5f * (box.vmax[0] + box.vmin[0]);
+  for (size_t i = 0; i < em.X.size(); i++) {
+    if (std::abs(em.X[i][0] - midx) < dist) {
+      em.fe[i] += force;
+    }
+  }
+}
 void FixFloorLeft(float ratio, ElementMesh& em) {
   BBox box;
   ComputeBBox(em.X, box);
@@ -300,11 +334,11 @@ class FemApp {
     MakeCheckerPatternRGBA(checker);
     _floorMeshId = _ui->AddMesh(floor);
     _ui->SetMeshTex(_floorMeshId, checker, 4);
-    _hexInputId = _ui->AddWidget(std::make_shared<InputText>("mesh file", "F:/dump/vox.txt"));
+    std::string voxFile = "F:/dump/vox6080.txt";
+    _hexInputId = _ui->AddWidget(std::make_shared<InputText>("mesh file", voxFile));
     _ui->AddButton("Load Hex mesh", [&] {
       std::string file = GetInputString(_hexInputId);
-      LoadElementMesh(file);
-      
+      LoadElementMesh(file);      
     });
     _ui->AddButton("Save x", [&] { _save_x = true; });
     _ui->AddButton("Run sim", [&] { _runSim = true; });
@@ -328,16 +362,17 @@ class FemApp {
   void InitExternalForce() { 
     _em.fe= std::vector<Vec3f>(_em.X.size());
     _em.fixedDOF=std::vector<bool>(_em.X.size() * 3, false);
-    //pull upwards
-    //PullRight(Vec3f(0, 0.01, 0), 0.03, _em);
-    //pull left
-    //PullRight(Vec3f(0.001, 0.0, 0), 0.06, _em);
-    FixLeft(0.03, _em);
-    FixRight(0.05, _em);
-    FixFloorLeft(0.4, _em);
-    _em.lb.resize(_em.X.size(), Vec3f(-1000, -1, -1000));
+    _em.lb.resize(_em.X.size(), Vec3f(-1000, -1000, -1000));
+    //PullRight(Vec3f(0,-0.001,  0), 0.01, _em);    
+    //PullLeft(Vec3f(0,-0.001, 0), 0.01, _em);
+    //FixLeft(0.03, _em);
+    //FixRight(0.03, _em);
+    //PullMiddle(Vec3f(0, 0.002, 0), 0.03, _em);
+    //FixFloorLeft(0.4, _em);
+    //_em.lb.resize(_em.X.size(), Vec3f(-1000, -1, -1000));
     //SetFloorForRightSide(0.0055, 0.4, _em);
-   // AddGravity(Vec3f(0, -0.01, 0),_em);
+    FixMiddle(0.03, _em);
+    //AddGravity(Vec3f(0, -0.0005, 0),_em);
   }
 
   void LoadElementMesh(const std::string& file) {
@@ -397,10 +432,10 @@ class FemApp {
   
   void EmbedMesh() { 
     ElementMesh em;
-    em.LoadTxt("F:/dump/vox.txt");
-    LoadX(em, "F:/dump/x_5207.txt");
+    em.LoadTxt("F:/dump/vox6080.txt");
+    LoadX(em, "F:/dump/x_6080_11.txt");
     TrigMesh mesh;
-    mesh.LoadObj("F:/dolphin/meshes/gasket/g5207_remesh.obj");
+    mesh.LoadObj("F:/dolphin/meshes/gasket/gasket6080_in.obj");
     const float meterTomm=1000.0f;
     for (auto& X : em.X) {
       X = meterTomm * X;
@@ -906,7 +941,6 @@ void VoxelizeMesh() {
 }
 
 int main(int argc, char** argv) {
-  VoxelizeMesh();
   // PngToGrid(argc, argv);
   // CenterMeshes();
   UILib ui;
@@ -916,7 +950,7 @@ int main(int argc, char** argv) {
   ui.SetKeyboardCb(HandleKeys);
   int statusLabel = ui.AddLabel("status");
   ui.Run();
-
+  app.EmbedMesh();
   const unsigned PollFreqMs = 20;
   while (ui.IsRunning()) {
     app.Refresh();
