@@ -2,9 +2,10 @@
 #include "femError.h"
 #include "ElementMesh.h"
 #include "StrainEneNeo.h"
+#include "StableNeo.h"
 
 MaterialModel::MaterialModel() {
-  enePtr = std::make_shared<StrainEneNeo>();
+  enePtr = std::make_shared<StableNeo>();
   Young2Lame(1e6, 0.4f, enePtr->param.data());
 }
 

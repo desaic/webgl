@@ -11,7 +11,7 @@ class StrainEneNeo : public StrainEne {
                                 int dim = 3);
   void CacheF(const Matrix3f& F) override;
 
-  Matrix3f FinvT;
-  float c1 = 0;
+  Matrix3f _FinvT;
+  float _c1 = 0;
 };
 #endif

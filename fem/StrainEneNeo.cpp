@@ -28,12 +28,12 @@ StrainEneNeo::getPK1(const Matrix3f & F)
 
 std::vector<Matrix3f> StrainEneNeo::getdPdx(const Matrix3f& F, const Vec3f& dF,
                                             int dim) {
-  Vec3f FinvTdF = FinvT * dF;
+  Vec3f FinvTdF = _FinvT * dF;
   std::vector<Matrix3f> dP(dim, Matrix3f::Zero());
   for (int ii = 0; ii < dim; ii++) {
     dP[ii].setRow(ii, float(param[0]) * dF);
-    dP[ii] += c1 * OuterProd(FinvTdF, FinvT.getRow(ii)) +
-              float(param[1]) * FinvTdF[ii] * FinvT;
+    dP[ii] += _c1 * OuterProd(FinvTdF, _FinvT.getRow(ii)) +
+              float(param[1]) * FinvTdF[ii] * _FinvT;
   }
   return dP;
 }
@@ -42,7 +42,7 @@ void StrainEneNeo::CacheF(const Matrix3f& F) {
   double JJ = std::log(F.determinant());
   double mu = param[0];
   double lambda = param[1];
-  c1 = mu - lambda * JJ;
-  FinvT = F.inverse();
-  FinvT.transpose();
+  _c1 = mu - lambda * JJ;
+  _FinvT = F.inverse();
+  _FinvT.transpose();
 }

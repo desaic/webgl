@@ -943,6 +943,7 @@ void VoxelizeMesh() {
 int main(int argc, char** argv) {
   // PngToGrid(argc, argv);
   // CenterMeshes();
+  //TestSparse();
   UILib ui;
   FemApp app(&ui);
   ui.SetFontsDir("./fonts");

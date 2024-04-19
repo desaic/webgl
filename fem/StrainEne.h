@@ -21,7 +21,7 @@ class StrainEne {
 
   std::vector<double> param;
 
-  enum MaterialModel { LIN, COROT, NEO };
+  enum MaterialModel { LIN, COROT, NEO, SNH };
 };
 
 std::vector<StrainEne*> loadMaterials(std::istream& in,
