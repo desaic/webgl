@@ -130,6 +130,7 @@ class Simulator {
     std::vector<Vec3f> force = em.GetForce();
     Add(force, em.fe);
     size_t numDOF = em.x.size() * 3;
+    float eleSize = em.X[1][2] - em.X[0][2];
     std::vector<double> dx(numDOF, 0), b(numDOF);
     float boundaryTol = 1e-4f;
     std::vector<bool> fixed = em.fixedDOF;
@@ -154,15 +155,18 @@ class Simulator {
     float identityScale = 1000;
     em.ComputeStiffness(state.K);
     FixDOF(fixed, state.K, identityScale);
-    CG(state.K, dx, b, 800);
-    const float h0 = 1.0f;
+    CG(state.K, dx, b, 10000);
+    float h0 = 1.0f;
     const unsigned MAX_LINE_SEARCH = 10;
     double E0 = em.GetPotentialEnergy();
     
     double newE = E0;
     auto oldx = em.x;
-    float h = h0;
+    float h;
     bool updated = false;
+    float maxdx = Linf(dx);
+    h = std::min(h0, 0.5f*eleSize / maxdx);
+    std::cout << "h " << h << "\n";
     for (unsigned li = 0;li<MAX_LINE_SEARCH;li++){
       em.x = oldx;
       AddTimes(em.x, dx, h);
@@ -241,8 +245,8 @@ class FemApp {
     //PullRight(Vec3f(0,-0.001,  0), 0.01, _em);    
     //PullLeft(Vec3f(0,-0.001, 0), 0.01, _em);
     FixLeft(0.03, _em);
-    FixRight(0.03, _em);
-    MoveRightEndTowardsLeft(0.03, -0.05, _em);
+    FixRight(0.01, _em);
+    MoveRightEnd(0.03, 0.005, _em);
     //PullMiddle(Vec3f(0, 0.002, 0), 0.03, _em);
     //FixFloorLeft(0.4, _em);
     //_em.lb.resize(_em.X.size(), Vec3f(-1000, -1, -1000));
@@ -314,7 +318,6 @@ extern void TestSparse();
 int main(int argc, char** argv) {
   // PngToGrid(argc, argv);
   // CenterMeshes();
-  TestSparse();
   UILib ui;
   FemApp app(&ui);
   ui.SetFontsDir("./fonts");

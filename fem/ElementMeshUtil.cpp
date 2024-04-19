@@ -152,7 +152,7 @@ void FixRight(float dist, ElementMesh& em) {
 }
 
 // for x > xmax-range, x-=distance
-void MoveRightEndTowardsLeft(float range, float distance, ElementMesh& em) {
+void MoveRightEnd(float range, float distance, ElementMesh& em) {
   BBox box;
   ComputeBBox(em.X, box);
   for (size_t i = 0; i < em.X.size(); i++) {

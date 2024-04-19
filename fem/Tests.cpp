@@ -148,8 +148,9 @@ void TestSparse() {
   em.LoadTxt("F:/github/webgl/fem/data/hex_m.txt");
   em.InitStiffnessPattern();
   em.CopyStiffnessPattern(K);
-  em.ComputeStiffness(K);
   em.x[0][0] -= 0.01;
+
+  em.ComputeStiffness(K);
   unsigned rows = K.Rows();
   unsigned cols = K.Cols();
   unsigned nnz = K.NNZ();
@@ -192,6 +193,7 @@ void TestSparse() {
 
     for (unsigned row = 0; row < rows; row++) {
       float central = fp[row / 3][row % 3];
+      std::cout << central << " " << Kref(col, row) << "\n";
       float diff = std::abs(central + Kref(col, row));
       if (diff > 0.5f) {
         std::cout << row << " " << central << " " << Kref(col, row) << "\n";
