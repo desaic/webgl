@@ -6,7 +6,9 @@
 
 MaterialModel::MaterialModel() {
   enePtr = std::make_shared<StableNeo>();
-  Young2Lame(1e6, 0.4f, enePtr->param.data());
+  std::vector<double> param(2,0);
+  Young2Lame(1e6, 0.4f, param.data());
+  enePtr->SetParam(param);
 }
 
 float MaterialModel::GetEnergy(size_t eidx, const ElementMesh& mesh) const {

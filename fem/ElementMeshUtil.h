@@ -32,4 +32,23 @@ void ComputeWireframeMesh(const ElementMesh& em, TrigMesh& m,
 void UpdateWireframePosition(const ElementMesh& em, TrigMesh& m,
                              std::vector<Edge>& edges, float drawingScale,
                              float beamThickness);
+
+void PullRight(const Vec3f& force, float dist, ElementMesh& em);
+void PullLeft(const Vec3f& force, float dist, ElementMesh& em);
+void AddGravity(const Vec3f& G, ElementMesh& em);
+
+void FixLeft(float dist, ElementMesh& em);
+
+void FixRight(float dist, ElementMesh& em);
+// for x > xmax-range, x-=distance
+void MoveRightEndTowardsLeft(float range, float distance, ElementMesh& em);
+void FixMiddle(float ratio, ElementMesh& em);
+
+void PullMiddle(const Vec3f& force, float ratio, ElementMesh& em);
+void FixFloorLeft(float ratio, ElementMesh& em);
+
+void SetFloorForRightSide(float y1, float ratio, ElementMesh& em);
+
+void EmbedMesh();
+int LoadX(ElementMesh& em, const std::string& inFile);
 #endif

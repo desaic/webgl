@@ -18,7 +18,7 @@ class StrainEne {
                                         int dim = 3) = 0;
   virtual void CacheF(const Matrix3f& F) {}
   virtual ~StrainEne();
-
+  virtual void SetParam(const std::vector<double>& in) { param = in; }
   std::vector<double> param;
 
   enum MaterialModel { LIN, COROT, NEO, SNH };

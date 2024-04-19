@@ -10,7 +10,7 @@ class StableNeo : public StrainEne {
   std::vector<Matrix3f> getdPdx(const Matrix3f& F, const Vec3f& dF,
                                 int dim = 3);
   void CacheF(const Matrix3f& F) override;
-
+  void SetParam(const std::vector<double>&param)override;
   double Mu() const { return param[0]; }
   double Lambda() const { return param[1]; }
   double Alpha() const { return param[2]; }

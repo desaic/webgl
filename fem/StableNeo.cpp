@@ -7,6 +7,15 @@ StableNeo::StableNeo() {
   param[2] = 1.1;
 }
 
+void StableNeo::SetParam(const std::vector<double> & in) {
+  float lambda = in[0] + in[1];
+  float alpha = (1.0 + in[0] / (in[1] + 1e-9f));
+  param.resize(3);
+  param[0] = in[0];
+  param[1] = lambda;
+  param[2] = alpha;
+}
+
 double StableNeo::getEnergy(const Matrix3f& F) {
   double Ic = F.squaredNorm();
   double Jminus1 = F.determinant() - Alpha();
