@@ -315,7 +315,37 @@ class FemApp {
 
 extern void TestSparse();
 
+struct Segment {
+  virtual Vec2f eval(float t)const=0;
+  virtual float len() const= 0;
+};
+
+struct Arc {
+  Vec2f x0;
+  Vec2f x1;
+  float radius=1;
+  Vec2f eval(float t) const {}
+  float len() const {}
+};
+
+struct Line{
+  Vec2f x0;
+  Vec2f x1;
+};
+
+
+struct Curve {
+  std::vector<std::unique_ptr<Segment>> segs;
+};
+
+void MakeCurve() {
+
+}
+
+extern void CenterMeshes(std::string dir);
+
 int main(int argc, char** argv) {
+  CenterMeshes("F:/dolphin/meshes/20240502-test/");
   // PngToGrid(argc, argv);
   // CenterMeshes();
   UILib ui;

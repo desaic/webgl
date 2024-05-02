@@ -5,7 +5,7 @@
 #include <iomanip>
 #include <iostream>
 #include <map>
-
+#include <filesystem>
 #include "ObjLoader.h"
 #include "Vec3.h"
 
@@ -27,6 +27,7 @@ int TrigMesh::LoadStl(const std::string& meshFile) {
   // ComputePseudoNormals();
   return 0;
 }
+
 int TrigMesh::SaveStlTxt(const std::string& filename) {
   std::ofstream out(filename);
   size_t numTrig = t.size() / 3;
@@ -43,6 +44,36 @@ int TrigMesh::SaveStlTxt(const std::string& filename) {
     out << "  endfacet\n";
   }
   out << "endsolid gg\n";
+  return 0;
+}
+
+int TrigMesh::SaveStl(const std::string& filename)
+{
+  std::string header_info =
+    "solid " + std::filesystem::path(filename).stem().string() + "-output";
+  char head[80];
+  std::strncpy(head, header_info.c_str(), sizeof(head) - 1);
+
+  std::ofstream out;
+  unsigned num_triangles = GetNumTrigs();
+  out.open((filename).c_str(), std::ios::out | std::ios::binary);
+  out.write(head, sizeof(head));
+  out.write((char*)&num_triangles, 4);
+  char attribute[2] = { 0, 0 };
+  const size_t VERT_BYTES = sizeof(float) * 3;
+  for (uint32_t ti = 0; ti < num_triangles; ti++) {
+    //we don't use normals in stls
+    Vec3f n(1, 0, 0);
+    unsigned v0 = t[3 * ti];
+    unsigned v1 = t[3 * ti + 1];
+    unsigned v2 = t[3 * ti + 2];
+    out.write((const char*)(&n), sizeof(n));
+    out.write((const char*)(v.data() + 3 * v0), VERT_BYTES);
+    out.write((const char*)(v.data() + 3 * v1), VERT_BYTES);
+    out.write((const char*)(v.data() + 3 * v2), VERT_BYTES);
+    out.write(attribute, 2);
+  }
+  out.close();
   return 0;
 }
 

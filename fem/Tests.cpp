@@ -217,12 +217,11 @@ void TestSparse() {
   TestSparseCG(K);
 }
 
-void CenterMeshes() {
-  std::string dir = "F:/dolphin/meshes/20240304-V8-01/mmp/";
-  int starti = 4, endi = 60;
-  for (int i = starti; i <= endi; i++) {
-    std::string istr = std::to_string(i);
-    std::string modelDir = dir + istr + "/models/";
+void CenterMeshes(std::string dir) {
+  int starti = 0, endi = 60;
+  for (int fi = starti; fi <= endi; fi++) {
+    std::string istr = std::to_string(fi);
+    std::string modelDir = dir + "/mmp/" + istr + "/models/";
     if (!std::filesystem::exists(modelDir)) {
       continue;
     }
@@ -231,36 +230,55 @@ void CenterMeshes() {
       continue;
     }
 
-    std::string originalStl = modelDir + "0.STL";
     fs::path directory_path(modelDir);
 
     // Create an iterator pointing to the directory
     fs::directory_iterator it(directory_path);
-    std::vector<fs::path> stls;
+    std::vector<fs::path> paths;
+    std::vector<std::string> exts;
     // Iterate through the directory entries
     for (const auto& entry : it) {
       // Check if it's a regular file
       if (entry.is_regular_file()) {
+        if (entry.path().filename() == "cage.obj") {
+          continue;
+        }
         std::string ext = entry.path().extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-        if (ext == ".stl") {
-          stls.push_back(entry.path());
+        if (ext == ".stl" || ext == ".obj") {
+          paths.push_back(entry.path());
+          exts.push_back(ext);
         }
       }
     }
-    for (const auto& path : stls) {
-      TrigMesh mesh;
-      mesh.LoadStl(path.string());
-      BBox box;
-      ComputeBBox(mesh.v, box);
-      Vec3f center = 0.5f * (box.vmax + box.vmin);
-      for (size_t i = 0; i < mesh.v.size(); i += 3) {
-        mesh.v[i] -= center[0];
-        mesh.v[i + 1] -= center[1];
-        mesh.v[i + 2] -= center[2];
+    std::vector<TrigMesh> meshes(paths.size());
+    BBox box;
+    for (size_t i = 0;i<paths.size();i++) {      
+      if (exts[i] == ".stl") {
+        meshes[i].LoadStl(paths[i].string());
+      } else {
+        meshes[i].LoadObj(paths[i].string());
       }
-      mesh.SaveStlTxt(path.string());
+      if (i == 0) {
+        ComputeBBox(meshes[i].v, box);
+      } else {
+        UpdateBBox(meshes[i].v, box);
+      }
     }
+    Vec3f center = 0.5f * (box.vmax + box.vmin);
+    for (size_t i = 0; i < paths.size(); i++) {
+      for (size_t j = 0; j < meshes[i].GetNumVerts(); j++) {
+        meshes[i].v[3 * j] -= center[0];
+        meshes[i].v[3 * j + 1] -= center[1];
+        meshes[i].v[3 * j + 2] -= center[2];
+      }
+      if (exts[i] == ".stl") {
+        meshes[i].SaveStl(paths[i].string());
+      } else {
+        meshes[i].SaveObj(paths[i].string());
+      }
+    }   
+
   }
 }
 
@@ -413,6 +431,43 @@ void VoxelizeMesh() {
     out << "8 ";
     for (size_t j = 0; j < NUM_HEX_VERTS; j++) {
       out << elts[i][j] << " ";
+    }
+    out << "\n";
+  }
+}
+
+void MakeGyroid() {
+  Array3D8u grid(100, 100, 100);
+  grid.Fill(1);
+  Vec3u size = grid.GetSize();
+  float twoPi = 6.2831853f;
+  float thresh = -0.3f;
+  unsigned fillCount = 0;
+  for (unsigned z = 0; z < size[2]; z++) {
+    float fz = float(z) / size[2] * twoPi;
+    for (unsigned y = 0; y < size[1]; y++) {
+      float fy = float(y) / size[1] * twoPi;
+      for (unsigned x = 0; x < size[0]; x++) {
+        float fx = float(x) / size[0] * twoPi;
+        float distVal = std::cos(fx) * std::sin(fy) +
+                        std::cos(fy) * std::sin(fz) +
+                        std::cos(fz) * std::sin(fx);
+        if (distVal < thresh) {
+          fillCount++;
+          grid(x, y, z) = 2;
+        }
+      }
+    }
+  }
+  std::cout << float(fillCount) / size[0] / size[1] / size[2] << "\n";
+
+  std::ofstream out("F:/dump/gyroid.txt");
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      for (unsigned x = 0; x < size[0]; x++) {
+        out << int(grid(x, y, z)) << " ";
+      }
+      out << "\n";
     }
     out << "\n";
   }
