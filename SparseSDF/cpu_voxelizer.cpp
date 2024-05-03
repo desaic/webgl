@@ -1,7 +1,7 @@
 #include "cpu_voxelizer.h"
 
 #include <algorithm>
-#include <iostream>
+
 #include "BBox.h"
 
 Vec3f clamp(const Vec3f& v, const Vec3f& lb, const Vec3f& ub) {
@@ -18,7 +18,7 @@ void cpu_voxelize_mesh(voxconf conf, const TrigMesh* mesh,
   Vec3f grid_max(
       conf.gridSize[0] - 1, conf.gridSize[1] - 1,
       conf.gridSize[2] - 1);  // grid max (grid runs from 0 to gridsize-1)
-
+  float eps = 1e-3f;
   for (size_t i = 0; i < n_triangles; i++) {
     Vec3f c(0.0f, 0.0f, 0.0f);  // critical point
     // COMPUTE COMMON TRIANGLE PROPERTIES
@@ -39,6 +39,8 @@ void cpu_voxelize_mesh(voxconf conf, const TrigMesh* mesh,
     // max(v0,v1,v2)
     BBox t_bbox_world;
     ComputeBBox(v0, v1, v2, t_bbox_world);
+    // catch triangles exactly on voxel faces
+    t_bbox_world.vmin = t_bbox_world.vmin - Vec3f(eps, eps, eps);
     // Triangle bounding box in voxel grid coordinates is the world bounding box
     // divided by the grid unit vector
     IntBox t_bbox_grid;
@@ -171,49 +173,4 @@ void cpu_voxelize_mesh(voxconf conf, const TrigMesh* mesh,
     }
     cb.EndTrig(i);
   }
-}
-
-bool TopLeftEdge(Vec2f v0, Vec2f v1) {
-  return ((v1[1] < v0[1]) || (v1[1] == v0[1] && v0[0] > v1[0]));
-}
-
-// check the triangle is counterclockwise or not
-bool checkCCW(Vec2f v0, Vec2f v1, Vec2f v2) {
-  Vec2f e0 = v1 - v0;
-  Vec2f e1 = v2 - v0;
-  float result = e0[0] * e1[1] - e1[0] * e0[1];
-  if (result > 0)
-    return true;
-  else
-    return false;
-}
-
-// find the x coordinate of the voxel
-float get_x_coordinate(Vec3f n, Vec3f v0, Vec2f point) {
-  return (-(n[1] * (point[0] - v0[1]) + n[2] * (point[1] - v0[2])) / n[0] +
-          v0[0]);
-}
-
-// check the location with point and triangle
-int check_point_triangle(Vec2f v0, Vec2f v1, Vec2f v2, Vec2f point) {
-  Vec2f PA = point - v0;
-  Vec2f PB = point - v1;
-  Vec2f PC = point - v2;
-  const float float_error = 1e-12;
-  float t1 = PA[0] * PB[1] - PA[1] * PB[0];
-  if (std::fabs(t1) < float_error && PA[0] * PB[0] <= 0 && PA[1] * PB[1] <= 0)
-    return 1;
-
-  float t2 = PB[0] * PC[1] - PB[1] * PC[0];
-  if (std::fabs(t2) < float_error && PB[0] * PC[0] <= 0 && PB[1] * PC[1] <= 0)
-    return 2;
-
-  float t3 = PC[0] * PA[1] - PC[1] * PA[0];
-  if (std::fabs(t3) < float_error && PC[0] * PA[0] <= 0 && PC[1] * PA[1] <= 0)
-    return 3;
-
-  if (t1 * t2 > 0 && t1 * t3 > 0)
-    return 0;
-  else
-    return -1;
 }

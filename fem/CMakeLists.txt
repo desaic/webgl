@@ -28,9 +28,9 @@ if (USE_NANOVDB)
   include_directories(${NANOVDB_INC_DIR})
   add_compile_definitions(USE_NANOVDB)
 endif()
-
+include_directories("../ImageIO")
 add_executable(${BIN} ${EXE_SRC} resource/icons.rc)
-target_link_libraries(${BIN} UILib imgui glfw3 opengl32 glew32s csparse Mesh MathLib SparseSDF)
+target_link_libraries(${BIN} UILib imgui glfw3 opengl32 glew32s csparse Mesh MathLib SparseSDF ImageIO)
 
 set(FONT_FOLDER fonts)
 add_custom_command(TARGET ${BIN} POST_BUILD

@@ -9,7 +9,6 @@ struct TrigDistInfo {
   /// squared distance
   float sqrDist;
   Vec3f bary;
-  Vec3f closest;
   TrigPointType type;
 };
 

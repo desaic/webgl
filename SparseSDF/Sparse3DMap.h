@@ -9,8 +9,12 @@ template <typename TIndex>
 class Sparse3DMap {
  public:
   Sparse3DMap() : count_(1) {}
+  /// <param name="x">size of coarse grid</param>
+  /// <param name="y"></param>
+  /// <param name="z"></param>
   void Allocate(unsigned x, unsigned y, unsigned z);
   /// <summary>
+  /// Input is fine index.
   /// Does not create new entry if already exists.
   /// Does not work after Compress().
   /// </summary>
@@ -22,9 +26,6 @@ class Sparse3DMap {
   /// </summary>
   void Compress();
 
-  /// <returns>0 if child does not exist</returns>
-  TIndex Get(unsigned x, unsigned y, unsigned z) const;
-  
   Vec3u GetCoarseSize() const { return grid_.GetSize(); }
   Vec3u GetFineSize() const {
     return SparseNode4<TIndex>::GRID_SIZE * grid_.GetSize();

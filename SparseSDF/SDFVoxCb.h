@@ -3,10 +3,10 @@
 
 #include <unordered_map>
 
-#include "AdapSDF.h"
-#include "PointTrigDist.h"
+#include "AdapDF.h"
 #include "TrigMesh.h"
 #include "VoxCallback.h"
+#include "PointTrigDist.h"
 
 // builds intersecting triangle list of
 //  coarse voxels around coarse vertices.
@@ -15,6 +15,7 @@ struct TrigListVoxCb : public VoxCallback {
   virtual void operator()(unsigned x, unsigned y, unsigned z,
                           size_t trigIdx) override;
   TrigMesh* m = nullptr;
-  AdapSDF* sdf = nullptr;
+  AdapDF* df = nullptr;
+
 };
 #endif

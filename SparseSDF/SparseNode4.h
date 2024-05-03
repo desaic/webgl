@@ -1,7 +1,8 @@
 #ifndef SPARSE_NODE_4_H
 #define SPARSE_NODE_4_H
+#include <stdint.h>
 
-#include "BitOps.h"
+unsigned CountOn(unsigned long long v);
 
 // sparse node for a 4x4x4 block
 template <typename T>
@@ -9,6 +10,24 @@ struct SparseNode4 {
   static const unsigned NUM_CHILDREN = 64;
   static const unsigned GRID_SIZE = 4;
   SparseNode4() {}
+
+  // Move constructor
+  SparseNode4(SparseNode4&& o) noexcept {
+    children = o.children;
+    mask = o.mask;
+
+    o.children = nullptr;
+    o.mask = 0;
+  }
+
+  //note: does not work before compression
+  SparseNode4(const SparseNode4& other) : mask(other.mask) {
+    size_t numChildren = CountOn(mask);
+    children = new T[numChildren];
+    for (size_t i = 0; i < numChildren; ++i) {
+      children[i] = other.children[i];
+    }
+  }
 
   ~SparseNode4() {
     if (children != nullptr) {
@@ -36,6 +55,14 @@ struct SparseNode4 {
       mask |= childMask;
     }
     return &children[linearIdx];
+  }
+
+  void Clear() {
+    if (children != nullptr) {
+      delete[] children;
+      children = nullptr;
+    }
+    mask = 0ull;
   }
 
   const T* GetChildDense(unsigned x, unsigned y, unsigned z) const {

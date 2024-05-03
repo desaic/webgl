@@ -23,6 +23,7 @@
 #include "cpu_voxelizer.h"
 #include "VoxCallback.h"
 #include "MeshUtil.h"
+#include "AdapUDF.h"
 
 void ShowGLInfo(UILib& ui, int label_id) {
   std::string info = ui.GetGLInfo();
@@ -313,41 +314,55 @@ class FemApp {
   bool _runSim = false;
 };
 
-extern void TestSparse();
+void TestAdapDF() {
+  Timer timer;
+  timer.start();
 
-struct Segment {
-  virtual Vec2f eval(float t)const=0;
-  virtual float len() const= 0;
-};
+  SDFMesh sdfMesh;
+  TrigMesh mesh;
+  timer.start();
+  mesh.LoadObj("F:/dolphin/meshes/Falcon1.obj");
+  timer.end();
+  sdfMesh.SetVoxelSize(1);
+  sdfMesh.SetBand(5);
+  float sec = timer.getSeconds();
+  std::cout << "load stl time " << sec << " s\n";
+  sdfMesh.SetMesh(&mesh);
+  timer.start();
+  sdfMesh.Compute();
+  timer.end();
+  sec =timer.getSeconds();
+  std::cout << "sdf time " << sec << " s\n";
+  TrigMesh surf;
+  sdfMesh.MarchingCubes(0.25, &surf);
 
-struct Arc {
-  Vec2f x0;
-  Vec2f x1;
-  float radius=1;
-  Vec2f eval(float t) const {}
-  float len() const {}
-};
-
-struct Line{
-  Vec2f x0;
-  Vec2f x1;
-};
-
-
-struct Curve {
-  std::vector<std::unique_ptr<Segment>> segs;
-};
-
-void MakeCurve() {
-
+  BBox box;
+  ComputeBBox(mesh.v, box);
+  float h = sdfMesh.GetVoxelSize();
+  Array2D8u slice;
+  Vec3f boxSize = box.vmax - box.vmin;
+  unsigned sx = boxSize[0] / h;
+  unsigned sy = boxSize[1] / h;
+  slice.Allocate(sx, sy);
+  slice.Fill(0);
+  surf.SaveObj("F:/dump/falcon_march.obj");
+  float z = 0.8f * box.vmin[0] + 0.2f * box.vmax[2];
+  for (unsigned x = 0; x < sx; x++) {
+    for (unsigned y = 0; y < sy; y++) {
+      Vec3f coord((x + 0.5f) * h, (y + 0.5f) * h, z);
+      coord += box.vmin;
+      float dist = sdfMesh.DistTrilinear(coord);
+      slice(x, y) = dist * 30;
+    }
+  }
+  SavePngGrey("F:/dump/slice.png", slice);
 }
 
-extern void CenterMeshes(std::string dir);
-
 int main(int argc, char** argv) {
-  CenterMeshes("F:/dolphin/meshes/20240502-test/");
+//  MakeCurve();
   // PngToGrid(argc, argv);
   // CenterMeshes();
+  TestAdapDF();
   UILib ui;
   FemApp app(&ui);
   ui.SetFontsDir("./fonts");

@@ -1,14 +1,15 @@
-#ifndef ADAP_SDF_H
-#define ADAP_SDF_H
+#ifndef ADAP_UDF_H
+#define ADAP_UDF_H
 
 #include "AdapDF.h"
 
 /// <summary>
-/// signed distance field.
+/// unsigned distance field
 /// </summary>
-class AdapSDF : public AdapDF {
+class AdapUDF : public AdapDF {
  public:
-  AdapSDF();
+  AdapUDF();
+  void FastSweepCoarse(Array3D<uint8_t>& frozen) override;
   float MinDist(const std::vector<size_t>& trigs, const std::vector<TrigFrame>& trigFrames,
                 const Vec3f& query, const TrigMesh* mesh) override;
 };

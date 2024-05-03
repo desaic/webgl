@@ -3,6 +3,10 @@
 template <typename TIndex>
 void Sparse3DMap<TIndex>::Allocate(unsigned x, unsigned y, unsigned z) {
   grid_.Allocate(x, y, z);
+  for (SparseNode4<TIndex>& node : grid_.GetData()) {
+    node.Clear();
+  }
+  count_ = 1;
 }
 
 template <typename TIndex>
@@ -29,11 +33,6 @@ void Sparse3DMap<TIndex>::Compress() {
   for (auto& node : data) {
     node.Compress();
   }
-}
-
-template <typename TIndex>
-TIndex Sparse3DMap<TIndex>::Get(unsigned x, unsigned y, unsigned z) const {
-  return 0;
 }
 
 template <typename TIndex>

@@ -8,6 +8,7 @@
 #include "Array3D.h"
 #include "cpu_voxelizer.h"
 
+#include "AdapDF.h"
 #include "MarchingCubes.h"
 #include "TrigMesh.h"
 #include "Vec3.h"
@@ -550,6 +551,42 @@ void CheckCornerCase(const AdapSDF &sdf) { Vec3u size = sdf.dist.GetSize();
   }
 }
 
+void MarchingCubes(AdapDF * sdf, float level, TrigMesh* surf) {
+  const Array3D<short>& grid = sdf->dist;
+  Vec3u s = grid.GetSize();
+  float unit = sdf->distUnit;
+  const unsigned zAxis = 2;
+  for (unsigned x = 0; x < s[0] - 1; x++) {
+    for (unsigned y = 0; y < s[1] - 1; y++) {
+      for (unsigned z = 0; z < s[2] - 1; z++) {
+        MarchOneCube(x, y, z, grid, level / unit, surf, sdf->voxSize / unit);
+      }
+    }
+  }
+  for (unsigned i = 0; i < surf->v.size(); i += 3) {
+    surf->v[i] = unit * surf->v[i] + sdf->origin[0];
+    surf->v[i + 1] = unit * surf->v[i + 1] + sdf->origin[1];
+    surf->v[i + 2] = unit * surf->v[i + 2] + sdf->origin[2];
+  }
+}
+
+void MarchingCubes(Array3D8u & grid, float level, TrigMesh* surf,float unit, float voxSize) {
+  Vec3u s = grid.GetSize();
+  const unsigned zAxis = 2;
+  for (unsigned x = 0; x < s[0] - 1; x++) {
+    for (unsigned y = 0; y < s[1] - 1; y++) {
+      for (unsigned z = 0; z < s[2] - 1; z++) {
+        MarchOneCube(x, y, z, grid, level / unit, surf, voxSize / unit);
+      }
+    }
+  }
+  for (unsigned i = 0; i < surf->v.size(); i += 3) {
+    surf->v[i] = unit * surf->v[i] ;
+    surf->v[i + 1] = unit * surf->v[i + 1] ;
+    surf->v[i + 2] = unit * surf->v[i + 2] ;
+  }
+}
+
 void TestSDF() {
   TrigMesh mesh1;
   
@@ -595,7 +632,7 @@ void TestSDF() {
   std::vector<uint8_t> dist(sdf.dist.GetData().size());
 
   TrigMesh marchMesh;
-  MarchingCubes(sdf.dist, 50, &marchMesh, sdf.voxSize*sdf.distUnit);
+  MarchingCubes(&sdf, sdf.voxSize * sdf.distUnit, &marchMesh);
   marchMesh.SaveObj("marchCubes.obj");
 }
 
@@ -924,7 +961,7 @@ int main(int argc, char* argv[]) {
   PadGridConst(mirrored, v8, 0);
   InvertVal(v8);
 
-  MarchingCubes(v8, 220, &surf, 1);
+  MarchingCubes(v8, 220, &surf,1,1);
 
   std::string objFile = std::to_string(id) + "_smooth.obj";
   surf.SaveObj(objFile.c_str());

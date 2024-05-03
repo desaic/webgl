@@ -22,7 +22,8 @@ if (NOT TARGET Mesh)
   message(STATUS "add mesh lib")
   add_subdirectory("../Mesh/" "Mesh")
 endif()
-
+include_directories("../ImageIO")
+add_subdirectory("../ImageIO/" "ImageIO")
 add_executable(${BIN}
   "main.cpp"
   resource/icons.rc
