@@ -346,7 +346,7 @@ void TestAdapDF() {
   slice.Allocate(sx, sy);
   slice.Fill(0);
   surf.SaveObj("F:/dump/falcon_march.obj");
-  float z = 0.8f * box.vmin[0] + 0.2f * box.vmax[2];
+  float z = 0.8f * box.vmin[2] + 0.2f * box.vmax[2];
   for (unsigned x = 0; x < sx; x++) {
     for (unsigned y = 0; y < sy; y++) {
       Vec3f coord((x + 0.5f) * h, (y + 0.5f) * h, z);
@@ -358,11 +358,190 @@ void TestAdapDF() {
   SavePngGrey("F:/dump/slice.png", slice);
 }
 
+void SaveSlice(float z, SDFMesh & sdf, const BBox & box, float h) {
+  Array2D8u slice;
+  Vec3f boxSize = box.vmax - box.vmin;
+  unsigned sx = boxSize[0] / h;
+  unsigned sy = boxSize[1] / h;
+  slice.Allocate(sx, sy);
+  slice.Fill(0);
+  for (unsigned x = 0; x < sx; x++) {
+    for (unsigned y = 0; y < sy; y++) {
+      Vec3f coord((x + 0.5f) * h, (y + 0.5f) * h, z);
+      coord += box.vmin;
+      float dist = sdf.DistTrilinear(coord);
+      slice(x, y) = dist * 30;
+    }
+  }
+  SavePngGrey("F:/dump/slice.png", slice);
+}
+
+void SaveSlice(float z, const AdapDF * df, const BBox& box, float h) {
+  Array2D8u slice;
+  Vec3f boxSize = box.vmax - box.vmin;
+  unsigned sx = boxSize[0] / h;
+  unsigned sy = boxSize[1] / h;
+  slice.Allocate(sx, sy);
+  slice.Fill(0);
+  for (unsigned x = 0; x < sx; x++) {
+    for (unsigned y = 0; y < sy; y++) {
+      Vec3f coord((x + 0.5f) * h, (y + 0.5f) * h, z);
+      coord += box.vmin;
+      float dist = df->GetCoarseDist(coord);
+      slice(x, y) = dist * 10;
+    }
+  }
+  SavePngGrey("F:/dump/slice.png", slice);
+}
+
+enum class VoxLabel : unsigned char {
+  UNVISITED = 0,
+  INSIDE,
+  OUTSIDE
+};
+
+void SaveSlice(unsigned z, const Array3D<VoxLabel> & labels) {
+  Array2D8u slice;
+  Vec3u size = labels.GetSize();
+  unsigned sx = size[0];
+  unsigned sy = size[1];
+  slice.Allocate(sx, sy);
+  slice.Fill(0);
+  for (unsigned x = 0; x < sx; x++) {
+    for (unsigned y = 0; y < sy; y++) {
+      slice(x, y) = uint8_t(labels(x, y, z)) * 50;
+    }
+  }
+  SavePngGrey("F:/dump/wrap_label" + std::to_string(z) + ".png", slice);
+}
+
+size_t LinearIdx(unsigned x, unsigned y, unsigned z, const Vec3u& size) {
+  return x + y * size_t(size[0]) + z * size_t(size[0] * size[1]);
+}
+
+Vec3u GridIdx(size_t l, const Vec3u& size) {
+  unsigned x = l % size[0];
+  unsigned y = (l % (size[0] * size[1])) / size[0];
+  unsigned z = l / (size[0] * size[1]);
+  return Vec3u(x, y, z);
+}
+
+bool InBound(int x, int y, int z, const Vec3u& size) {
+  return x >= 0 && y >= 0 && z >= 0 && x < int(size[0]) && y < int(size[1]) &&
+         z < int(size[2]);
+}
+
+/// <param name="dist">distance grid</param>
+/// <param name="distThresh">stop flooding if distance is less than this</param>
+/// <returns></returns>
+Array3D<VoxLabel> FloodOutside(const Array3D<short>& dist, float distThresh) { 
+  Array3D<VoxLabel> label;
+  Vec3u size = dist.GetSize();
+  label.Allocate(size[0],size[1],size[2]);
+  label.Fill(VoxLabel::UNVISITED);
+
+  std::deque<size_t> q;
+  //add 6 faces of the grid to q.
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      q.push_back(LinearIdx(0, y, z, size));
+      q.push_back(LinearIdx(size[0] - 1, y, z, size));
+    }
+  }
+  for (unsigned x = 0; x < size[0]; x++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      q.push_back(LinearIdx(x, y, 0, size));
+      q.push_back(LinearIdx(x, y, size[2]-1, size));
+    }
+  }
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned x = 0; x < size[0]; x++) {
+      q.push_back(LinearIdx(x, 0, z, size));
+      q.push_back(LinearIdx(x, size[1]-1, z, size));
+    }
+  }
+  const unsigned NUM_NBR = 6;
+  const int nbrOffset[6][3] = {{1, 0, 0},  {-1, 0, 0}, {0, 1, 0},
+                               {0, -1, 0}, {0, 0, 1},  {0, 0, -1}};
+  while (!q.empty()) {
+    size_t linearIdx = q.front();    
+    q.pop_front();
+    Vec3u idx = GridIdx(linearIdx, size);
+    label(idx[0], idx[1], idx[2]) = VoxLabel::OUTSIDE;
+    for (unsigned ni = 0; ni < NUM_NBR; ni++) {
+      int nx = int(idx[0] + nbrOffset[ni][0]);
+      int ny = int(idx[1] + nbrOffset[ni][1]);
+      int nz = int(idx[2] + nbrOffset[ni][2]);
+      if (!InBound(nx, ny, nz, size)) {
+        continue;
+      }
+      unsigned ux = unsigned(nx), uy = unsigned(ny), uz = unsigned(nz);
+      VoxLabel nLabel = label(ux, uy, uz);
+      size_t nLinear = LinearIdx(ux, uy, uz, size);
+      if (nLabel == VoxLabel::UNVISITED) {
+        uint16_t nDist = dist(ux, uy, uz);
+        if (nDist >= distThresh ) {
+          label(ux, uy, uz) = VoxLabel::OUTSIDE;
+          q.push_back(nLinear);
+        }
+      }
+    }
+  }
+
+  return label;
+}
+
+void ShrinkWrap(TrigMesh& meshIn, TrigMesh& meshOut, float ballRadius) {
+  std::shared_ptr<AdapUDF> udf = std::make_shared<AdapUDF>();
+  SDFImpAdap * dfImp = new SDFImpAdap(udf);
+  SDFMesh sdfMesh(dfImp);
+  sdfMesh.SetMesh(&meshIn);
+  float h = 1.0f;
+  sdfMesh.SetBand(ballRadius / h);
+  sdfMesh.SetVoxelSize(h);
+  Timer timer;
+  timer.start();
+
+  //compute coarse grid only
+  udf->voxSize = h;
+  udf->band = ballRadius/h;
+  udf->distUnit = 1e-2;
+  udf->ClearTemporaryArrays();
+  udf->BuildTrigList(&meshIn);
+  udf->Compress();
+  udf->ComputeCoarseDist();
+  Array3D8u frozen;
+  udf->band = ballRadius / h;
+  udf->FastSweepCoarse(frozen);
+  timer.end();
+  //distance >= thresh is considered outside.
+  float outsideThresh = (ballRadius - udf->voxSize) / udf->distUnit;
+  Array3D<VoxLabel> labels = FloodOutside(udf->dist, outsideThresh);
+  for (unsigned zi = 10; zi < 80; zi += 10) {
+    SaveSlice(zi, labels);
+  }
+  float sec = timer.getSeconds();
+  BBox box;
+  ComputeBBox(meshIn.v, box);
+  float z = 0.5f * box.vmin[2] + 0.5f * box.vmax[2];
+  std::cout << "sdf time " << sec << "s\n";
+  SaveSlice(z, udf.get(), box, 0.25);
+}
+
+void TestShrinkWrap() { 
+  float radius = 45;
+  TrigMesh mesh;
+  mesh.LoadObj("F:/dolphin/meshes/vase.obj");
+  TrigMesh wrap;
+  ShrinkWrap(mesh, wrap, radius);
+  wrap.SaveObj("F:/dump/wrap.obj");
+}
+
 int main(int argc, char** argv) {
 //  MakeCurve();
   // PngToGrid(argc, argv);
   // CenterMeshes();
-  TestAdapDF();
+  TestShrinkWrap();
   UILib ui;
   FemApp app(&ui);
   ui.SetFontsDir("./fonts");
