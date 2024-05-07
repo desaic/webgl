@@ -19,6 +19,7 @@
 #include "lodepng.h"
 #include "ElementMesh.h"
 #include "ElementMeshUtil.h"
+#include "FastSweep.h"
 #include "CSparseMat.h"
 #include "cpu_voxelizer.h"
 #include "VoxCallback.h"
@@ -394,6 +395,20 @@ void SaveSlice(float z, const AdapDF * df, const BBox& box, float h) {
   SavePngGrey("F:/dump/slice.png", slice);
 }
 
+void SaveSlice(unsigned z, const Array3D<short> dist) {
+  Array2D8u slice;
+  Vec3u size= dist.GetSize();
+  slice.Allocate(size[0],size[1]);
+  slice.Fill(0);
+  for (unsigned x = 0; x < size[0]; x++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      short d = dist(x, y, z);
+      slice(x, y) = 50+ d / 50;
+    }
+  }
+  SavePngGrey("F:/dump/dist"+std::to_string(z)+".png", slice);
+}
+
 enum class VoxLabel : unsigned char {
   UNVISITED = 0,
   INSIDE,
@@ -504,37 +519,68 @@ void ShrinkWrap(TrigMesh& meshIn, TrigMesh& meshOut, float ballRadius) {
 
   //compute coarse grid only
   udf->voxSize = h;
-  udf->band = ballRadius/h;
-  udf->distUnit = 1e-2;
+  //band controls grid margin at first
+  float distUnit = 1e-2;
+  udf->band = 3;
+  udf->distUnit = distUnit;
   udf->ClearTemporaryArrays();
   udf->BuildTrigList(&meshIn);
   udf->Compress();
   udf->ComputeCoarseDist();
   Array3D8u frozen;
+  //band now controls how far fastsweep propagates
   udf->band = ballRadius / h;
   udf->FastSweepCoarse(frozen);
   timer.end();
   //distance >= thresh is considered outside.
   float outsideThresh = (ballRadius - udf->voxSize) / udf->distUnit;
   Array3D<VoxLabel> labels = FloodOutside(udf->dist, outsideThresh);
-  for (unsigned zi = 10; zi < 80; zi += 10) {
-    SaveSlice(zi, labels);
+  Vec3u size = labels.GetSize();
+  frozen.Allocate(size[0], size[1], size[2]);
+  frozen.Fill(0);
+  // distance from outermost shell
+  Array3D<short> borderDist;
+  borderDist.Allocate(size[0], size[1], size[2]);
+  for (size_t i = 0;i<labels.GetData().size();i++) {
+    if (labels.GetData()[i] == VoxLabel::OUTSIDE) {
+      borderDist.GetData()[i] =
+          ballRadius / h / distUnit - udf->dist.GetData()[i];
+      frozen.GetData()[i] = 1;
+    } else {
+      borderDist.GetData()[i] = AdapDF::MAX_DIST;
+    }
+  }
+
+  FastSweepParUnsigned(borderDist, udf->voxSize, distUnit,
+                       udf->band + 2,
+                       frozen);
+  for (size_t i = 0; i < borderDist.GetData().size(); i++) {
+    short d = borderDist.GetData()[i];
+    if (d >= AdapDF::MAX_DIST) {
+      d = -2 * h / distUnit;      
+    } else {
+      d = short(ballRadius / h / distUnit - d);
+    }
+
+    udf->dist.GetData()[i] = std::min(udf->dist.GetData()[i],
+                                      d);
+      
+    
   }
   float sec = timer.getSeconds();
   BBox box;
   ComputeBBox(meshIn.v, box);
-  float z = 0.5f * box.vmin[2] + 0.5f * box.vmax[2];
   std::cout << "sdf time " << sec << "s\n";
-  SaveSlice(z, udf.get(), box, 0.25);
+  sdfMesh.MarchingCubes(h, &meshOut);
 }
 
 void TestShrinkWrap() { 
-  float radius = 45;
+  float radius = 10;
   TrigMesh mesh;
   mesh.LoadObj("F:/dolphin/meshes/vase.obj");
   TrigMesh wrap;
   ShrinkWrap(mesh, wrap, radius);
-  wrap.SaveObj("F:/dump/wrap.obj");
+  wrap.SaveObj("F:/dump/wrap_vase_10mm.obj");
 }
 
 int main(int argc, char** argv) {

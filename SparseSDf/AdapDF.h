@@ -15,6 +15,8 @@ class TrigMesh;
 /// <summary>
 /// Abstract class Adaptive distance field for AdapSDF and AdapUDF.
 /// Stores a dense coarse grid and a sparse set of fine grids.
+/// to save space, uses int16_t to store distance values
+/// then scaled by 'distUnit' parameter. default 1e-3 unit.
 /// </summary>
 class AdapDF {
  public:

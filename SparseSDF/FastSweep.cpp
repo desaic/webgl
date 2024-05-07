@@ -690,18 +690,20 @@ void FastSweepParUnsigned(Array3D<short>& dist, float voxSize, float unit, float
   if (gridSize[0] == 0 || gridSize[1] == 0 || gridSize[2] == 0) {
     return;
   }
+  float h = voxSize / unit;
   if (frozen.Empty()) {
     frozen.Allocate(gridSize, 0);
-  }
-  // cells initialized with dist < h are frozen
-  const std::vector<short>& src = dist.GetData();
-  std::vector<uint8_t>& dst = frozen.GetData();
-  float h = voxSize / unit;
-  for (size_t i = 0; i < src.size(); i++) {
-    if (std::abs(src[i]) <= h) {
-      dst[i] = true;
+    // cells initialized with dist < h are frozen
+    const std::vector<short>& src = dist.GetData();
+    std::vector<uint8_t>& dst = frozen.GetData();
+    float h = voxSize / unit;
+    for (size_t i = 0; i < src.size(); i++) {
+      if (std::abs(src[i]) <= h) {
+        dst[i] = true;
+      }
     }
   }
+
   for (unsigned s = 0; s < Sweep::NSweeps; s++) {
     SweepOneDiagUnsigned(s, dist, h, band, frozen);
   }
