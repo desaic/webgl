@@ -564,8 +564,6 @@ void ShrinkWrap(TrigMesh& meshIn, TrigMesh& meshOut, float ballRadius) {
 
     udf->dist.GetData()[i] = std::min(udf->dist.GetData()[i],
                                       d);
-      
-    
   }
   float sec = timer.getSeconds();
   BBox box;
