@@ -336,3 +336,24 @@ void EmbedMesh() {
   mesh.v = newVerts;
   mesh.SaveObj("F:/dump/deformed.obj");
 }
+
+void SaveHexTxt(const std::string& file, const std::vector<Vec3f>& X,
+                const std::vector<std::array<unsigned, 8> > elts) {
+  if (elts.size() == 0) {
+    return;
+  }
+  const unsigned NUM_HEX_VERTS = elts[0].size();
+  std::ofstream out(file);
+  out << "verts " << X.size() << "\n";
+  out << "elts " << elts.size() << "\n";
+  for (auto v : X) {
+    out << v[0] << " " << v[1] << " " << v[2] << "\n";
+  }
+  for (size_t i = 0; i < elts.size(); i++) {
+    out << NUM_HEX_VERTS << " ";
+    for (size_t j = 0; j < NUM_HEX_VERTS; j++) {
+      out << elts[i][j] << " ";
+    }
+    out << "\n";
+  }
+}

@@ -51,4 +51,9 @@ void SetFloorForRightSide(float y1, float ratio, ElementMesh& em);
 
 void EmbedMesh();
 int LoadX(ElementMesh& em, const std::string& inFile);
+
+void SaveHexTxt(const std::string& file, const std::vector<Vec3f>& X,
+                const std::vector<std::array<unsigned, 8> > elts);
+
+void VoxGridToHexMesh();
 #endif

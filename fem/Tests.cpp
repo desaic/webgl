@@ -413,9 +413,8 @@ void VoxelizeMesh() {
     }
     elts.push_back(ele);
   }
-  std::ofstream out("F:/dump/vox6080.txt");
-  out << "verts " << vertMap.size() << "\n";
-  out << "elts " << elts.size() << "\n";
+  std::string outFile("F:/dump/vox6080.txt");
+  std::vector<Vec3f> X;
   for (auto v : verts) {
     unsigned l = v;
     Vec3u vertIdx = linearToGrid(l, vertSize);
@@ -425,15 +424,9 @@ void VoxelizeMesh() {
     coord[2] = float(vertIdx[2]) * conf.unit[2];
     coord += box.vmin;
     coord *= 1e-3f;
-    out << coord[0] << " " << coord[1] << " " << coord[2] << "\n";
+    X.push_back(coord);
   }
-  for (size_t i = 0; i < elts.size(); i++) {
-    out << "8 ";
-    for (size_t j = 0; j < NUM_HEX_VERTS; j++) {
-      out << elts[i][j] << " ";
-    }
-    out << "\n";
-  }
+  SaveHexTxt(outFile, X, elts);
 }
 
 void MakeGyroid() {
