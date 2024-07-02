@@ -18,8 +18,8 @@ class StrainEne {
                                         int dim = 3) = 0;
   virtual void CacheF(const Matrix3f& F) {}
   virtual ~StrainEne();
-  virtual void SetParam(const std::vector<double>& in) { param = in; }
-  std::vector<double> param;
+  virtual void SetParam(const std::vector<float>& in) { param = in; }
+  std::vector<float> param;
 
   enum MaterialModel { LIN, COROT, NEO, SNH };
 };
@@ -29,7 +29,7 @@ std::vector<StrainEne*> loadMaterials(std::istream& in,
 
 ///@param E array of 2 doubles. E and nu
 ///@param mu array of size 2. mu and lambda.
-void Young2Lame(double E, double nu, double* mu);
+void Young2Lame(double E, double nu, float* mu);
 std::vector<StrainEne*> loadMaterials(std::istream& in,
                                       std::vector<double>& densities);
 #endif

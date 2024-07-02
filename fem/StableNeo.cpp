@@ -1,13 +1,13 @@
 #include "StableNeo.h"
 
 StableNeo::StableNeo() {
-  param.resize(2);
+  param.resize(3);
   param[0] =1e6f;
   param[1] =1e7f;
   param[2] = 1.1;
 }
 
-void StableNeo::SetParam(const std::vector<double> & in) {
+void StableNeo::SetParam(const std::vector<float>& in) {
   float lambda = in[0] + in[1];
   float alpha = (1.0 + in[0] / (in[1] + 1e-9f));
   param.resize(3);

@@ -11,7 +11,7 @@ StrainEne::~StrainEne() {}
 
 ///@param E array of 2 doubles. E and nu
 ///@param mu array of size 2. mu and lambda.
-void Young2Lame(double E, double nu, double* mu) {
+void Young2Lame(double E, double nu, float* mu) {
   mu[0] = E / (2 * (1 + nu));
   mu[1] = E * nu / ((1 + nu) * (1 - 2 * nu));
 }

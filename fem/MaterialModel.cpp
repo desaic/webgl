@@ -6,7 +6,7 @@
 
 MaterialModel::MaterialModel() {
   enePtr = std::make_shared<StableNeo>();
-  std::vector<double> param(2,0);
+  std::vector<float> param(2, 0);
   Young2Lame(1e6, 0.4f, param.data());
   enePtr->SetParam(param);
 }
