@@ -6,6 +6,21 @@
 #include "Array3D.h"
 #include <algorithm>
 
+static Vec3u linearToGrid(unsigned l, const Vec3u& size) {
+  Vec3u idx;
+  idx[2] = l / (size[0] * size[1]);
+  unsigned r = l - idx[2] * size[0] * size[1];
+  idx[1] = r / size[0];
+  idx[0] = l % (size[0]);
+  return idx;
+}
+
+static unsigned linearIdx(const Vec3u& idx, const Vec3u& size) {
+  unsigned l;
+  l = idx[0] + idx[1] * size[0] + idx[2] * size[0] * size[1];
+  return l;
+}
+
 void ComputeSurfaceMesh(const ElementMesh& em, TrigMesh& m,
                         std::vector<uint32_t>& meshToEMVert,
                         float drawingScale) {
@@ -355,5 +370,54 @@ void SaveHexTxt(const std::string& file, const std::vector<Vec3f>& X,
       out << elts[i][j] << " ";
     }
     out << "\n";
+  }
+}
+
+void VoxGridToHexMesh(const Array3D8u& grid,
+   const Vec3f & dx, const Vec3f & origin, std::vector<Vec3f>& X,
+                      std::vector<std::array<unsigned, 8> >& elts) {
+  std::map<unsigned, unsigned> vertMap;
+  Vec3u voxSize = grid.GetSize();
+  Vec3u vertSize = voxSize;
+  vertSize += Vec3u(1, 1, 1);
+  const std::vector<uint8_t>& v = grid.GetData();
+  const size_t NUM_HEX_VERTS = 8;
+  unsigned HEX_VERTS[8][3] = {{0, 0, 0}, {0, 0, 1}, {0, 1, 0}, {0, 1, 1},
+                              {1, 0, 0}, {1, 0, 1}, {1, 1, 0}, {1, 1, 1}};
+  std::vector<unsigned> verts;
+  for (size_t i = 0; i < v.size(); i++) {
+    if (!v[i]) {
+      continue;
+    }
+    Vec3u voxIdx = linearToGrid(i, voxSize);
+    std::array<unsigned, NUM_HEX_VERTS> ele;
+    for (size_t j = 0; j < NUM_HEX_VERTS; j++) {
+      Vec3u vi = voxIdx;
+      vi[0] += HEX_VERTS[j][0];
+      vi[1] += HEX_VERTS[j][1];
+      vi[2] += HEX_VERTS[j][2];
+      unsigned vl = linearIdx(vi, vertSize);
+      auto it = vertMap.find(vl);
+      unsigned vIdx;
+      if (it == vertMap.end()) {
+        vIdx = vertMap.size();
+        vertMap[vl] = vIdx;
+        verts.push_back(vl);
+      } else {
+        vIdx = vertMap[vl];
+      }
+      ele[j] = vIdx;
+    }
+    elts.push_back(ele);
+  }
+  for (auto v : verts) {
+    unsigned l = v;
+    Vec3u vertIdx = linearToGrid(l, vertSize);
+    Vec3f coord;
+    coord[0] = float(vertIdx[0]) * dx[0];
+    coord[1] = float(vertIdx[1]) * dx[1];
+    coord[2] = float(vertIdx[2]) * dx[2];
+    coord += origin;
+    X.push_back(coord);
   }
 }

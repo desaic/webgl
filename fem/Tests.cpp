@@ -342,12 +342,6 @@ Vec3u linearToGrid(unsigned l, const Vec3u& size) {
   return idx;
 }
 
-unsigned linearIdx(const Vec3u& idx, const Vec3u& size) {
-  unsigned l;
-  l = idx[0] + idx[1] * size[0] + idx[2] * size[0] * size[1];
-  return l;
-}
-
 void VoxelizeMesh() {
   voxconf conf;
   conf.unit = Vec3f(2.7f, 2.7f, 2.7f);
@@ -388,44 +382,9 @@ void VoxelizeMesh() {
   Vec3f origin(0, 0, 0);
   SaveVolAsObjMesh("F:/dump/vox_6080.obj", cb.grid, (float*)(&conf.unit[0]),
                    (float*)(&origin), 1);
-  for (size_t i = 0; i < v.size(); i++) {
-    if (!v[i]) {
-      continue;
-    }
-    Vec3u voxIdx = linearToGrid(i, voxSize);
-    std::array<unsigned, NUM_HEX_VERTS> ele;
-    for (size_t j = 0; j < NUM_HEX_VERTS; j++) {
-      Vec3u vi = voxIdx;
-      vi[0] += HEX_VERTS[j][0];
-      vi[1] += HEX_VERTS[j][1];
-      vi[2] += HEX_VERTS[j][2];
-      unsigned vl = linearIdx(vi, vertSize);
-      auto it = vertMap.find(vl);
-      unsigned vIdx;
-      if (it == vertMap.end()) {
-        vIdx = vertMap.size();
-        vertMap[vl] = vIdx;
-        verts.push_back(vl);
-      } else {
-        vIdx = vertMap[vl];
-      }
-      ele[j] = vIdx;
-    }
-    elts.push_back(ele);
-  }
-  std::string outFile("F:/dump/vox6080.txt");
   std::vector<Vec3f> X;
-  for (auto v : verts) {
-    unsigned l = v;
-    Vec3u vertIdx = linearToGrid(l, vertSize);
-    Vec3f coord;
-    coord[0] = float(vertIdx[0]) * conf.unit[0];
-    coord[1] = float(vertIdx[1]) * conf.unit[1];
-    coord[2] = float(vertIdx[2]) * conf.unit[2];
-    coord += box.vmin;
-    coord *= 1e-3f;
-    X.push_back(coord);
-  }
+  VoxGridToHexMesh(cb.grid, 1e-3f * conf.unit, box.vmin, X, elts);
+  std::string outFile("F:/dump/vox6080.txt");
   SaveHexTxt(outFile, X, elts);
 }
 

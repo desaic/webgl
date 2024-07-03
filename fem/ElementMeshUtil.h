@@ -8,7 +8,7 @@
 #include "ElementMesh.h"
 #include "TrigMesh.h"
 #include "Vec3.h"
-
+#include "Array3D.h"
 /// <summary>
 /// Unimplemented
 /// </summary>
@@ -55,5 +55,7 @@ int LoadX(ElementMesh& em, const std::string& inFile);
 void SaveHexTxt(const std::string& file, const std::vector<Vec3f>& X,
                 const std::vector<std::array<unsigned, 8> > elts);
 
-void VoxGridToHexMesh();
+void VoxGridToHexMesh(const Array3D8u& grid, const Vec3f& dx,
+                      const Vec3f& origin, std::vector<Vec3f>& X,
+                      std::vector<std::array<unsigned, 8> >& elts);
 #endif
