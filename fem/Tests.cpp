@@ -1,15 +1,16 @@
 #include <filesystem>
-#include "ElementMesh.h"
-#include "TrigMesh.h"
-#include <iostream>
 #include <fstream>
+#include <iostream>
+
 #include "ArrayUtil.h"
 #include "BBox.h"
-#include "ImageIO.h"
-#include "cpu_voxelizer.h"
-#include "VoxCallback.h"
-#include "MeshUtil.h"
+#include "ElementMesh.h"
 #include "ElementMeshUtil.h"
+#include "ImageIO.h"
+#include "MeshUtil.h"
+#include "TrigMesh.h"
+#include "VoxCallback.h"
+#include "cpu_voxelizer.h"
 
 namespace fs = std::filesystem;
 
@@ -83,6 +84,33 @@ void TestForceFiniteDiff() {
   PrintMat3(prod, std::cout);
   std::cout << "\n";
   std::cout << F.determinant() << " " << Finv.determinant() << "\n";
+}
+
+void TestForceBeam4() {
+  ElementMesh em;
+  em.LoadTxt("F:/github/webgl/fem/data/beam4.txt");
+  //LoadX(em, "F:/dump/beam4_x.txt");
+  MoveRightEnd(0.005, 0.1, em);
+  // em.SaveTxt("F:/dump/hex_m.txt");
+  float ene = em.GetElasticEnergy();
+
+  std::cout << "E: " << ene << "\n";
+  em.fe = std::vector<Vec3f>(em.X.size(),Vec3f(0.0f));
+  em.fixedDOF = std::vector<bool>(em.X.size() * 3, false);
+
+  std::vector<Vec3f> force = em.GetForce();
+  std::vector<Vec3f> refForce = CentralDiffForce(em, 0.0001f);
+  for (size_t i = 0; i < force.size(); i++) {
+    std::cout << force[i][0] << " " << force[i][1] << " " << force[i][2]
+              << ", ";
+    Vec3f diff = refForce[i] - force[i];
+    if (diff.norm() > 0.1) {
+      std::cout << refForce[i][0] << " " << refForce[i][1] << " "
+                << refForce[i][2] << " ";
+    }
+    std::cout << "\n";
+  }
+
 }
 
 void TestStiffnessFiniteDiff() {

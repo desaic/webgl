@@ -138,10 +138,11 @@ int CG(const CSparseMat& K, std::vector<double> & x, const std::vector<double>& 
   std::vector<double> diagInvd = ToDouble(diagInvf);
   
   double bmax = Linf(b);
-  float reduction = 0.001f;
+  float reduction = 1e-4;
   double initL2 = L2(b);
   int ret = 0;
-  std::ofstream log("F:/dump/CG_converge.txt");
+  double prevNorm = bmax;
+  //std::ofstream log("F:/dump/CG_converge.txt");
   for (int i = 0; i < maxIter; i++) {  
     job = 2;
     if (next_job == 1) {
@@ -155,12 +156,14 @@ int CG(const CSparseMat& K, std::vector<double> & x, const std::vector<double>& 
     } else if (next_job == 4) {
       double norm = Linf(R);
       double l2norm = L2(R);
-      log << norm << ", ";
-      log << l2norm << "\n";
-      if (norm < bmax * reduction || l2norm<initL2*reduction) {
+      //log << norm << ", ";
+      //log << l2norm << "\n";
+      if ((norm < bmax * reduction || l2norm < initL2 * reduction) &&
+          std::abs(prevNorm - norm) < bmax * reduction) {
         ret = i;
         break;
       }
+      prevNorm = norm;
     } else {
       return -1;
     }

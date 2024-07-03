@@ -421,3 +421,20 @@ void VoxGridToHexMesh(const Array3D8u& grid,
     X.push_back(coord);
   }
 }
+
+ElementMesh MakeHexMeshBlock(Vec3u size, const Vec3f& dx) {
+  ElementMesh mesh;
+  Array3D8u grid(size[0], size[1], size[2]);
+  grid.Fill(1);
+  std::vector<std::array<unsigned, 8> > elts;
+  VoxGridToHexMesh(grid, dx, Vec3f(0), mesh.X, elts);
+  mesh.InitElements();
+  mesh.x = mesh.X;
+  for (size_t i = 0; i < elts.size(); i++) {
+    mesh.e.push_back(std::make_unique<HexElement>());
+    for (unsigned j = 0; j < mesh.e.back()->NumVerts(); j++) {
+      (*mesh.e.back())[j] = elts[i][j];
+    }
+  }
+  return mesh;
+}

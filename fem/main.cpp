@@ -167,9 +167,17 @@ class Simulator {
     float h;
     bool updated = false;
     float maxdx = Linf(dx);
-    h = std::min(h0, 0.5f*eleSize / maxdx);
+    float maxb = Linf(b);
+    float bScale = 0;
+    if (maxb > 0) {
+      bScale = 0.1f * maxdx / maxb;
+      for (size_t i = 0; i < b.size(); i++) {
+        dx[i] += bScale * b[i];
+      }
+    }
+    h = std::min(h0, 0.5f * eleSize / maxdx);
     std::cout << "h " << h << "\n";
-    for (unsigned li = 0;li<MAX_LINE_SEARCH;li++){
+    for (unsigned li = 0; li < MAX_LINE_SEARCH; li++) {
       em.x = oldx;
       AddTimes(em.x, dx, h);
       newE = em.GetPotentialEnergy();
@@ -215,14 +223,21 @@ class FemApp {
     MakeCheckerPatternRGBA(checker);
     _floorMeshId = _ui->AddMesh(floor);
     _ui->SetMeshTex(_floorMeshId, checker, 4);
-    std::string voxFile = "F:/dump/vox6080.txt";
+    std::string voxFile = "F:/dump/beam4.txt";
     _hexInputId = _ui->AddWidget(std::make_shared<InputText>("mesh file", voxFile));
     _ui->AddButton("Load Hex mesh", [&] {
       std::string file = GetInputString(_hexInputId);
       LoadElementMesh(file);      
     });
     _ui->AddButton("Save x", [&] { _save_x = true; });
-    _ui->AddButton("Run sim", [&] { _runSim = true; });
+    _ui->AddButton("Run sim", [&] {
+      _runSim = true;
+      _numSteps = -1;
+    });
+    _ui->AddButton("Step sim", [&] {
+      _runSim = true;
+      _numSteps = 1;
+    }, true);
     _ui->AddButton("Stop sim", [&] { _runSim = false; });
     _xInputId =
         _ui->AddWidget(std::make_shared<InputText>("x file", "F:/dump/x_in.txt"));
@@ -246,9 +261,9 @@ class FemApp {
     _em.lb.resize(_em.X.size(), Vec3f(-1000, -1000, -1000));
     //PullRight(Vec3f(0,-0.001,  0), 0.01, _em);    
     //PullLeft(Vec3f(0,-0.001, 0), 0.01, _em);
-    FixLeft(0.03, _em);
-    FixRight(0.01, _em);
-    MoveRightEnd(0.03, 0.005, _em);
+    FixLeft(0.005, _em);
+    FixRight(0.005, _em);
+    MoveRightEnd(0.005, 0.1, _em);
     //PullMiddle(Vec3f(0, 0.002, 0), 0.03, _em);
     //FixFloorLeft(0.4, _em);
     //_em.lb.resize(_em.X.size(), Vec3f(-1000, -1, -1000));
@@ -286,7 +301,10 @@ class FemApp {
     std::lock_guard<std::mutex> lock(_refresh_mutex);
     bool wire = _ui->GetCheckBoxVal(_wireframeId);
     _renderMesh.ShowWireFrame(wire);
-    if (_runSim) {
+    if (_runSim && (_numSteps != 0)) {
+      if (_numSteps > 0) {
+        _numSteps--;
+      }
       _sim.StepCG(_em, _simState);
       _renderMesh.UpdatePosition();
       _ui->SetMeshNeedsUpdate(_meshId);
@@ -313,9 +331,15 @@ class FemApp {
   std::mutex _refresh_mutex;
   bool _save_x = false;
   bool _runSim = false;
+  //number of simulation steps to run.
+  //negative number to run forever
+  int _numSteps = -1;
 };
 
+extern void TestForceBeam4();
+
 int main(int argc, char** argv) {
+  TestForceBeam4();
   //  MakeCurve();
   // PngToGrid(argc, argv);
   // CenterMeshes();

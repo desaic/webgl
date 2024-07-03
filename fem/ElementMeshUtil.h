@@ -9,6 +9,7 @@
 #include "TrigMesh.h"
 #include "Vec3.h"
 #include "Array3D.h"
+
 /// <summary>
 /// Unimplemented
 /// </summary>
@@ -19,6 +20,7 @@
 void ComputeSurfaceMesh(const ElementMesh& em, TrigMesh& m,
                         std::vector<uint32_t>& meshToEMVert,
                         float drawingScale);
+
 /// <summary>
 /// 
 /// </summary>
@@ -58,4 +60,7 @@ void SaveHexTxt(const std::string& file, const std::vector<Vec3f>& X,
 void VoxGridToHexMesh(const Array3D8u& grid, const Vec3f& dx,
                       const Vec3f& origin, std::vector<Vec3f>& X,
                       std::vector<std::array<unsigned, 8> >& elts);
+
+ElementMesh MakeHexMeshBlock(Vec3u size, const Vec3f& dx);
+
 #endif

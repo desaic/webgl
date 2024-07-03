@@ -8,8 +8,9 @@ StableNeo::StableNeo() {
 }
 
 void StableNeo::SetParam(const std::vector<float>& in) {
-  float lambda = in[0] + in[1];
-  float alpha = (1.0 + in[0] / (in[1] + 1e-9f));
+  //Lame reparameterization
+  float lambda = in[1];
+  float alpha = 1.0 + in[0] / (in[1] + 1e-9f);
   param.resize(3);
   param[0] = in[0];
   param[1] = lambda;
@@ -18,8 +19,8 @@ void StableNeo::SetParam(const std::vector<float>& in) {
 
 double StableNeo::getEnergy(const Matrix3f& F) {
   double Ic = F.squaredNorm();
-  double Jminus1 = F.determinant() - Alpha();
-  double Psi = 0.5 * (Mu() * (Ic - 3.0) + Lambda() * Jminus1 * Jminus1);
+  double JminusA = F.determinant() - Alpha();
+  double Psi = 0.5 * (Mu() * (Ic - 3.0) + Lambda() * JminusA * JminusA);
   return Psi;
 }
 
