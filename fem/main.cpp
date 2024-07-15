@@ -263,7 +263,7 @@ class FemApp {
     //PullLeft(Vec3f(0,-0.001, 0), 0.01, _em);
     FixLeft(0.005, _em);
     FixRight(0.005, _em);
-    MoveRightEnd(0.005, 0.1, _em);
+    MoveRightEnd(0.005, -0.009, _em);
     //PullMiddle(Vec3f(0, 0.002, 0), 0.03, _em);
     //FixFloorLeft(0.4, _em);
     //_em.lb.resize(_em.X.size(), Vec3f(-1000, -1, -1000));
@@ -339,7 +339,7 @@ class FemApp {
 extern void TestForceBeam4();
 
 int main(int argc, char** argv) {
-  TestForceBeam4();
+  //TestForceBeam4();
   //  MakeCurve();
   // PngToGrid(argc, argv);
   // CenterMeshes();
