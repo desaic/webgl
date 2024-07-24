@@ -163,9 +163,9 @@ void ConnectorVox::VoxelizeMeshes() {
   Vec3f count = (box.vmax - box.vmin) / vconf.unit;
   vconf.gridSize = Vec3u(count[0] + 1, count[1] + 1, count[2] + 1);
   grid.Allocate(count[0], count[1], count[2]);
-  grid.Fill(0);
+  grid.Fill(meshes.size());
   for (unsigned i = 0; i < meshes.size(); i++) {
-    VoxelizeMesh(uint8_t(i + 1), box, voxRes, meshes[i], grid); 
+    VoxelizeMesh(uint8_t(i), box, voxRes, meshes[i], grid); 
   }
   _voxelized = true;
   for (unsigned i = 0; i < meshes.size(); i++) {
@@ -218,6 +218,16 @@ void ConnectorVox::Refresh() {
     _voxelized = false;
   }
   if (_fileLoaded && !_voxelized) {
+    std::stringstream ss(_resInput->_label);
+    int voxResUm = 0;
+    ss >> voxResUm;
+    float resMM = 1e-3 * voxResUm;
+    if (voxResUm > 0) {
+      if (std::abs(conf.voxResMM - resMM) > 1e-4) {
+        conf.voxResMM = resMM;
+        conf.Save();
+      }
+    }
     VoxelizeMeshes();
   }
 }
@@ -241,8 +251,9 @@ void ConnectorVox::Init(UILib* ui) {
   _statusLabel = ui->AddLabel("status");
   LogCb =
       std::bind(LogToUI, std::placeholders::_1, std::ref(*_ui), _statusLabel);
-  _voxResId =
-      _ui->AddWidget(std::make_shared<InputInt>("vox res um", 32));
+  _resInput =
+      std::make_shared<InputInt>("vox res um", int(conf.voxResMM * 1000));
+  _voxResId = _ui->AddWidget(_resInput);
   _outPrefixId =
       _ui->AddWidget(std::make_shared<InputText>("output file", "grid.txt"));
 }

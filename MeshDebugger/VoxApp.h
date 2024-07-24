@@ -25,5 +25,6 @@ struct ConnectorVox {
   std::vector<TrigMesh> meshes;
   Array3D8u grid;
   UILib * _ui;
+  std::shared_ptr<InputInt> _resInput;
   UIConf conf;
 };
