@@ -169,11 +169,12 @@ void ConnectorVox::VoxelizeMeshes() {
   }
   _voxelized = true;
   for (unsigned i = 0; i < meshes.size(); i++) {
-    uint8_t mat = i + 1;
+    uint8_t mat = i;
     SaveVolAsObjMesh(
         dir + "/" + conf.outputFile + std::to_string(i + 1) + ".obj", grid,
                      (float*)(&vconf.unit), i + 1);
   }
+
   std::string gridFilename = dir + "/" + conf.outputFile;
   SaveVoxTxt(grid, voxRes, gridFilename);
   Log("voxelize meshes done");
