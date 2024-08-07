@@ -349,8 +349,8 @@ void RunCanvasApp() {
 
 int main(int argc, char**argv) {
   //MakeXYPairs();
-    RunCanvasApp();
-    return 0;
+    //RunCanvasApp();
+    //return 0;
   if (argc > 1 && argv[1][0] == 'c') {
     CadApp();
   } else {

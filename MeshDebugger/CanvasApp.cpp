@@ -68,9 +68,7 @@ void CanvasApp::Step() {
   }
 }
 
-void CanvasApp::SnapPic() {
-
-}
+void CanvasApp::SnapPic() { SavePngColor("./snap.png", _canvas); }
 
 void CanvasApp::Refresh() {
   //update configs

@@ -51,30 +51,51 @@ Matrix3f colCrossProductMat(const Matrix3f& F, const int i) {
   return c;
 }
 
-std::vector<Matrix3f> StableNeo::getdPdx(const Matrix3f& F, const Vec3f& dF,
-                                            int dim) {
-  std::vector<Matrix3f> dP(dim, Matrix3f::Zero());
+void StableNeoHess(const StableNeo& neo, std::vector<Matrix3f>& dP,
+                   const Matrix3f& F, const Vec3f& dF, int dim) {
   double I3 = F.determinant();
-  double scale = Lambda() * (I3 - Alpha()); 
-
+  double scale = neo.Lambda() * (I3 - neo.Alpha()); 
   const Matrix3f f0hat = scale * colCrossProductMat(F, 0);
   const Matrix3f f1hat = scale * colCrossProductMat(F, 1);
   const Matrix3f f2hat = scale * colCrossProductMat(F, 2);
   for (int ii = 0; ii < dim; ii++) {
-    //mu * I * dFi
-    dP[ii].setRow(ii, float(Mu()) * dF);
-    //lambda * pJpF * pJpF^T * dF
-    dP[ii] += (Lambda() * _pJpF.getRow(ii).dot(dF)) * _pJpF;
+    // mu * I * dFi
+    dP[ii].setRow(ii, float(neo.Mu()) * dF);
+    // lambda * pJpF * pJpF^T * dF
+    dP[ii] += (neo.Lambda() * neo._pJpF.getRow(ii).dot(dF)) * neo._pJpF;
     Matrix3f hessJ;
-    Vec3f colVec = -dF[1] * f2hat.getCol(ii) + dF[2] * f1hat.getCol(ii);    
+    Vec3f colVec = -dF[1] * f2hat.getCol(ii) + dF[2] * f1hat.getCol(ii);
     hessJ.setCol(0, colVec);
     colVec = dF[0] * f2hat.getCol(ii) - dF[2] * f0hat.getCol(ii);
     hessJ.setCol(1, colVec);
-    colVec = -dF[0] * f1hat.getCol(ii) + dF[1] * f0hat.getCol(ii);    
+    colVec = -dF[0] * f1hat.getCol(ii) + dF[1] * f0hat.getCol(ii);
     hessJ.setCol(2, colVec);
     dP[ii] += hessJ;
   }
+}
+
+void PBNGApproxHess(const StableNeo& neo, std::vector<Matrix3f>& dP,
+                    const Matrix3f& F, const Vec3f& dF, int dim) {
+  double I3 = F.determinant();
+  double scale = neo.Lambda() * (I3 - neo.Alpha());
+  for (int ii = 0; ii < dim; ii++) {
+    // mu * I * dFi
+    dP[ii].setRow(ii, float(neo.Mu()) * dF);
+    // JFinv tensor cross JFinv.
+    dP[ii] += (neo.Lambda() * neo._pJpF.getRow(ii).dot(dF)) * neo._pJpF;
+  }
+}
+
+std::vector<Matrix3f> StableNeo::getdPdx(const Matrix3f& F, const Vec3f& dF,
+                                            int dim) {
+  std::vector<Matrix3f> dP(dim, Matrix3f::Zero());
+  // analytical stable neohookean hessian
+  // StableNeoHess(*this, dP, F, dF, dim);
+  // approximate positive definite hessian for large deformation
+  PBNGApproxHess(*this, dP, F, dF, dim);
   return dP;
 }
 
-void StableNeo::CacheF(const Matrix3f& F) { _pJpF = partialJpartialF(F); }
+void StableNeo::CacheF(const Matrix3f& F) {
+  _pJpF = partialJpartialF(F);
+}
