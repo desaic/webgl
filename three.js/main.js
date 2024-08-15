@@ -1,7 +1,6 @@
 import * as THREE from './js/three.module.js';
 import { OrbitControls } from './js/OrbitControls.js';
 import {World} from './World.js';
-
 const fps = 60;
 let world;
 let lastUpdateTime;
@@ -20,7 +19,9 @@ function Animate() {
 
 function InitScene()
 {
-    world = new World();
+
+
+world = new World();
     window.addEventListener( 'resize', onWindowResize, false );
     lastUpdateTime = Date.now();
     Animate();

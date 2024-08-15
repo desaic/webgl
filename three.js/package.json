@@ -8,7 +8,7 @@
   },
   "author": "D",
   "license": "ISC",
-  "dependencies": {
+  "dependencies": {    
     "three": "^0.137.5"
   }
 }
