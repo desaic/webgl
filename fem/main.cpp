@@ -73,9 +73,9 @@ class FETrigMesh{
     }
     for (size_t i = 0; i < _meshToEMVert.size(); i++) {
       unsigned emVert = _meshToEMVert[i];
-      _mesh->v[3 * i] = _em->x[emVert][0];
-      _mesh->v[3 * i + 1] = _em->x[emVert][1];
-      _mesh->v[3 * i + 2] = _em->x[emVert][2];
+      _mesh->v[3 * i] = _drawingScale * _em->x[emVert][0];
+      _mesh->v[3 * i + 1] = _drawingScale * _em->x[emVert][1];
+      _mesh->v[3 * i + 2] = _drawingScale * _em->x[emVert][2];
     }
   }
 
@@ -157,8 +157,8 @@ class Simulator {
     float identityScale = 1000;
     em.ComputeStiffness(state.K);
     FixDOF(fixed, state.K, identityScale);
-    CG(state.K, dx, b, 10000);
-    float h0 = 1.0f;
+    CG(state.K, dx, b, 100);
+    float h0 = 10.0f;
     const unsigned MAX_LINE_SEARCH = 10;
     double E0 = em.GetPotentialEnergy();
     
@@ -170,30 +170,58 @@ class Simulator {
     float maxb = Linf(b);
     float bScale = 0;
     if (maxb > 0) {
-      bScale = 0.1f * maxdx / maxb;
+      bScale = maxdx / maxb;
       for (size_t i = 0; i < b.size(); i++) {
         dx[i] += bScale * b[i];
       }
     }
     h = std::min(h0, 0.5f * eleSize / maxdx);
-    std::cout << "h " << h << "\n";
+   // std::cout << "h " << h << "\n";
     for (unsigned li = 0; li < MAX_LINE_SEARCH; li++) {
       em.x = oldx;
       AddTimes(em.x, dx, h);
       newE = em.GetPotentialEnergy();
-      std::cout << newE << "\n";
+      //std::cout << newE << "\n";
       if (newE < E0) {
         updated = true;
         break;
       }
       h /= 2;
     }
+    //std::cout << "h " << h << "\n";
     if (!updated) {
       em.x = oldx;
     }
+    std::cout << newE << "\n";
     //std::vector<Vec3f> dx = h * force;
   }
-  
+
+  void StepGS(ElementMesh& em, SimState& state) {
+    if (em.X.empty()) {
+      return;
+    }
+    // elastic and external force combined
+    std::vector<Vec3f> force = em.GetForce();
+    Add(force, em.fe);
+    size_t numDOF = em.x.size() * 3;
+    float eleSize = em.X[1][2] - em.X[0][2];
+    std::vector<double> dx(numDOF, 0), b(numDOF);
+    float boundaryTol = 1e-4f;
+    std::vector<bool> fixed = em.fixedDOF;
+    for (size_t i = 0; i < em.x.size(); i++) {
+      for (unsigned j = 0; j < 3; j++) {
+        unsigned l = 3 * i + j;
+        // within or under lower bound and the total force is not pulling it
+        // away
+        if (em.x[i][j] < em.lb[i][j] + boundaryTol) {  //&& force[i][j]<0) {
+          fixed[l] = true;
+        }
+      }
+    }
+
+  }
+
+
   void InitCG(ElementMesh& em, SimState& state) { 
     em.InitStiffnessPattern();
     em.CopyStiffnessPattern(state.K);
@@ -223,7 +251,7 @@ class FemApp {
     MakeCheckerPatternRGBA(checker);
     _floorMeshId = _ui->AddMesh(floor);
     _ui->SetMeshTex(_floorMeshId, checker, 4);
-    std::string voxFile = "F:/dump/beam4.txt";
+    std::string voxFile = "F:/dolphin/meshes/topopt/beam2mm_cut.txt";
     _hexInputId = _ui->AddWidget(std::make_shared<InputText>("mesh file", voxFile));
     _ui->AddButton("Load Hex mesh", [&] {
       std::string file = GetInputString(_hexInputId);
@@ -232,13 +260,17 @@ class FemApp {
     _ui->AddButton("Save x", [&] { _save_x = true; });
     _ui->AddButton("Run sim", [&] {
       _runSim = true;
-      _numSteps = -1;
+      _remainingSteps = -1;
+      _curveOut.open("F:/dolphin/meshes/topopt/force_disp.txt");
     });
     _ui->AddButton("Step sim", [&] {
       _runSim = true;
-      _numSteps = 1;
+      _remainingSteps = 1;
     }, true);
-    _ui->AddButton("Stop sim", [&] { _runSim = false; });
+    _ui->AddButton("Stop sim", [&] {
+      _runSim = false;
+      _curveOut.close();
+    });
     _xInputId =
         _ui->AddWidget(std::make_shared<InputText>("x file", "F:/dump/x_in.txt"));
     _ui->AddButton("Load x", [&] {
@@ -263,7 +295,7 @@ class FemApp {
     //PullLeft(Vec3f(0,-0.001, 0), 0.01, _em);
     FixLeft(0.005, _em);
     FixRight(0.005, _em);
-    MoveRightEnd(0.005, -0.009, _em);
+    MoveRightEnd(0.005, -0.005, _em);
     //PullMiddle(Vec3f(0, 0.002, 0), 0.03, _em);
     //FixFloorLeft(0.4, _em);
     //_em.lb.resize(_em.X.size(), Vec3f(-1000, -1, -1000));
@@ -301,11 +333,35 @@ class FemApp {
     std::lock_guard<std::mutex> lock(_refresh_mutex);
     bool wire = _ui->GetCheckBoxVal(_wireframeId);
     _renderMesh.ShowWireFrame(wire);
-    if (_runSim && (_numSteps != 0)) {
-      if (_numSteps > 0) {
-        _numSteps--;
+    if (_runSim && (_remainingSteps != 0)) {
+      if (_remainingSteps > 0) {
+        _remainingSteps--;
       }
       _sim.StepCG(_em, _simState);
+      _stepCount++;
+      bool converge = false;
+      if (!_em.e.empty()) {
+        float E = _em.GetPotentialEnergy();
+        converge = std::abs(E - _prevE) < 0.01f;
+        _prevE = E;
+      }
+     
+      if (converge && !_em.e.empty() && _moveCount < 20) {
+        auto f = _em.GetForce();
+        float totalForce = 0;
+        for (size_t i = 0; i < _em.X.size(); i++) {
+          if (_em.X[i][0] >= 0.205) {
+            totalForce += f[i][0];
+          }
+        }
+        _curveOut << _moveCount << " " << totalForce <<" "
+                  << "\n";
+        MoveRightEnd(0.005, -0.005, _em);
+        _moveCount++;
+      }
+      if (_moveCount >= 20) {
+        _curveOut.close();
+      }
       _renderMesh.UpdatePosition();
       _ui->SetMeshNeedsUpdate(_meshId);
     }
@@ -333,16 +389,24 @@ class FemApp {
   bool _runSim = false;
   //number of simulation steps to run.
   //negative number to run forever
-  int _numSteps = -1;
+  int _remainingSteps = -1; 
+  int _stepCount = 0;
+
+  std::ofstream _curveOut;
+  float _prevE = 0;
+  int _moveCount = 0;
 };
 
 extern void TestForceBeam4();
+extern void VoxelizeMesh();
 
 int main(int argc, char** argv) {
   //TestForceBeam4();
   //  MakeCurve();
   // PngToGrid(argc, argv);
   // CenterMeshes();
+  //VoxelizeMesh();
+
   UILib ui;
   FemApp app(&ui);
   ui.SetFontsDir("./fonts");

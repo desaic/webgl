@@ -372,11 +372,11 @@ Vec3u linearToGrid(unsigned l, const Vec3u& size) {
 
 void VoxelizeMesh() {
   voxconf conf;
-  conf.unit = Vec3f(2.7f, 2.7f, 2.7f);
+  conf.unit = Vec3f(0.1,0.1,0.1);
   conf.origin = Vec3f(0, 0, 0);
   TrigMesh mesh;
-  std::string meshDir = "F:/dolphin/meshes/gasket/";
-  std::string meshFile = "gasket6080.obj";
+  std::string meshDir = "F:/dolphin/meshes/topopt/";
+  std::string meshFile = "beam2mm_cut.obj";
   mesh.LoadObj(meshDir + meshFile);
   BBox box;
   ComputeBBox(mesh.v, box);
@@ -387,7 +387,6 @@ void VoxelizeMesh() {
     mesh.v[i + 2] -= box.vmin[2];
   }
   box.vmax -= box.vmin;
-  mesh.SaveObj("F:/dump/gasket6080_in.obj");
 
   box.vmin = Vec3f(0, 0, 0);
   conf.gridSize[0] = unsigned(box.vmax[0] / conf.unit[0]) + 1;
@@ -403,16 +402,14 @@ void VoxelizeMesh() {
   Vec3u voxSize = cb.grid.GetSize();
   const std::vector<uint8_t>& v = cb.grid.GetData();
   const size_t NUM_HEX_VERTS = 8;
-  unsigned HEX_VERTS[8][3] = {{0, 0, 0}, {0, 0, 1}, {0, 1, 0}, {0, 1, 1},
-                              {1, 0, 0}, {1, 0, 1}, {1, 1, 0}, {1, 1, 1}};
   std::vector<std::array<unsigned, NUM_HEX_VERTS> > elts;
   std::vector<unsigned> verts;
   Vec3f origin(0, 0, 0);
-  SaveVolAsObjMesh("F:/dump/vox_6080.obj", cb.grid, (float*)(&conf.unit[0]),
+  SaveVolAsObjMesh("F:/dolphin/meshes/topopt/beam_cut_vox.obj", cb.grid, (float*)(&conf.unit[0]),
                    (float*)(&origin), 1);
   std::vector<Vec3f> X;
-  VoxGridToHexMesh(cb.grid, 1e-3f * conf.unit, box.vmin, X, elts);
-  std::string outFile("F:/dump/vox6080.txt");
+  VoxGridToHexMesh(cb.grid, 1e-1f * conf.unit, box.vmin, X, elts);
+  std::string outFile("F:/dolphin/meshes/topopt/beam2mm_cut.txt");
   SaveHexTxt(outFile, X, elts);
 }
 

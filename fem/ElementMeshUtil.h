@@ -44,6 +44,7 @@ void FixLeft(float dist, ElementMesh& em);
 void FixRight(float dist, ElementMesh& em);
 // for x > xmax-range, x-=distance
 void MoveRightEnd(float range, float distance, ElementMesh& em);
+void MoveLeftEnd(float range, float distance, ElementMesh& em);
 void FixMiddle(float ratio, ElementMesh& em);
 
 void PullMiddle(const Vec3f& force, float ratio, ElementMesh& em);

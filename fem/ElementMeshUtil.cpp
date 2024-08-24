@@ -24,8 +24,46 @@ static unsigned linearIdx(const Vec3u& idx, const Vec3u& size) {
 void ComputeSurfaceMesh(const ElementMesh& em, TrigMesh& m,
                         std::vector<uint32_t>& meshToEMVert,
                         float drawingScale) {
+  //from hex element ordering to triangle indices
+  constexpr unsigned NUM_HEX_TRIGS = 12;
+  const unsigned CUBE_TRIGS[NUM_HEX_TRIGS][3] = {
+      {0, 1, 2}, {1, 3, 2}, {4, 6, 5}, {5, 6, 7}, {0, 4, 1}, {1, 4, 5},
+      {6, 2, 3}, {6, 3, 7}, {0, 2, 4}, {4, 2, 6}, {1, 5, 3}, {3, 5, 7}};
+  unsigned VSIZE = em.X.size();
+  std::vector<unsigned> vertMap(em.X.size(), VSIZE);
+  unsigned numVerts = 0;
   for (size_t i = 0; i < em.e.size(); i++) {
     const Element* ele = em.e[i].get();
+    if (ele->NumVerts() == 8) {
+      //add new verts to mesh if any
+      for (unsigned j = 0; j < 8; j++) {
+        unsigned oldVIdx = (*ele)[j];
+        unsigned newVIdx = vertMap[oldVIdx];
+        if (newVIdx>=VSIZE) {
+          newVIdx = numVerts;
+          vertMap[oldVIdx] = newVIdx;
+          for (unsigned d = 0; d < 3; d++) {
+            m.v.push_back(em.x[oldVIdx][d]);
+          }
+          numVerts++;
+        }
+      }
+      //make 12 new triangles.
+      for (unsigned j = 0; j < NUM_HEX_TRIGS; j++) {
+        for (unsigned k = 0; k < 3; k++) {
+          unsigned oldv = (*ele)[CUBE_TRIGS[j][k]];
+          m.t.push_back(vertMap[oldv]);
+        }
+      }
+    }
+  }
+  //m.SaveObj("F:/dump/em_cubes.obj");
+  //inverse map of vertMap
+  meshToEMVert.resize(m.v.size() / 3, 0);
+  for (size_t i = 0; i < em.X.size(); i++) {
+    if (vertMap[i] < meshToEMVert.size()) {
+      meshToEMVert[vertMap[i]] = i;
+    }
   }
 }
 
@@ -172,6 +210,16 @@ void MoveRightEnd(float range, float distance, ElementMesh& em) {
   ComputeBBox(em.X, box);
   for (size_t i = 0; i < em.X.size(); i++) {
     if (box.vmax[0] - em.X[i][0] < range) {
+      em.x[i][0] += distance;
+    }
+  }
+}
+
+void MoveLeftEnd(float range, float distance, ElementMesh& em) {
+  BBox box;
+  ComputeBBox(em.X, box);
+  for (size_t i = 0; i < em.X.size(); i++) {
+    if (em.X[i][0] - box.vmin[0] < range) {
       em.x[i][0] += distance;
     }
   }
