@@ -61,6 +61,7 @@ class FETrigMesh{
     } else {
       ComputeSurfaceMesh(*_em, *_mesh, _meshToEMVert, _drawingScale);
     }
+    _updated = true;
   }
 
   //copy "x" from _em to _mesh
@@ -68,6 +69,7 @@ class FETrigMesh{
     if (!(_em && _mesh)) {
       return;
     }
+    _updated = true;
     if (_showWireFrame) {
       UpdateWireframePosition(*_em, *_mesh, _edges, _drawingScale,
                               _beamThickness);
@@ -85,6 +87,7 @@ class FETrigMesh{
     if (b != _showWireFrame) {
       _showWireFrame = b;
       UpdateMesh(_em, _drawingScale);
+      _updated = true;
     }
   }
 
@@ -93,6 +96,7 @@ class FETrigMesh{
   std::vector<uint32_t> _meshToEMVert;
   std::vector<Edge> _edges;
   bool _showWireFrame = true;
+  bool _updated = false;
   float _drawingScale = 1;
   float _beamThickness = 0.5f;
 };
@@ -334,7 +338,7 @@ class FemApp {
   void Refresh() {
     std::lock_guard<std::mutex> lock(_refresh_mutex);
     bool wire = _ui->GetCheckBoxVal(_wireframeId);
-    _renderMesh.ShowWireFrame(wire);
+    _renderMesh.ShowWireFrame(wire);    
     if (_runSim && (_remainingSteps != 0)) {
       if (_remainingSteps > 0) {
         _remainingSteps--;
@@ -365,7 +369,10 @@ class FemApp {
         _curveOut.close();
       }
       _renderMesh.UpdatePosition();
+    }
+    if (_renderMesh._updated) {
       _ui->SetMeshNeedsUpdate(_meshId);
+      _renderMesh._updated = false;
     }
     if (_save_x) {
       SaveX(_em,"F:/dump/x_out.txt");
