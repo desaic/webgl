@@ -89,6 +89,13 @@ int TrigMesh::LoadStep(const std::string& meshFile) {
   return 0;
 }
 
+void TrigMesh::Clear() {
+  v.clear();
+  t.clear();
+  nt.clear();
+  uv.clear();
+}
+
 // compute triangle area.
 float TrigMesh::GetArea(unsigned tIdx) const {
   unsigned vIdx[3] = {t[tIdx * 3], t[tIdx * 3 + 1], t[tIdx * 3 + 2]};

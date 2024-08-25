@@ -53,7 +53,9 @@ class FETrigMesh{
     }
     _drawingScale = drawingScale;
     _em = em;
-    _mesh = std::make_shared<TrigMesh>();
+    if (!_mesh) {
+      _mesh = std::make_shared<TrigMesh>();
+    }
     if (_showWireFrame) {
       ComputeWireframeMesh(*_em, *_mesh, _edges, _drawingScale, _beamThickness);      
     } else {

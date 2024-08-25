@@ -32,6 +32,7 @@ void ComputeSurfaceMesh(const ElementMesh& em, TrigMesh& m,
   unsigned VSIZE = em.X.size();
   std::vector<unsigned> vertMap(em.X.size(), VSIZE);
   unsigned numVerts = 0;
+  m.Clear();
   for (size_t i = 0; i < em.e.size(); i++) {
     const Element* ele = em.e[i].get();
     if (ele->NumVerts() == 8) {
@@ -43,7 +44,7 @@ void ComputeSurfaceMesh(const ElementMesh& em, TrigMesh& m,
           newVIdx = numVerts;
           vertMap[oldVIdx] = newVIdx;
           for (unsigned d = 0; d < 3; d++) {
-            m.v.push_back(em.x[oldVIdx][d]);
+            m.v.push_back(drawingScale * em.x[oldVIdx][d]);
           }
           numVerts++;
         }

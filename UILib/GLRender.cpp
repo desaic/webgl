@@ -177,7 +177,7 @@ void GLRender::Render() {
   glBindFramebuffer(GL_FRAMEBUFFER, _fbo);
   glViewport(0, 0, _width, _height);
 
-  glClearColor(208 / 255.0f, 150 / 255.0f, 102 / 255.0f, 0.8);
+  glClearColor(50 / 255.0f, 50 / 255.0f, 50 / 255.0f, 0.8);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   glEnable(GL_DEPTH_TEST);
   const GLsizei matCount = 1;

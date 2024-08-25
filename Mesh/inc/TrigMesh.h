@@ -63,6 +63,8 @@ class TrigMesh {
   // texture coordinates
   std::vector<Vec2f> uv;
 
+  // delete and free all data.
+  void Clear();
   size_t GetNumTrigs() const { return t.size() / 3; }
   size_t GetNumVerts() const { return v.size() / 3; }
   int LoadStl(const std::string& filename);
