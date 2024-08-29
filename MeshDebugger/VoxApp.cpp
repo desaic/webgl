@@ -182,34 +182,48 @@ void ConnectorVox::VoxelizeMeshes() {
 
 bool FloatEq(float a, float b, float eps) { return std::abs(a - b) < eps; }
 
+/// @brief 
+/// @param widgetId 
+/// @param ui 
+/// @param confVal 
+/// @param inputScale 
+/// @return 0 if no change. >0 if value changed. 
+int CheckFloatInput(int widgetId, UILib* ui, float & confVal, float inputScale,
+  float minVal) {
+  std::shared_ptr<InputInt> input =
+      std::dynamic_pointer_cast<InputInt>(ui->GetWidget(widgetId));
+  float uiVal = confVal;
+  if (input && input->_entered) {
+    uiVal = float(input->_value * inputScale);
+    input->_entered = false;
+  }
+  const float EPS = 5e-5f;
+  uiVal = std::max(minVal, uiVal);
+  if (!FloatEq(uiVal, confVal, EPS)) {
+    confVal = uiVal;
+    return 1;
+  }
+  return 0;
+}
+
 void ConnectorVox::Refresh() {
   //update configs
-  bool confChanged = false;
+  int confChanged = 0;
   const float EPS = 5e-5f;
   const float umToMM=0.001f;
-  if (_voxResId >= 0) {
-    std::shared_ptr<InputInt> input =
-        std::dynamic_pointer_cast<InputInt>(_ui->GetWidget(_voxResId));
-    float uiVoxRes = conf.voxResMM;
-    if (input &&input->_entered) {
-      uiVoxRes = float(input->_value * umToMM);      
-      input->_entered = false;
-    }
-    if (!FloatEq(uiVoxRes, conf.voxResMM,EPS)) {
-      conf.voxResMM = uiVoxRes;
-      confChanged = true;
-    }
-  }
+  confChanged = CheckFloatInput(_voxResId, _ui, conf.voxResMM, 1e-3f, 1e-2);
+  confChanged |= CheckFloatInput(_waxGapId, _ui, conf.waxGapMM, 1e-3f, 0);
   if (_outPrefixId >= 0) {
     std::shared_ptr<InputText> input =
         std::dynamic_pointer_cast<InputText>(_ui->GetWidget(_outPrefixId));
     if (input && input->_entered) {
       input->_entered = false;
     }
-    conf.outputFile = input->GetString();
-    confChanged = true;
+    if (conf.outputFile != input->GetString()) {
+      conf.outputFile = input->GetString();
+      confChanged = true;
+    }
   }
-
   if (confChanged) {
     conf.Save();
   }
@@ -219,21 +233,10 @@ void ConnectorVox::Refresh() {
     _voxelized = false;
   }
   if (_fileLoaded && !_voxelized) {
-    std::stringstream ss(_resInput->_label);
-    int voxResUm = 0;
-    ss >> voxResUm;
-    float resMM = 1e-3 * voxResUm;
-    if (voxResUm > 0) {
-      if (std::abs(conf.voxResMM - resMM) > 1e-4) {
-        conf.voxResMM = resMM;
-        conf.Save();
-      }
-    }
     VoxelizeMeshes();
   }
 }
 
-  
 void OnChangeDir(std::string dir, UIConf& conf) {
   conf.workingDir = dir;
   conf.Save();
@@ -255,6 +258,9 @@ void ConnectorVox::Init(UILib* ui) {
   _resInput =
       std::make_shared<InputInt>("vox res um", int(conf.voxResMM * 1000));
   _voxResId = _ui->AddWidget(_resInput);
+  _waxGapInput =
+      std::make_shared<InputInt>("wax gap um", int(conf.waxGapMM * 1000));
+  _waxGapId = _ui->AddWidget(_waxGapInput);
   _outPrefixId =
       _ui->AddWidget(std::make_shared<InputText>("output file", "grid.txt"));
 }

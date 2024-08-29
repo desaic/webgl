@@ -20,11 +20,13 @@ struct ConnectorVox {
   bool _fileLoaded = false;  
   bool _voxelized = false;
   int _voxResId = -1;
+  int _waxGapId = -1;
   int _outPrefixId = -1;
   int _statusLabel = -1;
   std::vector<TrigMesh> meshes;
   Array3D8u grid;
   UILib * _ui;
   std::shared_ptr<InputInt> _resInput;
+  std::shared_ptr<InputInt> _waxGapInput;
   UIConf conf;
 };

@@ -13,6 +13,7 @@ class UIConf {
   int _numTokens = 128;
   std::string outputFile = "grid.txt";
   float voxResMM = 0.032f;
+  float waxGapMM = 0.064f;
   std::string workingDir = "./";
   std::string outDir = "./";
 };

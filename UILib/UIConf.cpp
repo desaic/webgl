@@ -82,6 +82,15 @@ std::string unescape_json_string(const std::string& str) {
   return result;
 }
 
+int ParseFloat(float& f, const std::string& s) {
+  try {
+    f = std::stod(s);
+  } catch (const std::exception& e) {
+    return -1;
+  }
+  return 0;
+}
+
 int UIConf::Load(const std::string& confFile) {
   std::ifstream in;
   std::string file = _confFile;
@@ -139,13 +148,13 @@ int UIConf::Load(const std::string& confFile) {
     } else if (key == "voxResMM") {
       i++;
       std::string val(&str[t[i].start], t[i].end - t[i].start);
-      double f = 0.032;
-      try {
-        f = std::stod(val);
-      } catch (const std::exception& e) {
-        std::cout << key << " invalid value " << val << "\n";
-      }
-      voxResMM = float(f);
+      voxResMM = 0.032;
+      ParseFloat(voxResMM, val);
+    } else if (key == "waxGapMM") {
+      i++;
+      std::string val(&str[t[i].start], t[i].end - t[i].start);
+      waxGapMM = 0.032;
+      ParseFloat(waxGapMM, val);
     } else {
       std::cout << "Unexpected key: " << key << "\n";
       i++;
@@ -180,6 +189,7 @@ int UIConf::Save() {
   PrintJson("outDir", outDir, out);
   PrintJson("workingDir", workingDir, out);
   PrintJson("voxResMM", voxResMM, out);
+  PrintJson("waxGapMM", waxGapMM, out);
   PrintJson("absoluteZero", -273.15f, out, LAST_ITEM);
   out<<"}\n";
   return 0;
