@@ -26,6 +26,7 @@ void ConnectorVox::LoadMeshes() {
   if (filenames.size() == 0) {
     return;
   }
+  meshes.clear();
   meshes.resize(filenames.size());
   Log("load meshes");
   for (size_t i = 0; i < filenames.size();i++) {
@@ -120,12 +121,126 @@ void SaveVoxTxt(const Array3D8u & grid, float voxRes, const std::string & filena
   for (unsigned z = 0; z < gridsize[2]; z++) {
     for (unsigned y = 0; y < gridsize[1]; y++) {
       for (unsigned x = 0; x < gridsize[0]; x++) {
-        out << int(grid(x, y, z) + 1) << " ";
+        out << int(grid(x, y, z)) << " ";
       }
       out << "\n";
     }    
   }
   out << "\n";
+}
+
+void DilateVec(uint8_t* vec, size_t len, unsigned rad, uint8_t matVal,
+               uint8_t dilateVal) {
+  std::vector<uint8_t> tmp(len, 0);
+  for (unsigned i = 0; i < len; i++) {
+    if (vec[i] != matVal) {
+      continue;
+    }
+    
+    for (int j = int(i) - rad; j <= int(i + rad); j++) {
+      if (j < 0) {
+        continue;
+      }
+      if (j >= int(len)) {
+        break;
+      }
+      tmp[j] = dilateVal;
+    }
+  }
+  for (unsigned i = 0; i < len; i++) {
+    vec[i] = tmp[i];
+  }
+}
+void DilateBinary(Array3D8u& grid, Vec3u rad) {
+  Vec3u size = grid.GetSize();
+  // dilate x
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      std::vector<uint8_t> row(size[0], 0);
+      for (unsigned x = 0; x < size[0]; x++) {
+        row[x] = grid(x, y, z);
+      }
+      DilateVec(row.data(), row.size(), rad[0], 1, 1);
+      for (unsigned x = 0; x < size[0]; x++) {
+        grid(x, y, z) = row[x];
+      }
+    }
+  }
+  // dilate y
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned x = 0; x < size[0]; x++) {
+      std::vector<uint8_t> row(size[1], 0);
+      for (unsigned y = 0; y < size[1]; y++) {
+        row[y] = grid(x, y, z);
+      }
+      DilateVec(row.data(), row.size(), rad[1], 1, 1);
+      for (unsigned y = 0; y < size[1]; y++) {
+        grid(x, y, z) = row[y];
+      }
+    }
+  }
+  // dilate z
+  for (unsigned y = 0; y < size[1]; y++) {
+    for (unsigned x = 0; x < size[0]; x++) {
+      std::vector<uint8_t> row(size[2], 0);
+      for (unsigned z = 0; z < size[2]; z++) {
+        row[z] = grid(x, y, z);
+      }
+      DilateVec(row.data(), row.size(), rad[2], 1, 1);
+      for (unsigned z = 0; z < size[2]; z++) {
+        grid(x, y, z) = row[z];
+      }
+    }
+  }
+}
+
+void AddWaxGap(Array3D8u &grid, Vec3f voxRes, float waxGapMM, uint8_t mat0) {
+  Vec3u rad;
+  rad[0] = std::round(waxGapMM / voxRes[0]);
+  rad[1] = std::round(waxGapMM / voxRes[1]);
+  rad[2] = std::round(waxGapMM / voxRes[2]);
+  Vec3u size = grid.GetSize();
+  uint8_t maxVal = 0;
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      for (unsigned x = 0; x < size[0]; x++) {
+        maxVal = std::max(grid(x, y, z), maxVal);
+      }
+    }
+  }
+  // add wax at z=[0, rad[2] ] to separate the two parts at interface
+  for (unsigned z = 0; z < rad[2]; z++) {
+    if (z >= size[2]) {
+      continue;
+    }
+    for (unsigned y = 0; y < size[1]; y++) {
+      for (unsigned x = 0; x < size[0]; x++) {
+        if (grid(x, y, z) == maxVal) {
+          grid(x, y, z) = 1;
+        }
+      }
+    }
+  }
+  Array3D8u mask(grid.GetSize(), 0);
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      for (unsigned x = 0; x < size[0]; x++) {
+        if (grid(x, y, z) == mat0) {
+          mask(x, y, z) = 1;
+        }
+      }
+    }
+  }
+  DilateBinary(mask, rad);
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      for (unsigned x = 0; x < size[0]; x++) {
+        if (mask(x, y, z) == 1 && grid(x,y,z) >= maxVal) {
+          grid(x, y, z) = 1;
+        }
+      }
+    }
+  }
 }
 
 void ConnectorVox::VoxelizeMeshes() {
@@ -152,27 +267,40 @@ void ConnectorVox::VoxelizeMeshes() {
   box.vmin = box.vmin - boxCenter;
   box.vmax = box.vmax - boxCenter;
   float voxRes = conf.voxResMM;
-  voxconf vconf;
-  vconf.unit = Vec3f(voxRes, voxRes, voxRes);
+  Vec3f unit = Vec3f(voxRes, voxRes, voxRes);
 
   int band = 0;
-  box.vmin = box.vmin - float(band) * vconf.unit;
-  box.vmax = box.vmax + float(band) * vconf.unit;
-  vconf.origin = box.vmin;
+  box.vmin = box.vmin - float(band) * unit;
+  box.vmax = box.vmax + float(band) * unit;  
 
-  Vec3f count = (box.vmax - box.vmin) / vconf.unit;
-  vconf.gridSize = Vec3u(count[0] + 1, count[1] + 1, count[2] + 1);
-  grid.Allocate(count[0], count[1], count[2]);
-  grid.Fill(meshes.size());
-  for (unsigned i = 0; i < meshes.size(); i++) {
-    VoxelizeMesh(uint8_t(i), box, voxRes, meshes[i], grid); 
+  Vec3f count = (box.vmax - box.vmin) / unit;
+  Vec3u gridSize = Vec3u(count[0] + 1, count[1] + 1, count[2] + 1);
+  if (conf.waxGapMM > 0.01) {
+    //pad the grid except in minus z direction.
+    unsigned pad=std::round(conf.waxGapMM / voxRes);
+    gridSize[0] += 2 * pad;
+    gridSize[1] += 2 * pad;
+    gridSize[2] += pad;
+    box.vmin[0] -= pad * voxRes;
+    box.vmin[1] -= pad * voxRes;
+    box.vmax = box.vmax + Vec3f(pad * voxRes);
   }
+  //0 for void and 1 for wax therefore +2.
+  uint8_t mat0 = 2;
+  grid.Allocate(gridSize, meshes.size() + mat0);
+  for (unsigned i = 0; i < meshes.size(); i++) {
+    VoxelizeMesh(uint8_t(i + mat0), box, voxRes, meshes[i], grid); 
+  }
+  if (conf.waxGapMM > 0.01) {
+    AddWaxGap(grid, voxRes, conf.waxGapMM, mat0);
+  }
+
   _voxelized = true;
   for (unsigned i = 0; i < meshes.size(); i++) {
     uint8_t mat = i;
     SaveVolAsObjMesh(
-        dir + "/" + conf.outputFile + std::to_string(i + 1) + ".obj", grid,
-                     (float*)(&vconf.unit), i + 1);
+        dir + "/" + conf.outputFile + std::to_string(i + mat0) + ".obj", grid,
+        (float*)(&unit), i + mat0);
   }
 
   std::string gridFilename = dir + "/" + conf.outputFile;
