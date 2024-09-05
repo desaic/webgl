@@ -76,18 +76,13 @@ void Camera::pan(float dx, float dy) {
     right = viewDir.cross(Vec3f(0, 1, 0));
   }
   right.normalize();
-  dx *= len / far;
-  dy *= len / far;
   Vec3f displacement = -dx * right + dy * up;
   at = at + displacement;
   eye = eye + displacement;
   update();
 }
 
-void Camera::zoom(float ratio) {
-  if (ratio <= 0) {
-    ratio = 0.1f;
-  }
+void Camera::zoom(float dist) {
   Vec3f viewDir = at - eye;
   float len = viewDir.norm2();
   if (len == 0) {
@@ -97,12 +92,14 @@ void Camera::zoom(float ratio) {
   }
   len = std::sqrt(len);
   viewDir = (1.0f / len) * viewDir;
-  len = len * ratio;
+  len = len - dist;
   if (len < near) {
     len = near;
+    at = at + dist * viewDir;
   }
-  if (len > far) {
-    len = far;
+  if (len > far/10) {
+    len = far/10;
+    at = at + dist * viewDir;
   }
   eye = at - len * viewDir;
   update();

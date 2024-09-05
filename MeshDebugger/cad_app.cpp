@@ -41,7 +41,14 @@ void cad_app::Init(UILib* ui) {
   MakeCheckerPatternRGBA(checker);
   _floorMeshId = _ui->AddMesh(_floor);
   _ui->SetMeshTex(_floorMeshId, checker, 4);
-
+  GLRender* gl = ui->GetGLRender();
+  GLLightArray* lights = gl->GetLights();
+  lights->SetLightPos(0, 250, 100, 250);
+  lights->SetLightPos(1, 500, 100, 250);
+  lights->SetLightColor(0, 0.8, 0.7, 0.6);
+  lights->SetLightColor(1, 0.8, 0.8, 0.8);
+  lights->SetLightPos(2, 0, 100, 100);
+  lights->SetLightColor(2, 0.8, 0.7, 0.6);
   _ui->SetShowImage(false);
 
   _ui->AddButton("Open", [&]() {

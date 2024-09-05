@@ -137,9 +137,9 @@ class GLRender {
   GLLightArray _lights;
   Mouse _mouse;
   bool captureMouse = false;
-  float camSpeed = 0.4;
+  float camSpeed = 0.2;
   float xRotSpeed = 4e-3f, yRotSpeed = 4e-3f;
-  float zoomRatio = 1.25f;
+  float zoomSpeed = 5.0f;
   Vec3f _eye0 = {500.0f, 100.0f, 400.0f};
   Vec3f _at0 = {200.0f, 0.0f, 200.0f};
 

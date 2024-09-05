@@ -128,9 +128,9 @@ void GLRender::SetMouse(int x, int y, float wheel, bool left, bool mid,
     }
   } else if (wheel != 0) {
     if (wheel > 0) {
-      _camera.zoom(1.0f/zoomRatio);
+      _camera.zoom(zoomSpeed);
     } else {
-      _camera.zoom(zoomRatio);
+      _camera.zoom(-zoomSpeed);
     }
   }
   _mouse.left = left;
