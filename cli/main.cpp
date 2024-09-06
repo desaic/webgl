@@ -8,80 +8,10 @@
 #include "Array3D.h"
 #include "BBox.h"
 
-#include "ImageIO.h"
-#include "cad_app.h"
-#include "CanvasApp.h"
-#include "VoxApp.h"
-#include "UIConf.h"
-#include "UILib.h"
-#include "TriangulateContour.h"
-
 #include "cpu_voxelizer.h"
-#include "Lattice.h"
 #include "Grid3Df.h"
+#include "Lattice.h"
 #include <functional>
-
-void VoxApp() {
-  UILib ui;
-  ConnectorVox app;
-  app.Init(&ui);
-  ui.SetFontsDir("./fonts");
-
-  int statusLabel = ui.AddLabel("status");
-
-  ui.Run();
-
-  const unsigned PollFreqMs = 20;
-
-  while (ui.IsRunning()) {
-    app.Refresh();
-    std::this_thread::sleep_for(std::chrono::milliseconds(PollFreqMs));
-  }
-}
-
-void TestCDT() {
-  TrigMesh mesh;
-  std::vector<float> v(8);
-  mesh = TriangulateLoop(v.data(), v.size() / 2);
-  mesh.SaveObj("F:/dump/loop_trigs.obj");
-}
-
-void CadApp() {
-  UILib ui;
-  cad_app app;
-  app.Init(&ui);
-  ui.SetFontsDir("./fonts");
-  int statusLabel = ui.AddLabel("status");
-  ui.Run();
-
-  const unsigned PollFreqMs = 20;
-
-  while (ui.IsRunning()) {
-    app.Refresh();
-    std::this_thread::sleep_for(std::chrono::milliseconds(PollFreqMs));
-  }
-}
-
-void RunCanvasApp() {
-  
-    UILib ui;
-    CanvasApp app;
-    app.conf._confFile = "./canvas_conf.json";
-    app.Init(&ui);
-    ui.SetFontsDir("./fonts");
-
-    int statusLabel = ui.AddLabel("status");
-
-    ui.Run();
-
-    const unsigned PollFreqMs = 20;
-
-    while (ui.IsRunning()) {
-      app.Refresh();
-      std::this_thread::sleep_for(std::chrono::milliseconds(PollFreqMs));
-    }
-  
-}
 
 slicer::Grid3Df MakeOctetUnitCell() {
     slicer::Grid3Df cell;
@@ -136,13 +66,6 @@ void MakeAcousticLattice() { slicer::Grid3Df cell = MakeOctetUnitCell();
 
 int main(int argc, char** argv) {
     MakeAcousticLattice();
-    // MakeXYPairs();
-    //RunCanvasApp();
-    //return 0;
-    // if (argc > 1 && argv[1][0] == 'c') {
-       CadApp();
-    // } else {
-    //VoxApp();
-    //}
+
     return 0;
 }

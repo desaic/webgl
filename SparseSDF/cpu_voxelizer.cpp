@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "BBox.h"
+#include "Vec2.h"
 
 Vec3f clamp(const Vec3f& v, const Vec3f& lb, const Vec3f& ub) {
   return Vec3f(std::clamp(v[0], lb[0], ub[0]), std::clamp(v[1], lb[1], ub[1]),

@@ -8,6 +8,7 @@ struct voxconf {
   Vec3f origin;
   Vec3f unit;
   Vec3u gridSize;
+
 };
 
 // ignores voxels with negative indices.
