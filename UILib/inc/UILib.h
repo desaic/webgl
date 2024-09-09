@@ -49,6 +49,15 @@ class InputInt : public UIWidget {
   bool _entered = false;
 };
 
+class InputFloat : public UIWidget {
+ public:
+  InputFloat(const std::string& label, float val) : _label(label), _value(val) {}
+  void Draw() override;
+  std::string _label;
+  float _value;
+  bool _entered = false;
+};
+
 class InputText : public UIWidget {
  public:
   InputText(const std::string& label, const std::string& initVal)

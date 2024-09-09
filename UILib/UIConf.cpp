@@ -145,6 +145,11 @@ int UIConf::Load(const std::string& confFile) {
       i++;
       std::string val(&str[t[i].start], t[i].end - t[i].start);
       workingDir = unescape_json_string(val);
+    } else if (key == "thicknessMM") {
+      i++;
+      std::string val(&str[t[i].start], t[i].end - t[i].start);
+      thicknessMM = 0.032;
+      ParseFloat(thicknessMM, val);
     } else if (key == "voxResMM") {
       i++;
       std::string val(&str[t[i].start], t[i].end - t[i].start);
@@ -190,6 +195,7 @@ int UIConf::Save() {
   PrintJson("workingDir", workingDir, out);
   PrintJson("voxResMM", voxResMM, out);
   PrintJson("waxGapMM", waxGapMM, out);
+  PrintJson("thicknessMM", thicknessMM, out);
   PrintJson("absoluteZero", -273.15f, out, LAST_ITEM);
   out<<"}\n";
   return 0;

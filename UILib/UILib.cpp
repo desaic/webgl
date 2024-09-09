@@ -295,6 +295,13 @@ void InputInt::Draw() {
   }
 }
 
+void InputFloat::Draw() {
+  ImGui::InputFloat(_label.c_str(), &_value, 0.5f, 1, "%0.1f");
+  if (ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+    _entered = true;
+  }
+}
+
 void InputText::Draw() {
   //imgui only support fixed length
   ImGui::InputText(_label.c_str(), _value.data(), _value.size());
