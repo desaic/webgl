@@ -984,10 +984,11 @@ void cropScanData(const ConfigFile& conf) {
 }
 
 void DownsizeScansX() {
-  std::string scanDir = "H:/nature/scan1109/";
-  std::string scanDirOut = "H:/nature/scan0.5x/";
-  unsigned startIdx = 3880;
-  unsigned endIdx = 3880;
+  std::string scanDir = "F:/v8/1213overlay/scan/";
+  std::string scanDirOut = "F:/v8/1213overlay/scan0.5x/";
+  unsigned startIdx = 2678;
+  unsigned endIdx = 6908;
+  createDir(scanDirOut);
   for (size_t i = startIdx; i <= endIdx; i++) {
     std::string inFile = scanDir + "/scan_" + std::to_string(i) + ".png";
     cv::Mat in = cv::imread(inFile,cv::IMREAD_GRAYSCALE);
@@ -1003,10 +1004,11 @@ void DownsizeScansX() {
 }
 
 void DownsizePrintsX() {
-  std::string scanDir = "H:/nature/print1109/";
-  std::string scanDirOut = "H:/nature/print0.5x/";
-  unsigned startIdx = 4;
-  unsigned endIdx = 4792;
+  std::string scanDir = "F:/v8/1213overlay/print/";
+  std::string scanDirOut = "F:/v8/1213overlay/print0.5x/";
+  unsigned startIdx = 2678;
+  unsigned endIdx = 6908;
+  createDir(scanDirOut);
   for (size_t i = startIdx; i < endIdx; i++) {
     std::string inFile = scanDir + "/slice_" + std::to_string(i) + "_0.png";
     cv::Mat in = cv::imread(inFile, cv::IMREAD_GRAYSCALE);
@@ -1459,10 +1461,11 @@ void SizeScans1080p() {
 }
 
 void DownsampleScan4x() {
-  std::string scanDir = "H:/nature/cleanScan/";
-  std::string scanDirOut = "H:/nature/scan0.25mm/";
-  unsigned startIdx = 118;
-  unsigned endIdx = 3880;
+  std::string scanDir = "F:/v8/1213overlay/scan0.5x/";
+  std::string scanDirOut = "F:/v8/1213overlay/scan0.25mm/";
+  unsigned startIdx = 2678;
+  unsigned endIdx = 6908;
+  createDir(scanDirOut);
   for (size_t i = startIdx; i <= endIdx; i++) {
     std::string inFile = scanDir + "/" + std::to_string(i) + ".png";
     cv::Mat in = cv::imread(inFile, cv::IMREAD_GRAYSCALE);
@@ -1479,10 +1482,11 @@ void DownsampleScan4x() {
   }
 }
 void DownsamplePrint4x() {
-  std::string scanDir = "H:/nature/print0.5x/";
-  std::string scanDirOut = "H:/nature/print0.25mm/";
-  unsigned startIdx = 3880;
-  unsigned endIdx = 3881;
+  std::string scanDir = "F:/v8/1213overlay/print0.5x/";
+  std::string scanDirOut = "F:/v8/1213overlay/print0.25mm/";
+  unsigned startIdx = 2678;
+  unsigned endIdx = 6908;
+  createDir(scanDirOut);
   for (size_t i = startIdx; i <= endIdx; i++) {
     std::string inFile = scanDir + "/" + std::to_string(i) + ".png";
     cv::Mat in = cv::imread(inFile, cv::IMREAD_GRAYSCALE);
@@ -1610,9 +1614,9 @@ int main(int argc, char * argv[])
   //MaskScans();
   //SizeScans1080p();
   //DownsampleScan4x();
-  //DownsamplePrint4x();
+  DownsamplePrint4x();
   //MakeHeightMeshSeq();
-  MakeVolMeshSeq();
+  //MakeVolMeshSeq();
   //CopyTimelapseImages();
     if (argc < 2) {
         std::cout << "Usage: " << argv[0] << " config.txt";
