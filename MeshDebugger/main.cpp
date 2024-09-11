@@ -169,7 +169,7 @@ void CenterMeshes(const std::string &buildDir) {
 }
 
 int main(int argc, char** argv) {
-  CenterMeshes("F:/meshes/20240828-FruitLatticeSamples-50A/20240828-50A-caged1/mmp/");
+  
     //MakeAcousticLattice();
     // MakeXYPairs();
     //RunCanvasApp();

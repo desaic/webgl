@@ -4,6 +4,7 @@
 #include "BBox.h"
 #include "AdapUDF.h"
 #include "MeshUtil.h"
+#include "Inflate.h"
 #include "cpu_voxelizer.h"
 #include "RaycastConf.h"
 #include "ZRaycast.h"
@@ -173,26 +174,6 @@ void SaveSlice(Array3D<T>& dist, unsigned z, float unit) {
   SavePngGrey(outName, image);
 }
 
-void ComputeCoarseDist(AdapDF*df) {
-  df->ClearTemporaryArrays();
-  Utils::Stopwatch timer;
-  timer.Start();
-  df->BuildTrigList(df->mesh_);
-  float ms = timer.ElapsedMS();
-  timer.Start();
-  df->Compress();
-  ms = timer.ElapsedMS();
-  timer.Start();
-  df->mesh_->ComputePseudoNormals();
-  ms = timer.ElapsedMS();
-  timer.Start();
-  df->ComputeCoarseDist();
-  ms = timer.ElapsedMS();
-  Array3D8u frozen;
-  timer.Start();
-  df->FastSweepCoarse(frozen);
-}
-
 void InflateApp::InflateMeshes() {
   Log("inflate meshes");
   if (meshes.size() == 0) {
@@ -208,38 +189,8 @@ void InflateApp::InflateMeshes() {
       mesh.t[t] += trigOffset;
     }
   }
-  mesh.ComputeTrigNormals();
-  BBox box;
-  ComputeBBox(mesh.v, box);
-  std::cout << box.vmin[0] << " " << box.vmin[1] << " " << box.vmin[2] << "\n";
-  std::cout << box.vmax[0] << " " << box.vmax[1] << " " << box.vmax[2] << "\n";
-  float h = conf.voxResMM;
-  const unsigned MAX_GRID_SIZE = 1000;
-  std::shared_ptr<AdapDF> udf = std::make_shared<AdapUDF>();
-  for (size_t d = 0; d < 3; d++) {
-    float len = box.vmax[d] - box.vmin[d];
-    if (len / h > MAX_GRID_SIZE) {
-      h = len / MAX_GRID_SIZE;
-    }
-  }
-  udf->distUnit = 1e-2;
-  udf->voxSize = h;
-  udf->band = conf.thicknessMM / h + 1;
-  udf->mesh_ = &mesh;
-  ComputeCoarseDist(udf.get());
-  Array3D8u outside;
-  outside = FloodOutside(udf->dist, h / udf->distUnit);
-  Vec3f voxRes(h);
-  //SaveVolAsObjMesh("F:/dump/inflate_flood.obj", frozen, (float*)(&voxRes), 1);
-  for (size_t i = 0; i < outside.GetData().size(); i++) {
-    if (!outside.GetData()[i]) {
-      udf->dist.GetData()[i] = -1;
-    }
-  }
-  //SaveSlice(udf->dist, udf->dist.GetSize()[2] / 2, udf->distUnit);
-  TrigMesh surf;
-  SDFImpAdap dfImp(udf);
-  dfImp.MarchingCubes(conf.thicknessMM, &surf);
+  unsigned MAX_GRID_SIZE = 1000;
+
   std::string suffix = ".obj";
   std::string inputSuffix = "";
   std::string input = conf.outputFile;
@@ -252,6 +203,11 @@ void InflateApp::InflateMeshes() {
     suffix = "";
   }
   std::string outpath = dir + "/" + filePrefix + input + suffix;
+  TrigMesh surf;
+  InflateConf inflateConf;
+  inflateConf.voxResMM = conf.voxResMM;
+  inflateConf.thicknessMM = conf.thicknessMM;
+  surf = InflateMesh(inflateConf, mesh);
   surf.SaveObj(outpath);
 }
 
@@ -265,160 +221,4 @@ void InflateApp::OpenMeshes(UILib& ui, const UIConf& conf) {
   ui.SetMultipleFilesOpenCb(
       std::bind(&InflateApp::OnOpenMeshes, this, std::placeholders::_1));
   ui.ShowFileOpen(true, conf.workingDir);
-}
-
-
-static size_t LinearIdx(unsigned x, unsigned y, unsigned z, const Vec3u& size) {
-  return x + y * size_t(size[0]) + z * size_t(size[0] * size[1]);
-}
-
-static Vec3u GridIdx(size_t l, const Vec3u& size) {
-  unsigned x = l % size[0];
-  unsigned y = (l % (size[0] * size[1])) / size[0];
-  unsigned z = l / (size[0] * size[1]);
-  return Vec3u(x, y, z);
-}
-static bool InBound(int x, int y, int z, const Vec3u& size) {
-  return x >= 0 && y >= 0 && z >= 0 && x < int(size[0]) && y < int(size[1]) &&
-         z < int(size[2]);
-}
-
-static void FloodOutsideSeed(Vec3u seed, const Array3D<short>& dist, float distThresh,
-                      Array3D8u& label) {
-  Vec3u size = dist.GetSize();
-  size_t linearSeed = LinearIdx(seed[0], seed[1], seed[2], size);
-  std::deque<size_t> q(1, linearSeed);
-  const unsigned NUM_NBR = 6;
-  const int nbrOffset[6][3] = {{1, 0, 0},  {-1, 0, 0}, {0, 1, 0},
-                               {0, -1, 0}, {0, 0, 1},  {0, 0, -1}};
-  while (!q.empty()) {
-    size_t linearIdx = q.front();
-    q.pop_front();
-    Vec3u idx = GridIdx(linearIdx, size);
-    label(idx[0], idx[1], idx[2]) = 1;
-    for (unsigned ni = 0; ni < NUM_NBR; ni++) {
-      int nx = int(idx[0] + nbrOffset[ni][0]);
-      int ny = int(idx[1] + nbrOffset[ni][1]);
-      int nz = int(idx[2] + nbrOffset[ni][2]);
-      if (!InBound(nx, ny, nz, size)) {
-        continue;
-      }
-      unsigned ux = unsigned(nx), uy = unsigned(ny), uz = unsigned(nz);
-      uint8_t nbrLabel = label(ux, uy, uz);
-      size_t nbrLinear = LinearIdx(ux, uy, uz, size);
-      if (nbrLabel == 0) {
-        uint16_t nbrDist = dist(ux, uy, uz);
-        if (nbrDist >= distThresh) {
-          label(ux, uy, uz) = 1;
-          q.push_back(nbrLinear);
-        }
-      }
-    }
-  }
-}
-
-/// <param name="dist">distance grid. at least 1 voxel of padding is
-/// assumed.</param> <param name="distThresh">stop flooding if distance is less
-/// than this</param> <returns>voxel labels. 1 for outside.</returns>
-static Array3D8u FloodOutside(const Array3D<short>& dist, float distThresh) {
-  Array3D8u label;
-  Vec3u size = dist.GetSize();
-  label.Allocate(size[0], size[1], size[2]);
-  label.Fill(0);
-  // process easy voxels first.
-
-  // all 6 faces are labeled to be outside regardless of actual distance
-  // assuming the voxel grid has padding around the mesh.
-  // all threads hanging from the faces are also labeld as outside quickly.
-  for (unsigned z = 0; z < size[2]; z++) {
-    for (unsigned y = 0; y < size[1]; y++) {
-      if (y == 0 || y == size[1] - 1 || z == 0 || z == size[2] - 1) {
-        for (unsigned x = 0; x < size[0]; x++) {
-          label(x, y, z) = 1;
-        }
-        continue;
-      }
-      label(0, y, z) = 1;
-      label(size[0] - 1, y, z) = 1;
-      for (unsigned x = 1; x < size[0] - 1; x++) {
-        short d = dist(x, y, z);
-        if (d <= distThresh) {
-          break;
-        }
-        label(x, y, z) = 1;
-      }
-      for (unsigned x = size[0] - 1; x > 0; x--) {
-        short d = dist(x, y, z);
-        if (d <= distThresh) {
-          break;
-        }
-        label(x, y, z) = 1;
-      }
-    }
-  }
-
-  for (unsigned x = 0; x < size[0]; x++) {
-    for (unsigned y = 0; y < size[1]; y++) {
-      for (unsigned z = 1; z < size[2] - 1; z++) {
-        short d = dist(x, y, z);
-        if (d <= distThresh) {
-          break;
-        }
-        label(x, y, z) = 1;
-      }
-      for (unsigned z = size[2] - 1; z > 0; z--) {
-        short d = dist(x, y, z);
-        if (d <= distThresh) {
-          break;
-        }
-        label(x, y, z) = 1;
-      }
-    }
-  }
-
-  for (unsigned z = 0; z < size[2]; z++) {
-    for (unsigned x = 0; x < size[0]; x++) {
-      for (unsigned y = 1; y < size[1] - 1; y++) {
-        short d = dist(x, y, z);
-        if (d <= distThresh) {
-          break;
-        }
-        label(x, y, z) = 1;
-      }
-      for (unsigned y = size[1] - 1; y > 0; y--) {
-        short d = dist(x, y, z);
-        if (d <= distThresh) {
-          break;
-        }
-        label(x, y, z) = 1;
-      }
-    }
-  }
-
-  const unsigned NUM_NBR = 6;
-  const int nbrOffset[6][3] = {{-1, 0, 0}, {0, -1, 0}, {0, 0, -1},
-                               {1, 0, 0},  {0, 1, 0},  {0, 0, 1}};
-  for (unsigned z = 1; z < size[2] - 1; z++) {
-    for (unsigned y = 1; y < size[1] - 1; y++) {
-      for (unsigned x = 1; x < size[0] - 1; x++) {
-        for (unsigned ni = 0; ni < NUM_NBR; ni++) {
-          unsigned ux = unsigned(x + nbrOffset[ni][0]);
-          unsigned uy = unsigned(y + nbrOffset[ni][1]);
-          unsigned uz = unsigned(z + nbrOffset[ni][2]);
-
-          if (!label(x, y, z)) {
-            continue;
-          }
-          uint8_t nbrLabel = label(ux, uy, uz);
-          if (nbrLabel == 0) {
-            uint16_t nbrDist = dist(ux, uy, uz);
-            if (nbrDist >= distThresh) {
-              FloodOutsideSeed(Vec3u(x, y, z), dist, distThresh, label);
-            }
-          }
-        }
-      }
-    }
-  }
-  return label;
 }
