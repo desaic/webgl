@@ -5,7 +5,6 @@
 
 #include "AdapUDF.h"
 #include "MarchingCubes.h"
-#include "Timer.hpp"
 /// not really infinity. just large enough
 #define INF_DIST 1e6f
 
