@@ -1,7 +1,6 @@
 #include "CanvasApp.h"
 #include "StringUtil.h"
 #include "ImageIO.h"
-#include "Timer.h"
 #include "BBox.h"
 #include <algorithm>
 #include <iostream>

@@ -8,7 +8,7 @@
 #include "MeshUtil.h"
 #include "RasterizeTrig.h"
 #include "ThreadPool.h"
-#include "Timer.h"
+#include "Stopwatch.h"
 #include "Vec2.h"
 
 #define MAX_GRID_SIZE 100000u
@@ -227,10 +227,9 @@ int ZRaycast::Raycast(const TrigMesh& mesh, ABufferf& abuf, const RaycastConf& c
   conf_.ComputeCoarseRes();
   // coarse grid and the final A-buffer share the same origin.
   Vec2f coarseRes(conf_.coarseRes_[0], conf_.coarseRes_[1]);
-  Timer timer;
-  timer.start();
+  Utils::Stopwatch timer;
+  timer.Start();
   RasterizeXY(mesh, coarseGrid_, coarseRes, conf_.box_);
-  timer.end();
   
   mesh_ = &mesh;
   const BBox& bbox = conf_.box_;
@@ -257,9 +256,8 @@ int ZRaycast::Raycast(const TrigMesh& mesh, ABufferf& abuf, const RaycastConf& c
     std::shared_ptr<ZRaycastRow> task = std::make_shared<ZRaycastRow>(y, *this);
     tp.addTask(task);
   }
-  timer.start();
+  timer.Start();
   tp.run();
-  timer.end();
   return 0;
 }
 

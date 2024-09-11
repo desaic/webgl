@@ -22,14 +22,18 @@ if (NOT TARGET Mesh)
   message(STATUS "add mesh lib")
   add_subdirectory("../Mesh/" "Mesh")
 endif()
+if (NOT TARGET Util)
+  add_subdirectory("../Util/" "Util")
+endif()
 include_directories("../ImageIO")
+include_directories("../Util")
 add_subdirectory("../ImageIO/" "ImageIO")
 add_executable(${BIN}
   "main.cpp"
   resource/icons.rc
 )
   
-target_link_libraries(${BIN} UILib imgui glfw3 opengl32 glew32s Mesh MathLib)
+target_link_libraries(${BIN} UILib imgui glfw3 opengl32 glew32s Mesh MathLib Util)
 
 # copy fonts over
 # @todo(mike) more consistent place for all this kind of stuff

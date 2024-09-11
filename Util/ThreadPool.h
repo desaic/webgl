@@ -20,12 +20,9 @@ class TPTask {
 class ThreadPool {
  public:
   using TaskPtr = std::shared_ptr<TPTask>;
-  ThreadPool() : numThreads(1) {}
+  ThreadPool() : numThreads(1) { threads.resize(1); }
 
-  void addTask(TaskPtr task) {
-    std::lock_guard<std::mutex> lock(queueLock);
-    taskQueue.push(task);
-  }
+  void addTask(TaskPtr task);
 
   ///\param task if queue is non empty,
   /// a TPTask pointer is assigned to task.

@@ -12,13 +12,15 @@
 #include "cad_app.h"
 #include "CanvasApp.h"
 #include "VoxApp.h"
+#include "InflateApp.h"
 #include "UIConf.h"
 #include "UILib.h"
 #include "TriangulateContour.h"
-
+#include "ThreadPool.h"
 #include "cpu_voxelizer.h"
 #include "Lattice.h"
 #include "Grid3Df.h"
+
 #include <functional>
 
 void VoxApp() {
@@ -33,6 +35,20 @@ void VoxApp() {
 
   const unsigned PollFreqMs = 20;
 
+  while (ui.IsRunning()) {
+    app.Refresh();
+    std::this_thread::sleep_for(std::chrono::milliseconds(PollFreqMs));
+  }
+}
+
+void RunInflateApp() {
+  UILib ui;
+  InflateApp app;
+  app.Init(&ui);
+  ui.SetFontsDir("./fonts");
+  int statusLabel = ui.AddLabel("status");
+  ui.Run();
+  const unsigned PollFreqMs = 20;
   while (ui.IsRunning()) {
     app.Refresh();
     std::this_thread::sleep_for(std::chrono::milliseconds(PollFreqMs));
@@ -134,13 +150,33 @@ void MakeAcousticLattice() { slicer::Grid3Df cell = MakeOctetUnitCell();
 
 }
 
+void CenterMeshes(const std::string &buildDir) {
+  for (int i = 0; i < 18; i++) {
+    std::string modelDir = buildDir + std::to_string(i) + "/models";
+    TrigMesh m;
+    std::string meshFile = modelDir + "/0.stl";
+    m.LoadStl(meshFile);
+    BBox box;
+    ComputeBBox(m.v, box);
+    Vec3f center = 0.5f * (box.vmin + box.vmax);
+    for (size_t j = 0; j < m.v.size(); j += 3) {
+      m.v[j] -= center[0];
+      m.v[j + 1] -= center[1];
+      m.v[j + 2] -= center[2];
+    }
+    m.SaveStl(meshFile);
+  }
+}
+
 int main(int argc, char** argv) {
-    MakeAcousticLattice();
+  CenterMeshes("F:/meshes/20240828-FruitLatticeSamples-50A/20240828-50A-caged1/mmp/");
+    //MakeAcousticLattice();
     // MakeXYPairs();
     //RunCanvasApp();
+  RunInflateApp();
     //return 0;
     // if (argc > 1 && argv[1][0] == 'c') {
-       CadApp();
+    //   CadApp();
     // } else {
     //VoxApp();
     //}

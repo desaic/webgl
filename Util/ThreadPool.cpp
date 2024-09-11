@@ -15,17 +15,17 @@ void ThreadPool::workerLoop() {
   }
 }
 
-unsigned ThreadPool::GetProcessorCount() {
-  return std::thread::hardware_concurrency();  
+void ThreadPool::addTask(TaskPtr task) {
+  std::lock_guard lock(queueLock);
+  taskQueue.push(task);
 }
 
 int ThreadPool::run() {
   std::lock_guard lock(busyLock);
-  unsigned numThreads = userNumThreads;
   if (userNumThreads > 0) {
     numThreads = userNumThreads;
   } else {
-    unsigned int processorCount = GetProcessorCount();
+    unsigned int processorCount = std::thread::hardware_concurrency();
     if (processorCount < 3) {
       numThreads = 1;
     } else {

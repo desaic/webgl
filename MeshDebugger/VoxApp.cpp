@@ -1,6 +1,6 @@
 #include "VoxApp.h"
 #include "StringUtil.h"
-#include "Timer.h"
+#include "Stopwatch.h"
 #include "BBox.h"
 #include "MeshUtil.h"
 #include "cpu_voxelizer.h"
@@ -63,11 +63,10 @@ struct SimpleVoxCb : public VoxCallback {
 void VoxelizeCPU(uint8_t matId, const voxconf& conf, const TrigMesh& mesh,
                  Array3D8u& grid) {
   SimpleVoxCb cb(grid, matId);
-  Timer timer;
-  timer.start();
+  Utils::Stopwatch timer;
+  timer.Start();
   cpu_voxelize_mesh(conf, &mesh, cb);
-  timer.end();
-  float ms = timer.getMilliseconds();
+  float ms = timer.ElapsedMS();
 }
 
 void VoxelizeMesh(uint8_t matId, const BBox& box, float voxRes,
@@ -77,13 +76,12 @@ void VoxelizeMesh(uint8_t matId, const BBox& box, float voxRes,
   rcConf.voxelSize_ = voxRes;
   rcConf.box_ = box;
   ABufferf abuf;
-  Timer timer;
-  timer.start();
+  Utils::Stopwatch timer;
+  timer.Start();
   int ret = raycast.Raycast(mesh, abuf, rcConf);
-  timer.end();
-  float ms = timer.getMilliseconds();
+  float ms = timer.ElapsedMS();
   std::cout << "vox time " << ms << "ms\n";
-  timer.start();
+  timer.Start();
   float z0 = box.vmin[2];
   //expand abuf to vox grid
   Vec3u gridSize = grid.GetSize();
@@ -103,8 +101,7 @@ void VoxelizeMesh(uint8_t matId, const BBox& box, float voxRes,
       }
     }
   }
-  timer.end();
-  ms = timer.getMilliseconds();
+  ms = timer.ElapsedMS();
   std::cout << "copy time " << ms << "ms\n";
 }
 
