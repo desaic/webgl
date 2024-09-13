@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 #include "Array3D.h"
 #include "TrigMesh.h"
 
@@ -10,8 +12,9 @@ struct InflateConf {
   unsigned MAX_GRID_SIZE = 1000;
 };
 
-void ComputeCoarseDist(AdapDF* df);
 float ComputeVoxelSize(const TrigMesh& mesh, float voxResMM,
                        unsigned MAX_GRID_SIZE);
+std::shared_ptr<AdapDF> ComputeOutsideDistanceField(const InflateConf& conf,
+                                                    TrigMesh& mesh);
 TrigMesh InflateMesh(const InflateConf& conf, TrigMesh& mesh);
 Array3D8u FloodOutside(const Array3D<short>& dist, float distThresh);
