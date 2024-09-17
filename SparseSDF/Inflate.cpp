@@ -52,34 +52,24 @@ static void SaveSlice(const std::string &file, const Array3D<short> & dist, unsi
 std::shared_ptr<AdapDF> ComputeOutsideDistanceField(const InflateConf& conf,
                                                     TrigMesh& mesh) {
   float h = ComputeVoxelSize(mesh, conf.voxResMM, conf.MAX_GRID_SIZE);
-  std::shared_ptr<AdapDF> udf = std::make_shared<AdapSDF>();
-  udf->distUnit = 1e-2;
-  udf->voxSize = h;
-  udf->band = conf.thicknessMM / h + 2;
-  udf->mesh_ = &mesh;
-  ComputeCoarseDist(udf.get());
-  udf->band = 10000;
+  std::shared_ptr<AdapDF> sdf = std::make_shared<AdapSDF>();
+  sdf->distUnit = 1e-2;
+  sdf->voxSize = h;
+  sdf->band = conf.thicknessMM / h + 2;
+  sdf->mesh_ = &mesh;
+  ComputeCoarseDist(sdf.get());  
+  return sdf;
+}
+
+std::shared_ptr<AdapDF> ComputeFullDistanceField(const InflateConf& conf,
+                                                    TrigMesh& mesh) {
+  std::shared_ptr<AdapDF> sdf = ComputeOutsideDistanceField(conf, mesh);
+  // fast sweep entire grid without narrow band.
+  sdf->band = 10000;
   Array3D8u frozen;
-  udf->FastSweepCoarse(frozen);
-
-  /*Array3D8u outside;
-  outside = FloodOutside(udf->dist, 1.8 * h / udf->distUnit);
-
-  for (size_t i = 0; i < outside.GetData().size(); i++) {
-    if (!outside.GetData()[i]) {
-      udf->dist.GetData()[i] = -1;
-    }
-  }
-  for (size_t i = 0; i < outside.GetData().size(); i++) {
-    outside.GetData()[i] = !outside.GetData()[i];
-    }
-  Vec3f voxRes(h);
-  Vec3f origin = udf->origin;  
-   SaveVolAsObjMesh("F:/dump/inflate_flood.obj", outside,
-   (float*)(&voxRes),(float*)(&origin),
-    1);*/
-  SaveSlice("F:/dump/dist.png", udf->dist, udf->dist.GetSize()[2] / 2, 0.1);
-  return udf;
+  sdf->FastSweepCoarse(frozen);
+  SaveSlice("F:/dump/dist.png", sdf->dist, sdf->dist.GetSize()[2] / 2, 0.1);
+  return sdf;
 }
 
 TrigMesh InflateMesh(const InflateConf& conf, TrigMesh& mesh) {

@@ -16,5 +16,7 @@ float ComputeVoxelSize(const TrigMesh& mesh, float voxResMM,
                        unsigned MAX_GRID_SIZE);
 std::shared_ptr<AdapDF> ComputeOutsideDistanceField(const InflateConf& conf,
                                                     TrigMesh& mesh);
+std::shared_ptr<AdapDF> ComputeFullDistanceField(const InflateConf& conf,
+                                                 TrigMesh& mesh);
 TrigMesh InflateMesh(const InflateConf& conf, TrigMesh& mesh);
 Array3D8u FloodOutside(const Array3D<short>& dist, float distThresh);
