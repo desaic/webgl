@@ -144,5 +144,5 @@ class SDFImpAdap : public SDFImp {
  private:
   std::shared_ptr<AdapDF> _df;
 };
-
+void ComputeCoarseDist(AdapDF* df);
 #endif

@@ -674,3 +674,23 @@ void SDFImpAdap::MarchingCubes(float level, TrigMesh* surf) {
     surf->v[i + 2] = unit * surf->v[i + 2] + _df->origin[2];
   }
 }
+
+void ComputeCoarseDist(AdapDF* df) {
+  df->ClearTemporaryArrays();
+  Utils::Stopwatch timer;
+  timer.Start();
+  df->BuildTrigList(df->mesh_);
+  float ms = timer.ElapsedMS();
+  timer.Start();
+  df->Compress();
+  ms = timer.ElapsedMS();
+  timer.Start();
+  df->mesh_->ComputePseudoNormals();
+  ms = timer.ElapsedMS();
+  timer.Start();
+  df->ComputeCoarseDist();
+  ms = timer.ElapsedMS();
+  Array3D8u frozen;
+  timer.Start();
+  df->FastSweepCoarse(frozen);
+}
