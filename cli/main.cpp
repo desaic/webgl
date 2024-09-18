@@ -3,6 +3,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <set>
 #include <sstream>
 
 #include "Array2D.h"
@@ -198,11 +199,9 @@ static void VoxelizeMesh(uint8_t matId, const BBox& box, float voxRes,
 
 void MakeHoneyCombGrid() {
   TrigMesh m;
-  m.LoadStl("F:/meshes/acoustic/honeyCombCell.stl");
+  m.LoadStl("F:/meshes/acoustic/honeyCombCell1.stl");
   BBox box;
   ComputeBBox(m.v, box);
-  box.vmin[1] += 0.4f;
-  box.vmax[1] -= 0.4f;
   Array3D8u grid;
   Vec3f sizemm = box.vmax - box.vmin;
   float h = 0.1f;
@@ -212,14 +211,35 @@ void MakeHoneyCombGrid() {
   }
   grid.Allocate(gridSize[0] ,gridSize[1], gridSize[2]);
   grid.Fill(0);
+
   VoxelizeMesh(2, box, 0.1, m, grid);
   Vec3f voxRes(h);
-  SaveVolAsObjMesh("F:/meshes/acoustic/honeyVox.obj", grid, (float*)(&voxRes),(float*)( &box.vmin), 2);
-  SaveVoxTxt(grid, h, "F:/meshes/acoustic/honey.txt");
+  SaveVolAsObjMesh("F:/meshes/acoustic/honeyVox1.obj", grid, (float*)(&voxRes),(float*)( &box.vmin), 2);
+ 
+  Vec3u croppedSize = gridSize;
+  croppedSize[1] -= 12;
+  Array3D8u croppedGrid(croppedSize, 1);
+
+  for (unsigned z = 0; z < gridSize[2]; z++) {
+    for (unsigned y = 0; y < croppedSize[1]; y++) {
+      for (unsigned x = 0; x < gridSize[0]; x++) {
+        croppedGrid(x, y, z) = grid(x, y + 6, z);
+      }
+    }
+  }
+  SaveVoxTxt(croppedGrid, h, "F:/meshes/acoustic/honey1.txt");
+}
+
+void WireframeLineSegs(std::string objFile) {
+  TrigMesh m;
+  m.LoadObj(objFile);
+  std::set<Edge> edges;
+  MergeCloseVerts
 }
 
 int main(int argc, char** argv) {  
-  MakeHoneyCombGrid();
+  WireframeLineSegs("F:/meshes/echoDot/wireMesh.obj");
+  //MakeHoneyCombGrid();
   //MakeAcousticLattice();
   return 0;
 }

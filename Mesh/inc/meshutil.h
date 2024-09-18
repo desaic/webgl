@@ -16,6 +16,8 @@ void saveCalibObj(const float * table, const int * tsize,
 //save list of 3d points to .obj mesh file.
 void savePointsObj(const std::string & fileName, const std::vector<std::array<float, 3 > > & points);
 
+void SaveVolAsObjMesh(std::string outfile, const Array3D8u& vol, float* voxRes, int mat);
+
 void SaveVolAsObjMesh(std::string outfile, const Array3D8u& vol, float* voxRes,
                       float* origin, int mat);
 
@@ -26,5 +28,9 @@ void SamplePointsOneTrig(unsigned tIdx, const TrigMesh& m,
 
 void SamplePoints(const TrigMesh& m, std::vector<SurfacePoint>& points,
                   float spacing);
+void MergeCloseVertices(TrigMesh& m);
 
+float SurfaceArea(const TrigMesh& m);
+
+float UVArea(const TrigMesh& m);
 #endif  // MESHUTIL_H

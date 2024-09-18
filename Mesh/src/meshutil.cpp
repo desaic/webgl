@@ -7,7 +7,7 @@
 #include <iostream>
 #include <fstream>
 #include <thread>
-
+#include <unordered_map>
 struct QuadMesh {
     std::vector<std::array<unsigned,4> > q;
     std::vector<Vec3f> v;
@@ -231,6 +231,12 @@ void save_obj(const QuadMesh & m, const std::string & filename) {
     out.close();
 }
 
+void SaveVolAsObjMesh(std::string outfile, const Array3D8u& vol, float* voxRes, int mat) {
+  Vec3f origin(0);
+  SaveVolAsObjMesh(outfile, vol, voxRes,
+    (float*)(&origin), mat);
+}
+
 void SaveVolAsObjMesh(std::string outfile, const Array3D8u& vol, float* voxRes,
                       float* origin, int mat) {
   QuadMesh mout;
@@ -303,70 +309,101 @@ TrigMesh MarchCubes(std::vector<uint8_t>& vol, std::array<unsigned, 3>& gsize) {
     return m;
 }
 
+void ComputeUVTangents(Vec3f& tx, Vec3f& ty, const Vec3f& e1, const Vec3f& e2, const Vec2f& uve1,
+                       const Vec2f& uve2) {
+  float l1, l2;
+  float det = uve1[0] * uve2[1] - uve1[1] * uve2[0];
+  if (det == 0) {
+    // uv triangle is degenerate.
+    tx = e1;
+    ty = e2;
+    return;
+  }
+  l1 = uve2[1] / det;
+  l2 = -uve1[1] / det;
+  tx = l1 * e1 + l2 * e2;
 
-void SamplePointsOneTrig(unsigned tIdx, const TrigMesh& m,
-                         std::vector<SurfacePoint>& points, float spacing) {
-    Vec3f v0 = m.GetTriangleVertex(tIdx, 0);
-    Vec3f v1 = m.GetTriangleVertex(tIdx, 1);
-    Vec3f v2 = m.GetTriangleVertex(tIdx, 2);
-    Vec3f e1 = v1 - v0;
-    Vec3f e2 = v2 - v0;
-    Vec3f cross = e1.cross(e2);
-    float norm = cross.norm();
-    float area = 0.5f * norm;
-    Vec3f n;
+  l1 = -uve2[0] / det;
+  l2 = uve1[0] / det;
+  ty = l1 * e1 + l2 * e2;
+}
 
-    if (norm > 0) {
-      n = (1.0f / norm) * cross;
-    } else {
-      // degenerate triangle.
-      return;
+void SamplePointsOneTrig(unsigned tIdx, const TrigMesh& m, std::vector<SurfacePoint>& points,
+                         float spacing) {
+  Vec3f v0 = m.GetTriangleVertex(tIdx, 0);
+  Vec3f v1 = m.GetTriangleVertex(tIdx, 1);
+  Vec3f v2 = m.GetTriangleVertex(tIdx, 2);
+  Vec3f e1 = v1 - v0;
+  Vec3f e2 = v2 - v0;
+  Vec3f cross = e1.cross(e2);
+  float norm = cross.norm();
+  float area = 0.5f * norm;
+  Vec3f n;
+
+  if (norm > 0) {
+    n = (1.0f / norm) * cross;
+  } else {
+    // degenerate triangle.
+    return;
+  }
+
+  Vec2f uv0 = m.GetTriangleUV(tIdx, 0);
+  Vec2f uv1 = m.GetTriangleUV(tIdx, 1);
+  Vec2f uv2 = m.GetTriangleUV(tIdx, 2);
+  Vec2f uve1 = uv1 - uv0;
+  Vec2f uve2 = uv2 - uv0;
+  Vec3f tx, ty;
+  // same within a triangle.
+  ComputeUVTangents(tx, ty, e1, e2, uve1, uve2);
+  const float oneThird = 1.0f / 3.0f;
+  SurfacePoint sp;
+  sp.v = oneThird * (v0 + v1 + v2);
+  sp.n = n;
+  sp.uv = oneThird * (uv0 + uv1 + uv2);
+  sp.tx = tx;
+  sp.ty = ty;
+  points.push_back(sp);
+  if (area < spacing * spacing) {
+    // small triangle. one center point is enough.
+    return;
+  }
+
+  float e1Len = e1.norm();
+  Vec3f x = (1.0f / e1Len) * e1;
+  float e2Len = e2.norm();
+  Vec3f y = (1.0f / e2Len) * e2;
+
+  Vec3f e3 = v2 - v1;
+
+  Vec3f e3mid = 0.5f * (v1 + v2);
+  Vec3f centerLine = v0 - e3mid;
+  float e3len = e3.norm();
+  Vec3f e3Unit = (1.0f / e3len) * e3;
+  Vec3f projection = centerLine.dot(e3Unit) * e3Unit;
+  Vec3f hVec = centerLine - projection;
+  float h = hVec.norm();
+  int numHSteps = h / spacing + 1;
+  for (int hi = 0; hi < numHSteps; hi++) {
+    // between 0 to 1
+    float y = (hi + 0.5f) / numHSteps;
+    float xlen = y * e3len;
+    int numXSteps = int(xlen / spacing);
+    if (numXSteps == 0) {
+      // very narrow area, nothing to sample.
+      continue;
     }
-
-    // same within a triangle.
-    const float oneThird = 1.0f / 3.0f;
-    SurfacePoint sp;
-    sp.v = oneThird * (v0 + v1 + v2);
-    sp.l = Vec2f(0.5, 0.5);
-    points.push_back(sp);
-    if (area < spacing * spacing) {
-      // small triangle. one center point is enough.
-      return;
+    for (int xi = 0; xi < numXSteps; xi++) {
+      float x = (xi + 0.5f) / numXSteps;
+      Vec3f point = v0 + (1 - y) * (x * e1 + (1 - x) * e2);
+      SurfacePoint sp;
+      sp.v = point;
+      sp.uv = (1 - y) * x * uv1 + (1 - y) * (1 - x) * uv2 + y * uv0;
+      sp.n = n;
+      sp.tx = tx;
+      sp.ty = ty;
+      points.push_back(sp);
     }
-
-    float e1Len = e1.norm();
-    Vec3f x = (1.0f / e1Len) * e1;
-    float e2Len = e2.norm();
-    Vec3f y = (1.0f / e2Len) * e2;
-
-    Vec3f e3 = v2 - v1;
-
-    Vec3f e3mid = 0.5f * (v1 + v2);
-    Vec3f centerLine = v0 - e3mid;
-    float e3len = e3.norm();
-    Vec3f e3Unit = (1.0f / e3len) * e3;
-    Vec3f projection = centerLine.dot(e3Unit) * e3Unit;
-    Vec3f hVec = centerLine - projection;
-    float h = hVec.norm();
-    int numHSteps = h / spacing + 1;
-    for (int hi = 0; hi < numHSteps; hi++) {
-      // between 0 to 1
-      float y = (hi + 0.5f) / numHSteps;
-      float xlen = y * e3len;
-      int numXSteps = int(xlen / spacing);
-      if (numXSteps == 0) {
-        // very narrow area, nothing to sample.
-        continue;
-      }
-      for (int xi = 0; xi < numXSteps; xi++) {
-        float x = (xi + 0.5f) / numXSteps;
-        Vec3f point = v0 + (1 - y) * (x * e1 + (1 - x) * e2);
-        SurfacePoint sp;
-        sp.v = point;
-        sp.l = Vec2f((1 - y) * x , (1 - y) * (1 - x));
-        points.push_back(sp);
-      }
-    }
+  }
 }
 
 void SamplePoints(const TrigMesh& m, std::vector<SurfacePoint>& points,
@@ -375,4 +412,105 @@ void SamplePoints(const TrigMesh& m, std::vector<SurfacePoint>& points,
     for (size_t ti = 0; ti < numTrigs; ti++) {
       SamplePointsOneTrig(ti, m, points, spacing);
     }
+}
+
+float SurfaceArea(const TrigMesh& m) {
+  size_t numTrigs = m.t.size() / 3;
+  double area = 0;
+  for (size_t ti = 0; ti < numTrigs; ti++) {
+    Vec3f v0 = m.GetTriangleVertex(ti, 0);
+    Vec3f v1 = m.GetTriangleVertex(ti, 1);
+    Vec3f v2 = m.GetTriangleVertex(ti, 2);
+    v1 = v1 - v0;
+    v2 = v2 - v0;
+    v1 = v1.cross(v2);
+    float trigArea = v1.norm();
+    area += trigArea;
+  }
+  return 0.5f * float(area);
+}
+
+float UVArea(const TrigMesh& m) {
+  size_t numTrigs = m.t.size() / 3;
+  double area = 0;
+  for (size_t ti = 0; ti < numTrigs; ti++) {
+    Vec2f uv0 = m.GetTriangleUV(ti, 0);
+    Vec2f uv1 = m.GetTriangleUV(ti, 1);
+    Vec2f uv2 = m.GetTriangleUV(ti, 2);
+    uv1 = uv1 - uv0;
+    uv2 = uv2 - uv0;
+
+    float trigArea = uv1[0] * uv2[1] - uv1[1] * uv2[0];
+    area += std::abs(trigArea);
+  }
+  return 0.5f * float(area);
+}
+
+static float MergeEps = 1e-3f;
+class Vec3fKey {
+ public:
+  Vec3fKey() {}
+  Vec3fKey(float x, float y, float z) : _x(x), _y(y), _z(z) {}
+  float _x = 0;
+  float _y = 0;
+  float _z = 0;
+  bool operator==(const Vec3fKey& other) const {
+    return std::abs(_x - other._x) <= MergeEps && std::abs(_y - other._y) <= MergeEps &&
+           std::abs(_z - other._z) <= MergeEps;
+  }
+};
+struct Vec3fHash {
+  size_t operator()(const Vec3fKey& k) const {
+    return size_t((92821 * 92831) * int64_t(k._x / MergeEps) + 92831 * int64_t(k._y / MergeEps) +
+                  int64_t(k._z / MergeEps));
+  }
+};
+
+//remove all squished triangles
+bool DegenerateTrig(uint32_t* t) { return t[0] == t[1] || t[0] == t[2] || t[1] == t[2]; }
+
+void MergeCloseVertices(TrigMesh& m) {
+  if (m.v.size() == 0 || m.t.size() == 0) {
+    return;
+  }
+  /// maps from a vertex to its new index.
+  std::vector<float> v_out;
+  std::vector<unsigned> t_out;
+  std::unordered_map<Vec3fKey, size_t, Vec3fHash> vertMap;
+  size_t nV = m.v.size() / 3;
+  std::vector<uint32_t> newVertIdx(nV, 0);
+  size_t vCount = 0;
+  for (size_t i = 0; i < m.v.size(); i += 3) {
+    Vec3fKey vi(m.v[i], m.v[i + 1], m.v[i + 2]);
+    auto it = vertMap.find(vi);
+    size_t newIdx = 0;
+    if (it == vertMap.end()) {
+      vertMap[vi] = vCount;
+      newIdx = vCount;
+      v_out.push_back(m.v[i]);
+      v_out.push_back(m.v[i + 1]);
+      v_out.push_back(m.v[i + 2]);
+      vCount++;
+    } else {
+      newIdx = it->second;
+    }
+    newVertIdx[i / 3] = newIdx;
+  }
+  for (size_t i = 0; i < m.t.size(); i+=3) {
+    unsigned vertIdx[3];
+    vertIdx[0] = newVertIdx[m.t[i]];
+    vertIdx[1] = newVertIdx[m.t[i + 1]];
+    vertIdx[2] = newVertIdx[m.t[i + 2]];
+    if(DegenerateTrig(vertIdx)){
+      continue;
+    }
+    t_out.push_back(vertIdx[0]);
+    t_out.push_back(vertIdx[1]);
+    t_out.push_back(vertIdx[2]);
+  }
+  if (v_out.size() != m.v.size()) {
+    m.v = v_out;
+    m.t = t_out;
+    m.ComputeTrigNormals();
+  }
 }
