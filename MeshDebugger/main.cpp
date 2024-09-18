@@ -179,7 +179,7 @@ void CenterMeshes(const std::string &buildDir) {
 }
 
 int main(int argc, char** argv) {
-  CenterMeshes("F:/meshes/donut/Donut-TDD-v4-interlock2original/mmp/mmp/models/");
+  //CenterMeshes("F:/meshes/donut/Donut-TDD-v4-interlock2original/mmp/mmp/models/");
     //MakeAcousticLattice();
     // MakeXYPairs();
     //RunCanvasApp();

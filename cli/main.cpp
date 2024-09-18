@@ -18,6 +18,7 @@
 #include "AdapSDF.h"
 #include "meshutil.h"
 #include "VoxIO.h"
+#include "ZRayCast.h"
 
 slicer::Grid3Df MakeOctetUnitCell(Vec3f cellSize) {
   slicer::Grid3Df cell;
@@ -155,49 +156,70 @@ void MakeAcousticLattice() {
   SaveVoxTxt(voxGrid, h, "F:/meshes/acoustic/octet_pyramid_skin.txt");
 }
 
-struct FunCb : public VoxCallback {
+struct FuncCb : public VoxCallback {
   virtual void operator()(unsigned x, unsigned y, unsigned z,
-                          size_t trigIdx) override;
-  
+                          size_t trigIdx) override { 
+    if (func) {
+      func(x, y, z, trigIdx);
+    }
+  }
+  std::function<void(unsigned, unsigned, unsigned, size_t)> func;  
 };
 
-void VoxelizeHoneyComb(std::string meshFile) {
+static void VoxelizeMesh(uint8_t matId, const BBox& box, float voxRes,
+                  const TrigMesh& mesh, Array3D8u& grid) {
+  ZRaycast raycast;
+  RaycastConf rcConf;
+  rcConf.voxelSize_ = voxRes;
+  rcConf.box_ = box;
+  ABufferf abuf;
 
+  int ret = raycast.Raycast(mesh, abuf, rcConf);
+  float z0 = box.vmin[2];
+  // expand abuf to vox grid
+  Vec3u gridSize = grid.GetSize();
+  for (unsigned y = 0; y < gridSize[1]; y++) {
+    for (unsigned x = 0; x < gridSize[0]; x++) {
+      const auto intersections = abuf(x, y);
+      for (auto seg : intersections) {
+        unsigned zIdx0 = seg.t0 / voxRes + 0.5f;
+        unsigned zIdx1 = seg.t1 / voxRes + 0.5f;
+
+        for (unsigned z = zIdx0; z < zIdx1; z++) {
+          if (z >= gridSize[2]) {
+            continue;
+          }
+          grid(x, y, z) = matId;
+        }
+      }
+    }
+  }
+}
+
+void MakeHoneyCombGrid() {
   TrigMesh m;
-  m.LoadStl(meshFile);
+  m.LoadStl("F:/meshes/acoustic/honeyCombCell.stl");
   BBox box;
   ComputeBBox(m.v, box);
-  Vec3f boxCenter = 0.5f * (box.vmax + box.vmin);
-  for (size_t i = 0; i < m.GetNumVerts(); i++) {
-    m.v[3 * i] -= boxCenter[0];
-    m.v[3 * i + 1] -= boxCenter[1];
-    m.v[3 * i + 2] -= boxCenter[2];
-  }
-
-  box.vmin = box.vmin - boxCenter;
-  box.vmax = box.vmax - boxCenter;
-  float voxRes = 0.1;
-  Vec3f unit = Vec3f(voxRes, voxRes, voxRes);
-
-  box.vmin[1] += 0.4;
-  box.vmax[1] -= 0.4;
-
-  Vec3f count = (box.vmax - box.vmin) / unit;
-  Vec3u gridSize = Vec3u(count[0] + 1, count[1] + 1, count[2] + 1);
-
-  // 0 for void and 1 for wax therefore +2.
-  uint8_t mat0 = 2;
+  box.vmin[1] += 0.4f;
+  box.vmax[1] -= 0.4f;
   Array3D8u grid;
-  grid.Allocate(gridSize, 1);
-  voxconf conf;
-  conf.gridSize = gridSize;
-  conf.origin = box.vmin;
-  conf.unit = 0.1f;
-
+  Vec3f sizemm = box.vmax - box.vmin;
+  float h = 0.1f;
+  Vec3u gridSize;
+  for (unsigned i = 0; i < 3; i++) {
+    gridSize[i] = std::round(sizemm[i] / h);
+  }
+  grid.Allocate(gridSize[0] ,gridSize[1], gridSize[2]);
+  grid.Fill(0);
+  VoxelizeMesh(2, box, 0.1, m, grid);
+  Vec3f voxRes(h);
+  SaveVolAsObjMesh("F:/meshes/acoustic/honeyVox.obj", grid, (float*)(&voxRes),(float*)( &box.vmin), 2);
+  SaveVoxTxt(grid, h, "F:/meshes/acoustic/honey.txt");
 }
 
 int main(int argc, char** argv) {  
+  MakeHoneyCombGrid();
   //MakeAcousticLattice();
-  VoxelizeHoneyComb("F:/meshes/acoustic/honeyCombCell.stl");
   return 0;
 }
