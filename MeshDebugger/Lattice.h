@@ -13,4 +13,5 @@ Array3Df MakeDiamondCell(Vec3f voxelSize, Vec3f cellSize, Vec3u gridSize);
 Array3Df MakeGyroidCell(Vec3f voxelSize, Vec3f cellSize, Vec3u gridSize);
 Array3Df MakeFluoriteCell(Vec3f voxelSize, Vec3f cellSize, Vec3u gridSize);
 Array3Df MakeOctetCell(Vec3f voxelSize, Vec3f cellSize, Vec3u gridSize);
+Array3Df MakeShearXCell(Vec3f voxelSize, Vec3f cellSize, Vec3u gridSize);
 }  // namespace slicer

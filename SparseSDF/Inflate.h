@@ -14,9 +14,13 @@ struct InflateConf {
 
 float ComputeVoxelSize(const TrigMesh& mesh, float voxResMM,
                        unsigned MAX_GRID_SIZE);
-std::shared_ptr<AdapDF> ComputeOutsideDistanceField(const InflateConf& conf,
+std::shared_ptr<AdapDF> SignedDistanceFieldBand(const InflateConf& conf,
                                                     TrigMesh& mesh);
-std::shared_ptr<AdapDF> ComputeFullDistanceField(const InflateConf& conf,
+std::shared_ptr<AdapDF> ComputeSignedDistanceField(const InflateConf& conf,
                                                  TrigMesh& mesh);
+std::shared_ptr<AdapDF> UnsignedDistanceFieldBand(const InflateConf& conf,
+                                                TrigMesh& mesh);
+std::shared_ptr<AdapDF> ComputeUnsignedDistanceField(const InflateConf& conf,
+                                                   TrigMesh& mesh);
 TrigMesh InflateMesh(const InflateConf& conf, TrigMesh& mesh);
 Array3D8u FloodOutside(const Array3D<short>& dist, float distThresh);

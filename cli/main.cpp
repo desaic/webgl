@@ -17,7 +17,7 @@
 #include "SDFMesh.h"
 #include "AdapUDF.h"
 #include "AdapSDF.h"
-#include "meshutil.h"
+#include "MeshUtil.h"
 #include "VoxIO.h"
 #include "ZRayCast.h"
 
@@ -107,7 +107,7 @@ void MakeAcousticLattice() {
   InflateConf conf;
   conf.voxResMM = 0.2;
   conf.thicknessMM = 1;  
-  std::shared_ptr<AdapDF> df = ComputeFullDistanceField(conf, mesh);
+  std::shared_ptr<AdapDF> df = ComputeSignedDistanceField(conf, mesh);
   //distance field for lattice.
 
   Vec3u dfSize = df->dist.GetSize();
@@ -234,10 +234,53 @@ void WireframeLineSegs(std::string objFile) {
   TrigMesh m;
   m.LoadObj(objFile);
   std::set<Edge> edges;
-  MergeCloseVerts
+  MergeCloseVertices(m);
+  for (size_t i = 0; i < m.GetNumTrigs(); i++) {
+    for (unsigned j = 0; j < 3; j++) {
+      unsigned v0 = m.t[3 * i + j];
+      unsigned v1 = m.t[3 * i + (j + 1) % 3];
+      Edge edge(v0, v1);
+      edges.insert(edge);
+    }
+  }
+  std::cout << "numEdges " << edges.size() << "\n";
+  std::ofstream out("F:/meshes/echoDot/wires.txt");
+  out << edges.size() << "\n";
+  std::vector<Edge> edgeList(edges.begin(), edges.end());
+  //must >=4 for cubic spline.
+  const unsigned NumCtrlPt = 4;
+  int isLoop = 0;
+  float segLen = 1.0f / (NumCtrlPt - 3);
+  for (size_t i = 0; i < edgeList.size(); i++) {
+    out << isLoop <<" 4\n";
+    Vec3f v0 = m.GetVertex(edgeList[i].v[0]);
+    Vec3f v1 = m.GetVertex(edgeList[i].v[1]);
+
+    for (unsigned j = 0; j < NumCtrlPt; j++) {
+      float alpha = 1.0f + segLen - float(j) * segLen;
+      Vec3f v = alpha * v0 + (1.0f - alpha) * v1;
+      out << v[0] << " " << v[1] << " " << v[2] << "\n";
+    }
+  }
+}
+
+void InflateSurface(std::string objFile) {
+  TrigMesh mesh;
+  mesh.LoadObj(objFile);
+  InflateConf conf;
+  conf.thicknessMM = 1.0f;
+  conf.voxResMM = 0.5f;
+  std::shared_ptr<AdapDF> sdf = UnsignedDistanceFieldBand(conf, mesh);
+  // SaveSlice(udf->dist, udf->dist.GetSize()[2] / 2, udf->distUnit);
+  TrigMesh surf;
+  SDFImpAdap dfImp(sdf);
+  dfImp.MarchingCubes(conf.thicknessMM, &surf);
+  MergeCloseVertices(surf);
+  surf.SaveObj("F:/meshes/echoDot/wireBound.obj");
 }
 
 int main(int argc, char** argv) {  
+  //InflateSurface("F:/meshes/echoDot/wireMesh.obj");
   WireframeLineSegs("F:/meshes/echoDot/wireMesh.obj");
   //MakeHoneyCombGrid();
   //MakeAcousticLattice();

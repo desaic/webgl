@@ -6,6 +6,8 @@
 
 #include "Array2D.h"
 #include "Array3D.h"
+#include "Array3DUtils.h"
+
 #include "BBox.h"
 
 #include "ImageIO.h"
@@ -20,6 +22,7 @@
 #include "cpu_voxelizer.h"
 #include "Lattice.h"
 #include "Grid3Df.h"
+#include "VoxIO.h"
 
 #include <functional>
 
@@ -139,8 +142,8 @@ void MakeAcousticLattice() { slicer::Grid3Df cell = MakeOctetUnitCell();
     conf.origin = box.vmin;
 
     voxGrid.Allocate(conf.gridSize, 0);
-    callback.fun = [&voxGrid](unsigned x, unsigned y, unsigned z, size_t tIdx) {
-      const Vec3u size = voxGrid.GetSize();
+    callback.fun = [&voxGrid, size](unsigned x, unsigned y, unsigned z, size_t tIdx) {
+      const Vec3u sized = voxGrid.GetSize();
       if (x < size[0] && y < size[1] && z < size[2]) {
         voxGrid(x, y, z) = 1;
       }
@@ -178,7 +181,77 @@ void CenterMeshes(const std::string &buildDir) {
   //}
 }
 
+static Array3D8u GetBinaryGrid(const Array3Df& grid, Vec3f voxSize, float thickness, 
+                        float h) {
+  Array3D8u binGrid;
+  Vec3f cellSize((grid.GetSize()[0] - 1) * voxSize[0],
+                 (grid.GetSize()[1] - 1) * voxSize[1],
+                 (grid.GetSize()[2] - 1) * voxSize[2]);
+  Vec3u size(cellSize[0] / h + 0.5f, cellSize[1] / h + 0.5f,
+             cellSize[1] / h + 0.5f);
+  binGrid.Allocate(size, 0);
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      for (unsigned x = 0; x < size[0]; x++) {
+        float dist = 0;
+        Vec3f coord((x + 0.5f) * h, (y + 0.5f) * h, (z + 0.5f) * h);
+        dist = TrilinearInterp(grid, coord, voxSize);
+        if (dist <= thickness) {
+          binGrid(x, y, z) = 1;
+        }
+      }
+    }
+  }
+  return binGrid;
+}
+
+void FlipGridX(Array3D8u&grid) { 
+  Vec3u size = grid.GetSize();
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      for (unsigned x = 0; x < size[0] / 2; x++) {
+        uint8_t tmp = grid(x, y, z);
+        grid(x, y, z) = grid(size[0] - x - 1, y, z);
+        grid(size[0] - x - 1, y, z) = tmp;
+      }
+    }
+  }
+}
+
+void FlipGridXY(Array3D8u& grid) {
+  Vec3u size = grid.GetSize();
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      for (unsigned x = y + 1; x < size[0]; x++) {
+        uint8_t tmp = grid(x, y, z);
+        grid(x, y, z) = grid(y, x, z);
+        grid(y, x, z) = tmp;
+      }
+    }
+  }
+}
+
+void MakeShearXGrid() {
+    slicer::Grid3Df cell;
+    Vec3f cellSize(3.5f);
+
+    cell.voxelSize = Vec3f(0.05f);
+    unsigned n = cellSize[0] / cell.voxelSize[0];
+    // distance values are defined on vertices instead of voxel centers
+    Vec3u gridSize(n + 1);
+    cell.Allocate(gridSize, 1000);
+    cell.Array() = slicer::MakeShearXCell(cell.voxelSize, cellSize, gridSize);    
+  
+    float h = 0.064;
+    Array3D8u binGrid = GetBinaryGrid(cell.Array(), cell.voxelSize, 0.3, h);
+    FlipGridX(binGrid);
+    FlipGridXY(binGrid);
+    SaveVoxTxt(binGrid, h, "F:/meshes/lattice_fablet/shearmy.txt");
+
+}
+
 int main(int argc, char** argv) {
+  MakeShearXGrid();
   //CenterMeshes("F:/meshes/donut/Donut-TDD-v4-interlock2original/mmp/mmp/models/");
     //MakeAcousticLattice();
     // MakeXYPairs();

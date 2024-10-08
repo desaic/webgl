@@ -49,7 +49,7 @@ static void SaveSlice(const std::string &file, const Array3D<short> & dist, unsi
   SavePngGrey(file, slice);
 }
 
-std::shared_ptr<AdapDF> ComputeOutsideDistanceField(const InflateConf& conf,
+std::shared_ptr<AdapDF> SignedDistanceFieldBand(const InflateConf& conf,
                                                     TrigMesh& mesh) {
   float h = ComputeVoxelSize(mesh, conf.voxResMM, conf.MAX_GRID_SIZE);
   std::shared_ptr<AdapDF> sdf = std::make_shared<AdapSDF>();
@@ -61,9 +61,9 @@ std::shared_ptr<AdapDF> ComputeOutsideDistanceField(const InflateConf& conf,
   return sdf;
 }
 
-std::shared_ptr<AdapDF> ComputeFullDistanceField(const InflateConf& conf,
+std::shared_ptr<AdapDF> ComputeSignedDistanceField(const InflateConf& conf,
                                                     TrigMesh& mesh) {
-  std::shared_ptr<AdapDF> sdf = ComputeOutsideDistanceField(conf, mesh);
+  std::shared_ptr<AdapDF> sdf = SignedDistanceFieldBand(conf, mesh);
   // fast sweep entire grid without narrow band.
   sdf->band = 10000;
   Array3D8u frozen;
@@ -73,10 +73,32 @@ std::shared_ptr<AdapDF> ComputeFullDistanceField(const InflateConf& conf,
 }
 
 TrigMesh InflateMesh(const InflateConf& conf, TrigMesh& mesh) {
-  std::shared_ptr<AdapDF> udf = ComputeOutsideDistanceField(conf, mesh);
+  std::shared_ptr<AdapDF> sdf = ComputeSignedDistanceField(conf, mesh);
   // SaveSlice(udf->dist, udf->dist.GetSize()[2] / 2, udf->distUnit);
   TrigMesh surf;
-  SDFImpAdap dfImp(udf);
+  SDFImpAdap dfImp(sdf);
   dfImp.MarchingCubes(conf.thicknessMM, &surf);
   return surf;
+}
+
+std::shared_ptr<AdapDF> UnsignedDistanceFieldBand(const InflateConf& conf,
+                                                  TrigMesh& mesh) {
+  float h = ComputeVoxelSize(mesh, conf.voxResMM, conf.MAX_GRID_SIZE);
+  std::shared_ptr<AdapDF> df = std::make_shared<AdapUDF>();
+  df->distUnit = 1e-2;
+  df->voxSize = h;
+  df->band = conf.thicknessMM / h + 2;
+  df->mesh_ = &mesh;
+  ComputeCoarseDist(df.get());
+  return df;
+}
+
+std::shared_ptr<AdapDF> ComputeUnsignedDistanceField(const InflateConf& conf,
+                                                     TrigMesh& mesh) {
+  std::shared_ptr<AdapDF> df = UnsignedDistanceFieldBand(conf, mesh);
+  // fast sweep entire grid without narrow band.
+  df->band = 10000;
+  Array3D8u frozen;
+  df->FastSweepCoarse(frozen);
+  return df;
 }

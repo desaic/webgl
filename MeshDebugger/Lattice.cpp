@@ -209,4 +209,21 @@ Array3Df MakeOctetCell(Vec3f voxelSize, Vec3f cellSize, Vec3u gridSize) {
   return grid;
 }
 
+Array3Df MakeShearXCell(Vec3f voxelSize, Vec3f cellSize, Vec3u gridSize) {
+  Array3Df grid;
+  grid.Allocate(gridSize, INIT_CELL_DIST);
+  const unsigned NUM_BEAMS = 12 + 2 * 4;
+  float beams[NUM_BEAMS][6] = {
+      {0, 0, 0, 1, 0, 0},   {0, 0, 1, 1, 0, 1},   {0, 1, 1, 1, 1, 1},
+      {0, 1, 0, 1, 1, 0},   {0, 0, 0, 0, 1, 0},   {0, 0, 1, 0, 1, 1},
+      {1, 0, 0, 1, 1, 0},   {1, 0, 1, 1, 1, 1},   {0, 0, 0, 0.2, 0, 1},
+      {0, 1, 0, 0.2, 1, 1}, {0.8, 0, 0, 1, 0, 1}, {0.8, 1, 0, 1, 1, 1},
+      {0, 0, 0, 0.2, 1, 1}, {0.2, 0, 1, 0, 1, 0}, {0.8, 0, 0, 1, 1, 1},
+      {0.8, 1, 0, 1, 0, 1}, {0, 0, 0, 1, 1, 0},   {1, 0, 0, 0, 1, 0},
+      {0, 0, 1, 1, 1, 1},   {0, 1, 1, 1, 0, 1}};
+
+  DrawBeams(NUM_BEAMS, beams, grid, voxelSize, cellSize);
+  return grid;
+}
+
 }  // namespace slicer
