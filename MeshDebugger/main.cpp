@@ -96,7 +96,7 @@ void RunCanvasApp() {
     const unsigned PollFreqMs = 20;
 
     while (ui.IsRunning()) {
-      app.Refresh();
+      app.RefreshUI();
       std::this_thread::sleep_for(std::chrono::milliseconds(PollFreqMs));
     }
   
@@ -251,17 +251,17 @@ void MakeShearXGrid() {
 }
 
 int main(int argc, char** argv) {
-  MakeShearXGrid();
+  //MakeShearXGrid();
   //CenterMeshes("F:/meshes/donut/Donut-TDD-v4-interlock2original/mmp/mmp/models/");
     //MakeAcousticLattice();
     // MakeXYPairs();
-    //RunCanvasApp();
+    RunCanvasApp();
   //RunInflateApp();
     //return 0;
     // if (argc > 1 && argv[1][0] == 'c') {
     //   CadApp();
     // } else {
-    VoxApp();
+   // VoxApp();
     //}
     return 0;
 }

@@ -60,16 +60,31 @@ void CanvasApp::Step() {
   DrawRow(_num, _drawRow, _canvas);
   _drawRow++;
   _drawRow %= _canvas.GetSize()[1];
-  _ui->SetImageData(_imageId, _canvas); 
   _num = NextNum(_num);
-  if (_num == 3562942561397226080ull / 32) {
-    std::cout << "hooray!\n";
-  }
+  _imageStale = true;
 }
 
 void CanvasApp::SnapPic() { SavePngColor("./snap.png", _canvas); }
+void CanvasApp::RefreshSim() {  
+  while (_ui->IsRunning()) {
+    switch (_simState) {
+      case State::RUN:
+        if (_remainingSteps > 0) {
+          Step();
+          _remainingSteps--;
+        }
+        break;
+      case State::ONE_STEP:
+        Step();
+        _simState = State::IDLE;
+        break;
+      default:
+        break;
+    }
+  }
+}
 
-void CanvasApp::Refresh() {
+  void CanvasApp::RefreshUI() {
   //update configs
   bool confChanged = false;
   const float EPS = 5e-5f;
@@ -78,16 +93,10 @@ void CanvasApp::Refresh() {
   if (confChanged) {
     conf.Save();
   }
-  switch (_state) {
-    case State::RUN:
-      Step();
-      break;
-    case State::ONE_STEP:
-      Step();
-      _state = State::IDLE;
-      break;
-    default:
-      break;
+  auto inputWidget = _ui->GetWidget(_numStepsId);
+  if (inputWidget) {
+    const InputInt* stepsInput = (const InputInt*)inputWidget.get();
+    _totalSteps = stepsInput->_value;
   }
   _ui->SetLabelText(_numLabelId, std::to_string(_num));
   if (_snap) {
@@ -95,7 +104,10 @@ void CanvasApp::Refresh() {
     SavePngColor("canvas.png", _canvas);
     _snap = false;
   }
-
+  if (_imageStale) {
+    _ui->SetImageData(_imageId, _canvas);
+    _imageStale = false;
+  }
 }
 
 static void OnChangeDir(std::string dir, UIConf& conf) {
@@ -116,14 +128,26 @@ void CanvasApp::Init(UILib* ui) {
   _imageId = _ui->AddImage();
   _ui->SetImageData(_imageId, _canvas);
   conf.Load(conf._confFile);
-  _ui->AddButton("Run", [&] { this->_state = State::RUN; });
-  _ui->AddButton("One Step", [&] { this->_state = State::ONE_STEP; });
-  _ui->AddButton("Stop", [&] { this->_state = State::IDLE; });
+  _ui->AddButton("Run", [&] {
+    this->_remainingSteps = _totalSteps;
+    this->_simState = State::RUN;
+  });
+  _ui->AddButton("One Step", [&] { this->_simState = State::ONE_STEP; });
+  _ui->AddButton("Stop", [&] { this->_simState = State::IDLE; });
   _ui->AddButton("Snap Pic", [&] { this->_snap = true; });
+  std::shared_ptr<InputInt> numStepsInput = std::make_shared<InputInt>("#steps", 100);
+  _numStepsId = _ui->AddWidget(numStepsInput);
   _numLabelId = _ui->AddLabel("num: ");
   _ui->SetChangeDirCb(
       [&](const std::string& dir) { OnChangeDir(dir, conf); });
   _statusLabel = ui->AddLabel("status");
   LogCb =
       std::bind(LogToUI, std::placeholders::_1, std::ref(*_ui), _statusLabel);
+  _simThread = std::thread(&CanvasApp::RefreshSim, this);
+}
+
+CanvasApp::~CanvasApp() {
+  if (_simThread.joinable()) {
+    _simThread.join();
+  }
 }
