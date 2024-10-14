@@ -16,7 +16,8 @@ link_directories("extern/glfw3.3.8")
 add_compile_options("/std:c++latest")
 include_directories("inc")
 
-list(REMOVE_ITEM SRC "main.cpp")
+list(FILTER SRC EXCLUDE REGEX "[.+/]?main.cpp")
+
 add_library("UILib" ${SRC})
 if (NOT TARGET Mesh)
   message(STATUS "add mesh lib")
