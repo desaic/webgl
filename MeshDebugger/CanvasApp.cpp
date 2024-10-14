@@ -8,6 +8,57 @@
 #include <filesystem>
 #include <sstream>
 #include <bit>
+
+class CellAuto {
+ public:
+  //every two bits for one cell.
+  //every int has 16 cells.
+  std::vector<uint32_t> v;
+  //between 0-4
+  uint8_t GetCellVal(unsigned index) { 
+    unsigned intIdx = index / 16;
+
+    if (intIdx >= v.size()) {
+      return 0;
+    }
+    unsigned bitIdx = index % 16;
+    return (v[intIdx] >> (2 * bitIdx)) & 3;
+  }
+  void SetBinaryBit(unsigned bitIndex, uint8_t val) {
+    unsigned intIdx = bitIndex / 16;
+    if (intIdx >= v.size()) {
+      return;
+    }
+    unsigned bitIdx = bitIndex % 16;
+    uint32_t v0 = v[intIdx];
+    //set carry to 0
+    v0 &= ~(1 <<(2*bitIdx + 1));
+    if (val > 0) {
+      v0 |= 1 << (2 * bitIdx);
+    } else {
+      v0 &= ~(1 << (2 * bitIdx));
+    }
+    v[intIdx] = v0;
+  }
+  void SetBinaryVal(uint64_t val) {
+    uint64_t x = val;
+    unsigned numBits = 0;
+    while (x > 0) {
+      x /= 2;
+      numBits++;
+    }
+    v.resize(numBits / 16 + 1, 0);
+    x = val;
+    unsigned bitIndex = 0;
+    while (x > 0) {
+      uint8_t bit = x % 2;
+      x /= 2;
+      SetBinaryBit(bitIndex, bit);
+      bitIndex++;
+    }
+  }
+};
+
 //info for voxelizing
 //multi-material interface connector designs
 void CanvasApp::Log(const std::string& str) const {
@@ -123,6 +174,9 @@ void CanvasApp::Init(UILib* ui) {
   _ui = ui;
   _ui->SetShowImage(true);
   _num = 1410123943ull;
+  _cells = std::make_shared<CellAuto>();
+  _cells->SetBinaryVal(99);
+  std::cout << _cells->v[0] << "\n";
   _canvas.Allocate(800, 800);
   _canvas.Fill(Vec4b(127, 127, 0, 127));
   _imageId = _ui->AddImage();
@@ -144,6 +198,7 @@ void CanvasApp::Init(UILib* ui) {
   LogCb =
       std::bind(LogToUI, std::placeholders::_1, std::ref(*_ui), _statusLabel);
   _simThread = std::thread(&CanvasApp::RefreshSim, this);
+  
 }
 
 CanvasApp::~CanvasApp() {
