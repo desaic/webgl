@@ -20,8 +20,6 @@ class CanvasApp {
   void SnapPic();
   std::function<void(const std::string&)> LogCb;
 
-  int _drawRow = 0;
-  uint64_t _num;
   std::shared_ptr<CellAuto> _cells;
   int _imageId = -1;
   int _statusLabel = -1;

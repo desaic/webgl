@@ -2,6 +2,7 @@
 #include "StringUtil.h"
 #include "ImageIO.h"
 #include "BBox.h"
+#include "Array2D.h"
 #include <algorithm>
 #include <iostream>
 #include <fstream>
@@ -9,54 +10,71 @@
 #include <sstream>
 #include <bit>
 
+class CellRow {
+ public:
+  // every two bits for one cell.
+  // every int has 16 cells.
+  std::vector<uint32_t> v;
+  CellRow(uint64_t val) { SetBinaryVal(val); }
+   // between 0-4
+   uint8_t GetCellVal(unsigned index) {
+     unsigned intIdx = index / 16;
+     if (intIdx >= v.size()) {
+       return 0;
+     }
+     unsigned bitIdx = index % 16;
+     return (v[intIdx] >> (2 * bitIdx)) & 3;
+   }
+   void SetBinaryBit(unsigned bitIndex, uint8_t val) {
+     unsigned intIdx = bitIndex / 16;
+     if (intIdx >= v.size()) {
+       return;
+     }
+     unsigned bitIdx = bitIndex % 16;
+     uint32_t v0 = v[intIdx];
+     // set carry to 0
+     v0 &= ~(1 << (2 * bitIdx + 1));
+     if (val > 0) {
+       v0 |= 1 << (2 * bitIdx);
+     } else {
+       v0 &= ~(1 << (2 * bitIdx));
+     }
+     v[intIdx] = v0;
+   }
+   void SetBinaryVal(uint64_t val) {
+     uint64_t x = val;
+     unsigned numBits = 0;
+     while (x > 0) {
+       x /= 2;
+       numBits++;
+     }
+     v.resize(numBits / 16 + 1, 0);
+     x = val;
+     unsigned bitIndex = 0;
+     while (x > 0) {
+       uint8_t bit = x % 2;
+       x /= 2;
+       SetBinaryBit(bitIndex, bit);
+       bitIndex++;
+     }
+   }
+};
+
 class CellAuto {
  public:
-  //every two bits for one cell.
-  //every int has 16 cells.
-  std::vector<uint32_t> v;
-  //between 0-4
-  uint8_t GetCellVal(unsigned index) { 
-    unsigned intIdx = index / 16;
 
-    if (intIdx >= v.size()) {
-      return 0;
-    }
-    unsigned bitIdx = index % 16;
-    return (v[intIdx] >> (2 * bitIdx)) & 3;
+  std::vector<CellRow> v;
+  void AddRow(uint64_t val) {
+     std::lock_guard<std::mutex> lock(vLock);
+     v.push_back(CellRow(val));
   }
-  void SetBinaryBit(unsigned bitIndex, uint8_t val) {
-    unsigned intIdx = bitIndex / 16;
-    if (intIdx >= v.size()) {
-      return;
-    }
-    unsigned bitIdx = bitIndex % 16;
-    uint32_t v0 = v[intIdx];
-    //set carry to 0
-    v0 &= ~(1 <<(2*bitIdx + 1));
-    if (val > 0) {
-      v0 |= 1 << (2 * bitIdx);
-    } else {
-      v0 &= ~(1 << (2 * bitIdx));
-    }
-    v[intIdx] = v0;
+  void Step() { 
+    std::lock_guard<std::mutex> lock(vLock);
+     CellRow newRow;
+
+    v.push_back(newRow);
   }
-  void SetBinaryVal(uint64_t val) {
-    uint64_t x = val;
-    unsigned numBits = 0;
-    while (x > 0) {
-      x /= 2;
-      numBits++;
-    }
-    v.resize(numBits / 16 + 1, 0);
-    x = val;
-    unsigned bitIndex = 0;
-    while (x > 0) {
-      uint8_t bit = x % 2;
-      x /= 2;
-      SetBinaryBit(bitIndex, bit);
-      bitIndex++;
-    }
-  }
+  std::mutex vLock;
 };
 
 //info for voxelizing
@@ -108,10 +126,7 @@ uint64_t NextNum(uint64_t num) {
 }
 
 void CanvasApp::Step() {
-  DrawRow(_num, _drawRow, _canvas);
-  _drawRow++;
-  _drawRow %= _canvas.GetSize()[1];
-  _num = NextNum(_num);
+  _cells->Step();
   _imageStale = true;
 }
 
@@ -149,7 +164,7 @@ void CanvasApp::RefreshSim() {
     const InputInt* stepsInput = (const InputInt*)inputWidget.get();
     _totalSteps = stepsInput->_value;
   }
-  _ui->SetLabelText(_numLabelId, std::to_string(_num));
+
   if (_snap) {
     Array2D4b out = _canvas;
     SavePngColor("canvas.png", _canvas);
@@ -173,9 +188,9 @@ static void LogToUI(const std::string& str, UILib& ui, int statusLabel) {
 void CanvasApp::Init(UILib* ui) { 
   _ui = ui;
   _ui->SetShowImage(true);
-  _num = 1410123943ull;
+
   _cells = std::make_shared<CellAuto>();
-  _cells->SetBinaryVal(99);
+  _cells->AddRow(99);
   std::cout << _cells->v[0] << "\n";
   _canvas.Allocate(800, 800);
   _canvas.Fill(Vec4b(127, 127, 0, 127));
