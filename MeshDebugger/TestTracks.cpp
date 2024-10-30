@@ -5,6 +5,7 @@
 #include "ArrayUtil.h"
 #include "BBox.h"
 #include "TrigMesh.h"
+#include "Vec2.h"
 
 struct Segment {
   virtual Vec2f eval(float t) const = 0;
@@ -143,22 +144,38 @@ std::vector<Placement> PlaceTracks(Vec2f hole0, Vec2f hole1,
 }
 
 void MakeCurve() { 
-  Curve c;
+  //// tank versions 1-6
+  //Curve c;
 
-  c.AddArc({-0.024, 19.119}, {-18.88, 4.494}, 19);
-  c.AddArc({-18.88, 4.494}, {-0.16, -19.4}, 19);
-  c.AddLine({-0.16, -19.4} ,{45, -32.66});
-  c.AddLine({45, -32.66}, {133, -31.16});
-  c.AddArc({133, -31.16}, {146.68, -26.222}, 19.4);
-  c.AddLine({146.68, -26.222}, {178.22, 1.7});
-  c.AddArc({178.22, 1.7}, {183.3, 7.7781}, 18.5);
-  c.AddArc({183.3, 7.7781}, {166, 33.3}, 18.5);
-  c.AddLine({166, 33.3} , {68.042, 33.8});
-  c.AddLine({68.042, 33.8}, {-0.024, 19.519});
+  //c.AddArc({-0.024, 19.119}, {-18.88, 4.494}, 19);
+  //c.AddArc({-18.88, 4.494}, {-0.16, -19.4}, 19);
+  //c.AddLine({-0.16, -19.4} ,{45, -32.66});
+  //c.AddLine({45, -32.66}, {133, -31.16});
+  //c.AddArc({133, -31.16}, {146.68, -26.222}, 19.4);
+  //c.AddLine({146.68, -26.222}, {178.22, 1.7});
+  //c.AddArc({178.22, 1.7}, {183.3, 7.7781}, 18.5);
+  //c.AddArc({183.3, 7.7781}, {166, 33.3}, 18.5);
+  //c.AddLine({166, 33.3} , {68.042, 33.8});
+  //c.AddLine({68.042, 33.8}, {-0.024, 19.519});
+  //auto points = c.SamplePoints(0.1f);
+  // tank version 7
+  Curve c;
+  c.AddLine({196,17}, {0,17});
+  c.AddArc({0,17}, {-18.55,4.14}, 18.5);
+  c.AddArc({-18.55, 4.14}, {0, -19}, 18.5);
+  c.AddLine({0, -19}, {205, -19});
   auto points = c.SamplePoints(0.1f);
-  std::ofstream out("F:/dump/place_tracks.txt");
-  Vec2f hole0(-3.4157, 0.53905);
-  Vec2f hole1(5.0823, 0.53937);
+  std::ofstream out("F:/meshes/tank/place_tracks.txt");
+  std::ofstream ptOut("F:/dump/trackCurve.txt");
+  for (size_t i = 0; i < points.size(); i++) {
+    ptOut << points[i][0] << " " << points[i][1] << "\n";
+  }
+  ptOut.close();
+  //Vec2f hole0(-3.4157, 0.53905);
+  //Vec2f hole1(5.0823, 0.53937);
+  Vec2f hole1(2.674, -0.38);
+  Vec2f hole0(-5.815, -0.38);
+  std::reverse(points.begin(), points.end());
   std::vector<Placement> placement = PlaceTracks(hole0, hole1, points);
   for (size_t i = 0; i < placement.size(); i++) {
     const auto& p = placement[i];

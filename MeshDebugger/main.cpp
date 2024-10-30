@@ -250,16 +250,12 @@ void MakeShearXGrid() {
 
 }
 
-extern void MakeCurve();
-
-int main(int argc, char** argv) {
-  RunInflateApp();
-  //MakeCurve();
+int main(int argc, char** argv) {  
   //MakeShearXGrid();
   //CenterMeshes("F:/meshes/donut/Donut-TDD-v4-interlock2original/mmp/mmp/models/");
     //MakeAcousticLattice();
     // MakeXYPairs();
-    //RunCanvasApp();
+  RunCanvasApp();
   //RunInflateApp();
     //return 0;
     // if (argc > 1 && argv[1][0] == 'c') {
