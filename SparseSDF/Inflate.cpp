@@ -55,7 +55,7 @@ std::shared_ptr<AdapDF> SignedDistanceFieldBand(const InflateConf& conf,
   std::shared_ptr<AdapDF> sdf = std::make_shared<AdapSDF>();
   sdf->distUnit = 1e-2;
   sdf->voxSize = h;
-  sdf->band = conf.thicknessMM / h + 2;
+  sdf->band = std::abs(conf.thicknessMM)/ h + 2;
   sdf->mesh_ = &mesh;
   ComputeCoarseDist(sdf.get());  
   return sdf;
@@ -87,7 +87,7 @@ std::shared_ptr<AdapDF> UnsignedDistanceFieldBand(const InflateConf& conf,
   std::shared_ptr<AdapDF> df = std::make_shared<AdapUDF>();
   df->distUnit = 1e-2;
   df->voxSize = h;
-  df->band = conf.thicknessMM / h + 2;
+  df->band = std::abs(conf.thicknessMM) / h + 2;
   df->mesh_ = &mesh;
   ComputeCoarseDist(df.get());
   return df;

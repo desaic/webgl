@@ -86,7 +86,7 @@ void InflateApp::Refresh() {
   int confChanged = 0;
   const float EPS = 5e-5f;
   confChanged = CheckFloatInput(_voxResId, _ui, conf.voxResMM, 1, 1e-2);
-  confChanged |= CheckFloatInput(_thicknessId, _ui, conf.thicknessMM, 1, 0);
+  confChanged |= CheckFloatInput(_thicknessId, _ui, conf.thicknessMM, 1, -1);
   if (_outPrefixId >= 0) {
     std::shared_ptr<InputText> input =
         std::dynamic_pointer_cast<InputText>(_ui->GetWidget(_outPrefixId));
