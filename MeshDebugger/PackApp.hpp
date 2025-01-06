@@ -1,27 +1,27 @@
 #pragma once
-#include "Command.hpp"
 #include "TrigMesh.h"
 #include "UIConf.h"
 #include "UILib.h"
 #include "threadsafe_queue.h"
 #include "MakeHelix.h"
 
-struct Part {
-  std::vector<std::shared_ptr<TrigMesh> > meshes;
-  std::vector<int> _meshIds;
-  std::string name;
-  int id = 0;
+class PackApp;
+
+struct PackCommand {
+  std::string _name = "";
+  PackCommand(const std::string& name) : _name(name) {}
+  virtual const std::string& GetName() const { return _name; }
+  virtual ~PackCommand() {}
+  virtual void Run(PackApp& app) {}
 };
 
-class cad_app;
-
-struct OpenCadMeshes : public Command {
-  OpenCadMeshes() : Command("open") {}
+struct OpenCommand : public PackCommand {
+  OpenCommand() : PackCommand("open") {}
   std::vector<std::string> _filenames;
-  virtual void Run() override;
+  virtual void Run(PackApp& app) override;
 };
 
-typedef std::shared_ptr<Command> CadCmdPtr;
+typedef std::shared_ptr<PackCommand> CadCmdPtr;
 
 class cad_app {
  public:
