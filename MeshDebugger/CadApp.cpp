@@ -1,4 +1,4 @@
-#include "cad_app.h"
+#include "CadApp.hpp"
 #include "ImageUtils.h"
 #include "StringUtil.h"
 #include "imgui.h"
@@ -28,7 +28,7 @@ class HelixWidget : public UIWidget {
   std::function<void(const HelixSpec&)> _genHelixFun;
 };
 
-void cad_app::Init(UILib* ui) {
+void CadApp::Init(UILib* ui) {
   _conf.Load(_conf._confFile);
   _ui = ui;
   _floor = std::make_shared<TrigMesh>();
@@ -53,16 +53,17 @@ void cad_app::Init(UILib* ui) {
 
   _ui->AddButton("Open", [&]() {
     auto meshOpenCb =
-        std::bind(&cad_app::QueueOpenFiles, this, std::placeholders::_1);
+        std::bind(&CadApp::QueueOpenFiles, this, std::placeholders::_1);
     _ui->SetMultipleFilesOpenCb(meshOpenCb);
     _ui->ShowFileOpen(true, _conf.workingDir);
   });
 
-  _ui->SetChangeDirCb(std::bind(&cad_app::OnChangeDir, this, std::placeholders::_1));
+  _ui->SetChangeDirCb(
+      std::bind(&CadApp::OnChangeDir, this, std::placeholders::_1));
 
   auto helixWidget = std::make_shared<HelixWidget>();
   helixWidget->_genHelixFun =
-      std::bind(&cad_app::QueueHelix, this, std::placeholders::_1);
+      std::bind(&CadApp::QueueHelix, this, std::placeholders::_1);
   _ui->AddWidget(helixWidget);
   _outDirWidget = std::make_shared<InputText>("out dir", _conf.outDir);
   _ui->AddWidget(_outDirWidget);
@@ -77,18 +78,19 @@ void cad_app::Init(UILib* ui) {
   });
 }
 
-struct HelixCommand : public CadCommand {
-  HelixCommand(const HelixSpec& spec) : CadCommand("helix"), _spec(spec) {}
+struct HelixCommand : public Command {
+  HelixCommand(const HelixSpec& spec) : Command("helix"), _spec(spec) {}
   HelixSpec _spec;
-  void Run(cad_app& app) override { app.AddHelix(_spec); }
+  void Run() override { app->AddHelix(_spec); }
+  CadApp* app = nullptr;
 };
 
-void cad_app::QueueHelix(const HelixSpec& spec) {
+void CadApp::QueueHelix(const HelixSpec& spec) {
   std::shared_ptr<HelixCommand> cmd = std::make_shared<HelixCommand>(spec);
   QueueCommand(cmd);
 }
 
-void cad_app::AddHelix(const HelixSpec& spec) {
+void CadApp::AddHelix(const HelixSpec& spec) {
   std::cout << "make helix " << spec.inner_width << "\n";
   Part p;
   p.id = _parts.size();
@@ -101,12 +103,12 @@ void cad_app::AddHelix(const HelixSpec& spec) {
   _parts.push_back(p);
 }
 
-void cad_app::OnChangeDir(std::string dir) {
+void CadApp::OnChangeDir(std::string dir) {
   _conf.workingDir = dir;
   _confChanged = true;
 }
 
-int LoadMeshFile(const std::string& path, TrigMesh& mesh) {
+static int LoadMeshFile(const std::string& path, TrigMesh& mesh) {
   std::string suffix = get_suffix(path);
   std::transform(suffix.begin(), suffix.end(), suffix.begin(),
                         std::tolower);
@@ -120,7 +122,7 @@ int LoadMeshFile(const std::string& path, TrigMesh& mesh) {
   return -1;
 }
 
-void cad_app::OpenFiles(const std::vector<std::string>& files) {
+void CadApp::OpenFiles(const std::vector<std::string>& files) {
   if (files.size() == 0) {
     return;
   }
@@ -141,13 +143,13 @@ void cad_app::OpenFiles(const std::vector<std::string>& files) {
   _parts.push_back(p);
 }
 
-void cad_app::QueueOpenFiles(const std::vector<std::string>& files) {
-  std::shared_ptr<OpenCommand> cmd = std::make_shared<OpenCommand>();
+void CadApp::QueueOpenFiles(const std::vector<std::string>& files) {
+  std::shared_ptr<OpenCadMeshes> cmd = std::make_shared<OpenCadMeshes>();
   cmd->_filenames = files;
   QueueCommand(cmd);
 }
 
-void cad_app::Refresh() {
+void CadApp::Refresh() {
   ExeCommands();
   if (_outDirWidget->_entered) {
     _conf.outDir = _outDirWidget->GetString();
@@ -158,20 +160,20 @@ void cad_app::Refresh() {
   }
 } 
 
-void cad_app::ExeCommands() {
+void CadApp::ExeCommands() {
   while (!_commandQueue.empty()) {
-    std::shared_ptr<CadCommand> cmdPtr;
+    std::shared_ptr<Command> cmdPtr;
     bool has = _commandQueue.try_pop(cmdPtr);
     if (cmdPtr) {
-      cmdPtr->Run(*this);
+      cmdPtr->Run();
     }
   }
 }
 
-void cad_app::QueueCommand(CadCmdPtr cmd) {
+void CadApp::QueueCommand(CmdPtr cmd) {
   if (_commandQueue.size() < MAX_COMMAND_QUEUE_SIZE) {
     _commandQueue.push(cmd);
   }
 }
 
-void OpenCommand::Run(cad_app& app) { app.OpenFiles(_filenames); }
+void OpenCadMeshes::Run() { app->OpenFiles(_filenames); }

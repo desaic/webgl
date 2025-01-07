@@ -2,6 +2,8 @@
 #define COMMAND_HPP
 
 #include <string>
+#include <memory>
+#include "threadsafe_queue.h"
 
 struct Command {
   std::string _name = "";
@@ -10,5 +12,8 @@ struct Command {
   virtual ~Command() {}
   virtual void Run() {}
 };
+
+typedef std::shared_ptr<Command> CmdPtr;
+typedef threadsafe_queue<CmdPtr> CmdQueue;
 
 #endif  // !COMMAND_HPP

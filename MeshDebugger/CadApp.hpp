@@ -13,17 +13,16 @@ struct Part {
   int id = 0;
 };
 
-class cad_app;
+class CadApp;
 
 struct OpenCadMeshes : public Command {
   OpenCadMeshes() : Command("open") {}
   std::vector<std::string> _filenames;
   virtual void Run() override;
+  CadApp* app = nullptr;
 };
 
-typedef std::shared_ptr<Command> CadCmdPtr;
-
-class cad_app {
+class CadApp {
  public:
   void Init(UILib* ui);
   void Refresh();
@@ -33,7 +32,7 @@ class cad_app {
   void OpenFiles(const std::vector<std::string>& files);
   void OnChangeDir(std::string dir);
 
-  void QueueCommand(CadCmdPtr cmd);
+  void QueueCommand(CmdPtr cmd);
   void QueueOpenFiles(const std::vector<std::string>& files);
 
   void QueueHelix(const HelixSpec& spec);
@@ -46,7 +45,7 @@ class cad_app {
   bool _confChanged = false;
   std::vector<Part> _parts;
   const static size_t MAX_COMMAND_QUEUE_SIZE = 10;
-  threadsafe_queue<CadCmdPtr> _commandQueue;
+  CmdQueue _commandQueue;
 
   std::shared_ptr<InputText> _outDirWidget;
 };
