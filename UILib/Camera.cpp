@@ -97,8 +97,8 @@ void Camera::zoom(float dist) {
     len = near;
     at = at + dist * viewDir;
   }
-  if (len > far/10) {
-    len = far/10;
+  if (len > far) {
+    len = far;
     at = at + dist * viewDir;
   }
   eye = at - len * viewDir;

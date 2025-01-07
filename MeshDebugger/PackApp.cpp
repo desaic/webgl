@@ -8,24 +8,7 @@
 void PackApp::Init(UILib* ui) {
   _conf.Load(_conf._confFile);
   _ui = ui;
-  _floor = std::make_shared<TrigMesh>();
-  *_floor =
-      MakePlane(Vec3f(-200, -0.1, -200), Vec3f(200, -0.1, 200), Vec3f(0, 1, 0));
-  for (size_t i = 0; i < _floor->uv.size(); i++) {
-    _floor->uv[i] *= 5;
-  }
-  Array2D8u checker;
-  MakeCheckerPatternRGBA(checker);
-  _floorMeshId = _ui->AddMesh(_floor);
-  _ui->SetMeshTex(_floorMeshId, checker, 4);
-  GLRender* gl = ui->GetGLRender();
-  GLLightArray* lights = gl->GetLights();
-  lights->SetLightPos(0, 250, 100, 250);
-  lights->SetLightPos(1, 500, 100, 250);
-  lights->SetLightColor(0, 0.8, 0.7, 0.6);
-  lights->SetLightColor(1, 0.8, 0.8, 0.8);
-  lights->SetLightPos(2, 0, 100, 100);
-  lights->SetLightColor(2, 0.8, 0.7, 0.6);
+  Init3DScene(_ui);
   _ui->SetShowImage(false);
 
   _ui->AddButton("Open", [&]() {
@@ -41,6 +24,29 @@ void PackApp::Init(UILib* ui) {
   _outDirWidget = std::make_shared<InputText>("out dir", _conf.outDir);
   _ui->AddWidget(_outDirWidget);
   
+}
+
+void PackApp::Init3DScene(UILib*ui) {
+  
+  _floor = std::make_shared<TrigMesh>();
+  *_floor =
+      MakePlane(Vec3f(-200, -0.1, -200), Vec3f(200, -0.1, 200), Vec3f(0, 1, 0));
+  for (size_t i = 0; i < _floor->uv.size(); i++) {
+    _floor->uv[i] *= 5;
+  }
+  Array2D8u checker;
+  MakeCheckerPatternRGBA(checker);
+  _floorMeshId = _ui->AddMesh(_floor);
+  _ui->SetMeshTex(_floorMeshId, checker, 4);
+  GLRender* gl = ui->GetGLRender();
+  gl->SetDefaultCameraView(Vec3f(0, 200, -200), Vec3f(0));
+  GLLightArray* lights = gl->GetLights();
+  lights->SetLightPos(0, 25, 10, 25);
+  lights->SetLightPos(1, 50, 10, 25);
+  lights->SetLightColor(0, 0.8, 0.7, 0.6);
+  lights->SetLightColor(1, 0.8, 0.8, 0.8);
+  lights->SetLightPos(2, 0, 100, 100);
+  lights->SetLightColor(2, 0.8, 0.7, 0.6);
 }
 
 void PackApp::OnChangeDir(std::string dir) {

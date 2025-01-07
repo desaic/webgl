@@ -1,18 +1,17 @@
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <sstream>
 
-#include "ImageIO.h"
 #include "CadApp.hpp"
 #include "CanvasApp.h"
-#include "PackApp.hpp"
-#include "VoxApp.h"
+#include "ImageIO.h"
 #include "InflateApp.h"
+#include "PackApp.hpp"
 #include "UIConf.h"
 #include "UILib.h"
-
-#include <functional>
+#include "VoxApp.h"
 
 void VoxApp() {
   UILib ui;
@@ -62,23 +61,23 @@ void RunCadApp() {
   }
 }
 
-void RunCanvasApp() {  
-    UILib ui;
-    CanvasApp app;
-    app.conf._confFile = "./canvas_conf.json";
-    app.Init(&ui);
-    ui.SetFontsDir("./fonts");
+void RunCanvasApp() {
+  UILib ui;
+  CanvasApp app;
+  app.conf._confFile = "./canvas_conf.json";
+  app.Init(&ui);
+  ui.SetFontsDir("./fonts");
 
-    int statusLabel = ui.AddLabel("status");
+  int statusLabel = ui.AddLabel("status");
 
-    ui.Run();
+  ui.Run();
 
-    const unsigned PollFreqMs = 20;
+  const unsigned PollFreqMs = 20;
 
-    while (ui.IsRunning()) {
-      app.RefreshUI();
-      std::this_thread::sleep_for(std::chrono::milliseconds(PollFreqMs));
-    }  
+  while (ui.IsRunning()) {
+    app.RefreshUI();
+    std::this_thread::sleep_for(std::chrono::milliseconds(PollFreqMs));
+  }
 }
 
 void RunPackApp() {
@@ -98,8 +97,8 @@ void RunPackApp() {
 }
 
 int main(int argc, char** argv) {
-  //RunCanvasApp();
-  // RunInflateApp();
+  // RunCanvasApp();
+  //  RunInflateApp();
   RunPackApp();
   // VoxApp();
   return 0;

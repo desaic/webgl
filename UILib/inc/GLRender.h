@@ -108,7 +108,7 @@ class GLRender {
   const static unsigned MAX_NUM_LIGHTS = 8;
 
   Camera* GetCamera() { return &_camera; }
-  
+
   GLLightArray* GetLights() { return &_lights; }
 
   void SetDefaultCameraView(const Vec3f& eye, const Vec3f& at) {

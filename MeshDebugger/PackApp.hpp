@@ -36,6 +36,7 @@ class PackApp {
   bool _confChanged = false;
   const static size_t MAX_COMMAND_QUEUE_SIZE = 10;
   threadsafe_queue<CmdPtr> _commandQueue;
-
   std::shared_ptr<InputText> _outDirWidget;
+
+  void Init3DScene(UILib* ui);
 };
