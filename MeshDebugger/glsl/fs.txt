@@ -20,7 +20,7 @@ void main()
 		lightDist = min(200,lightDist);
 		lightDist = min(1, 100/lightDist);
 		vec3 N = normalize(normal);
-		vec3 diffuse = max(0, dot(L, N)) * lightcolor[li];
+		vec3 diffuse = max(0.05, dot(L, N)) * lightcolor[li];
 		vec3 V = -normalize(pos);
 		vec3 H = L + V;
 		H = normalize(H);

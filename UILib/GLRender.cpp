@@ -74,17 +74,23 @@ void GLRender::Resize(unsigned int width, unsigned int height) {
                           _width, _height, GL_TRUE);
 }
 
-int GLRender::DrawMesh(size_t meshId) {
+int GLRender::DrawInstance(size_t instanceId) {
   std::lock_guard<std::mutex> lock(meshLock);
-  if (meshId >= _bufs.size()) {
+  if (instanceId >= _instances.size()) {
     return -1;
   }
-  GLBuf& buf = _bufs[meshId];
+  auto& instance = _instances[instanceId];
+  int bufId = instance.bufId;
+  if (bufId >= _bufs.size()) {
+    return -2;
+  }
+
+  GLBuf& buf = _bufs[bufId];
   if (!buf._allocated) {
-    AllocateMeshBuffer(meshId);
+    AllocateMeshBuffer(bufId);
   }
   if (buf._needsUpdate) {
-    UploadMeshData(meshId);
+    UploadMeshData(bufId);
   }
   if (buf._tex.HasImage()) {
     buf._tex.UpdateTextureData();
@@ -182,18 +188,31 @@ void GLRender::Render() {
   glEnable(GL_DEPTH_TEST);
   const GLsizei matCount = 1;
   const GLboolean noTranspose = GL_FALSE;
-  float vit[16];
-  glUniformMatrix4fv(_vmat_loc, matCount, noTranspose,
-                     (const GLfloat*)_camera.view);
   glUniformMatrix4fv(_pmat_loc, matCount, noTranspose,
                      (const GLfloat*)_camera.proj);
+
+  glUniformMatrix4fv(_vmat_loc, matCount, noTranspose,
+                     (const GLfloat*)_camera.view);
+  float vit[16];
   _camera.VIT(vit);
   glUniformMatrix4fv(_mvit_loc, matCount, noTranspose, (const GLfloat*)vit);
   UploadLights();
   glEnable(GL_MULTISAMPLE);
-  for (size_t i = 0; i < _bufs.size(); i++) {
-    DrawMesh(i);
+  Matrix4f view = _camera.view;  
+  for (size_t i = 0; i < _instances.size(); i++) {
+    //multiply model matrix
+    Matrix4f model = _instances[i].matrix;
+    model = view * model;
+    glUniformMatrix4fv(_vmat_loc, matCount, noTranspose, (const GLfloat*)model);
+    Matrix4f mvit = model.inverse();
+    mvit.transpose();
+    glUniformMatrix4fv(_mvit_loc, matCount, noTranspose, (const GLfloat*)mvit);
+    DrawInstance(i);
   }
+  //restore camera matrix
+  glUniformMatrix4fv(_vmat_loc, matCount, noTranspose,
+                     (const GLfloat*)_camera.view);  
+  glUniformMatrix4fv(_mvit_loc, matCount, noTranspose, (const GLfloat*)vit);
 
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glDisable(GL_MULTISAMPLE);
@@ -411,11 +430,14 @@ int GLRender::UploadMeshData(size_t meshId) {
   return 0;
 }
 
-int GLRender::AddMesh(std::shared_ptr<TrigMesh> mesh) {
+int GLRender::CreateMeshBufs(std::shared_ptr<TrigMesh> mesh) {
   std::lock_guard<std::mutex> lock(meshLock);
   int meshId = int(_bufs.size());
   _bufs.push_back(mesh);
   return meshId;
+}
+
+int CreateMeshBufAndInstance(std::shared_ptr<TrigMesh> mesh) {
 }
 
 int GLRender::SetNeedsUpdate(size_t meshId) {

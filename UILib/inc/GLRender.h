@@ -5,7 +5,7 @@
 #include <memory>
 
 #include "Vec3.h"
-
+#include "Matrix4f.h"
 #include "Array2D.h"
 #include "Camera.h"
 #include "GLTex.h"
@@ -62,6 +62,16 @@ struct GLLightArray {
   unsigned NumLights() const { return pos.size(); }
 };
 
+struct MeshInstance {
+  Matrix4f matrix;
+  // index into GLBuf array.
+  // also mesh id.
+  int bufId = 0;
+  int instanceId = 0;
+  bool hide = false;
+  bool matrixUpdated = false;
+};
+
 class GLRender {
  public:
   GLRender();
@@ -84,13 +94,20 @@ class GLRender {
   unsigned Height() const { return _height; }
   unsigned TexId() const { return _resolve_tex; }
 
-  int AddMesh(std::shared_ptr<TrigMesh> mesh);
+  int CreateMeshBufs(std::shared_ptr<TrigMesh> mesh);
+  
+  /// @brief also creates one instance with identity transformation
+  /// @param mesh 
+  /// @return 
+  int CreateMeshBufAndInstance(std::shared_ptr<TrigMesh> mesh);
 
   int AllocateMeshBuffer(size_t meshId);
 
-  int DrawMesh(size_t meshId);
+  int DrawInstance(size_t instanceId);
 
   void SetMouse(int x, int y, float wheel, bool left, bool mid, bool right);
+
+  void SetZoomSpeed(float s) { zoomSpeed = s; }
 
   void KeyPressed(KeyboardInput& keys);
 
@@ -145,6 +162,7 @@ class GLRender {
 
   std::string _vs_string, _fs_string;
   std::vector<GLBuf> _bufs;
+  std::vector<MeshInstance> _instances;
   const static unsigned INIT_WIDTH = 800, INIT_HEIGHT = 800;
   unsigned _width = 0, _height = 0;
   bool _initialized = false;

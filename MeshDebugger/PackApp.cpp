@@ -39,11 +39,12 @@ void PackApp::Init3DScene(UILib*ui) {
   _floorMeshId = _ui->AddMesh(_floor);
   _ui->SetMeshTex(_floorMeshId, checker, 4);
   GLRender* gl = ui->GetGLRender();
-  gl->SetDefaultCameraView(Vec3f(0, 200, -200), Vec3f(0));
+  gl->SetDefaultCameraView(Vec3f(0, 200, -400), Vec3f(0));
   GLLightArray* lights = gl->GetLights();
-  lights->SetLightPos(0, 25, 10, 25);
-  lights->SetLightPos(1, 50, 10, 25);
-  lights->SetLightColor(0, 0.8, 0.7, 0.6);
+  gl->SetZoomSpeed(20);
+  lights->SetLightPos(0, 25, 100, 25);
+  lights->SetLightPos(1, 50, 100, 25);
+  lights->SetLightColor(0, 1,1,1);
   lights->SetLightColor(1, 0.8, 0.8, 0.8);
   lights->SetLightPos(2, 0, 100, 100);
   lights->SetLightColor(2, 0.8, 0.7, 0.6);
