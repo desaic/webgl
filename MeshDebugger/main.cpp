@@ -1,13 +1,7 @@
-
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
-
-#include "Array2D.h"
-#include "Array3D.h"
-
-#include "BBox.h"
 
 #include "ImageIO.h"
 #include "CadApp.hpp"
@@ -17,7 +11,6 @@
 #include "InflateApp.h"
 #include "UIConf.h"
 #include "UILib.h"
-#include "TriangulateContour.h"
 
 #include <functional>
 
@@ -51,13 +44,6 @@ void RunInflateApp() {
     app.Refresh();
     std::this_thread::sleep_for(std::chrono::milliseconds(PollFreqMs));
   }
-}
-
-void TestCDT() {
-  TrigMesh mesh;
-  std::vector<float> v(8);
-  mesh = TriangulateLoop(v.data(), v.size() / 2);
-  mesh.SaveObj("F:/dump/loop_trigs.obj");
 }
 
 void RunCadApp() {
