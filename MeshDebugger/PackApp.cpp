@@ -11,11 +11,12 @@ void PackApp::Init(UILib* ui) {
   Init3DScene(_ui);
   _ui->SetShowImage(false);
 
-  _ui->AddButton("Open", [&]() {
+  _ui->AddButton("Container", [&]() {
     auto meshOpenCb =
-        std::bind(&PackApp::QueueOpenFiles, this, std::placeholders::_1);
-    _ui->SetMultipleFilesOpenCb(meshOpenCb);
-    _ui->ShowFileOpen(true, _conf.workingDir);
+        std::bind(&PackApp::QueueLoadContainer, this, std::placeholders::_1);
+    _ui->SetFileOpenCb(meshOpenCb);
+    bool openMulti = false;
+    _ui->ShowFileOpen(openMulti, _conf.workingDir);
   });
 
   _ui->SetChangeDirCb(
@@ -36,14 +37,16 @@ void PackApp::Init3DScene(UILib*ui) {
   }
   Array2D8u checker;
   MakeCheckerPatternRGBA(checker);
-  _floorMeshId = _ui->AddMeshAndInstance(_floor);
-  _ui->SetMeshTex(_floorMeshId, checker, 4);
+  _floorInst = _ui->AddMeshAndInstance(_floor);
+  _ui->SetInstTex(_floorInst, checker, 4);
   GLRender* gl = ui->GetGLRender();
-  gl->SetDefaultCameraView(Vec3f(0, 200, -400), Vec3f(0));
+  gl->SetDefaultCameraView(Vec3f(0, 20, -40), Vec3f(0));
+  gl->SetDefaultCameraZ(0.2, 200);
+  gl->SetPanSpeed(0.05);
   GLLightArray* lights = gl->GetLights();
-  gl->SetZoomSpeed(20);
-  lights->SetLightPos(0, 25, 100, 25);
-  lights->SetLightPos(1, 50, 100, 25);
+  gl->SetZoomSpeed(2);
+  lights->SetLightPos(0, 0, 20, 20);
+  lights->SetLightPos(1, 0, 20, -20);
   lights->SetLightColor(0, 1,1,1);
   lights->SetLightColor(1, 0.8, 0.8, 0.8);
   lights->SetLightPos(2, 0, 100, 100);
@@ -76,10 +79,16 @@ void PackApp::OpenFiles(const std::vector<std::string>& files) {
   
 }
 
-void PackApp::QueueOpenFiles(const std::vector<std::string>& files) {
-  std::shared_ptr<OpenCommand> cmd = std::make_shared<OpenCommand>();
-  cmd->_filenames = files;
-  QueueCommand(cmd);
+void PackApp::QueueLoadContainer(const std::string& file) {
+  QueueCommand(std::make_shared<LoadContainerCmd>(this, file));
+}
+
+void PackApp::LoadContainer(const std::string& file) {
+  _container = std::make_shared<TrigMesh>();
+  int ret = LoadMeshFile(file, *_container);
+  if (ret == 0) {
+    _containerInst = _ui->AddMeshAndInstance(_container);
+  }
 }
 
 void PackApp::Refresh() {
@@ -109,4 +118,4 @@ void PackApp::QueueCommand(CmdPtr cmd) {
   }
 }
 
-void OpenCommand::Run() { app->OpenFiles(_filenames); }
+void LoadContainerCmd::Run() { app->LoadContainer(_filename); }

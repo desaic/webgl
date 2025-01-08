@@ -122,6 +122,8 @@ class GLRender {
 
   void SetMouse(int x, int y, float wheel, bool left, bool mid, bool right);
 
+  void SetPanSpeed(float s) { camSpeed = s; }
+
   void SetZoomSpeed(float s) { zoomSpeed = s; }
 
   void KeyPressed(KeyboardInput& keys);
@@ -146,6 +148,10 @@ class GLRender {
   void SetDefaultCameraView(const Vec3f& eye, const Vec3f& at) {
     _eye0 = eye;
     _at0 = at;
+  }
+  void SetDefaultCameraZ(float near, float far) {
+    _near0 = near;
+    _far0 = far;
   }
 
  private:
@@ -174,7 +180,8 @@ class GLRender {
   float zoomSpeed = 5.0f;
   Vec3f _eye0 = {500.0f, 100.0f, 400.0f};
   Vec3f _at0 = {200.0f, 0.0f, 200.0f};
-
+  float _near0 = 1;
+  float _far0 = 1000;
   std::string _vs_string, _fs_string;
   std::vector<GLBuf> _bufs;
   std::vector<MeshInstance> _instances;

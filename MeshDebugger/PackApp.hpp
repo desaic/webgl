@@ -8,11 +8,13 @@
 
 class PackApp;
 
-struct OpenCommand : public Command {
-  OpenCommand() : Command("open") {}
-  std::vector<std::string> _filenames;
+struct LoadContainerCmd : public Command {
+  LoadContainerCmd() : Command("container") {}
+  LoadContainerCmd(PackApp* a, const std::string& f)
+      : Command("container"), app(a), _filename(f) {}
   virtual void Run() override;
   PackApp* app = nullptr;
+  std::string _filename;
 };
 
 class PackApp {
@@ -26,12 +28,18 @@ class PackApp {
   void OnChangeDir(std::string dir);
 
   void QueueCommand(CmdPtr cmd);
-  void QueueOpenFiles(const std::vector<std::string>& files);
+
+  void QueueLoadContainer(const std::string& file);
+  void LoadContainer(const std::string& file);
 
  protected:
   UILib* _ui;
   std::shared_ptr<TrigMesh> _floor;
-  int _floorMeshId = -1;
+  std::shared_ptr<TrigMesh> _container;
+  
+  int _floorInst = -1;
+  int _containerInst = -1;
+
   UIConf _conf;
   bool _confChanged = false;
   const static size_t MAX_COMMAND_QUEUE_SIZE = 10;

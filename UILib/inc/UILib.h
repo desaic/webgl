@@ -197,6 +197,15 @@ class UILib {
 
   int SetMeshTex(int meshId, const Array2D8u& image, int numChannels);
   
+  /// @brief set mesh's texture through instance id
+  /// @param meshId 
+  /// @param image 
+  /// @param numChannels 
+  /// @return 
+  int SetInstTex(int meshId, const Array2D8u& image, int numChannels);
+  
+  int BufIdFromInst(int instanceId) const;
+
   int SetMeshNeedsUpdate(int meshId);
   
   int SetImageScale(int id, float scale);

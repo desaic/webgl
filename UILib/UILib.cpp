@@ -232,10 +232,19 @@ int UILib::SetImageData(int imageId, const Array2D4b& image) {
   return 0;
 }
 
+int UILib::BufIdFromInst(int instanceId) const {
+  return _glRender.GetInstance(instanceId).bufId;
+}
+
 int UILib::SetMeshNeedsUpdate(int meshId) { return _glRender.SetNeedsUpdate(meshId); }
 
 int UILib::SetMeshTex(int meshId, const Array2D8u& image, int numChannels) {
   return _glRender.SetMeshTexture(meshId, image, numChannels);
+}
+
+int UILib::SetInstTex(int instId, const Array2D8u& image, int numChannels) {
+  int meshId = BufIdFromInst(instId);
+  return SetMeshTex(meshId, image, numChannels);
 }
 
 int UILib::SetImageScale(int id, float scale) {

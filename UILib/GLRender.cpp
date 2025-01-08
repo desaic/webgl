@@ -245,8 +245,8 @@ int checkShaderError(GLuint shader) {
 void GLRender::ResetCam() {
   _camera.eye = _eye0;
   _camera.at = _at0;
-  _camera.near = 1;
-  _camera.far = 1000;
+  _camera.near = _near0;
+  _camera.far = _far0;
   _camera.update();
 }
 
