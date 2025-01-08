@@ -36,7 +36,7 @@ void PackApp::Init3DScene(UILib*ui) {
   }
   Array2D8u checker;
   MakeCheckerPatternRGBA(checker);
-  _floorMeshId = _ui->AddMesh(_floor);
+  _floorMeshId = _ui->AddMeshAndInstance(_floor);
   _ui->SetMeshTex(_floorMeshId, checker, 4);
   GLRender* gl = ui->GetGLRender();
   gl->SetDefaultCameraView(Vec3f(0, 200, -400), Vec3f(0));

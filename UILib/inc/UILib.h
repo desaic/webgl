@@ -230,8 +230,11 @@ class UILib {
 
   void SetShaderDir(const std::string& dir) { _shaderDir = dir; }
 
-  /// @return mesh index
+  /// @return mesh data index
   int AddMesh(std::shared_ptr<TrigMesh> mesh);
+  
+  /// @return instance id.
+  int AddMeshAndInstance(std::shared_ptr<TrigMesh> mesh);
 
   /// will overwrite existing texture image
   int SetMeshColor(int meshId, Vec3b color);

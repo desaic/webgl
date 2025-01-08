@@ -37,6 +37,12 @@ int UILib::AddMesh(std::shared_ptr<TrigMesh> mesh) {
   return meshId;
 }
 
+int UILib::AddMeshAndInstance(std::shared_ptr<TrigMesh> mesh) {
+  std::lock_guard<std::mutex> lock(glLock_);
+  int instId = _glRender.CreateMeshBufAndInstance(mesh);
+  return instId;
+}
+
 int UILib::SetMeshColor(int meshId, Vec3b color) {
   return _glRender.SetSolidColor(meshId, color);
 }

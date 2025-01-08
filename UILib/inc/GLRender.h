@@ -63,6 +63,7 @@ struct GLLightArray {
 };
 
 struct MeshInstance {
+  MeshInstance() : matrix(Matrix4f::identity()) {}
   Matrix4f matrix;
   // index into GLBuf array.
   // also mesh id.
@@ -94,16 +95,30 @@ class GLRender {
   unsigned Height() const { return _height; }
   unsigned TexId() const { return _resolve_tex; }
 
+  /// @brief 
+  /// @param mesh 
+  /// @return buffer id for new mesh 
   int CreateMeshBufs(std::shared_ptr<TrigMesh> mesh);
   
+  /// @brief 
+  /// @param bufId index into _bufs
+  /// @param inst 
+  /// @return global instance id 
+  int AddInstance(const MeshInstance &inst);
+
   /// @brief also creates one instance with identity transformation
   /// @param mesh 
-  /// @return 
+  /// @return new instance id. new buffer id can be queried through instance id.
   int CreateMeshBufAndInstance(std::shared_ptr<TrigMesh> mesh);
 
   int AllocateMeshBuffer(size_t meshId);
 
   int DrawInstance(size_t instanceId);
+
+  MeshInstance& GetInstance(int instanceId) { return _instances[instanceId]; }
+  const MeshInstance& GetInstance(int instanceId) const {
+    return _instances[instanceId];
+  }
 
   void SetMouse(int x, int y, float wheel, bool left, bool mid, bool right);
 

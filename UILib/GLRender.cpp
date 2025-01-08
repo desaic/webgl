@@ -430,6 +430,12 @@ int GLRender::UploadMeshData(size_t meshId) {
   return 0;
 }
 
+int GLRender::AddInstance(const MeshInstance& inst) {
+  int instId = int(_instances.size());
+  _instances.push_back(inst);
+  return instId;
+}
+
 int GLRender::CreateMeshBufs(std::shared_ptr<TrigMesh> mesh) {
   std::lock_guard<std::mutex> lock(meshLock);
   int meshId = int(_bufs.size());
@@ -437,7 +443,12 @@ int GLRender::CreateMeshBufs(std::shared_ptr<TrigMesh> mesh) {
   return meshId;
 }
 
-int CreateMeshBufAndInstance(std::shared_ptr<TrigMesh> mesh) {
+int GLRender::CreateMeshBufAndInstance(std::shared_ptr<TrigMesh> mesh) {
+  int bufId = CreateMeshBufs(mesh);
+  MeshInstance inst;
+  inst.bufId = bufId;
+  int instId = AddInstance(inst);
+  return instId;
 }
 
 int GLRender::SetNeedsUpdate(size_t meshId) {
