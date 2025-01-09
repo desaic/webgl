@@ -200,6 +200,9 @@ void GLRender::Render() {
   glEnable(GL_MULTISAMPLE);
   Matrix4f view = _camera.view;  
   for (size_t i = 0; i < _instances.size(); i++) {
+    if (_instances[i].hide) {
+      continue;
+    }
     //multiply model matrix
     Matrix4f model = _instances[i].matrix;
     model = view * model;

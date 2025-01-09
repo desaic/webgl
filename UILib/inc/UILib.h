@@ -111,6 +111,8 @@ class Slideri : public UIWidget {
     }
     i_ = val;
   }
+  void SetUb(int ub) { ub_ = ub; }
+  void SetLb(int lb) { lb_ = lb; }
  private:
   int i_= 0;
   int lb_ = 0;
