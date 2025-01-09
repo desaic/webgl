@@ -184,6 +184,10 @@ void PackApp::LoadBoxes(const std::string& seqFile) {
     endWidget->SetVal(_places.size());
   }
 
+  for (size_t i = 0; i < _boxMesh->v.size(); i++) {
+    _boxMesh->v[i] *= 0.98;
+  }
+  gl->SetNeedsUpdate(bufId);
 }
 
 void PackApp::QueueLoadContainer(const std::string& file) {
