@@ -4,10 +4,12 @@
 #include "imgui.h"
 #include "BBox.h"
 #include "Matrix3f.h"
+#include "Quat4f.h"
 #include "Transformations.h"
 #include <algorithm>
 #include <fstream>
 #include <sstream>
+#include <filesystem>
 
 void PackApp::Init(UILib* ui) {
   _conf.Load(_conf._confFile);
@@ -34,6 +36,25 @@ void PackApp::Init(UILib* ui) {
   _startBoxSlider = _ui->AddSlideri("start i", 0, 0, 1000);
   _endBoxSlider = _ui->AddSlideri("end i", 1000, 0, 1000);
 
+  _ui->AddButton("Load Sim", [&]() {
+    auto meshOpenCb =
+        std::bind(&PackApp::QueueLoadSim, this, std::placeholders::_1);
+    _ui->SetFileOpenCb(meshOpenCb);
+    bool openMulti = false;
+    _ui->ShowFileOpen(openMulti, _conf.workingDir);
+  });
+
+  _ui->AddButton("one step", [&]() { rigidStates.stepState = 1; });
+  _ui->AddButton(
+      "play sim", [&]() { rigidStates.stepState = 2; }, true);
+  _ui->AddButton(
+      "reset sim",
+      [&]() {
+        rigidStates.currStep = 0;
+        rigidStates.stepState = 0;
+      },
+      true);
+  _simStepLabel = _ui->AddLabel("sim step 0");
   _ui->SetChangeDirCb(
       std::bind(&PackApp::OnChangeDir, this, std::placeholders::_1));
 
@@ -60,8 +81,8 @@ void PackApp::Init3DScene(UILib*ui) {
   gl->SetPanSpeed(0.05);
   GLLightArray* lights = gl->GetLights();
   gl->SetZoomSpeed(2);
-  lights->SetLightPos(0, 0, 20, 20);
-  lights->SetLightPos(1, 0, 20, -20);
+  lights->SetLightPos(0, 0, 100, 50);
+  lights->SetLightPos(1, 0, 100, -50);
   lights->SetLightColor(0, 1,1,1);
   lights->SetLightColor(1, 0.8, 0.8, 0.8);
   lights->SetLightPos(2, 0, 100, 100);
@@ -75,8 +96,9 @@ void PackApp::OnChangeDir(std::string dir) {
 
 static int LoadMeshFile(const std::string& path, TrigMesh& mesh) {
   std::string suffix = get_suffix(path);
-  std::transform(suffix.begin(), suffix.end(), suffix.begin(),
-                        std::tolower);
+  for (char& c : suffix) {
+    c = std::tolower(c);
+  }
   if(suffix=="obj"){
     mesh.LoadObj(path);
     return 0;
@@ -202,6 +224,107 @@ void PackApp::LoadContainer(const std::string& file) {
   }
 }
 
+void PackApp::QueueLoadSim(const std::string& stateFile) {
+  QueueCommand(std::make_shared<LoadSimCmd>(this, stateFile));
+}
+
+void PackApp::AddSimMeshesToUI() {
+  rigidStates.uiInstIds.resize(rigidStates.meshes.size());
+  for (size_t i = 0; i < rigidStates.meshes.size(); i++) {
+    int instId = _ui->AddMeshAndInstance(rigidStates.meshes[i]);
+    rigidStates.uiInstIds[i] = instId;
+  }
+}
+
+std::vector<std::shared_ptr<TrigMesh > > LoadSimMesh(const std::filesystem::path& p) {
+  std::ifstream in(p);
+  if (!in.good()) {
+    return {};
+  }
+  size_t vOffset = 1;
+  std::string line;
+  std::shared_ptr<TrigMesh> mesh;
+  std::vector<std::shared_ptr<TrigMesh> > meshes; 
+  while (std::getline(in, line)) {
+
+    if (line.size() < 3 || line[0] == '#') {
+      continue;
+    }
+    std::istringstream iss(line);
+    std::string tok;
+    iss >> tok;
+    if (tok[0] == 'o') {
+      if (mesh) {
+        meshes.push_back(mesh);
+        vOffset += mesh->GetNumVerts();
+        std::string debugFile =
+            "./debug_mesh_" + std::to_string(meshes.size()) + ".obj";
+        //mesh->SaveObj(debugFile);
+      }
+      mesh = std::make_shared<TrigMesh>();
+    } else if (tok[0] == 'v') {
+      if (mesh) {
+        Vec3f vert;
+        iss >> vert[0] >> vert[1] >> vert[2];
+        mesh->AddVert(vert[0], vert[1], vert[2]);
+      }
+    } else if (tok[0] == 'f') {
+      if (mesh) {
+        Vec3u face;
+        iss >> face[0] >> face[1] >> face[2];
+        mesh->t.push_back(face[0] - vOffset);
+        mesh->t.push_back(face[1] - vOffset);
+        mesh->t.push_back(face[2] - vOffset);
+      }
+    }
+  }
+  meshes.push_back(mesh);
+  vOffset += mesh->GetNumVerts();
+  //std::string debugFile =
+  //    "./debug_mesh_" + std::to_string(meshes.size()) + ".obj";
+  //mesh->SaveObj(debugFile);
+  return meshes;
+}
+
+void PackApp::LoadSim(const std::string& stateFile) { 
+  std::ifstream in(stateFile);
+  if (!in.good()) {
+    std::cout << "can't open " << stateFile << "\n";
+    return;
+  }
+  std::string line;
+  std::getline(in, line);
+  std::string token;
+  std::istringstream iss(line);
+  std::string meshFile;
+  iss >> token >> meshFile;
+
+  std::filesystem::path p(stateFile);
+  auto dir = p.parent_path();
+  std::filesystem::path meshPath = dir / meshFile;
+  rigidStates.meshes = LoadSimMesh(meshPath);
+  if (rigidStates.meshes.size() == 0) {
+    return;
+  }
+  int numSteps = 0;
+  in >> token >> numSteps;
+  rigidStates.states.resize(numSteps);
+  for (int i = 0; i < numSteps; i++) {
+    std::getline(in, line);
+    int stepId;
+    int numBodies = 0;
+    in >> token >> stepId >> token >> numBodies;
+    RigidState s;
+    s.resize(numBodies);
+    for (int j = 0; j < numBodies; j++) {
+      in >> s[j].pos[0] >> s[j].pos[1] >> s[j].pos[2];
+      in >> s[j].rot[0] >> s[j].rot[1] >> s[j].rot[2] >> s[j].rot[3];
+    }
+    rigidStates.states[i] = s;
+  }
+  AddSimMeshesToUI();
+}
+
 int PackApp::GetUISliderVal(int widgetId) const {
   if (widgetId >= 0) {
     std::shared_ptr<const Slideri> slider =
@@ -209,6 +332,47 @@ int PackApp::GetUISliderVal(int widgetId) const {
     return slider->GetVal();
   }
   return -1;
+}
+
+/// @brief 
+/// @param pos 
+/// @param rot quaternion in wxyz order
+/// @return 
+Matrix4f RigidMatrix(const Vec3f & pos, const Vec4f&rot) {  
+  Quat4f q(rot[0], rot[1],rot[2],rot[3]);
+  Matrix4f mat = Matrix4f::rotation(q);
+  mat(0, 3) = pos[0];
+  mat(1, 3) = pos[1];
+  mat(2, 3) = pos[2];
+  return mat;
+}
+
+void PackApp::UpdateSimRender() {
+  if (rigidStates.states.size() == 0) {
+    return;
+  }
+  GLRender* gl = _ui->GetGLRender();
+  int step = rigidStates.currStep;
+  if (step < 0) {
+    step = 0;
+  }
+  if (step >= rigidStates.states.size()) {
+    step = rigidStates.states.size() - 1;
+    //stop sim after reaching the end.
+    rigidStates.stepState = 0;
+  }  
+  
+  const auto& s = rigidStates.states[step];
+  //loop over bodies
+  for (size_t b = 0; b < rigidStates.meshes.size(); b++) {
+    int instId = rigidStates.uiInstIds[b];
+    if (instId < 0) {
+      continue;
+    }
+    auto& inst = gl->GetInstance(instId);
+    inst.matrix = RigidMatrix(s[b].pos, s[b].rot);
+    inst.matrixUpdated = true;
+  }    
 }
 
 void PackApp::Refresh() {
@@ -238,6 +402,18 @@ void PackApp::Refresh() {
     }
   }
 
+  if (rigidStates.stepState == 1) {
+    rigidStates.currStep++;
+    rigidStates.stepState = 0;
+    UpdateSimRender();
+  } else if (rigidStates.stepState == 2) {
+    rigidStates.currStep++;
+    UpdateSimRender();
+  }
+  if (_simStepLabel >= 0) {
+    _ui->SetLabelText(_simStepLabel,
+                      "sim step " + std::to_string(rigidStates.currStep));
+  }
   if (_outDirWidget->_entered) {
     _conf.outDir = _outDirWidget->GetString();
     _confChanged = true;
@@ -265,3 +441,4 @@ void PackApp::QueueCommand(CmdPtr cmd) {
 
 void LoadContainerCmd::Run() { app->LoadContainer(_filename); }
 void LoadBoxesCmd::Run() { app->LoadBoxes(_filename); }
+void LoadSimCmd::Run() { app->LoadSim(_filename); }
