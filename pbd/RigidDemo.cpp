@@ -222,7 +222,7 @@ void createBodyModel()
 		Quaternionr(1.0, 0.0, 0.0, 0.0),
 		vdBox, meshBox, Vector3r(100.0, 1.0, 100.0));
 	rb[rbIndex]->setMass(0.0);
-
+	rb[rbIndex]->setRestitutionCoeff(0);
 	const std::vector<Vector3r>& vertices = rb[rbIndex]->getGeometry().getVertexDataLocal().getVertices();
 	const unsigned int nVert = static_cast<unsigned int>(vertices.size());
 
@@ -242,7 +242,7 @@ void createBodyModel()
 				vdCylinder, meshCylinder,
 				Vector3r(0.5, 10.0, 0.5));
 			rb[rbIndex]->setMass(0.0);
-
+			rb[rbIndex]->setRestitutionCoeff(0);
 			const std::vector<Vector3r>& vertices = rb[rbIndex]->getGeometry().getVertexDataLocal().getVertices();
 			const unsigned int nVert = static_cast<unsigned int>(vertices.size());
 			cd->addCollisionCylinder(rbIndex, CollisionDetection::CollisionObject::RigidBodyCollisionObjectType, vertices.data(), nVert, Vector2r(0.5, 10.0));
@@ -280,7 +280,7 @@ void createBodyModel()
 					q, //Quaternionr(1.0, 0.0, 0.0, 0.0),
 					vdCube, meshCube,
 					Vector3r(1.0, 1.0, 1.0));
-
+				rb[rbIndex]->setRestitutionCoeff(0);
 				const std::vector<Vector3r>& vertices = rb[rbIndex]->getGeometry().getVertexDataLocal().getVertices();
 				const unsigned int nVert = static_cast<unsigned int>(vertices.size());
 				cd->addCollisionBox(rbIndex, CollisionDetection::CollisionObject::RigidBodyCollisionObjectType, vertices.data(), nVert, Vector3r(1.99, 0.99, 0.49));
