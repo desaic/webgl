@@ -81,8 +81,8 @@ void PackApp::Init3DScene(UILib*ui) {
   gl->SetPanSpeed(0.05);
   GLLightArray* lights = gl->GetLights();
   gl->SetZoomSpeed(2);
-  lights->SetLightPos(0, 0, 300, 300);
-  lights->SetLightPos(1, 0, 300, -300);
+  lights->SetLightPos(0, 30, 100, 30);
+  lights->SetLightPos(1, -30, 100, -30);
   lights->SetLightColor(0, 1,1,1);
   lights->SetLightColor(1, 0.8, 0.8, 0.8);
   //lights->SetLightPos(2, 0, 100, 100);
