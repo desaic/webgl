@@ -6,6 +6,8 @@ namespace slicer {
 /// also has saving and loading
 class Grid3Df {
  public:
+  Grid3Df() {}
+  Grid3Df(const Vec3u& size, float initVal) { Allocate(size, initVal); }
   void Allocate(const Vec3u &size, float initVal) {
     _arr.Allocate(size, initVal);
   }

@@ -6,7 +6,6 @@
 
 #include "CadApp.hpp"
 #include "CanvasApp.h"
-#include "ImageIO.h"
 #include "InflateApp.h"
 #include "PackApp.hpp"
 #include "UIConf.h"
@@ -96,10 +95,12 @@ void RunPackApp() {
   }
 }
 
+extern void MapDrawingToThickness();
+
 int main(int argc, char** argv) {
   // RunCanvasApp();
-  //  RunInflateApp();
-  RunPackApp();
+  // RunInflateApp();
+  // RunPackApp();
   // VoxApp();
   return 0;
 }
