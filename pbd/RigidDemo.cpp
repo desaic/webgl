@@ -3,18 +3,24 @@
 #include "Simulation/TimeManager.h"
 #include "Simulation/SimulationModel.h"
 #include "Simulation/TimeStepController.h"
+#include <array>
 #include <iostream>
 #include "Simulation/Simulation.h"
 #include "Simulation/DistanceFieldCollisionDetection.h"
 #include "Utils/Logger.h"
 #include "Utils/Timing.h"
+#include "Discregrid/mesh/triangle_mesh.hpp"
+#include "Discregrid/geometry/TriangleMeshDistance.h"
+#include "Discregrid/cubic_lagrange_discrete_grid.hpp"
+#include "Simulation/CubicSDFCollisionDetection.h"
 #define _USE_MATH_DEFINES
 #include "math.h"
 
 #include "TrigMesh.h"
 #include "Vec4.h"
 #include "Quat4f.h"
-
+#include "Array2D.h"
+#include "ImageIO.h"
 using namespace PBD;
 using namespace std;
 using namespace Utilities;
@@ -79,11 +85,15 @@ void SaveSimState(const std::vector<RigidState> & states,
 	}
 }
 
+void GenerateSDF();
+
 // main 
 int main( int argc, char **argv )
 {
 	Utilities::logger.addSink(unique_ptr<Utilities::ConsoleSink>(new Utilities::ConsoleSink(Utilities::LogLevel::INFO)));
 	Utilities::logger.addSink(unique_ptr<Utilities::ConsoleSink>(new Utilities::ConsoleSink(Utilities::LogLevel::DEBUG)));
+	GenerateSDF();
+
 	SimulationModel *model = new SimulationModel();
 	model->init();
 	Simulation::getCurrent()->setModel(model);
@@ -170,6 +180,65 @@ void LoadObj(const string &fileName ,IndexedFaceMesh & mesh, VertexData &vd) {
 	mesh.updateVertexNormals(vd);
 }
 
+void GenerateSDF() {
+	// Generate SDF
+	std::string modelFileName = "F:/meshes/trunk/trunk0.obj";
+
+	string fileNameTrunk = "F:/meshes/trunk/trunk0.obj";
+	std::string sdfFile = modelFileName + ".csdf";
+	IndexedFaceMesh meshTrunk;
+	VertexData vdTrunk;
+	LoadObj(fileNameTrunk, meshTrunk, vdTrunk);
+
+	VertexData& vd = vdTrunk;
+	IndexedFaceMesh& mesh = meshTrunk;
+
+	std::vector<unsigned int>& faces = mesh.getFaces();
+	const unsigned int nFaces = mesh.numFaces();
+
+#ifdef USE_DOUBLE
+	Discregrid::TriangleMesh sdfMesh(&vd.getPosition(0)[0], faces.data(), vd.size(), nFaces);
+#else
+	// if type is float, copy vector to double vector
+	std::vector<double> doubleVec;
+	doubleVec.resize(3 * vd.size());
+	for (unsigned int i = 0; i < vd.size(); i++)
+		for (unsigned int j = 0; j < 3; j++)
+			doubleVec[3 * i + j] = vd.getPosition(i)[j];
+	Discregrid::TriangleMesh sdfMesh(&doubleVec[0], faces.data(), vd.size(), nFaces);
+#endif
+	Discregrid::TriangleMeshDistance md(sdfMesh);
+	Eigen::AlignedBox3d domain;
+	for (auto const& x : sdfMesh.vertices())
+	{
+		domain.extend(x);
+	}
+	domain.max() += 0.1 * Eigen::Vector3d::Ones();
+	domain.min() -= 0.1 * Eigen::Vector3d::Ones();
+	Vec3i sdfRes(50, 50, 50);
+	LOG_INFO << "Set SDF resolution: " << sdfRes[0] << ", " << sdfRes[1] << ", " << sdfRes[2];
+	std::shared_ptr<CubicSDFCollisionDetection::Grid> sdfGrid= std::make_shared<CubicSDFCollisionDetection::Grid>(domain, std::array<unsigned int, 3>({ unsigned(sdfRes[0]), unsigned(sdfRes[1]), unsigned(sdfRes[2]) }));
+	auto func = Discregrid::DiscreteGrid::ContinuousFunction{};
+	func = [&md](Eigen::Vector3d const& xi) {return md.signed_distance(xi).distance; };
+	LOG_INFO << "Generate SDF\n";
+	sdfGrid->addFunction(func, true);
+	//LOG_INFO << "Save SDF: " << sdfFile;
+	//sdfGrid->save(sdfFile);
+	double val = sdfGrid->interpolate(0, Eigen::Vector3d(1, 1, 1));
+	std::cout << val << "\n";
+	Array2D8u distImage(800, 800);
+	Vec2u size = distImage.GetSize();
+	float z = 2.95;
+	for (unsigned y = 0; y < size[1]; y++) {
+		for (unsigned x = 0; x < size[0]; x++) {
+			double val = sdfGrid->interpolate(0, Eigen::Vector3d(x / (float)size[0] * 14, y / (float)size[1] * 14, z));
+		//	std::cout << val << "\n";
+		  distImage(x,y) = uint8_t( val * 100 + 125 );
+		}
+	}
+	SavePngGrey("F:/meshes/trunk/trunk_sdf_slice.png", distImage);
+}
+
 /** Create the rigid body model
 */
 void createBodyModel()
@@ -184,10 +253,10 @@ void createBodyModel()
 	LoadObj(fileNameBox, meshBox, vdBox);
 	meshBox.setFlatShading(true);
 
-	string fileNameCylinder = "F:/meshes/trunk/cylinder.obj";
-	IndexedFaceMesh meshCylinder;
-	VertexData vdCylinder;
-	LoadObj(fileNameCylinder, meshCylinder, vdCylinder);
+	string fileNameTrunk = "F:/meshes/trunk/trunk0.obj";
+	IndexedFaceMesh meshTrunk;
+	VertexData vdTrunk;
+	LoadObj(fileNameTrunk, meshTrunk, vdTrunk);
 
 	string fileNameCube = "F:/meshes/trunk/cuboid_dm.obj";
 	IndexedFaceMesh meshCube;
@@ -195,10 +264,10 @@ void createBodyModel()
 	LoadObj(fileNameCube, meshCube, vdCube);
 	meshCube.setFlatShading(true);
 
-	const unsigned int num_piles_x = 5;
-	const unsigned int num_piles_z = 5;
-	const Real dx_piles = 4.0;
-	const Real dz_piles = 4.0;
+	const unsigned int num_piles_x = 2;
+	const unsigned int num_piles_z = 2;
+	const Real dx_piles = 14.0;
+	const Real dz_piles = 14.0;
 	const Real startx_piles = -0.5 * (Real)(num_piles_x - 1) * dx_piles;
 	const Real startz_piles = -0.5 * (Real)(num_piles_z - 1) * dz_piles;
 	const unsigned int num_piles = num_piles_x * num_piles_z;
@@ -239,7 +308,7 @@ void createBodyModel()
 			rb[rbIndex]->initBody(100.0,
 				Vector3r(current_x, 5.0, current_z),
 				Quaternionr(1.0, 0.0, 0.0, 0.0),
-				vdCylinder, meshCylinder,
+				vdTrunk, meshTrunk,
 				Vector3r(0.5, 10.0, 0.5));
 			rb[rbIndex]->setMass(0.0);
 			rb[rbIndex]->setRestitutionCoeff(0);
