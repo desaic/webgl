@@ -6,10 +6,7 @@ import { GLTFLoader } from './GLTFLoader.js';
 var container, controls;
 var camera, scene, renderer, mixer, clock;
 
-init();
-animate();
-
-function init() {
+function InitScene() {
 
   container = document.createElement( 'div' );
   document.body.appendChild( container );
@@ -40,7 +37,7 @@ function init() {
                      specular: col});
 				
       var loader = new GLTFLoader();
-      loader.load( './example/untitled.glb?v=1584360698775', async function ( gltf ) {
+      loader.load( './mesh/coffeeMug.glb?v=1584360698775', async function ( gltf ) {
  							
 	    const model = gltf.scene;
 		for (let i = 0; i < model.children.length; i++) {
@@ -87,9 +84,9 @@ function onWindowResize() {
 
 //
 
-function animate() {
+function Animate() {
   
-  requestAnimationFrame( animate );
+  requestAnimationFrame( Animate );
   
   var delta = clock.getDelta();
   
@@ -98,3 +95,4 @@ function animate() {
   renderer.render( scene, camera );
 
 }
+export {InitScene, Animate};

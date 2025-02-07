@@ -1,16 +1,22 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>gltf</title>
+  <title>viewer</title>
 </head>
 <body>
-<script type="module" src="./src/main.js"></script>
-  <h1>gltf</h1>
-  <p>This is gltf.</p>
+  <h1>viewer</h1>
+  <p>This is a viewer.</p>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./src/three.module.js"
+      }
+    }
+  </script>
   <script type="module">			
     import * as main from "./src/main.js";
-    main.init();
-    main.animate();
+    main.InitScene();
+    main.Animate();
   </script>
 </body>
 </html>
