@@ -1,28 +1,61 @@
 import * as THREE from 'three'
 import { GLTFLoader } from "./GLTFLoader.js";
 import { STLLoader } from "./STLLoader.js";
-
+import {OBJLoader} from "./OBJLoader.js"
 import World from "./World.js";
+import {ThreeMFLoader} from "./3MFLoader.js";
 
-function ReadSTL(buf, world){
-	const loader = new STLLoader();
-	const geometry = loader.parse(buf);
-    world.geometries.push(geometry);
-    const mesh = new THREE.Mesh(geometry, world.defaultMaterial);
-    world.instances.push(mesh);
+function ReadSTL(filename, world){
+    const reader = new FileReader();
+	try{
+		reader.onload = function () {
+            const loader = new STLLoader();
+            const geometry = loader.parse(reader.result);			
+            world.geometries.push(geometry);
+            const mesh = new THREE.Mesh(geometry, world.defaultMaterial);
+            world.instances.push(mesh);
+		}
+		reader.readAsArrayBuffer(filename)
+	}catch(err){
+		console.log(err.message);
+	}
 }
 
-function Read3MF(buf, world){
-
+function Read3MF(filename, world) {
+  const reader = new FileReader();
+  try {
+    reader.onload = function () {
+      const loader = new ThreeMFLoader();
+      const group = loader.parse(reader.result);
+      world.instances.push(group);
+    };
+    reader.readAsArrayBuffer(filename);
+  } catch (err) {
+    console.log(err.message);
+  }
 }
 
-function ParseMeshData(readerBuf, extension, world){
+function ReadOBJ(filename, world) {
+  const reader = new FileReader();
+  try {
+    reader.onload = function () {
+      var loader = new OBJLoader();
+      const object = loader.parse(reader.result);
+      world.instances.push(object);
+    };
+    reader.readAsText(filename);
+  } catch (err) {
+    console.log(err.message);
+  }
+}
+
+function ParseMeshData(file, extension, world){
     if (extension === "stl"){
-        ReadSTL(readerBuf, world);
+        ReadSTL(file, world);
     }else if(extension ==="3mf"){
-        Read3MF(readerBuf, world);
+        Read3MF(file, world);
     }else if(extension ==="obj"){
-
+        ReadOBJ(file,world);
     }else if(extension ==="glb"){
 
     }else{
@@ -33,13 +66,6 @@ function ParseMeshData(readerBuf, extension, world){
 export const LoadMeshes = (files, world) => {
     for (const file of files) {
         const extension = file.name.split('.').pop().toLowerCase();
-        const reader = new FileReader();
-        try{
-            reader.onload = function(){ParseMeshData(reader.result, extension, world);}
-            reader.readAsArrayBuffer(file);
-        }catch(err){
-            console.log(err.message);
-        }
-        
+        ParseMeshData(file, extension, world);
     }
 }
