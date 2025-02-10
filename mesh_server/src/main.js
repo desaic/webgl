@@ -1,98 +1,82 @@
-import * as THREE from './three.module.js';
+import * as THREE from "./three.module.js";
 
-import { OrbitControls } from './OrbitControls.js';
-import { GLTFLoader } from './GLTFLoader.js';
+import { OrbitControls } from "./OrbitControls.js";
+import { TransformControls } from "./TransformControls.js";
 
-var container, controls;
-var camera, scene, renderer, mixer, clock;
+import World from "./World.js";
+import { GPUPicker } from './gpupicker.js';
+import { LoadMeshes } from './LoadMeshes.js';
+var container, orbit;
+var renderer, mixer, clock, world;
+let control;
+var gpuPicker;
+var pixelRatio = 1.0;
 
 function InitScene() {
-
-  container = document.createElement( 'div' );
-  document.body.appendChild( container );
-
-  camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 100 );
-
-  scene = new THREE.Scene();
-  
+  container = document.getElementById("threejs-container");
+  world = new World();
   clock = new THREE.Clock();
-
-  const ambientLight = new THREE.AmbientLight( 0xffffff, 0.1 );
-  scene.add( ambientLight );
-  const col = new THREE.Color(0xeeeeee);
-  const pointLight = new THREE.PointLight( 0xffffff, 10,100 );
-  pointLight.position.set(1,5,5);
-  const pointLight1 = new THREE.PointLight( 0xffffff, 10,100 );
-  pointLight1.position.set(1,5,-5);
-  camera.position.set(1,5,5);
-  scene.add(pointLight1);
-  scene.add(pointLight);
   
-  const sphereSize = 0.1;
-  const pointLightHelper = new THREE.PointLightHelper( pointLight, sphereSize );
-  scene.add( pointLightHelper );
-  const pointLightHelper1 = new THREE.PointLightHelper( pointLight1, sphereSize );
-  scene.add( pointLightHelper1 );
-  var phongMat = new THREE.MeshPhongMaterial({color: col, 
-                     specular: col});
-				
-      var loader = new GLTFLoader();
-      loader.load( './mesh/coffeeMug.glb?v=1584360698775', async function ( gltf ) {
- 							
-	    const model = gltf.scene;
-		for (let i = 0; i < model.children.length; i++) {
-		  const child = model.children[i];
-          if (child.isMesh){
-		    child.material=phongMat;
-			child.geometry.computeVertexNormals();
-		  }
-		}
-		scene.add( model );
-        mixer = new THREE.AnimationMixer( model );
-        await renderer.compileAsync( model, camera, scene );
-        gltf.animations.forEach( ( clip ) => {
-          
-            mixer.clipAction( clip ).play();
-          
-        } );
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(window.devicePixelRatio);
+  onWindowResize();
+  container.appendChild(renderer.domElement);
 
-      } );
-
-  renderer = new THREE.WebGLRenderer( { antialias: true } );
-  renderer.setPixelRatio( window.devicePixelRatio );
-  renderer.setSize( window.innerWidth, window.innerHeight );
-  container.appendChild( renderer.domElement );
+  orbit = new OrbitControls(world.camera, renderer.domElement);
+  orbit.minDistance = 2;
+  orbit.maxDistance = 1000;
+  orbit.target.set(0, 0, -0.2);
+  orbit.update();
   
-  controls = new OrbitControls( camera, renderer.domElement );
-  controls.minDistance = 2;
-  controls.maxDistance = 100
-  controls.target.set( 0, 0, - 0.2 );
-  controls.update();
+  control = new TransformControls(world.camera, renderer.domElement)
+  world.scene.add(control.getHelper());
 
-  window.addEventListener( 'resize', onWindowResize, false );
+  pixelRatio = window.devicePixelRatio ? 1.0 / window.devicePixelRatio : 1.0;
+  gpuPicker = new GPUPicker(THREE, renderer, world.scene, world.camera);
+  
+  bindEventListeners();
+
+  BindFileInput();
+}
+
+const BindFileInput = () => {
+  const fileInput = document.getElementById("file-input");
+  fileInput.addEventListener("change", (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    LoadMeshes(event.target.files, world);
+  });
+};
+
+const bindEventListeners = () => {
+  
+  window.addEventListener("resize", onWindowResize, false);
+  container.addEventListener('click', selectObj)
+}
+
+const selectObj = (event) => {
+  var inversePixelRatio = 1.0 / pixelRatio;
+  var objId = gpuPicker.pick(event.clientX * inversePixelRatio, event.clientY * inversePixelRatio);
+  if(objId<0){return null;}
+  return world.scene.getObjectById(objId);
 
 }
 
 function onWindowResize() {
+  world.camera.aspect = window.innerWidth / window.innerHeight;
+  world.camera.updateProjectionMatrix();
 
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-
-  renderer.setSize( window.innerWidth, window.innerHeight );
-
+  renderer.setSize(window.innerWidth, window.innerHeight);
 }
-
-//
 
 function Animate() {
-  
-  requestAnimationFrame( Animate );
-  
+  requestAnimationFrame(Animate);
+
   var delta = clock.getDelta();
-  
-  if ( mixer ) mixer.update( delta );
 
-  renderer.render( scene, camera );
+  if (mixer) mixer.update(delta);
 
+  renderer.render(world.scene, world.camera);
 }
-export {InitScene, Animate};
+
+export { InitScene, Animate };
