@@ -45,10 +45,19 @@ export default class World {
     this.instances = [];
     this.geometries = [];
 
-	const PartsGroup=new THREE.Group();
-	PartsGroup.children = this.instances;
-	this.scene.add(PartsGroup);
+    const PartsGroup = new THREE.Group();
+    PartsGroup.children = this.instances;
+    this.scene.add(PartsGroup);
   }
+
+  GetInstanceById = (id) => {
+    for (let i = 0; i < this.instances.length; i++) {
+      if (this.instances[i].id == id) {
+        return this.instances[i];
+      }
+    }
+    return null;
+  };
 
   addShadowedLight = (x, y, z, color, intensity, scene) => {
     const directionalLight = new THREE.DirectionalLight(color, intensity);

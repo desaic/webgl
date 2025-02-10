@@ -73,16 +73,7 @@ var GPUPicker = function(three, renderer, scene, camera) {
     var material = renderItem.material;
     var geometry = renderItem.geometry;
 
-    var frontSide = material.side === THREE.FrontSide ? 1 : 0;
-    var backSide = material.side === THREE.BackSide ? 1 : 0;
-    var doubleSide = material.side === THREE.DoubleSide ? 1 : 0;
-   
-    var sizeAttenuation = material.sizeAttenuation ? 1 : 0;
-    var index =
-      (frontSide << 3) |
-      (backSide << 4) |
-      (doubleSide << 5) |
-      (sizeAttenuation << 7);
+    var index = 0;
     var renderMaterial = renderItem.object.pickingMaterial ? renderItem.object.pickingMaterial : materialCache[index];
     if (!renderMaterial) {
       let vertexShader = THREE.ShaderChunk.meshbasic_vert;

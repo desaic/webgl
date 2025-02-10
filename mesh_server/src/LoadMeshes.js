@@ -41,7 +41,12 @@ function ReadOBJ(filename, world) {
     reader.onload = function () {
       var loader = new OBJLoader();
       const object = loader.parse(reader.result);
-      world.instances.push(object);
+      if(object.isGroup){
+        for(const child of object.children){
+            world.instances.push(child);
+        }
+      }else{world.instances.push(object);}
+      
     };
     reader.readAsText(filename);
   } catch (err) {

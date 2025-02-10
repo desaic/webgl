@@ -28,7 +28,11 @@ function InitScene() {
   orbit.target.set(0, 0, -0.2);
   orbit.update();
   
-  control = new TransformControls(world.camera, renderer.domElement)
+  control = new TransformControls(world.camera, renderer.domElement);
+  control.addEventListener('dragging-changed', function (event) {
+    orbit.enabled = !event.value;
+  });
+
   world.scene.add(control.getHelper());
 
   pixelRatio = window.devicePixelRatio ? 1.0 / window.devicePixelRatio : 1.0;
@@ -48,8 +52,7 @@ const BindFileInput = () => {
   });
 };
 
-const bindEventListeners = () => {
-  
+const bindEventListeners = () => {  
   window.addEventListener("resize", onWindowResize, false);
   container.addEventListener('click', selectObj)
 }
@@ -58,8 +61,11 @@ const selectObj = (event) => {
   var inversePixelRatio = 1.0 / pixelRatio;
   var objId = gpuPicker.pick(event.clientX * inversePixelRatio, event.clientY * inversePixelRatio);
   if(objId<0){return null;}
-  return world.scene.getObjectById(objId);
-
+  console.log("pick", objId);
+  const selected = world.GetInstanceById(objId);
+  if(selected){
+    control.attach(selected);
+  }
 }
 
 function onWindowResize() {
