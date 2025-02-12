@@ -34,7 +34,9 @@ class FemApp {
   int _wireframeId = -1;
   float _drawingScale = MToMM;
   std::shared_ptr<TrigMesh> floor;
-  int _floorMeshId = -1;
+  std::shared_ptr<TrigMesh> _floor;
+  int _floorInst = -1;
+
   FESim _sim;
   SimState _simState;
   std::mutex _refresh_mutex;

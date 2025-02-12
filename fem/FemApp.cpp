@@ -7,25 +7,27 @@
 const float FemApp::MToMM = 1000;
 FemApp::FemApp(UILib* ui) : _ui(ui) {
   // EmbedMesh();
-  floor = std::make_shared<TrigMesh>();
-  *floor =
-      MakePlane(Vec3f(-0, -0.1, -0), Vec3f(500, -0.1, 500), Vec3f(0, 1, 0));
-  for (size_t i = 0; i < floor->uv.size(); i++) {
-    floor->uv[i] *= 5;
+  _floor = std::make_shared<TrigMesh>();
+  *_floor =
+      MakePlane(Vec3f(-50, -0.1, -50), Vec3f(50, -0.1, 50), Vec3f(0, 1, 0));
+  for (size_t i = 0; i < _floor->uv.size(); i++) {
+    _floor->uv[i] *= 5;
   }
-  GLRender* gl = ui->GetGLRender();
-  gl->SetDefaultCameraView(Vec3f(250, 100, 500), Vec3f(200, 0, 250));
-  GLLightArray* lights = gl->GetLights();
-  lights->SetLightPos(0, 250, 100, 250);
-  lights->SetLightPos(1, 500, 100, 250);
-  lights->SetLightColor(0, 0.8, 0.7, 0.6);
-  lights->SetLightColor(1, 0.8, 0.8, 0.8);
-  lights->SetLightPos(2, 0, 100, 100);
-  lights->SetLightColor(2, 0.8, 0.7, 0.6);
   Array2D8u checker;
   MakeCheckerPatternRGBA(checker);
-  _floorMeshId = _ui->AddMesh(floor);
-  _ui->SetMeshTex(_floorMeshId, checker, 4);
+  _floorInst = _ui->AddMeshAndInstance(_floor);
+  _ui->SetInstTex(_floorInst, checker, 4);
+  GLRender* gl = ui->GetGLRender();
+  gl->SetDefaultCameraView(Vec3f(0, 20, -40), Vec3f(0));
+  gl->SetDefaultCameraZ(0.2, 200);
+  gl->SetPanSpeed(0.05);
+  GLLightArray* lights = gl->GetLights();
+  gl->SetZoomSpeed(2);
+  lights->SetLightPos(0, 30, 100, 30);
+  lights->SetLightPos(1, -30, 100, -30);
+  lights->SetLightColor(0, 1, 1, 1);
+  lights->SetLightColor(1, 0.8, 0.8, 0.8);
+
   std::string voxFile = "F:/dolphin/meshes/topopt/beam2mm_cut.txt";
   _hexInputId =
       _ui->AddWidget(std::make_shared<InputText>("mesh file", voxFile));

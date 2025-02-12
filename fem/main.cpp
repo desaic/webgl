@@ -9,16 +9,7 @@ void ShowGLInfo(UILib& ui, int label_id) {
   ui.SetLabelText(label_id, info);
 }
 
-extern void TestForceBeam4();
-extern void VoxelizeMesh();
-
 int main(int argc, char** argv) {
-  //TestForceBeam4();
-  //  MakeCurve();
-  // PngToGrid(argc, argv);
-  // CenterMeshes();
-  //VoxelizeMesh();
-
   UILib ui;
   FemApp app(&ui);
   ui.SetFontsDir("./fonts");
