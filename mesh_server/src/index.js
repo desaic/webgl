@@ -12,7 +12,7 @@ let control;
 var gpuPicker;
 var pixelRatio = 1.0;
 
-function InitScene() {
+export function InitScene() {
   container = document.getElementById("threejs-container");
   world = new World();
   clock = new THREE.Clock();
@@ -75,7 +75,7 @@ function onWindowResize() {
   renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-function Animate() {
+export function Animate() {
   requestAnimationFrame(Animate);
 
   var delta = clock.getDelta();
@@ -85,4 +85,5 @@ function Animate() {
   renderer.render(world.scene, world.camera);
 }
 
-export { InitScene, Animate };
+window.InitScene = InitScene;
+window.Animate = Animate;

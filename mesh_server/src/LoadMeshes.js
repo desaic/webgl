@@ -1,5 +1,4 @@
 import * as THREE from 'three'
-import { GLTFLoader } from "./GLTFLoader.js";
 import { STLLoader } from "./STLLoader.js";
 import {OBJLoader} from "./OBJLoader.js"
 import World from "./World.js";
@@ -75,8 +74,6 @@ function ParseMeshData(file, extension, world){
         Read3MF(file, world);
     }else if(extension ==="obj"){
         ReadOBJ(file,world);
-    }else if(extension ==="glb"){
-
     }else{
         console.log(file , "unknown file type");
     }

@@ -1,11 +1,15 @@
 const path = require('path');
 const TerserPlugin = require('terser-webpack-plugin');
+const glob = require('glob-all');
 module.exports = {
-  entry: './src/index.js',
+  entry:glob.sync( './src/**/*.js'),
   output: {
     filename: 'main.js',
     path: path.resolve(__dirname, 'dist'),
-  },  optimization: {
+    library: 'main',
+    libraryTarget: 'umd'    
+  },  
+  optimization: {
   minimize: true,
   minimizer: [ new TerserPlugin({
             terserOptions: {
