@@ -31,6 +31,8 @@ class FemApp {
   int _hexInputId = -1;
   int _xInputId = -1;
   int _meshId = -1;
+  // instance being rendered
+  int _drawInstId = -1;
   int _wireframeId = -1;
   float _drawingScale = MToMM;
   std::shared_ptr<TrigMesh> floor;

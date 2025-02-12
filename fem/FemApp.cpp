@@ -19,7 +19,7 @@ FemApp::FemApp(UILib* ui) : _ui(ui) {
   _ui->SetInstTex(_floorInst, checker, 4);
   GLRender* gl = ui->GetGLRender();
   gl->SetDefaultCameraView(Vec3f(0, 20, -40), Vec3f(0));
-  gl->SetDefaultCameraZ(0.2, 200);
+  gl->SetDefaultCameraZ(1, 1000);
   gl->SetPanSpeed(0.05);
   GLLightArray* lights = gl->GetLights();
   gl->SetZoomSpeed(2);
@@ -28,7 +28,7 @@ FemApp::FemApp(UILib* ui) : _ui(ui) {
   lights->SetLightColor(0, 1, 1, 1);
   lights->SetLightColor(1, 0.8, 0.8, 0.8);
 
-  std::string voxFile = "F:/dolphin/meshes/topopt/beam2mm_cut.txt";
+  std::string voxFile = "F:/meshes/topopt/beam2mm_cut.txt";
   _hexInputId =
       _ui->AddWidget(std::make_shared<InputText>("mesh file", voxFile));
   _ui->AddButton("Load Hex mesh", [&] {
@@ -95,6 +95,9 @@ void FemApp::UpdateRenderMesh() {
   _renderMesh.UpdateMesh(&_em, _drawingScale);
   if (_meshId < 0) {
     _meshId = _ui->AddMesh(_renderMesh._mesh);
+    MeshInstance inst;
+    inst.bufId = _meshId;
+    _drawInstId = _ui->GetGLRender()->AddInstance(inst);
   }
   _ui->SetMeshNeedsUpdate(_meshId);
 }
