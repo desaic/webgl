@@ -4,7 +4,7 @@ export default class World {
   constructor() {
     const fov = 50;
     const aspect = window.innerWidth / window.innerHeight;
-    const near = 0.01;
+    const near = 1;
     const far = 2000;
     this.camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
     this.camera.up.set(0, 0, 1);
