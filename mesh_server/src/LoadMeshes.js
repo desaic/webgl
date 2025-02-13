@@ -12,7 +12,7 @@ function ReadSTL(filename, world){
             const geometry = loader.parse(reader.result);			
             world.geometries.push(geometry);
             const mesh = new THREE.Mesh(geometry, world.defaultMaterial);
-            world.instances.push(mesh);
+            world.instances.add(mesh);
 		}
 		reader.readAsArrayBuffer(filename)
 	}catch(err){
@@ -27,7 +27,7 @@ function Sort3MFInstances(g, world, mat4){
       world.geometries.push(g.geometry);
     }
     g.matrix.multiply(mat4);
-    world.instances.push(g);
+    world.instances.add(g);
   }
 
 }
@@ -56,9 +56,9 @@ function ReadOBJ(filename, world) {
       const object = loader.parse(reader.result);
       if(object.isGroup){
         for(const child of object.children){
-            world.instances.push(child);
+            world.instances.add(child);
         }
-      }else{world.instances.push(object);}
+      }else{world.instances.add(object);}
       
     };
     reader.readAsText(filename);

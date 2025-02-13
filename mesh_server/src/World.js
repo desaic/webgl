@@ -42,18 +42,16 @@ export default class World {
     });
 
     this.selectedInstance = [];
-    this.instances = [];
     this.geometries = [];
 
-    const PartsGroup = new THREE.Group();
-    PartsGroup.children = this.instances;
-    this.scene.add(PartsGroup);
+    this.instances = new THREE.Group();
+    this.scene.add( this.instances);
   }
 
   GetInstanceById = (id) => {
-    for (let i = 0; i < this.instances.length; i++) {
-      if (this.instances[i].id == id) {
-        return this.instances[i];
+    for (let i = 0; i < this.instances.children.length; i++) {
+      if (this.instances.children[i].id == id) {
+        return this.instances.children[i];
       }
     }
     return null;
