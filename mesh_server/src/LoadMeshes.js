@@ -21,15 +21,21 @@ function ReadSTL(filename, world){
 }
 
 function Sort3MFInstances(g, world, mat4){
+  const myMat=new THREE.Matrix4();
+  myMat.copy(mat4);
+  myMat.multiply(g.matrix);
   if(g.isMesh){
     const gid = g.geometry.id;
     if(world.GetGeometryById(gid) == null){
       world.geometries.push(g.geometry);
-    }
-    g.matrix.multiply(mat4);
+    }    
+    g.position.setFromMatrixPosition(myMat);
+    g.rotation.setFromRotationMatrix(myMat);
     world.instances.add(g);
   }
-
+  for(var i = 0;i<g.children.length;i++){
+    Sort3MFInstances(g.children[i], world, myMat);
+  }
 }
 
 function Read3MF(filename, world) {
@@ -40,7 +46,7 @@ function Read3MF(filename, world) {
       const group = loader.parse(reader.result);
       const m = new THREE.Matrix4();
       m.identity();
-      Sort3MFInstances(g, world, m);
+      Sort3MFInstances(group, world, m);
     };
     reader.readAsArrayBuffer(filename);
   } catch (err) {
