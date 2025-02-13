@@ -1,9 +1,7 @@
-<!DOCTYPE html>
-<html>
+<!doctype html><html>
 <head>
-  <title>viewer</title>
-  <style>
-    body, html {
+<title>viewer</title>
+<style>body, html {
         margin: 0;
         padding: 0;
         overflow: hidden; /* Prevent scrolling */
@@ -23,7 +21,7 @@
             border-radius: 5px;
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
         }
-    #downloadButton {
+        #downloadButton {
       position: absolute;
       top: 20px;
       right: 20px;
@@ -38,28 +36,20 @@
     #downloadButton:hover {
       background-color: #0056b3;
     }
-</style>
-</head>
-<body>
+    </style>
 
-<div id="threejs-container">
-  <input type="file" id="file-input" accept=".obj,.stl,.3mf" />
-  <button id="downloadButton">Download Scene</button>
+    </head>
+		
+<body><div id="threejs-container">
+    <input type="file" id="file-input" accept=".obj,.stl,.3mf"/>
+    <button id="downloadButton">Download Scene</button>
 </div>
 
-  <script type="importmap">
-    {
-      "imports": {
-        "three": "./three.module.js"
-      }
-    }
-  </script>
+	<script type="module">
 
-  <script type="module">			
-    import * as main from "./src/index.js";
-    main.InitScene();
-    main.Animate();
-  </script>
-  
-</body>
-</html>
+    window.InitScene();
+    window.Animate();
+	
+	</script>
+	
+	</body></html>
