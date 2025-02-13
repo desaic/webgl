@@ -54,7 +54,13 @@ const BindFileInput = () => {
 
 const bindEventListeners = () => {  
   window.addEventListener("resize", onWindowResize, false);
-  container.addEventListener('click', selectObj)
+  container.addEventListener('click', selectObj);
+    
+  // Download button functionality
+  document.getElementById('downloadButton').addEventListener('click', () => {
+    downloadJSON(world.scene.toJSON(), 'scene-data.json');
+  });
+
 }
 
 const selectObj = (event) => {
@@ -73,6 +79,19 @@ function onWindowResize() {
   world.camera.updateProjectionMatrix();
 
   renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+// Function to download JSON
+function downloadJSON(json, filename = 'data.json') {
+  const jsonString = JSON.stringify(json, null, 2);
+  const blob = new Blob([jsonString], { type: 'application/json' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(link.href);
 }
 
 export function Animate() {

@@ -23,12 +23,28 @@
             border-radius: 5px;
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
         }
+        #downloadButton {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      padding: 10px 20px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      z-index: 10; /* Ensure it's above the canvas */
+    }
+    #downloadButton:hover {
+      background-color: #0056b3;
+    }
 </style>
 </head>
 <body>
 
 <div id="threejs-container">
   <input type="file" id="file-input" accept=".obj,.stl,.3mf" />
+  <button id="downloadButton">Download Scene</button>
 </div>
 
   <script type="importmap">
