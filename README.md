@@ -1,6 +1,7 @@
 webgl
 =====
-Demo URL: desaic.github.io/webgl 
+Demo URL: http://desaic.github.io/webgl 
+
 Learning webgl
 
 To use:
