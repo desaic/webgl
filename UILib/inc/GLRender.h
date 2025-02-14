@@ -154,6 +154,8 @@ class GLRender {
     _far0 = far;
   }
 
+  Vec3f clearColor{0.9, 0.9, 0.9};
+
  private:
   // rendered
   unsigned _fbo = 0;

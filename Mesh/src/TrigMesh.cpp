@@ -317,18 +317,18 @@ void TrigMesh::AddVert(float x, float y, float z) {
 }
 
 void TrigMesh::scale(float s) {
-  for (size_t i = 0; i < v.size(); i++) {
+  for (size_t i = 0; i < v.size(); i+=3) {
     for (unsigned d = 0; d < 3; d++) {
-      v[3 * i + d] *= s;
+      v[i + d] *= s;
     }
   }
 }
 
 void TrigMesh::translate(float dx, float dy, float dz) {
-  for (size_t i = 0; i < v.size(); i++) {
-    v[3 * i] += dx;
-    v[3 * i + 1] += dy;
-    v[3 * i + 2] += dz;
+  for (size_t i = 0; i < v.size(); i+=3) {
+    v[i] += dx;
+    v[i + 1] += dy;
+    v[i + 2] += dz;
   }
 }
 

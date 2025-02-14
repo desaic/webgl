@@ -5,6 +5,10 @@
 void UpdateBBox(const std::vector<float>& verts, BBox& box)
 {
   const unsigned dim = 3;
+  if (!box._init) {
+    ComputeBBox(verts, box);
+    return;
+  }
   for (size_t i = 0; i < verts.size(); i+=3) {
     for (unsigned j = 0; j < dim; j++) {
       box.vmin[j] = std::min(box.vmin[j], verts[i + j]);
