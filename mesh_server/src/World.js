@@ -8,9 +8,6 @@ export default class World {
     const far = 2000;
     this.camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
     this.camera.up.set(0, 0, 1);
-    this.camera.position.set(0, -400, 150);
-    this.camera.lookAt(200, 125, 0);
-
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x333333);
 
@@ -46,6 +43,12 @@ export default class World {
 
     this.instances = new THREE.Group();
     this.scene.add( this.instances);
+  }
+  
+  ResetView = (orbit)=>{
+    this.camera.position.set(0, -400, 150);
+    orbit.target.set(0, 0, 0);
+    orbit.update();
   }
 
   GetInstanceById = (id) => {
