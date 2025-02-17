@@ -219,7 +219,8 @@ struct SimpleVoxCb : public VoxCallback {
 };
 
 void MeshHeightMap() {
-  std::string meshFile = "F:/meshes/shoe/shoe_pos.obj";
+  //std::string meshFile = "F:/meshes/shoe_design_kit/sole_r_deform.obj";
+  std::string meshFile = "F:/meshes/shoe_design_kit/l_pos.obj";
   TrigMesh mesh;
   mesh.LoadObj(meshFile);
   voxconf conf;
@@ -227,10 +228,18 @@ void MeshHeightMap() {
   SimpleVoxCb cb(voxGrid, 1);
   BBox box;
   ComputeBBox(mesh.v, box);
+
   float h = 0.5;
+  float margin = h * 0.5f;
+  for (size_t i = 0; i < mesh.GetNumVerts(); i++) {
+    mesh.v[3 * i] -= box.vmin[0] - margin;
+    mesh.v[3 * i + 1] -= box.vmin[1] - margin;
+    mesh.v[3 * i + 2] -= box.vmin[2] - margin;
+  }
+  //mesh.SaveObj("F:/meshes/shoe_design_kit/r_pos.obj");
   Vec3f boxSize = box.vmax - box.vmin;
-  Vec3u gridSize(unsigned(boxSize[0] / h) + 1, unsigned(boxSize[1] / h) + 1,
-                 unsigned(boxSize[2] / h) + 1);
+  Vec3u gridSize(unsigned(boxSize[0] / h) + 2, unsigned(boxSize[1] / h) + 2,
+                 unsigned(boxSize[2] / h) + 2);
   conf.unit = h;
   voxGrid.Allocate(gridSize, 0);
   conf.gridSize = gridSize;
@@ -248,17 +257,17 @@ void MeshHeightMap() {
       }
     }
   }
-  SavePngGrey("F:/meshes/shoe/height.png", height);
+  SavePngGrey("F:/meshes/shoe_design_kit/height.png", height);
 }
 
 void MapDrawingToThickness() { 
   
   //std::string pressureFile = "F:/meshes/shoe/right_drawing_1mm.png";
-  std::string pressureFile = "F:/meshes/shoe/draw_l_1mm.png";
+  std::string pressureFile = "F:/meshes/shoe_design_kit/draw_r_1mm.png";
   Array2D8u pressureImage; 
   LoadPngGrey(pressureFile, pressureImage);
 
-  std::string meshFile = "F:/meshes/shoe/shoe_l.obj";
+  std::string meshFile = "F:/meshes/shoe_design_kit/r_pos.obj";
   TrigMesh mesh;
   mesh.LoadObj(meshFile);
   voxconf conf;
@@ -266,14 +275,15 @@ void MapDrawingToThickness() {
   SimpleVoxCb cb(voxGrid, 1);
   BBox box;
   ComputeBBox(mesh.v, box);
-
+  float h = 1;
+  float margin = 0.25f * h;
   for (size_t i = 0; i < mesh.GetNumVerts(); i++) {
-    mesh.v[3 * i] -= box.vmin[0];
-    mesh.v[3 * i+1] -= box.vmin[1];
-    mesh.v[3 * i+2] -= box.vmin[2];
+    mesh.v[3 * i] -= box.vmin[0] - margin;
+    mesh.v[3 * i + 1] -= box.vmin[1] - margin;    
+    mesh.v[3 * i + 2] -= box.vmin[2] - margin;    
   }
   std::cout << box.vmin[0] << " " << box.vmin[1] << " " << box.vmin[2] << "\n";
-  float h = 1;
+  
   Vec3f boxSize = box.vmax - box.vmin;
   Vec3u size(unsigned(boxSize[0] / h) + 1, unsigned(boxSize[1] / h) + 1,
                  unsigned(boxSize[2] / h) + 1);
@@ -285,9 +295,9 @@ void MapDrawingToThickness() {
   //for diamond cell
   float cellSize = 2.0;
   // about 50% density
-  float defaultThickness = 0.379;
-  float maxThickness = 0.575;
-  float minThickness = 0.225;
+  float defaultThickness = 0.35;
+  float maxThickness = 0.6;
+  float minThickness = 0.18;
   //thickness grid
   slicer::Grid3Df tGrid(size, 0);
   Vec2u imageSize = pressureImage.GetSize();
@@ -333,8 +343,8 @@ void MapDrawingToThickness() {
       if (!hasVox) {
         continue;
       }
-      zStartImage(x, y) = zStart;
-      zEndImage(x, y) = zEnd;
+      //zStartImage(x, y) = zStart;
+      //zEndImage(x, y) = zEnd;
       float alpha = pressure / float(maxPressure);
       float startThickness =
           maxThickness * alpha + (1 - alpha) * defaultThickness;
@@ -348,11 +358,16 @@ void MapDrawingToThickness() {
         float beta = (z - zStart) / float(zEnd - zStart);
         float t = (1 - beta) * startThickness + beta * endThickness;
         tGrid(x, y, z) = t;
+        if (z == zStart) {
+          zStartImage(x, y) = t * 50;          
+        } else if (z == zEnd) {
+          zEndImage(x, y) = t*50;
+        }
       }
     }
   }
-  std::ofstream gridOut("F:/meshes/shoe/thick_diamond_r.txt");
+  std::ofstream gridOut("F:/meshes/shoe_design_kit/thick_diamond_r.txt");
   slicer::SaveTxt(tGrid, gridOut, 3);
-  //SavePngGrey("F:/meshes/shoe/zStart.png", zStartImage);
-  //SavePngGrey("F:/meshes/shoe/zEnd.png", zEndImage);
+  SavePngGrey("F:/meshes/shoe_design_kit/zStart.png", zStartImage);
+  SavePngGrey("F:/meshes/shoe_design_kit/zEnd.png", zEndImage);
 }

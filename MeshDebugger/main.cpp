@@ -116,11 +116,15 @@ void RunHeadApp() {
   }
 }
 
+extern void MeshHeightMap();
+extern void MapDrawingToThickness();
 int main(int argc, char** argv) {
   // RunCanvasApp();
   // RunInflateApp();
   // RunPackApp();
   // VoxApp();
-  RunHeadApp();
+  //RunHeadApp();
+  //MeshHeightMap();
+  MapDrawingToThickness();
   return 0;
 }
