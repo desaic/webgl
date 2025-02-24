@@ -118,6 +118,8 @@ void RunHeadApp() {
 
 extern void MeshHeightMap();
 extern void MapDrawingToThickness();
+extern void TestSDF();
+
 int main(int argc, char** argv) {
   // RunCanvasApp();
   // RunInflateApp();
@@ -125,6 +127,7 @@ int main(int argc, char** argv) {
   // VoxApp();
   //RunHeadApp();
   //MeshHeightMap();
-  MapDrawingToThickness();
+  //MapDrawingToThickness();
+  TestSDF();
   return 0;
 }
