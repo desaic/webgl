@@ -3,6 +3,7 @@
 #include "TrigMesh.h"
 #include "BBox.h"
 #include "MarchingCubes.h"
+#include "FastSweep.h"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -68,37 +69,38 @@ void TestSDF() {
   std::string softFile = "F:/meshes/head/nose.obj";
   float rigidDist = 0.5f;
 
-  TrigMesh rigidMesh;
-  rigidMesh.LoadObj(rigidFile);
+   const float h = 0.5f;
+   const float narrowBand = 8;
+   const float distUnit = 0.005f;
+  //TrigMesh rigidMesh;
+  //rigidMesh.LoadObj(rigidFile);
 
-  const float h = 0.5f;
-  const float narrowBand = 8;
-  const float distUnit = 0.005f;
-  std::shared_ptr<AdapSDF> sdf = std::make_shared<AdapSDF>();
-  sdf->distUnit = distUnit;
-  SDFImpAdap* imp = new SDFImpAdap(sdf);
-  SDFMesh sdfMesh(imp);
-  sdfMesh.SetMesh(&rigidMesh);
-  sdfMesh.SetVoxelSize(h);
-  sdfMesh.SetBand(narrowBand);
-  sdfMesh.Compute();
+  //std::shared_ptr<AdapSDF> sdf = std::make_shared<AdapSDF>();
+  //sdf->distUnit = distUnit;
+  //SDFImpAdap* imp = new SDFImpAdap(sdf);
+  //SDFMesh sdfMesh(imp);
+  //sdfMesh.SetMesh(&rigidMesh);
+  //sdfMesh.SetVoxelSize(h);
+  //sdfMesh.SetBand(narrowBand);
+  //sdfMesh.Compute();
 
   TrigMesh softMesh;
   softMesh.LoadObj(softFile);
   std::shared_ptr<AdapSDF> softSdf = std::make_shared<AdapSDF>();
-  softSdf->voxSize = h;
+  softSdf->voxSize = 0.5;
   softSdf->band = narrowBand;
+  softSdf->distUnit = distUnit;
   softSdf->BuildTrigList(&softMesh);
   softSdf->Compress();
   softMesh.ComputePseudoNormals();
   softSdf->ComputeCoarseDist();
-  softSdf->distUnit = distUnit;
-  TrigMesh surf;
-  MarchingCubes(softSdf->dist, 0.5, distUnit, h, softSdf->origin, &surf);
-
+  CloseExterior(softSdf->dist, softSdf->MAX_DIST);  
+  Array3D8u frozen;
+  softSdf->FastSweepCoarse(frozen);
   
   //sdfMesh.MarchingCubes(0.5, &surf); 
-  
+  TrigMesh surf;
+  MarchingCubes(softSdf->dist, 0.5, distUnit, h, softSdf->origin, &surf);  
   std::filesystem::path p(softFile);
   p.replace_extension("surf2.obj");
   surf.SaveObj(p.string());
