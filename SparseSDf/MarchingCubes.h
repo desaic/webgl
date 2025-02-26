@@ -22,8 +22,15 @@ struct GridCell {
 };
 
 ///\param mesh output a mini mesh for cell
-void MarchCube(GridCell &cell, float level, TrigMesh*mesh);
+void MarchCube(GridCell& cell, float level, TrigMesh* mesh);
 
 template <typename T>
 void MarchOneCube(unsigned x, unsigned y, unsigned z, const Array3D<T>& grid,
-  float level, TrigMesh* surf, float h);
+                  float level, TrigMesh* surf, float h);
+
+template <typename T>
+void MarchingCubes(const Array3D<T>& grid, float level, TrigMesh* surf,
+                   float h);
+
+void MarchingCubes(const Array3D<short>& grid, float level, float gridUnit,
+                   float voxSize, const Vec3f& origin, TrigMesh* surf);
