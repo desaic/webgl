@@ -7,6 +7,8 @@ add_subdirectory("../Util" "Util")
 add_subdirectory("../UILib" "ui")
 add_subdirectory("../SparseSDF" "SparseSDF")
 add_subdirectory("../ZRayCast" "ZRayCast")
+include_directories("../MeshSimplification")
+add_subdirectory("../MeshSimplification" "MeshSimplification")
 include_directories(.)
 FILE(GLOB EXE_SRC "*.cpp" "*.c")
 set(CMAKE_CXX_STANDARD 17)
@@ -38,7 +40,7 @@ else()
   target_link_libraries(${BIN} cgal_wrapper)
 endif()
 
-target_link_libraries(${BIN} UILib imgui glfw3 opengl32 glew32s SparseSDF ZRayCast Mesh ImageIO Util MathLib)
+target_link_libraries(${BIN} UILib imgui glfw3 opengl32 glew32s SparseSDF ZRayCast Mesh ImageIO Util MathLib MeshSimplification)
 
 set(FONT_FOLDER fonts)
 add_custom_command(TARGET ${BIN} POST_BUILD

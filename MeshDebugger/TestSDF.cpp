@@ -4,6 +4,8 @@
 #include "BBox.h"
 #include "MarchingCubes.h"
 #include "FastSweep.h"
+#include "MeshUtil.h"
+#include "MeshOptimization.h"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -66,29 +68,28 @@ void SaveDistGrid() {
 
 void TestSDF() { 
   std::string rigidFile = "F:/meshes/head/hardshell.obj";
-  std::string softFile = "F:/meshes/head/nose.obj";
+  std::string softFile = "F:/meshes/head/back_head.obj";
   float rigidDist = 0.5f;
-
-   const float h = 0.5f;
+   const float h = 0.25f;
    const float narrowBand = 8;
    const float distUnit = 0.005f;
-  //TrigMesh rigidMesh;
-  //rigidMesh.LoadObj(rigidFile);
+  TrigMesh rigidMesh;
+  rigidMesh.LoadObj(rigidFile);
 
-  //std::shared_ptr<AdapSDF> sdf = std::make_shared<AdapSDF>();
-  //sdf->distUnit = distUnit;
-  //SDFImpAdap* imp = new SDFImpAdap(sdf);
-  //SDFMesh sdfMesh(imp);
-  //sdfMesh.SetMesh(&rigidMesh);
-  //sdfMesh.SetVoxelSize(h);
-  //sdfMesh.SetBand(narrowBand);
-  //sdfMesh.Compute();
+  std::shared_ptr<AdapSDF> sdf = std::make_shared<AdapSDF>();
+  sdf->distUnit = distUnit;
+  SDFImpAdap* imp = new SDFImpAdap(sdf);
+  SDFMesh sdfMesh(imp);
+  sdfMesh.SetMesh(&rigidMesh);
+  sdfMesh.SetVoxelSize(h);
+  sdfMesh.SetBand(narrowBand);
+  sdfMesh.Compute();
 
   TrigMesh softMesh;
   softMesh.LoadObj(softFile);
   std::shared_ptr<AdapSDF> softSdf = std::make_shared<AdapSDF>();
-  softSdf->voxSize = 0.5;
-  softSdf->band = narrowBand;
+  softSdf->voxSize = 0.2;
+  softSdf->band = 16;
   softSdf->distUnit = distUnit;
   softSdf->BuildTrigList(&softMesh);
   softSdf->Compress();
@@ -98,9 +99,50 @@ void TestSDF() {
   Array3D8u frozen;
   softSdf->FastSweepCoarse(frozen);
   
-  //sdfMesh.MarchingCubes(0.5, &surf); 
+  std::cout << softSdf->origin[0] << " " << softSdf->origin[1] << " "
+            << softSdf->origin[2] << "\n";
+  BBox box;
+  ComputeBBox(softMesh.v, box);
+  std::cout << box.vmin[0] << " " << box.vmin[1] << " " << box.vmin[2] << "\n";
+  std::cout << box.vmax[0] << " " << box.vmax[1] << " " << box.vmax[2] << "\n";
+
+  Array3D<short> softCopy = softSdf->dist;
+  //take 0.5mm outer shell
+  short skinThickness = 0.5 / distUnit;
+  for (size_t i = 0; i < softCopy.GetData().size(); i++) {
+    softCopy.GetData()[i] = -softCopy.GetData()[i] - skinThickness;
+  }
+  //subtract shell of rigid sdf + 0.6mm
+  Vec3u size = softSdf->dist.GetSize();
+  float rigidOuter = 0.55;
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      for (unsigned x = 0; x < size[0]; x++) {
+        float softd = softCopy(x, y, z) * distUnit;
+        Vec3f worldCoord = softSdf->WorldCoord(Vec3f(x, y, z));
+        float rigidDist = sdf->GetFineDist(worldCoord);
+        rigidDist = -(rigidDist - rigidOuter);
+        if (rigidDist > 0) {
+          float dist = std::max(rigidDist, softd);
+          softCopy(x, y, z) = dist / distUnit;
+        }
+      }
+    }
+  }
+
+  //subtract partial skin from original soft mesh
+  for (size_t i = 0; i < softCopy.GetData().size(); i++) {
+    short d0 = softSdf->dist.GetData()[i]; 
+    softSdf->dist.GetData()[i] = std::max(d0, short(-softCopy.GetData()[i]));
+  }
+  
+  //sdfMesh.MarchingCubes(0, &surf); 
   TrigMesh surf;
-  MarchingCubes(softSdf->dist, 0.5, distUnit, h, softSdf->origin, &surf);  
+  MarchingCubes(softSdf->dist, 0, distUnit, softSdf->voxSize, softSdf->origin, &surf);  
+  MergeCloseVertices(surf);
+  MeshOptimization::ComputeSimplifiedMesh(surf.v, surf.t, 0.05, 0.4, surf.v,
+                                        surf.t);
+
   std::filesystem::path p(softFile);
   p.replace_extension("surf2.obj");
   surf.SaveObj(p.string());

@@ -517,6 +517,10 @@ static bool OutsideNarrowBand(const Array3D<short>& dist, unsigned ix, unsigned 
   return false;
 }
 
+Vec3f AdapDF::WorldCoord(const Vec3f& gridCoord) const {
+  return voxSize * gridCoord + origin;
+}
+
 /// <summary>
 /// Triliearly interpolates the vertex distance grid.
 /// </summary>

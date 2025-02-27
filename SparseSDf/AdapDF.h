@@ -62,6 +62,8 @@ class AdapDF {
   /// </summary>
   void Compress();
 
+  Vec3f WorldCoord(const Vec3f& gridCoord) const;
+
   /// <summary>
   /// Biliearly interpolates the vertex distance grid.
   /// </summary>

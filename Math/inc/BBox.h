@@ -28,6 +28,21 @@ struct IntBox {
   IntBox() : min(0, 0, 0), max(0, 0, 0) {}
 };
 
+/// @TODO: phase out BBox and use Box3f
+template<typename T>
+class BoxTemplate {
+public:
+  /// vertices at min and max coordinates
+  Vec3<T> vmin, vmax;
+  bool _init = false;
+  BoxTemplate() : vmin(0, 0, 0), vmax(0, 0, 0) {}
+  void Merge(const BoxTemplate<T>& b);
+};
+
+using Box3i = BoxTemplate<int>;
+using Box3u = BoxTemplate<unsigned>;
+using Box3f = BoxTemplate<float>;
+
 void UpdateBBox(const std::vector<float>& verts, BBox& box);
 
 void ComputeBBox(const std::vector<float>& verts, BBox& box);
