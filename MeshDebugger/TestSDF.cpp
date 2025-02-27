@@ -68,7 +68,7 @@ void SaveDistGrid() {
 
 void TestSDF() { 
   std::string rigidFile = "F:/meshes/head/hardshell.obj";
-  std::string softFile = "F:/meshes/head/back_head.obj";
+  std::string softFile = "F:/meshes/head/right.obj";
   float rigidDist = 0.5f;
    const float h = 0.25f;
    const float narrowBand = 8;
