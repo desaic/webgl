@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>viewer</title>
+  <style>
+    body,
+    html {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      /* Prevent scrolling */
+      height: 100%;
+    }
+
+    #threejs-container {
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="threejs-container">
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./node_modules/three/build/three.module.js"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as main from "./src/index.js";
+    main.InitScene();
+    main.Animate();
+  </script>
+
+</body>
+
+</html>
