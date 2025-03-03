@@ -1,17 +1,24 @@
-<!doctype html><html>
+<!doctype html>
+<html>
+
 <head>
-<title>viewer</title>
-<style>body, html {
-        margin: 0;
-        padding: 0;
-        overflow: hidden; /* Prevent scrolling */
-        height: 100%;
-    }
-    #threejs-container {
-        width: 100%;
-        height: 100%;
-    }
-    #file-input {
+    <title>viewer</title>
+    <style>
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            /* Prevent scrolling */
+            height: 100%;
+        }
+
+        #threejs-container {
+            width: 100%;
+            height: 100%;
+        }
+
+        #file-input {
             position: absolute;
             top: 20px;
             left: 20px;
@@ -21,32 +28,49 @@
             border-radius: 5px;
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
         }
+
         #downloadButton {
-      position: absolute;
-      top: 20px;
-      right: 20px;
-      padding: 10px 20px;
-      background-color: #007bff;
-      color: white;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-      z-index: 10; /* Ensure it's above the canvas */
-    }
-    #downloadButton:hover {
-      background-color: #0056b3;
-    }
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            z-index: 10;
+            /* Ensure it's above the canvas */
+        }
+
+        #downloadButton:hover {
+            background-color: #0056b3;
+        }
+
+        #info {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            font-family: Arial, sans-serif;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
     </style>
 
-    </head>
-		
-<body><div id="threejs-container">
-    <input type="file" id="file-input" accept=".obj,.stl,.3mf"/>
-    <!--<button id="downloadButton">Download Scene</button>-->
-</div>
+</head>
 
-	<script type="module">
-/*! For license information please see main.js.LICENSE.txt */
+<body>
+    <div id="threejs-container">
+        <input type="file" id="file-input" accept=".obj,.stl,.3mf" />
+        <div id="info"></div>
+    </div>
+
+    <script type="module">
+	
+	/*! For license information please see main.js.LICENSE.txt */
 !function(t,e){"object"==typeof exports&&"object"==typeof module?module.exports=e():"function"==typeof define&&define.amd?define([],e):"object"==typeof exports?exports.main=e():t.main=e()}(self,(()=>(()=>{"use strict"
 var t={973:(t,e,n)=>{n.d(e,{R:()=>a})
 var i=n(922),r=n(203)
@@ -568,7 +592,7 @@ case"XYZ":case"E":E.set(0,0,0)}break
 default:E.set(0,0,0)}0===E.length()?this.quaternion.copy(this.cameraQuaternion):(A.lookAt(s.set(0,0,0),E,M),this.quaternion.setFromRotationMatrix(A)),super.updateMatrixWorld(t)}}},788:(t,e,n)=>{n.r(e),n.d(e,{default:()=>r})
 var i=n(922)
 class r{constructor(){const t=window.innerWidth/window.innerHeight
-this.camera=new i.ubm(50,t,10,2e4),this.camera.up.set(0,1,0),this.camera.position.set(0,100,-4e3),this.camera.lookAt(200,0,200),this.scene=new i.Z58,this.scene.background=new i.Q1f(15658734),this.meshes=[],this.images=[]
+this.camera=new i.ubm(50,t,1,2e3),this.camera.up.set(0,1,0),this.camera.position.set(0,1,-4),this.camera.lookAt(2,0,2),this.scene=new i.Z58,this.scene.background=new i.Q1f(15658734),this.meshes=[],this.images=[]
 const e=[400,250]
 this.ground=new i.eaF(new i.bdM(e[0],e[1]),new i.tXL({color:6710886,specular:1052688})),this.ground.position.x=0,this.ground.position.y=0,this.ground.position.z=0,this.ground.receiveShadow=!0,this.scene.add(new i.dth(3355443,1118481)),this.addShadowedLight(0,1e3,100,14540253,1.35,this.scene),this.addShadowedLight(200,-1e3,100,13421772,1,this.scene)
 const n=15658734
@@ -1887,7 +1911,7 @@ if(n<0)return null
 console.log("pick",n)
 const i=Xe.GetInstanceById(n)
 i&&Je.attach(i)}
-function rn(){Xe.camera.aspect=window.innerWidth/window.innerHeight,Xe.camera.updateProjectionMatrix(),Ge.setSize(window.innerWidth,window.innerHeight)}window.InitScene=function(){Ve=document.getElementById("threejs-container"),Xe=new Ye.default,We=new r.zD7,(Ge=new ke({antialias:!0})).setPixelRatio(window.devicePixelRatio),rn(),Ve.appendChild(Ge.domElement),(He=new je.N(Xe.camera,Ge.domElement)).minDistance=20,He.maxDistance=1e4,He.target.set(0,0,0),He.update(),Je=new qe.ZU(Xe.camera,Ge.domElement),Je.addEventListener("dragging-changed",(function(t){He.enabled=!t.value})),Xe.scene.add(Je.getHelper()),$e=window.devicePixelRatio?1/window.devicePixelRatio:1,Qe=new Ze.R(i,Ge,Xe.scene,Xe.camera),en(),tn()},window.Animate=function t(){requestAnimationFrame(t),We.getDelta(),Ge.render(Xe.scene,Xe.camera)}},203:(t,e,n)=>{n.d(e,{AO:()=>H})
+function rn(){Xe.camera.aspect=window.innerWidth/window.innerHeight,Xe.camera.updateProjectionMatrix(),Ge.setSize(window.innerWidth,window.innerHeight)}window.InitScene=function(){Ve=document.getElementById("threejs-container"),Xe=new Ye.default,We=new r.zD7,(Ge=new ke({antialias:!0})).setPixelRatio(window.devicePixelRatio),rn(),Ve.appendChild(Ge.domElement),(He=new je.N(Xe.camera,Ge.domElement)).minDistance=1,He.maxDistance=100,He.target.set(0,0,0),He.update(),Je=new qe.ZU(Xe.camera,Ge.domElement),Je.addEventListener("dragging-changed",(function(t){He.enabled=!t.value})),Xe.scene.add(Je.getHelper()),$e=window.devicePixelRatio?1/window.devicePixelRatio:1,Qe=new Ze.R(i,Ge,Xe.scene,Xe.camera),en(),tn()},window.Animate=function t(){requestAnimationFrame(t),We.getDelta(),Ge.render(Xe.scene,Xe.camera)}},203:(t,e,n)=>{n.d(e,{AO:()=>H})
 var i=Uint8Array,r=Uint16Array,s=Int32Array,a=new i([0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0,0,0,0]),o=new i([0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13,0,0]),l=new i([16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15]),c=function(t,e){for(var n=new r(31),i=0;i<31;++i)n[i]=e+=1<<t[i-1]
 var a=new s(n[30])
 for(i=1;i<30;++i)for(var o=n[i];o<n[i+1];++o)a[o]=o-n[i]<<5|i
@@ -4286,10 +4310,12 @@ if(void 0!==r)return r.exports
 var s=e[i]={exports:{}}
 return t[i](s,s.exports,n),s.exports}return n.d=(t,e)=>{for(var i in e)n.o(e,i)&&!n.o(t,i)&&Object.defineProperty(t,i,{enumerable:!0,get:e[i]})},n.o=(t,e)=>Object.prototype.hasOwnProperty.call(t,e),n.r=t=>{"undefined"!=typeof Symbol&&Symbol.toStringTag&&Object.defineProperty(t,Symbol.toStringTag,{value:"Module"}),Object.defineProperty(t,"__esModule",{value:!0})},n(973),n(800),n(614),n(203),n(775),n(2),n(446),n(666),n(938),n(788)})()))
 
+	
+        window.InitScene();
+        window.Animate();
 
-    window.InitScene();
-    window.Animate();
-	
-	</script>
-	
-	</body></html>
+    </script>
+
+</body>
+
+</html>
