@@ -3,7 +3,7 @@ import * as THREE from "three";
 export class World {
   constructor() {
     const fov = 50;
-    const aspect = window.innerWidth / window.innerHeight;
+    const aspect = 1;
     const near = 1;
     const far = 2000;
     this.camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
