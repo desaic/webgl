@@ -1,11 +1,48 @@
 import * as THREE from "three";
-import { World } from "./World.js"
 import { OrbitControls } from "./OrbitControls.js";
 
 let canvas, renderer;
 
 const parts = [];
 const scenes = [];
+
+const yOffset = 32;
+const fov = 50;
+const aspect = 1;
+const near = 1;
+const far = 2000;
+const ResetView = (scene, orbit) => {
+  scene.userData.camera.position.set(0, -400, 150);
+  orbit.target.set(0, 0, 0);
+  orbit.update();
+};
+
+const MakeEmtpyScene = (element) => {
+  const scene = new THREE.Scene();
+  scene.userData.camera = new THREE.PerspectiveCamera(fov, aspect, near, far);  
+  const camera = scene.userData.camera;
+  camera.up.set(0, 0, 1);
+  camera.position.z = 2;
+  scene.userData.element = element;
+  const controls = new OrbitControls(
+    scene.userData.camera,
+    scene.userData.element
+  );
+  controls.minDistance = 2;
+  controls.maxDistance = 5;
+  controls.enablePan = false;
+  controls.enableZoom = true;
+  scene.userData.controls = controls;
+
+  scene.add(new THREE.HemisphereLight(0xaaaaaa, 0x444444, 2));
+
+  const light = new THREE.DirectionalLight(0xffffff, 2);
+  light.position.set(5, -5, 5);
+  scene.add(light);
+
+  ResetView(scene, controls);
+  return scene;
+}
 
 export function InitScene() {
   canvas = document.getElementById("c");
@@ -16,79 +53,43 @@ export function InitScene() {
     new THREE.DodecahedronGeometry(0.5),
     new THREE.CylinderGeometry(0.5, 0.5, 1, 12),
   ];
-
   // add parts here
   const partList = document.getElementById("part-list");
-  for (let i = 0; i < 6; i++) {
-    const world = new World();
-    const scene = world.scene;
-
-    // make a list item
+  for (let i = 0; i < 6; i++) {    
+   // make a list item
     const element = document.createElement("div");
     element.className = "grid-item";
-
     const sceneElement = document.createElement("div");
     sceneElement.className = "mini-canvas"
     element.appendChild(sceneElement);
-
-
-    // the element that represents the area we want to render the scene
-    scene.userData.element = sceneElement;
     partList.appendChild(element);
-
-
-    const camera = world.camera;
-    camera.position.z = 2;
-    scene.userData.camera = camera;
-
-    const controls = new OrbitControls(
-      scene.userData.camera,
-      scene.userData.element
-    );
-    controls.minDistance = 2;
-    controls.maxDistance = 5;
-    controls.enablePan = false;
-    controls.enableZoom = false;
-    scene.userData.controls = controls;
+    
+    // the element that represents the area we want to render the scene
+    const scene = MakeEmtpyScene(sceneElement);
 
     // add one random mesh to each scene
     const geometry = geometries[(geometries.length * Math.random()) | 0];
-
-    const material = new THREE.MeshStandardMaterial({
+    const material = new THREE.MeshPhongMaterial({
       color: new THREE.Color().setHSL(
         Math.random(),
         1,
         0.75,
         THREE.SRGBColorSpace
-      ),
-      roughness: 0.5,
-      metalness: 0,
-      flatShading: true,
+      )
     });
 
     scene.add(new THREE.Mesh(geometry, material));
 
-    scene.add(new THREE.HemisphereLight(0xaaaaaa, 0x444444, 3));
-
-    const light = new THREE.DirectionalLight(0xffffff, 1.5);
-    light.position.set(1, 1, 1);
-    scene.add(light);
-
-    world.ResetView(controls);
     scenes.push(scene);
   }
 
   // add instructions here
   const instructionsList = document.getElementById("instruction-steps")
   for (let i = 0; i < 6; i++) {
-    const world = new World();
-    const scene = world.scene;
 
     // make a list item
     const element = document.createElement("div");
     element.className = "grid-item";
-
-
     const sceneElement = document.createElement("div");
     sceneElement.className = "mini-canvas"
     element.appendChild(sceneElement);
@@ -97,55 +98,28 @@ export function InitScene() {
     stepNumber.innerText = `${i+1}`
     stepNumber.className = "step-number"
     element.appendChild(stepNumber)
-
-    // the element that represents the area we want to render the scene
-    scene.userData.element = sceneElement;
     instructionsList.appendChild(element);
 
-
-    const camera = world.camera;
-    camera.position.z = 2;
-    scene.userData.camera = camera;
-
-    const controls = new OrbitControls(
-      scene.userData.camera,
-      scene.userData.element
-    );
-    controls.minDistance = 2;
-    controls.maxDistance = 5;
-    controls.enablePan = false;
-    controls.enableZoom = false;
-    scene.userData.controls = controls;
+    // the element that represents the area we want to render the scene
+    const scene = MakeEmtpyScene(sceneElement);
 
     // add one random mesh to each scene
     const geometry = geometries[(geometries.length * Math.random()) | 0];
-
-    const material = new THREE.MeshStandardMaterial({
+    const material = new THREE.MeshPhongMaterial({
       color: new THREE.Color().setHSL(
         Math.random(),
         1,
         0.75,
         THREE.SRGBColorSpace
-      ),
-      roughness: 0.5,
-      metalness: 0,
-      flatShading: true,
+      )
     });
-
     scene.add(new THREE.Mesh(geometry, material));
 
-    scene.add(new THREE.HemisphereLight(0xaaaaaa, 0x444444, 3));
-
-    const light = new THREE.DirectionalLight(0xffffff, 1.5);
-    light.position.set(1, 1, 1);
-    scene.add(light);
-
-    world.ResetView(controls);
     scenes.push(scene);
   }
 
   renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
-  renderer.setClearColor(0xffffff, 1);
+  renderer.setClearColor(0xdddddd, 1);
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setAnimationLoop(animate);
 
@@ -202,10 +176,9 @@ function animate() {
 
     const camera = scene.userData.camera;
 
-    //camera.aspect = width / height; // not changing in this example
-    //camera.updateProjectionMatrix();
-
-    //scene.userData.controls.update();
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+    scene.userData.controls.update();
 
     renderer.render(scene, camera);
   });
@@ -215,8 +188,7 @@ const HandleKeyboard = (event)=>{
   switch (event.key) {
     case 'Shift':
       break;
-    case 'v':
-      world.ResetView(orbit);
+    case 'v':      
       break;
     case 'Delete':
       break;
@@ -229,13 +201,9 @@ const HandleKeyboard = (event)=>{
 }
 
 const bindEventListeners = () => {  
-  window.addEventListener("resize", onWindowResize, false);  
+
   window.addEventListener('keydown', HandleKeyboard);
-}
-
-function onWindowResize() {
-  world.camera.aspect = window.innerWidth / window.innerHeight;
-  world.camera.updateProjectionMatrix();
-
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  // window.addEventListener('scroll', function() {
+  //   console.log('Scroll event detected');
+  // });
 }
