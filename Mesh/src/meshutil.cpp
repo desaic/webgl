@@ -2,7 +2,6 @@
 
 #include "Array3D.h"
 #include "TrigMesh.h"
-#include "MarchingCubes.h"
 
 #include <iostream>
 #include <fstream>
@@ -254,59 +253,6 @@ void SaveVolAsObjMesh(std::string outfile, const Array3D8u& vol, float* voxRes,
 
 uint8_t LinearIndex(int x, int y, int z, std::vector<uint8_t>& vol, std::array<unsigned, 3>& gsize) {
   return vol[gsize[0] * (gsize[1] * z + y) + x];
-}
-
-void MarchOneCube(int x, int y, int z, TrigMesh& m, std::vector<uint8_t>& vol, std::array<unsigned, 3>& gsize) {
-    GridCell cell;
-    cell.p[0] = Vec3f(0, 0, 0);
-    float h = 0.6f;
-    cell.p[0][0] += x * h;
-    cell.p[0][1] += y * h;
-    cell.p[0][2] += z * h;
-
-    for (unsigned i = 1; i < GridCell::NUM_PT; i++) {
-      cell.p[i] = cell.p[0];
-    }
-    cell.p[1][1] += h;
-
-    cell.p[2][0] += h;
-    cell.p[2][1] += h;
-
-    cell.p[3][0] += h;
-
-    cell.p[4][2] += h;
-
-    cell.p[5][1] += h;
-    cell.p[5][2] += h;
-
-    cell.p[6][0] += h;
-    cell.p[6][1] += h;
-    cell.p[6][2] += h;
-
-    cell.p[7][0] += h;
-    cell.p[7][2] += h;
-
-    cell.val[0] = LinearIndex(x,y,z,vol,gsize);
-    cell.val[1] = LinearIndex(x,y+1,z,vol,gsize);
-    cell.val[2] = LinearIndex(x+1,y+1,z,vol,gsize);
-    cell.val[3] = LinearIndex(x+1,y,z,vol,gsize);
-    cell.val[4] = LinearIndex(x,y,z+1,vol,gsize);
-    cell.val[5] = LinearIndex(x,y+1,z+1,vol,gsize);
-    cell.val[6] = LinearIndex(x+1,y+1,z+1,vol,gsize);
-    cell.val[7] = LinearIndex(x+1,y,z+1,vol,gsize);
-    MarchCube(cell,0.5, &m);
-}
-
-TrigMesh MarchCubes(std::vector<uint8_t>& vol, std::array<unsigned, 3>& gsize) {
-    TrigMesh m;
-    for (unsigned z = 0; z < gsize[2]/2; z++) {
-      for (unsigned y = 0; y < gsize[1]/2; y++) {
-        for (unsigned x = 0; x < gsize[0]/2; x++) {
-          MarchOneCube(x, y, z, m, vol, gsize);
-        }
-      }
-    }
-    return m;
 }
 
 void ComputeUVTangents(Vec3f& tx, Vec3f& ty, const Vec3f& e1, const Vec3f& e2, const Vec2f& uve1,

@@ -7,9 +7,12 @@ export default class World {
     const near = 1;
     const far = 2000;
     this.camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
-    this.camera.up.set(0, 0, 1);
+    this.camera.up.set(0, 1, 0);
+    this.camera.position.set(0, 1, -4);
+    this.camera.lookAt(2, 0, 2);
+
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x333333);
+    this.scene.background = new THREE.Color(0xeeeeee);
 
     this.meshes = [];
     this.images = [];
@@ -25,12 +28,12 @@ export default class World {
     this.ground.position.y = 0;
     this.ground.position.z = 0; // = - 0.5;
     this.ground.receiveShadow = true;
-    this.scene.add(this.ground);
+    //this.scene.add(this.ground);
 
     //lights
     this.scene.add(new THREE.HemisphereLight(0x333333, 0x111111));
-    this.addShadowedLight(0, 10, 100, 0xdddddd, 1.35, this.scene);
-    this.addShadowedLight(200, 0, 100, 0xcccccc, 1, this.scene);
+    this.addShadowedLight(0, 1000, 100, 0xdddddd, 1.35, this.scene);
+    this.addShadowedLight(200, -1000, 100, 0xcccccc, 1, this.scene);
 
     const defaultcol = 0xeeeeee;
     this.defaultMaterial = new THREE.MeshPhongMaterial({
@@ -43,12 +46,6 @@ export default class World {
 
     this.instances = new THREE.Group();
     this.scene.add( this.instances);
-  }
-  
-  ResetView = (orbit)=>{
-    this.camera.position.set(0, -400, 150);
-    orbit.target.set(0, 0, 0);
-    orbit.update();
   }
 
   GetInstanceById = (id) => {

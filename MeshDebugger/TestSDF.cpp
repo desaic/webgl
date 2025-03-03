@@ -1,14 +1,17 @@
 #include "AdapSDF.h"
+#include "AdapUDF.h"
 #include "SDFMesh.h"
 #include "TrigMesh.h"
 #include "BBox.h"
 #include "MarchingCubes.h"
 #include "FastSweep.h"
+#include "HalfEdgeMesh.h"
 #include "MeshUtil.h"
 #include "MeshOptimization.h"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <queue>
 
 void SaveDistGrid() {
   TrigMesh mesh;
@@ -66,13 +69,125 @@ void SaveDistGrid() {
   // surf.SaveObj(p.string());  
 }
 
-void TestSDF() { 
+void TrigToPolyMesh(const TrigMesh & mesh, PolyMesh&pm) {
+  size_t numV = mesh.GetNumVerts();
+  for (size_t i = 0; i < numV; i++) {
+    pm.V().push_back(mesh.GetVertex(i));
+  }
+  
+  size_t numT = mesh.GetNumTrigs();
+  for (size_t i = 0; i < numT; i++) {
+    PolyFace face({mesh.t[3 * i], mesh.t[3 * i + 1], mesh.t[3 * i + 2]});
+    pm.F().push_back(face);
+  }
+}
+
+std::vector<unsigned> TrigNeighbors(const HalfEdgeMesh & hem, unsigned tIdx) {
+  std::vector<unsigned> n;
+  const auto& face = hem.F(tIdx);
+  for (unsigned i = 0; i < face.n; i++) {
+    unsigned heIdx = hem.HalfEdgeIndex(tIdx, i);
+    const auto &he = hem.he[heIdx];
+    if(he.hasTwin()) {
+      //const auto& twin = hem.he[he.twin];
+      n.push_back(hem.edgeFaceIndex[he.twin]);
+    }
+  }
+  return n;
+}
+
+Vec3f NormalTrig(const PolyMesh & pm, unsigned t) {
+  Vec3f v0 = pm.V()[pm.F(t)[0]];
+  Vec3f v1 = pm.V()[pm.F(t)[1]];
+  Vec3f v2 = pm.V()[pm.F(t)[2]];
+  Vec3f n = (v1 - v0).cross(v2 - v0);
+  n.normalize();
+  return n;
+}
+
+void FloodMeshByNormal(const HalfEdgeMesh& hem, unsigned seedTrig, int label, std::vector<int>&labels) {
+  std::queue<unsigned> q;
+  q.push(seedTrig);
+  const float MAX_ANGLE = 30/180.0f * 3.1415926;
+  while (!q.empty()) {
+    unsigned t = q.front();
+    q.pop();
+    std::vector<unsigned> nbrs = TrigNeighbors(hem, t);
+    labels[t] = label;
+    Vec3f n0 = NormalTrig(hem.m_, t);
+    for (size_t i = 0; i < nbrs.size(); i++) {
+      unsigned nbr = nbrs[i];
+      if (labels[nbr] > 0) {
+        continue;
+      }
+      Vec3f ni = NormalTrig(hem.m_, nbr);
+      float angle = acos(n0.dot(ni));
+      if (angle < MAX_ANGLE) {
+        labels[nbr] = label;
+        q.push(nbr);
+      }
+    }
+  }
+}
+
+/// @brief 
+/// @param mesh 
+/// @return cluster ids for each triangle 
+std::vector<int> FloodMeshByNormal(const TrigMesh & mesh) {
+  size_t numT = mesh.GetNumTrigs();
+  PolyMesh pm;
+  TrigToPolyMesh(mesh, pm);
+  HalfEdgeMesh hem(pm);
+  
+  //0 unlabeled.
+  std::vector<int> labels(numT, 0);
+  int labelCount = 1;
+  for (size_t t = 0; t < numT; t++) {
+    if (labels[t] > 0) {
+      continue;
+    }
+    FloodMeshByNormal(hem, t, labelCount, labels);
+    labelCount++;
+  }
+  return labels;
+}
+
+TrigMesh Subset(const std::vector<int>& labels, int targetLabel,
+                const TrigMesh& mesh) {
+  TrigMesh out;
+  std::vector<unsigned> oldToNewVert(mesh.GetNumVerts(),
+                                     mesh.GetNumVerts() + 1);
+  for (size_t i = 0; i < mesh.GetNumTrigs(); i++) {
+    if (labels[i] != targetLabel) {
+      continue;
+    }
+    for (unsigned vi = 0; vi < 3; vi++) {
+      unsigned v = mesh.t[3 * i + vi];
+      unsigned newIndex = oldToNewVert[v];
+      Vec3f newCoord = mesh.GetTriangleVertex(i, vi);
+      if(newIndex>=out.GetNumVerts()){
+        newIndex = out.GetNumVerts();
+        oldToNewVert[v] = newIndex;
+        out.v.push_back(newCoord[0]);
+        out.v.push_back(newCoord[1]);
+        out.v.push_back(newCoord[2]);
+      }
+      out.t.push_back(newIndex);
+    }
+  }
+  return out;
+}
+
+void ProcessHead() {
   std::string rigidFile = "F:/meshes/head/hardshell.obj";
-  std::string softFile = "F:/meshes/head/right.obj";
+  std::string softFile = "F:/meshes/head/front.obj";
+
+  TrigMesh softMesh;
+  softMesh.LoadObj(softFile);
   float rigidDist = 0.5f;
-   const float h = 0.25f;
-   const float narrowBand = 8;
-   const float distUnit = 0.005f;
+  const float h = 0.25f;
+  const float narrowBand = 8;
+  const float distUnit = 0.005f;
   TrigMesh rigidMesh;
   rigidMesh.LoadObj(rigidFile);
 
@@ -85,8 +200,6 @@ void TestSDF() {
   sdfMesh.SetBand(narrowBand);
   sdfMesh.Compute();
 
-  TrigMesh softMesh;
-  softMesh.LoadObj(softFile);
   std::shared_ptr<AdapSDF> softSdf = std::make_shared<AdapSDF>();
   softSdf->voxSize = 0.2;
   softSdf->band = 16;
@@ -95,10 +208,10 @@ void TestSDF() {
   softSdf->Compress();
   softMesh.ComputePseudoNormals();
   softSdf->ComputeCoarseDist();
-  CloseExterior(softSdf->dist, softSdf->MAX_DIST);  
+  CloseExterior(softSdf->dist, softSdf->MAX_DIST);
   Array3D8u frozen;
   softSdf->FastSweepCoarse(frozen);
-  
+
   std::cout << softSdf->origin[0] << " " << softSdf->origin[1] << " "
             << softSdf->origin[2] << "\n";
   BBox box;
@@ -107,43 +220,310 @@ void TestSDF() {
   std::cout << box.vmax[0] << " " << box.vmax[1] << " " << box.vmax[2] << "\n";
 
   Array3D<short> softCopy = softSdf->dist;
-  //take 0.5mm outer shell
-  short skinThickness = 0.5 / distUnit;
-  for (size_t i = 0; i < softCopy.GetData().size(); i++) {
-    softCopy.GetData()[i] = -softCopy.GetData()[i] - skinThickness;
-  }
-  //subtract shell of rigid sdf + 0.6mm
+  float waxDrain = 0.3;
+  // union outer shell
   Vec3u size = softSdf->dist.GetSize();
-  float rigidOuter = 0.55;
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      for (unsigned x = 0; x < size[0]; x++) {
+        float softd = softCopy(x, y, z) * distUnit;
+        Vec3f worldCoord = softSdf->WorldCoord(Vec3f(x, y, z));
+        float rigidDist = sdf->GetFineDist(worldCoord) - waxDrain;
+        float dist = std::min(rigidDist, softd);
+        softCopy(x, y, z) = dist / distUnit;        
+      }
+    }
+  }
+
+  // subtract skin from original soft mesh
+  short skinThickness = 0.52 / distUnit;
+  for (size_t i = 0; i < softCopy.GetData().size(); i++) {
+    short d0 = softSdf->dist.GetData()[i];
+    short dCopy = softCopy.GetData()[i];
+    if (dCopy >= AdapDF::MAX_DIST) {
+      continue;
+    }
+    softSdf->dist.GetData()[i] = std::max(d0, short(dCopy + skinThickness));
+  }
+
+  TrigMesh surf;
+  MarchingCubes(softSdf->dist, 0, distUnit, softSdf->voxSize, softSdf->origin,
+                &surf);
+  MergeCloseVertices(surf);
+  MeshOptimization::ComputeSimplifiedMesh(surf.v, surf.t, 0.05, 0.4, surf.v,
+                                          surf.t);
+
+  std::filesystem::path p(softFile);
+  p.replace_extension("surf3.obj");
+  surf.SaveObj(p.string());
+}
+
+std::shared_ptr<AdapSDF> ComputeSDF(float distUnit, float h, TrigMesh & mesh) {
+  std::shared_ptr<AdapSDF> softSdf = std::make_shared<AdapSDF>();
+  softSdf->voxSize = h;
+  softSdf->band = 16;
+  softSdf->distUnit = distUnit;
+  softSdf->BuildTrigList(&mesh);
+  softSdf->Compress();
+  mesh.ComputePseudoNormals();
+  softSdf->ComputeCoarseDist();
+  CloseExterior(softSdf->dist, softSdf->MAX_DIST);
+  Array3D8u frozen;
+  softSdf->FastSweepCoarse(frozen);
+  return softSdf;
+}
+
+std::shared_ptr<AdapUDF> ComputeUDF(float distUnit, float h, TrigMesh& mesh) {
+  std::shared_ptr<AdapUDF> udf = std::make_shared<AdapUDF>();
+  udf->voxSize = h;
+  udf->band = 16;
+  udf->distUnit = distUnit;
+  udf->BuildTrigList(&mesh);
+  udf->Compress();
+  mesh.ComputePseudoNormals();
+  udf->ComputeCoarseDist();
+  for (size_t i = 0; i < udf->dist.GetData().size(); i++) {
+    short d = udf->dist.GetData()[i];
+    if (d < 0) {
+      udf->dist.GetData()[i] = -d;
+    }
+  }
+  Array3D8u frozen;
+  udf->FastSweepCoarse(frozen);
+  return udf;
+}
+
+void ProcessFront() {  
+  std::string softFile = "F:/meshes/head/front.obj";
+  std::string sideFile = "F:/meshes/head/front_patch.obj";
+
+  TrigMesh sideMesh;
+  sideMesh.LoadObj(sideFile);
+  TrigMesh softMesh;
+  
+  softMesh.LoadObj(softFile);
+  MergeCloseVertices(softMesh);
+  //std::vector<int> labels = FloodMeshByNormal(softMesh);
+  //for (int label = 0; label < 20; label++) {
+  //  TrigMesh face = Subset(labels, label, softMesh);
+  //  std::string outFile = "side" + std::to_string(label)+".obj";
+  //  face.SaveObj(outFile);
+  //}
+  
+  const float h = 0.25f;
+  const float narrowBand = 8;
+  const float distUnit = 0.005f;
+
+  std::shared_ptr<AdapSDF> softSdf = ComputeSDF(distUnit, 0.2, softMesh);
+  std::shared_ptr<AdapUDF> surfUdf = ComputeUDF(distUnit, 0.2, sideMesh);
+
+  std::cout << softSdf->origin[0] << " " << softSdf->origin[1] << " "
+            << softSdf->origin[2] << "\n";
+  BBox box;
+  ComputeBBox(softMesh.v, box);
+  std::cout << box.vmin[0] << " " << box.vmin[1] << " " << box.vmin[2] << "\n";
+  std::cout << box.vmax[0] << " " << box.vmax[1] << " " << box.vmax[2] << "\n";
+
+
+  //volume near surface
+  Array3D<short> softCopy = softSdf->dist;
+
+  // remove volume within 0.5mm of surface.
+  const float surfThickness = 0.5f;  
+  Vec3u size = softSdf->dist.GetSize();
+  float MAX_POSITIVE_DIST = 100;  
+
+  // subtract from volume.
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      for (unsigned x = 0; x < size[0]; x++) {
+        float softd = softCopy(x, y, z) * distUnit;
+        Vec3f worldCoord = softSdf->WorldCoord(Vec3f(x, y, z));        
+        float surfDist = surfUdf->GetCoarseDist(worldCoord);
+        if (surfDist >= AdapDF::MAX_DIST) {
+          surfDist = MAX_POSITIVE_DIST;
+        }
+        surfDist -= surfThickness;
+        softd = std::max(-surfDist, softd);        
+        softCopy(x, y, z) = softd / distUnit;
+      }
+    }
+  }
+
+  TrigMesh surf;
+  MarchingCubes(softCopy, 0, distUnit, softSdf->voxSize, softSdf->origin,
+                &surf);
+  MergeCloseVertices(surf);
+  MeshOptimization::ComputeSimplifiedMesh(surf.v, surf.t, 0.05, 0.4, surf.v,
+                                          surf.t);
+
+  std::filesystem::path p(softFile);
+  p.replace_extension("latt.obj");
+  surf.SaveObj(p.string());
+}
+
+void ProcessNose() {
+  std::string rigidFile = "F:/meshes/head/hardshell.obj";
+  std::string softFile = "F:/meshes/head/nose.obj";
+  std::string sideFile = "F:/meshes/head/nose_patch.obj";
+
+  TrigMesh sideMesh;
+  sideMesh.LoadObj(sideFile);
+  TrigMesh softMesh;
+  softMesh.LoadObj(softFile);
+  // std::vector<int> labels = FloodMeshByNormal(softMesh);
+  // TrigMesh face = Subset(labels, 3, softMesh);
+  // face.SaveObj("F:/meshes/head/nose_side3.obj");
+  float rigidDist = 0.5f;
+  const float h = 0.25f;
+  const float narrowBand = 8;
+  const float distUnit = 0.005f;
+  TrigMesh rigidMesh;
+  rigidMesh.LoadObj(rigidFile);
+
+  std::shared_ptr<AdapSDF> sdf = std::make_shared<AdapSDF>();
+  sdf->distUnit = distUnit;
+  SDFImpAdap* imp = new SDFImpAdap(sdf);
+  SDFMesh sdfMesh(imp);
+  sdfMesh.SetMesh(&rigidMesh);
+  sdfMesh.SetVoxelSize(h);
+  sdfMesh.SetBand(narrowBand);
+  sdfMesh.Compute();
+
+  std::shared_ptr<AdapSDF> softSdf = ComputeSDF(distUnit, 0.2, softMesh);
+  std::shared_ptr<AdapUDF> surfUdf = ComputeUDF(distUnit, 0.2, sideMesh);
+
+  std::cout << softSdf->origin[0] << " " << softSdf->origin[1] << " "
+            << softSdf->origin[2] << "\n";
+  BBox box;
+  ComputeBBox(softMesh.v, box);
+  std::cout << box.vmin[0] << " " << box.vmin[1] << " " << box.vmin[2] << "\n";
+  std::cout << box.vmax[0] << " " << box.vmax[1] << " " << box.vmax[2] << "\n";
+
+  Array3D<short> softCopy = softSdf->dist;
+  // union rigid shell into soft
+  const float surfThickness = 1.0f;
+  // intersect surface udf and union mesh
+  Vec3u size = softSdf->dist.GetSize();
+  float MAX_POSITIVE_DIST = 100;
   for (unsigned z = 0; z < size[2]; z++) {
     for (unsigned y = 0; y < size[1]; y++) {
       for (unsigned x = 0; x < size[0]; x++) {
         float softd = softCopy(x, y, z) * distUnit;
         Vec3f worldCoord = softSdf->WorldCoord(Vec3f(x, y, z));
         float rigidDist = sdf->GetFineDist(worldCoord);
-        rigidDist = -(rigidDist - rigidOuter);
-        if (rigidDist > 0) {
-          float dist = std::max(rigidDist, softd);
-          softCopy(x, y, z) = dist / distUnit;
+        float surfDist = surfUdf->GetCoarseDist(worldCoord);
+        if (surfDist >= AdapDF::MAX_DIST) {
+          surfDist = MAX_POSITIVE_DIST;
         }
+        surfDist -= surfThickness;
+
+        // if (rigidDist <= 0) {
+        softd = std::min(rigidDist, softd);
+        //}
+        // intersect with thin volume around surface mesh
+        // if (surfDist >= 0) {
+        softd = std::max(surfDist, softd);
+        //}
+        softCopy(x, y, z) = softd / distUnit;
       }
     }
   }
 
-  //subtract partial skin from original soft mesh
-  for (size_t i = 0; i < softCopy.GetData().size(); i++) {
-    short d0 = softSdf->dist.GetData()[i]; 
-    softSdf->dist.GetData()[i] = std::max(d0, short(-softCopy.GetData()[i]));
+  // for (size_t i = 0; i < softCopy.GetData().size(); i++) {
+  //   short d0 = softSdf->dist.GetData()[i];
+  //   softSdf->dist.GetData()[i] = short(softCopy.GetData()[i]);
+  //   std::max(short(softCopy.GetData()[i]), short(-d0));
+  // }
+
+  // subtract 0.5mm from surface.
+  const float skinThick = 0.2f;
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      for (unsigned x = 0; x < size[0]; x++) {
+        float softd = softCopy(x, y, z) * distUnit;
+        Vec3f worldCoord = softSdf->WorldCoord(Vec3f(x, y, z));
+        float surfDist = surfUdf->GetCoarseDist(worldCoord);
+        if (surfDist >= AdapDF::MAX_DIST) {
+          surfDist = MAX_POSITIVE_DIST;
+        }
+        surfDist -= skinThick;
+
+        // if (rigidDist <= 0) {
+        //}
+        // intersect with thin volume around surface mesh
+        // if (surfDist >= 0) {
+        softd = std::max(-surfDist, softd);
+        //}
+        softCopy(x, y, z) = softd / distUnit;
+      }
+    }
   }
-  
-  //sdfMesh.MarchingCubes(0, &surf); 
+
   TrigMesh surf;
-  MarchingCubes(softSdf->dist, 0, distUnit, softSdf->voxSize, softSdf->origin, &surf);  
+  MarchingCubes(softCopy, 0, distUnit, softSdf->voxSize, softSdf->origin,
+                &surf);
   MergeCloseVertices(surf);
   MeshOptimization::ComputeSimplifiedMesh(surf.v, surf.t, 0.05, 0.4, surf.v,
-                                        surf.t);
+                                          surf.t);
 
   std::filesystem::path p(softFile);
-  p.replace_extension("surf2.obj");
+  p.replace_extension("add.obj");
   surf.SaveObj(p.string());
+}
+
+#include <sstream>
+void PadGridXY() {
+  std::ifstream in("F:/meshes/head/loop.txt");
+  std::string lines[8];
+  for (int i = 0; i < 8; i++) {
+    std::getline(in, lines[i]);
+  }
+  
+  std::istringstream iss(lines[7]);
+  Vec3u gridSize;
+  iss >> gridSize[0] >> gridSize[1] >> gridSize[2];
+  Array3D8u gridIn(gridSize[0], gridSize[1], gridSize[2]);
+  for (size_t i = 0; i < gridIn.GetData().size(); i++) {
+    int num;
+    in >> num;
+    gridIn.GetData()[i] = uint8_t(num);
+  }
+
+  unsigned padding = 10;
+  Vec3u outSize(gridSize[0] + 2 * padding, gridSize[1] + 2 * padding,
+                gridSize[2]);
+  Array3D8u gridOut(outSize, 3);
+  for (unsigned z = 0; z < gridSize[2]; z++) {
+    for (unsigned y = 0; y < gridSize[1]; y++) {
+      for (unsigned x = 0; x < gridSize[0]; x++) {
+        unsigned dsty = y + padding;
+        unsigned dstx = x + padding;
+        gridOut(dstx, dsty, z) = gridIn(x, y, z);
+      }
+    }
+  }
+
+  std::ofstream out("F:/meshes/head/loop_sparse_2mm.txt");
+  for (int i = 0; i < 7; i++) {
+    out << lines[i] << "\n";
+  }
+  out << outSize[0] << " " << outSize[1] << " " << outSize[2] << "\n";
+  for (unsigned z = 0; z < outSize[2]; z++) {
+    for (unsigned y = 0; y < outSize[1]; y++) {
+      for (unsigned x = 0; x < outSize[0]; x++) {
+        out<< int(gridOut(x, y, z))<<" ";
+      }
+      out << "\n";
+    }
+    out<<"\n";
+  }
+  out.close();
+}
+
+void TestSDF() { 
+ // ProcessNose();
+  //ProcessHead();
+  //ProcessFront();
+  PadGridXY();
 }
