@@ -1,6 +1,6 @@
 import * as THREE from "three";
 
-export default class World {
+export class World {
   constructor() {
     const fov = 50;
     const aspect = window.innerWidth / window.innerHeight;
@@ -9,20 +9,20 @@ export default class World {
     this.camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
     this.camera.up.set(0, 0, 1);
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0xcccccc);
+    this.scene.background = new THREE.Color(0xffffff);
 
     this.meshes = [];
 
-    //lights
+    // lights
     this.scene.add(new THREE.HemisphereLight(0x333333, 0x111111));
     this.addShadowedLight(0, 10, 100, 0xdddddd, 1.35, this.scene);
     this.addShadowedLight(200, 0, 100, 0xcccccc, 1, this.scene);
 
-	const pointLight = new THREE.PointLight(0xffffff, 1, 100); // Color, intensity, distance
-	pointLight.position.set(10, 10, 10);
-	this.scene.add(pointLight);
-	const pointLightHelper = new THREE.PointLightHelper(pointLight);
-	this.scene.add(pointLightHelper);
+    const pointLight = new THREE.PointLight(0xffffff, 1, 100); // Color, intensity, distance
+    pointLight.position.set(10, 10, 10);
+    this.scene.add(pointLight);
+    const pointLightHelper = new THREE.PointLightHelper(pointLight);
+    this.scene.add(pointLightHelper);
 
     const defaultcol = 0xeeeeee;
     this.defaultMaterial = new THREE.MeshPhongMaterial({
@@ -34,14 +34,14 @@ export default class World {
     this.geometries = [];
 
     this.instances = new THREE.Group();
-    this.scene.add( this.instances);
+    this.scene.add(this.instances);
   }
-  
-  ResetView = (orbit)=>{
+
+  ResetView = (orbit) => {
     this.camera.position.set(0, -400, 150);
     orbit.target.set(0, 0, 0);
     orbit.update();
-  }
+  };
 
   GetInstanceById = (id) => {
     for (let i = 0; i < this.instances.children.length; i++) {
@@ -72,8 +72,8 @@ export default class World {
     directionalLight.shadow.camera.near = 1;
     directionalLight.shadow.camera.far = 400;
     directionalLight.shadow.bias = -0.002;
-	
-	const lightHelper = new THREE.DirectionalLightHelper(directionalLight);
+
+    const lightHelper = new THREE.DirectionalLightHelper(directionalLight);
     scene.add(lightHelper);
   };
 }
