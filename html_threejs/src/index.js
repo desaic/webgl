@@ -12,7 +12,7 @@ const aspect = 1;
 const near = 1;
 const far = 2000;
 const ResetView = (scene, orbit) => {
-  scene.userData.camera.position.set(0, -400, 150);
+  scene.userData.camera.position.set(0,-5,0);  
   orbit.target.set(0, 0, 0);
   orbit.update();
 };
@@ -22,7 +22,6 @@ const MakeEmtpyScene = (element) => {
   scene.userData.camera = new THREE.PerspectiveCamera(fov, aspect, near, far);  
   const camera = scene.userData.camera;
   camera.up.set(0, 0, 1);
-  camera.position.z = 2;
   scene.userData.element = element;
   const controls = new OrbitControls(
     scene.userData.camera,
@@ -32,6 +31,7 @@ const MakeEmtpyScene = (element) => {
   controls.maxDistance = 5;
   controls.enablePan = false;
   controls.enableZoom = true;
+  controls.maxPolarAngle = 3;
   scene.userData.controls = controls;
 
   scene.add(new THREE.HemisphereLight(0xaaaaaa, 0x444444, 2));
@@ -207,3 +207,22 @@ const bindEventListeners = () => {
   //   console.log('Scroll event detected');
   // });
 }
+
+const AddParts = (parts) =>{
+
+}
+
+const AddPartList = (partList)=>{
+
+
+}
+
+const AddInstructions = (instructions)=>{
+
+
+}
+
+window.InitScene = InitScene;
+window.AddParts = AddParts;
+window.AddPartList = AddPartList;
+window.AddInstructions = AddInstructions;
