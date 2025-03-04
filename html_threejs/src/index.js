@@ -1,125 +1,201 @@
-import * as THREE from "three";
+import {
+  Box3,
+  Vector3,
+  Quaternion,
+  Euler,
+  Scene,
+  BufferGeometry,
+  BufferAttribute,
+  Group,
+  Mesh,
+  MeshPhongMaterial,
+  PerspectiveCamera,
+  DirectionalLight,
+  WebGLRenderer
+} from "three";
 import { OrbitControls } from "./OrbitControls.js";
 
 let canvas, renderer;
 
-const parts = [];
 const scenes = [];
 
 const yOffset = 32;
-const fov = 50;
+const fov = 75;
 const aspect = 1;
 const near = 1;
 const far = 2000;
-const ResetView = (scene, orbit) => {
-  scene.userData.camera.position.set(0,-5,0);  
+
+window.stepsList = [];
+window.partList = [];
+window.parts = [];
+window.InitScene = InitScene;
+
+const meshScale = 0.1;
+const defaultMeshRot = new Euler(-Math.PI / 2, 0, -Math.PI / 2);
+const ResetView = (scene) => {
+  const orbit = scene.userData.controls;
   orbit.target.set(0, 0, 0);
   orbit.update();
 };
 
-const MakeEmtpyScene = (element) => {
-  const scene = new THREE.Scene();
-  scene.userData.camera = new THREE.PerspectiveCamera(fov, aspect, near, far);  
+const SetSceneCamera = (scene, camPos, fov) => {
   const camera = scene.userData.camera;
-  camera.up.set(0, 0, 1);
+  camera.position.set(10 * camPos[0], 10 * camPos[1], 10 * camPos[2]);
+  camera.fov = fov;
+  camera.updateProjectionMatrix();
+  ResetView(scene);
+};
+
+const MakeEmtpyScene = (element) => {
+  const scene = new Scene();
+  scene.userData.camera = new PerspectiveCamera(fov, aspect, near, far);
+  const camera = scene.userData.camera;
+  camera.up.set(0, 1, 0);
   scene.userData.element = element;
   const controls = new OrbitControls(
     scene.userData.camera,
     scene.userData.element
   );
   controls.minDistance = 2;
-  controls.maxDistance = 5;
-  controls.enablePan = false;
+  controls.maxDistance = 100;
+  controls.enablePan = true;
   controls.enableZoom = true;
   controls.maxPolarAngle = 3;
   scene.userData.controls = controls;
 
-  scene.add(new THREE.HemisphereLight(0xaaaaaa, 0x444444, 2));
-
-  const light = new THREE.DirectionalLight(0xffffff, 2);
-  light.position.set(5, -5, 5);
+  const light = new DirectionalLight(0xffffff, 2);
+  light.position.set(50, 50, 50);
   scene.add(light);
+
+  const light2 = new DirectionalLight(0xffffff, 2);
+  light2.position.set(5, 50, -50);
+  scene.add(light2);
+
+  const light3 = new DirectionalLight(0xffffff, 2);
+  light3.position.set(0, -50, 0);
+  scene.add(light3);
+
+  const light4 = new DirectionalLight(0xffffff, 2);
+  light4.position.set(-50, 0, 0);
+  scene.add(light4);
 
   ResetView(scene, controls);
   return scene;
-}
+};
+
+const InitGeometries = (parts) => {
+  const geometries = [];
+  for (let i = 0; i < parts.length; i++) {
+    geometries[i] = new BufferGeometry();
+    const farr = new Float32Array(parts[i].vertices).map((val) => 0.1 * val);
+    geometries[i].setAttribute("position", new BufferAttribute(farr, 3));
+    geometries[i].computeVertexNormals();
+  }
+  return geometries;
+};
 
 export function InitScene() {
   canvas = document.getElementById("c");
 
-  const geometries = [
-    new THREE.BoxGeometry(1, 1, 1),
-    new THREE.SphereGeometry(0.5, 12, 8),
-    new THREE.DodecahedronGeometry(0.5),
-    new THREE.CylinderGeometry(0.5, 0.5, 1, 12),
-  ];
+  const parts = window.parts;
+  const geometries = InitGeometries(parts);
+
   // add parts here
-  const partList = document.getElementById("part-list");
-  for (let i = 0; i < 6; i++) {    
-   // make a list item
-    const element = document.createElement("div");
-    element.className = "grid-item";
-    const sceneElement = document.createElement("div");
-    sceneElement.className = "mini-canvas"
-    element.appendChild(sceneElement);
-    partList.appendChild(element);
-    
-    // the element that represents the area we want to render the scene
-    const scene = MakeEmtpyScene(sceneElement);
-
-    // add one random mesh to each scene
-    const geometry = geometries[(geometries.length * Math.random()) | 0];
-    const material = new THREE.MeshPhongMaterial({
-      color: new THREE.Color().setHSL(
-        Math.random(),
-        1,
-        0.75,
-        THREE.SRGBColorSpace
-      )
-    });
-
-    scene.add(new THREE.Mesh(geometry, material));
-
-    scenes.push(scene);
-  }
-
-  // add instructions here
-  const instructionsList = document.getElementById("instruction-steps")
-  for (let i = 0; i < 6; i++) {
-
+  const partListEle = document.getElementById("part-list");
+  const partList = window.partList;
+  for (let i = 0; i < partList.length; i++) {
     // make a list item
     const element = document.createElement("div");
     element.className = "grid-item";
     const sceneElement = document.createElement("div");
-    sceneElement.className = "mini-canvas"
+    sceneElement.className = "mini-canvas";
     element.appendChild(sceneElement);
-
-    const stepNumber = document.createElement("div");
-    stepNumber.innerText = `${i+1}`
-    stepNumber.className = "step-number"
-    element.appendChild(stepNumber)
-    instructionsList.appendChild(element);
+    partListEle.appendChild(element);
 
     // the element that represents the area we want to render the scene
     const scene = MakeEmtpyScene(sceneElement);
-
-    // add one random mesh to each scene
-    const geometry = geometries[(geometries.length * Math.random()) | 0];
-    const material = new THREE.MeshPhongMaterial({
-      color: new THREE.Color().setHSL(
-        Math.random(),
-        1,
-        0.75,
-        THREE.SRGBColorSpace
-      )
-    });
-    scene.add(new THREE.Mesh(geometry, material));
-
+    for (let j = 0; j < partList[i].partIdxs.length; j++) {
+      const partId = partList[i].partIdxs[j];
+      const geometry = geometries[partId];
+      const material = new MeshPhongMaterial({
+        color: parts[partId].color,
+      });
+      const mesh = new Mesh(geometry, material);
+      mesh.setRotationFromEuler(defaultMeshRot);
+      scene.add(mesh);
+    }
+    SetSceneCamera(scene, partList[i].camera.position, partList[i].camera.fov);
     scenes.push(scene);
   }
 
-  renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
-  renderer.setClearColor(0xdddddd, 1);
+  const stepsEle = document.getElementById("instruction-steps");
+  const stepsList = window.stepsList;
+
+  for (let i = 0; i < stepsList.length; i++) {
+    // make a list item
+    const element = document.createElement("div");
+    element.className = "grid-item";
+    const sceneElement = document.createElement("div");
+    sceneElement.className = "mini-canvas";
+    element.appendChild(sceneElement);
+
+    const stepNumber = document.createElement("div");
+    stepNumber.innerText = `${i + 1}`;
+    stepNumber.className = "step-number";
+    element.appendChild(stepNumber);
+    stepsEle.appendChild(element);
+
+    // the element that represents the area we want to render the scene
+    const scene = MakeEmtpyScene(sceneElement);
+    // overall rotation
+    const group = new Group();
+    group.setRotationFromEuler(defaultMeshRot);
+    scene.add(group);
+    for (let j = 0; j < stepsList[i].partIdxs.length; j++) {
+      const partId = stepsList[i].partIdxs[j];
+      const geometry = geometries[partId];
+      const trans = parts[partId].transparent;
+      const material = new MeshPhongMaterial({
+        color: parts[partId].color,
+      });
+      if (trans) {
+        material.transparent = true;
+        material.opacity = 0.1;
+        material.depthWrite = false;
+      }
+      const mesh = new Mesh(geometry, material);
+      const pos = parts[partId].position;
+      mesh.position.set(pos[0], pos[1], pos[2]);
+      const q = new Quaternion();
+      q.fromArray(parts[partId].rotation);
+      mesh.setRotationFromQuaternion(q);
+      group.add(mesh);
+    }
+
+    SetSceneCamera(
+      scene,
+      stepsList[i].camera.position,
+      stepsList[i].camera.fov
+    );
+    if (group.children.length > 0) {
+      group.updateMatrixWorld(true);
+      const bbox = new Box3().setFromObject(group.children[0]);
+      const boxCenter = new Vector3(0, 0, 0);
+      boxCenter.copy(bbox.min);
+      boxCenter.add(bbox.max);
+      boxCenter.multiplyScalar(0.5);
+      const orbit = scene.userData.controls;
+      orbit.target.copy(boxCenter);
+      orbit.target0.copy(boxCenter);
+      const camera = scene.userData.camera;
+      camera.position.add(boxCenter);
+      orbit.update();
+    }
+    scenes.push(scene);
+  }
+
+  renderer = new WebGLRenderer({ canvas: canvas, antialias: true });
+  renderer.setClearColor(0xffffff, 1);
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setAnimationLoop(animate);
 
@@ -140,11 +216,9 @@ function animate() {
 
   canvas.style.transform = `translateY(${window.scrollY}px)`;
 
-  renderer.setClearColor(0xffffff);
   renderer.setScissorTest(false);
   renderer.clear();
 
-  renderer.setClearColor(0xe0e0e0);
   renderer.setScissorTest(true);
 
   scenes.forEach(function (scene) {
@@ -184,45 +258,25 @@ function animate() {
   });
 }
 
-const HandleKeyboard = (event)=>{
+const HandleKeyboard = (event) => {
   switch (event.key) {
-    case 'Shift':
+    case "Shift":
       break;
-    case 'v':      
+    case "v":
       break;
-    case 'Delete':
+    case "Delete":
       break;
-    case 'Escape':
+    case "Escape":
       break;
-    case 'd':
+    case "d":
       break;
     default:
   }
-}
+};
 
-const bindEventListeners = () => {  
-
-  window.addEventListener('keydown', HandleKeyboard);
+const bindEventListeners = () => {
+  window.addEventListener("keydown", HandleKeyboard);
   // window.addEventListener('scroll', function() {
   //   console.log('Scroll event detected');
   // });
-}
-
-const AddParts = (parts) =>{
-
-}
-
-const AddPartList = (partList)=>{
-
-
-}
-
-const AddInstructions = (instructions)=>{
-
-
-}
-
-window.InitScene = InitScene;
-window.AddParts = AddParts;
-window.AddPartList = AddPartList;
-window.AddInstructions = AddInstructions;
+};
