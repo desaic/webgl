@@ -134,91 +134,160 @@
         flex-direction: row;
         justify-content: space-between;
       }
-      @media print {
-        /* Ensure the body and container take up the full page */
+
+      @page {
+        margin: 0;
+      }
+      body {
+        margin: 0;
+      }
+      .sheet {
+        margin: 0;
+        overflow: hidden;
+        position: relative;
+        box-sizing: border-box;
+        page-break-after: always;
+      }
+
+      /** Paper sizes **/
+      body.A3 .sheet {
+        width: 297mm;
+        height: 419mm;
+      }
+      body.A3.landscape .sheet {
+        width: 420mm;
+        height: 296mm;
+      }
+      body.A4 .sheet {
+        width: 210mm;
+        height: 296mm;
+      }
+      body.A4.landscape .sheet {
+        width: 297mm;
+        height: 209mm;
+      }
+      body.A5 .sheet {
+        width: 148mm;
+        height: 209mm;
+      }
+      body.A5.landscape .sheet {
+        width: 210mm;
+        height: 147mm;
+      }
+      body.letter .sheet {
+        width: 216mm;
+        height: 279mm;
+      }
+      body.letter.landscape .sheet {
+        width: 280mm;
+        height: 215mm;
+      }
+      body.legal .sheet {
+        width: 216mm;
+        height: 356mm;
+      }
+      body.legal.landscape .sheet {
+        width: 357mm;
+        height: 215mm;
+      }
+
+      /** Padding area **/
+      .sheet.padding-10mm {
+        padding: 10mm;
+      }
+      .sheet.padding-15mm {
+        padding: 15mm;
+      }
+      .sheet.padding-20mm {
+        padding: 20mm;
+      }
+      .sheet.padding-25mm {
+        padding: 25mm;
+      }
+
+      /** For screen preview **/
+      @media screen {
         body {
-          margin: 0;
-          padding: 0;
-          display: block;
+          background: #e0e0e0;
         }
-
-        .container {
-          width: 100%;
-          max-width: none; /* Ensure it doesn't shrink */
-          page-break-inside: avoid; /* Prevent breaking elements between pages */
-        }
-
-        .grid {
-          display: flex;
-          flex-wrap: wrap;
-        }
-
-        .grid-item {
-          page-break-inside: avoid; /* Keep grid items together */
-        }
-
-        /* Prevent cutting off content */
-        .box,
-        .header,
-        .info-container {
-          page-break-after: avoid;
-        }
-
-        /* Make sure the canvas is visible */
-        canvas {
-          max-width: 100%;
-          max-height: 100%;
-        }
-
-        /* Ensure colors are printed */
-        * {
-          -webkit-print-color-adjust: exact; /* Safari/Chrome */
-          print-color-adjust: exact; /* Other browsers */
+        .sheet {
+          background: white;
+          box-shadow: 0 0.5mm 2mm rgba(0, 0, 0, 0.3);
+          margin: 5mm auto;
         }
       }
+
+      /** Fix for Chrome issue #273306 **/
+      @media print {
+        body.A3.landscape {
+          width: 420mm;
+        }
+        body.A3,
+        body.A4.landscape {
+          width: 297mm;
+        }
+        body.A4,
+        body.A5.landscape {
+          width: 210mm;
+        }
+        body.A5 {
+          width: 148mm;
+        }
+        body.letter,
+        body.legal {
+          width: 216mm;
+        }
+        body.letter.landscape {
+          width: 280mm;
+        }
+        body.legal.landscape {
+          width: 357mm;
+        }
+      }
+      @page { size: A4 }
     </style>
   </head>
 
-  <body>
-    <canvas id="c"></canvas>
-
-    <div class="container">
-      <div class="header">
-        <div class="logo" id="logo-left"></div>
-        <div class="title" id="pdf-title"></div>
-        <div class="logo" id="logo-right"></div>
-      </div>
-      <div class="space-between-stack-hor">
-        <div class="info-container">
-          <b>Pack Result:</b>
-          <div id="pack-result"></div>
+  <body class="A4">
+    <section class="sheet padding-10mm">
+      <canvas id="c"></canvas>
+      <div class="container">
+        <div class="header">
+          <div class="logo" id="logo-left"></div>
+          <div class="title" id="pdf-title"></div>
+          <div class="logo" id="logo-right"></div>
+        </div>
+        <div class="space-between-stack-hor">
+          <div class="info-container">
+            <b>Pack Result:</b>
+            <div id="pack-result"></div>
+          </div>
+          <div class="info-container">
+            <b>Packed On:</b>
+            <div id="packed-on-date"></div>
+          </div>
         </div>
         <div class="info-container">
-          <b>Packed On:</b>
-          <div id="packed-on-date"></div>
+          <b>Container:</b>
+          <div id="container-name"></div>
         </div>
+        <div class="box"><b>Part List</b></div>
+        <div class="grid" id="part-list"></div>
+        <div class="box"><b>Packing Instructions</b></div>
+        <div class="grid" id="instruction-steps"></div>
       </div>
-      <div class="info-container">
-        <b>Container:</b>
-        <div id="container-name"></div>
-      </div>
-      <div class="box"><b>Part List</b></div>
-      <div class="grid" id="part-list"></div>
-      <div class="box"><b>Packing Instructions</b></div>
-      <div class="grid" id="instruction-steps"></div>
-    </div>
-
-    <script type="importmap">
-      {
-        "imports": {
-          "three": "./node_modules/three/build/three.module.js"
+      <script type="importmap">
+        {
+          "imports": {
+            "three": "./node_modules/three/build/three.module.js"
+          }
         }
-      }
-    </script>
+      </script>
+      <script type="module">
+        import { InitScene } from "./src/index.js";
 
-    <script type="module">
-      import { InitScene } from "./src/index.js";
-      window.InitScene();
-    </script>
+        window.InitScene();
+      </script>
+    </section>
   </body>
 </html>
