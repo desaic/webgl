@@ -11,9 +11,11 @@ import {
   MeshPhongMaterial,
   PerspectiveCamera,
   DirectionalLight,
-  WebGLRenderer
+  WebGLRenderer,
 } from "three";
 import { OrbitControls } from "./OrbitControls.js";
+import { left_logo } from "./logo-left.js";
+import { right_logo } from "./logo-right.js";
 
 let canvas, renderer;
 
@@ -280,3 +282,64 @@ const bindEventListeners = () => {
   //   console.log('Scroll event detected');
   // });
 };
+
+const setPackResult = (text) => {
+  const target = document.getElementById("pack-result");
+  if (target) {
+    target.innerText = text;
+  }
+};
+
+const setPackDate = (text) => {
+  const target = document.getElementById("packed-on-date");
+  if (target) {
+    target.innerText = text;
+  }
+};
+
+const setContainerName = (text) => {
+  const target = document.getElementById("container-name");
+  if (target) {
+    target.innerText = text;
+  }
+};
+
+const setLeftLogo = (img_base64) => {
+  const target = document.getElementById("logo-left");
+  if (target) {
+    const img = document.createElement("img");
+    img.src = img_base64;
+    img.style.maxHeight = "100%";
+    img.style.maxWidth = "100%";
+
+    target.appendChild(img);
+  }
+};
+
+const setRightLogo = (img_base64) => {
+  const target = document.getElementById("logo-right");
+  if (target) {
+    const img = document.createElement("img");
+    img.src = img_base64;
+    img.style.maxHeight = "100%";
+    img.style.maxWidth = "100%";
+    target.appendChild(img);
+  }
+};
+
+const setTitle = (text) => {
+  const target = document.getElementById("pdf-title");
+  if (target) {
+    target.innerText = text;
+  }
+};
+
+window.SetContainerName = setContainerName;
+window.SetLeftLogo = setLeftLogo;
+window.SetRightLogo = setRightLogo;
+window.SetPackResult = setPackResult;
+window.SetPackDate = setPackDate;
+window.SetTitle = setTitle;
+
+window.SetLeftLogo(left_logo);
+window.SetRightLogo(right_logo);
