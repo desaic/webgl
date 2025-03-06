@@ -99,7 +99,11 @@ HalfEdgeMesh::VERTEX_TOPOLOGY HalfEdgeMesh::CheckVertexManifold(
     unsigned v, const std::vector<unsigned>& faces) {
   //using unordered_map is ~2x slower
   std::vector<bool> hit(faces.size(), false);
+  
   unsigned edge = v_[v];  
+  if (edge == HalfEdge::INVALID_IDX) {
+    return BOUNDARY;
+  }
   if (!AddToSet(edgeFaceIndex[edge], hit, faces)) {
     return BOUNDARY;
   }

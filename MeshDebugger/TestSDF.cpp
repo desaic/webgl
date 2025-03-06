@@ -105,7 +105,8 @@ Vec3f NormalTrig(const PolyMesh & pm, unsigned t) {
   return n;
 }
 
-void FloodMeshByNormal(const HalfEdgeMesh& hem, unsigned seedTrig, int label, std::vector<int>&labels) {
+void FloodMeshByNormal(const HalfEdgeMesh& hem, unsigned seedTrig, int label,
+                       std::vector<int>& labels, bool ignoreOri) {
   std::queue<unsigned> q;
   q.push(seedTrig);
   const float MAX_ANGLE = 30/180.0f * 3.1415926;
@@ -121,7 +122,12 @@ void FloodMeshByNormal(const HalfEdgeMesh& hem, unsigned seedTrig, int label, st
         continue;
       }
       Vec3f ni = NormalTrig(hem.m_, nbr);
-      float angle = acos(n0.dot(ni));
+      float dot = n0.dot(ni);
+      if (ignoreOri) {
+        dot = std::abs(dot);
+      }
+      float angle = acos(dot);
+
       if (angle < MAX_ANGLE) {
         labels[nbr] = label;
         q.push(nbr);
@@ -133,7 +139,7 @@ void FloodMeshByNormal(const HalfEdgeMesh& hem, unsigned seedTrig, int label, st
 /// @brief 
 /// @param mesh 
 /// @return cluster ids for each triangle 
-std::vector<int> FloodMeshByNormal(const TrigMesh & mesh) {
+std::vector<int> FloodMeshByNormal(const TrigMesh & mesh, bool ignoreOri = false) {
   size_t numT = mesh.GetNumTrigs();
   PolyMesh pm;
   TrigToPolyMesh(mesh, pm);
@@ -146,7 +152,7 @@ std::vector<int> FloodMeshByNormal(const TrigMesh & mesh) {
     if (labels[t] > 0) {
       continue;
     }
-    FloodMeshByNormal(hem, t, labelCount, labels);
+    FloodMeshByNormal(hem, t, labelCount, labels, ignoreOri);
     labelCount++;
   }
   return labels;
@@ -294,21 +300,31 @@ std::shared_ptr<AdapUDF> ComputeUDF(float distUnit, float h, TrigMesh& mesh) {
 }
 
 void ProcessFront() {  
-  std::string softFile = "F:/meshes/head/front.obj";
+  std::string softFile = "F:/meshes/head/front_merge.obj";
   std::string sideFile = "F:/meshes/head/front_patch.obj";
+
+  TrigMesh softMesh;
+  softMesh.LoadObj(softFile);
+  MergeCloseVertices(softMesh);
+  std::vector<int> labels = FloodMeshByNormal(softMesh);
+
+  int maxLabel = 1;
+  for (size_t i = 0; i < labels.size(); i++) {
+    maxLabel = std::max(maxLabel, labels[i]);
+  }
+
+  std::string outDir = "F:/meshes/head/front_seg";
+  std::ofstream statsOut(outDir + "/stats.txt");
+  for (int label = 0; label <= maxLabel; label++) {
+    TrigMesh face = Subset(labels, label, softMesh);
+    float area = SurfaceArea(face);
+    statsOut << label << " " << area << "\n";
+    std::string outFile = outDir  + "/side" + std::to_string(label) + ".obj";
+    face.SaveObj(outFile);
+  }
 
   TrigMesh sideMesh;
   sideMesh.LoadObj(sideFile);
-  TrigMesh softMesh;
-  
-  softMesh.LoadObj(softFile);
-  MergeCloseVertices(softMesh);
-  //std::vector<int> labels = FloodMeshByNormal(softMesh);
-  //for (int label = 0; label < 20; label++) {
-  //  TrigMesh face = Subset(labels, label, softMesh);
-  //  std::string outFile = "side" + std::to_string(label)+".obj";
-  //  face.SaveObj(outFile);
-  //}
   
   const float h = 0.25f;
   const float narrowBand = 8;
@@ -361,6 +377,67 @@ void ProcessFront() {
   p.replace_extension("latt.obj");
   surf.SaveObj(p.string());
 }
+
+
+void OrientFlatGroups() {
+  std::string softFile = "F:/meshes/head/extruded0.obj";
+  TrigMesh mesh;
+  mesh.LoadObj(softFile);
+  MergeCloseVertices(mesh);
+  bool ignoreOri = true;
+  std::vector<int> labels = FloodMeshByNormal(mesh, ignoreOri);
+  
+  int maxLabel = 1;
+  for (size_t i = 0; i < labels.size(); i++) {
+    maxLabel = std::max(maxLabel, labels[i]);
+  }
+  std::vector<std::vector<unsigned> > labelTrigs(maxLabel + 1);
+  for (size_t i = 0; i < labels.size(); i++) {
+    labelTrigs[labels[i]].push_back(i);
+  }
+
+  std::string outDir = "F:/meshes/head/front_seg";
+  std::ofstream statsOut(outDir + "/stats.txt");
+  for (int label = 0; label <= maxLabel; label++) {
+    const std::vector<unsigned> &subset = labelTrigs[label];    
+    if (subset.size() < 10) {
+      continue;
+    }    
+    Vec3f avgNormal(0);
+    for (size_t ti = 0; ti < subset.size(); ti++) {
+      unsigned t = subset[ti];
+      Vec3f v0 = mesh.GetTriangleVertex(t, 0);
+      Vec3f v1 = mesh.GetTriangleVertex(t, 1);
+      Vec3f v2 = mesh.GetTriangleVertex(t, 2);
+      v1 = v1 - v0;
+      v2 = v2 - v0;
+      v1 = v1.cross(v2);
+      float trigArea = v1.norm();
+      avgNormal += trigArea * mesh.GetTrigNormal(ti);
+    }
+    float area = SurfaceArea(mesh);
+    avgNormal.normalize();
+    for (size_t ti = 0; ti < subset.size(); ti++) {
+      unsigned t = subset[ti];
+      Vec3f n = mesh.GetTrigNormal(ti);
+      if (n.dot(avgNormal) < 0) {
+        unsigned i0 = mesh.t[3 * ti];
+        unsigned i1 = mesh.t[3 * ti + 1];
+        mesh.t[3 * ti] = i1;
+        mesh.t[3 * ti + 1] = i0;
+      }
+    }
+  }
+  for (int label = 0; label <= maxLabel; label++) {
+    TrigMesh face = Subset(labels, label, mesh);
+    float area = SurfaceArea(face);
+    statsOut << label << " " << area << "\n";
+    std::string outFile = outDir + "/side" + std::to_string(label) + ".obj";
+    face.SaveObj(outFile);
+  }
+  mesh.SaveObj("F:/meshes/head/ori.obj");
+}
+
 
 void ProcessNose() {
   std::string rigidFile = "F:/meshes/head/hardshell.obj";
@@ -521,9 +598,123 @@ void PadGridXY() {
   out.close();
 }
 
+namespace {
+
+unsigned findIndex(unsigned* arr, unsigned len, unsigned x) {
+  for (unsigned i = 0; i < len; i++) {
+    if (arr[i] == x) {
+      return i;
+    }
+  }
+  return 0;
+}
+
+bool IsSkinny(const Triangle& t) {
+  const float MIN_DIST = 2e-2;
+  for (unsigned i = 0; i < 3; i++) {
+    Vec3f v0 = t.v[i];
+    Vec3f v1 = t.v[(i + 1) % 3];
+    Vec3f v2 = t.v[(i + 2) % 3];
+
+    Vec3f e1 = v1 - v0;
+    Vec3f e2 = v2 - v0;
+    float norm1 = e1.norm();
+    float norm2 = e2.norm();
+    if (norm1 < MIN_DIST || norm2 < MIN_DIST) {
+      return true;
+    }
+    e2.normalize();
+    Vec3f vertical = e1 - e1.dot(e2) * e2;
+    float dist = vertical.norm();
+    if (dist < 0.1) {
+    //  std::cout << "debug\n";
+    }
+    if (dist < MIN_DIST) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void RemoveSkinnyTrigs(TrigMesh& mesh) {
+  std::vector<unsigned> kept;
+  for (size_t i = 0; i < mesh.GetNumTrigs(); i++) {
+    Triangle triangle = mesh.GetTriangleVerts(i);
+    if (!IsSkinny(triangle)) {
+      kept.push_back(mesh.GetIndex(i, 0));
+      kept.push_back(mesh.GetIndex(i, 1));
+      kept.push_back(mesh.GetIndex(i, 2));
+    }
+  }
+  mesh.t = kept;
+}
+
+}  // namespace
+
+void ExtrudeAlongNormal(const std::string & objFile, float thick) {
+  TrigMesh mesh;
+  mesh.LoadObj(objFile);
+  MergeCloseVertices(mesh);
+  
+  mesh.ComputeVertNormals();
+  PolyMesh pm;
+  TrigToPolyMesh(mesh, pm);
+  HalfEdgeMesh hem(pm);
+  TrigMesh outMesh;
+  outMesh = mesh;
+  for (size_t i = 0; i < mesh.GetNumTrigs(); i++) {
+    unsigned v0Idx = outMesh.GetNumVerts();
+    unsigned oldVidx[3];
+    //make new verts
+    for (size_t j = 0; j < 3; j++) {
+      unsigned vidx = mesh.GetIndex(i, j);
+      oldVidx[j] = vidx;
+      Vec3f v = mesh.GetTriangleVertex(i, j);
+      Vec3f vn = mesh.nv[vidx];
+      v += -thick * vn;
+      outMesh.AddVert(v[0], v[1], v[2]);
+    }
+    
+    //add a new triangle in opposite winding.
+    // 0 1 2 -> 0 2 1
+    outMesh.t.push_back(v0Idx);
+    outMesh.t.push_back(v0Idx + 2);
+    outMesh.t.push_back(v0Idx + 1);
+
+    unsigned newVidx[3] = {v0Idx, v0Idx + 1, v0Idx + 2};
+
+    //add side faces for boundary edges
+    unsigned edgeIdx = hem.faceEdgeIndex[i];
+    for (unsigned j = 0; j < 3; j++) {
+      const auto& edge = hem.he[edgeIdx];
+      if(edge.hasTwin()){
+        edgeIdx = edge.next;
+        continue;
+      }
+
+      unsigned oldv0 = edge.vertex;
+      unsigned oldv1 = hem.he[edge.next].vertex;
+      unsigned newv0 = newVidx[findIndex(oldVidx, 3, oldv0)];
+      unsigned newv1 = newVidx[findIndex(oldVidx, 3, oldv1)];
+
+      outMesh.t.push_back(oldv1);
+      outMesh.t.push_back(oldv0);
+      outMesh.t.push_back(newv0);
+
+      outMesh.t.push_back(oldv1);      
+      outMesh.t.push_back(newv0);
+      outMesh.t.push_back(newv1);
+    }
+  }
+  MergeCloseVertices(outMesh);
+  outMesh.SaveObj("F:/meshes/head/extruded.obj");
+}
+
 void TestSDF() { 
- // ProcessNose();
+  OrientFlatGroups();
+  //ExtrudeAlongNormal("F:/meshes/head/front_surf1.obj", 0.52);
+  // ProcessNose();
   //ProcessHead();
   //ProcessFront();
-  PadGridXY();
+  //PadGridXY();
 }
