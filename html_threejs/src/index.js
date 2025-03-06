@@ -89,7 +89,7 @@ const InitGeometries = (parts) => {
   const geometries = [];
   for (let i = 0; i < parts.length; i++) {
     geometries[i] = new BufferGeometry();
-    const farr = new Float32Array(parts[i].vertices).map((val) => 0.1 * val);
+    const farr = new Float32Array(parts[i].vertices).map((val) => meshScale * val);
     geometries[i].setAttribute("position", new BufferAttribute(farr, 3));
     geometries[i].computeVertexNormals();
   }
@@ -168,6 +168,9 @@ export function InitScene() {
       const mesh = new Mesh(geometry, material);
       const pos = parts[partId].position;
       mesh.position.set(pos[0], pos[1], pos[2]);
+      //add scaling in the steps list only
+      const scale = parts[partId].scale;
+      mesh.scale.set(scale[0], scale[1],scale[2]);
       const q = new Quaternion();
       q.fromArray(parts[partId].rotation);
       mesh.setRotationFromQuaternion(q);
@@ -202,6 +205,7 @@ export function InitScene() {
   renderer.setAnimationLoop(animate);
 
   bindEventListeners();
+  updateSize();
 }
 
 function updateSize() {
@@ -214,7 +218,7 @@ function updateSize() {
 }
 
 function animate() {
-  updateSize();
+  //updateSize();
 
   canvas.style.transform = `translateY(${window.scrollY}px)`;
 
