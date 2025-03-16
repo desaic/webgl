@@ -299,7 +299,7 @@ std::shared_ptr<AdapUDF> ComputeUDF(float distUnit, float h, TrigMesh& mesh) {
   return udf;
 }
 
-void ProcessFront() {  
+void ProcessFront0() {  
   std::string softFile = "F:/meshes/head/front_merge.obj";
   std::string sideFile = "F:/meshes/head/front_patch.obj";
 
@@ -374,6 +374,68 @@ void ProcessFront() {
                                           surf.t);
 
   std::filesystem::path p(softFile);
+  p.replace_extension("latt.obj");
+  surf.SaveObj(p.string());
+}
+
+void MakeFrontLatticeMesh() {
+  std::string surfFile = "F:/meshes/head/front.obj";
+  std::string headFile = "F:/meshes/head/head_trim.obj";
+
+  TrigMesh frontMesh;
+  frontMesh.LoadObj(surfFile);
+  MergeCloseVertices(frontMesh);
+  TrigMesh headMesh;
+  headMesh.LoadObj(headFile);
+  const float h = 0.25f;
+  const float narrowBand = 8;
+  const float distUnit = 0.005f;
+
+  std::shared_ptr<AdapSDF> headSdf = ComputeSDF(distUnit, h, headMesh);
+  std::shared_ptr<AdapUDF> surfUdf = ComputeUDF(distUnit, h, frontMesh);
+
+  std::cout << surfUdf->origin[0] << " " << surfUdf->origin[1] << " "
+            << surfUdf->origin[2] << "\n";
+  BBox box;
+  ComputeBBox(headMesh.v, box);
+  std::cout << box.vmin[0] << " " << box.vmin[1] << " " << box.vmin[2] << "\n";
+  std::cout << box.vmax[0] << " " << box.vmax[1] << " " << box.vmax[2] << "\n";
+
+  // volume near surface
+  Array3D<short> frontCopy = surfUdf->dist;
+
+  const float skinThickness = 0.4f;
+  const float latticeThickness = 3;
+  Vec3u size = surfUdf->dist.GetSize();
+  float MAX_POSITIVE_DIST = 100;
+
+
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      for (unsigned x = 0; x < size[0]; x++) {
+        float frontd = frontCopy(x, y, z) * distUnit;
+        // set volume to between 0.5 to latticeThickness away from surface.
+        frontd = std::abs(frontd - (skinThickness + 0.5f * latticeThickness)) - 0.5f * latticeThickness;
+        // intersect volume with head volume
+        Vec3f worldCoord = surfUdf->WorldCoord(Vec3f(x, y, z));
+        float headDist = headSdf->GetCoarseDist(worldCoord);
+        if (headDist >= AdapDF::MAX_DIST) {
+          headDist = MAX_POSITIVE_DIST;
+        }
+        frontd = std::max(frontd, headDist + skinThickness);
+        frontCopy(x, y, z) = frontd / distUnit;
+      }
+    }
+  }
+
+  TrigMesh surf;
+  MarchingCubes(frontCopy, 0, distUnit, surfUdf->voxSize, surfUdf->origin,
+                &surf);
+  MergeCloseVertices(surf);
+  MeshOptimization::ComputeSimplifiedMesh(surf.v, surf.t, 0.05, 0.4, surf.v,
+                                          surf.t);
+
+  std::filesystem::path p(surfFile);
   p.replace_extension("latt.obj");
   surf.SaveObj(p.string());
 }
@@ -710,11 +772,47 @@ void ExtrudeAlongNormal(const std::string & objFile, float thick) {
   outMesh.SaveObj("F:/meshes/head/extruded.obj");
 }
 
+void GetInnerSurf() {
+  std::string meshFile = "F:/meshes/head/ear_l.obj";
+  std::string outFile = "F:/meshes/head/ear_l_inner.obj";
+  TrigMesh mesh;
+  mesh.LoadObj(meshFile);
+
+  const float h = 0.25f;
+  const float narrowBand = 16;
+  const float distUnit = 0.005f;
+
+  std::shared_ptr<AdapSDF> sdf = std::make_shared<AdapSDF>();
+  sdf->distUnit = distUnit;
+  SDFImpAdap* imp = new SDFImpAdap(sdf);
+  SDFMesh sdfMesh(imp);
+  sdfMesh.SetMesh(&mesh);
+  sdfMesh.SetVoxelSize(h);
+  sdfMesh.SetBand(narrowBand);
+  sdfMesh.Compute();
+
+  BBox box;
+  ComputeBBox(mesh.v, box);
+  std::cout << box.vmin[0] << " " << box.vmin[1] << " " << box.vmin[2] << "\n";
+  std::cout << box.vmax[0] << " " << box.vmax[1] << " " << box.vmax[2] << "\n";
+
+  TrigMesh surf;
+  MarchingCubes(sdf->dist, -2, distUnit, sdf->voxSize, sdf->origin,
+                &surf);
+  MergeCloseVertices(surf);
+  MeshOptimization::ComputeSimplifiedMesh(surf.v, surf.t, 0.02, 0.4, surf.v,
+                                          surf.t);
+  surf.SaveObj(outFile);
+}
+
 void TestSDF() { 
-  OrientFlatGroups();
-  //ExtrudeAlongNormal("F:/meshes/head/front_surf1.obj", 0.52);
+  //OrientFlatGroups();
+  //GetInnerSurf();
+  //ExtrudeAlongNormal("F:/meshes/head/front.obj", 0.52);
   // ProcessNose();
   //ProcessHead();
   //ProcessFront();
   //PadGridXY();
+
+  MakeFrontLatticeMesh();
 }
