@@ -772,13 +772,7 @@ void ExtrudeAlongNormal(const std::string & objFile, float thick) {
   outMesh.SaveObj("F:/meshes/head/extruded.obj");
 }
 
-void GetInnerSurf() {
-  std::string meshFile = "F:/meshes/head/ear_l.obj";
-  std::string outFile = "F:/meshes/head/ear_l_inner.obj";
-  TrigMesh mesh;
-  mesh.LoadObj(meshFile);
-
-  const float h = 0.25f;
+TrigMesh GetInnerSurf(TrigMesh & mesh, float h, float offset) {
   const float narrowBand = 16;
   const float distUnit = 0.005f;
 
@@ -797,12 +791,39 @@ void GetInnerSurf() {
   std::cout << box.vmax[0] << " " << box.vmax[1] << " " << box.vmax[2] << "\n";
 
   TrigMesh surf;
-  MarchingCubes(sdf->dist, -2, distUnit, sdf->voxSize, sdf->origin,
+  MarchingCubes(sdf->dist, -offset, distUnit, sdf->voxSize, sdf->origin,
                 &surf);
   MergeCloseVertices(surf);
-  MeshOptimization::ComputeSimplifiedMesh(surf.v, surf.t, 0.02, 0.4, surf.v,
-                                          surf.t);
-  surf.SaveObj(outFile);
+  //MeshOptimization::ComputeSimplifiedMesh(surf.v, surf.t, 0.02, 0.4, surf.v,
+  //                                        surf.t);
+  return surf;
+}
+
+void MakeEarCore() {
+  std::string meshFile = "F:/meshes/head/ear_l.obj";
+  std::string outFile = "F:/meshes/head/ear_l_inner.obj";
+  TrigMesh mesh;
+  mesh.LoadObj(meshFile);
+  TrigMesh out = GetInnerSurf(mesh, 0.25, 2);
+  out.SaveObj(outFile);
+}
+
+void MakeRigidMesh() {
+  std::string meshFile = "F:/meshes/head/head_trim.obj";
+  std::string outFile = "F:/meshes/head/head_rigid.obj";
+  TrigMesh mesh;
+  mesh.LoadObj(meshFile);
+  TrigMesh rigid = GetInnerSurf(mesh, 0.5, 4);
+  rigid.SaveObj(outFile);
+}
+
+void MakeHollowMesh() {
+  std::string meshFile = "F:/meshes/head/head_rigid1.obj";
+  std::string outFile = "F:/meshes/head/head_hollow.obj";
+  TrigMesh mesh;
+  mesh.LoadObj(meshFile);
+  TrigMesh rigid = GetInnerSurf(mesh, 0.5, 4);
+  rigid.SaveObj(outFile);
 }
 
 void TestSDF() { 
@@ -814,5 +835,6 @@ void TestSDF() {
   //ProcessFront();
   //PadGridXY();
 
-  MakeFrontLatticeMesh();
+  //MakeFrontLatticeMesh();
+  MakeHollowMesh();
 }
