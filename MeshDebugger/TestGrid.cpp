@@ -5,7 +5,9 @@
 #include "Lattice.h"
 #include "Grid3Df.h"
 #include "VoxIO.h"
+#include "MeshUtil.h"
 
+#include <fstream>
 #include <functional>
 
 slicer::Grid3Df MakeOctetUnitCell() {
@@ -125,4 +127,27 @@ void MakeShearXGrid() {
   FlipGridX(binGrid);
   FlipGridXY(binGrid);
   SaveVoxTxt(binGrid, h, "F:/meshes/lattice_fablet/shearmy.txt");
+}
+
+void SaveVolMesh() {
+  const std::string volFile = "F:/meshes/dispmap/part_0.vol";
+  std::ifstream in(volFile, std::fstream::binary);
+  Vec3u size;
+  in.read((char*)(&size), 12);
+  Array3D8u grid(size[0], size[1], size[2]);
+  size_t bytes = size[0] * size_t(size[1]) * size[2];
+  in.read((char*)(grid.DataPtr()), bytes);
+  float VoxRes[3] = {0.1, 0.1, 0.1};
+
+  Array3D8u expanded(size[0] * 8,size[1], size[2]);
+  for (size_t i = 0; i < grid.GetData().size(); i++) {
+    uint8_t val = grid.GetData()[i];
+    for (size_t j = 0; j < 8; j++) {
+      size_t outIdx = i * 8 + j;
+      uint8_t outVal = (val >> j) & 1;
+      expanded.GetData()[outIdx] = outVal;
+    }
+  }
+  SaveVolAsObjMesh("F:/meshes/dispmap/part0_vol.obj", expanded, VoxRes, 1);
+
 }

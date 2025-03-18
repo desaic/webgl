@@ -120,6 +120,8 @@ extern void MeshHeightMap();
 extern void MapDrawingToThickness();
 extern void TestSDF();
 
+extern void SaveVolMesh();
+
 int main(int argc, char** argv) {
   // RunCanvasApp();
   // RunInflateApp();
@@ -129,5 +131,6 @@ int main(int argc, char** argv) {
   //MeshHeightMap();
   //MapDrawingToThickness();
   TestSDF();
+   //SaveVolMesh();
   return 0;
 }

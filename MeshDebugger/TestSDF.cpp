@@ -785,6 +785,11 @@ TrigMesh GetInnerSurf(TrigMesh & mesh, float h, float offset) {
   sdfMesh.SetBand(narrowBand);
   sdfMesh.Compute();
 
+  //fast sweep whole grid
+  float band = 10000;
+  Array3D8u frozen;
+  FastSweepPar(sdf->dist, sdf->voxSize, sdf->distUnit, band, frozen);
+
   BBox box;
   ComputeBBox(mesh.v, box);
   std::cout << box.vmin[0] << " " << box.vmin[1] << " " << box.vmin[2] << "\n";
@@ -826,6 +831,35 @@ void MakeHollowMesh() {
   rigid.SaveObj(outFile);
 }
 
+void MakeSkinMesh() {
+  std::string meshFile = "F:/meshes/head/head_surf0.obj";
+  std::string outFile = "F:/meshes/head/head_skinsub.obj";
+  TrigMesh mesh;
+  mesh.LoadObj(meshFile);
+  TrigMesh rigid = GetInnerSurf(mesh, 0.25, 0.5);
+  rigid.SaveObj(outFile);
+}
+
+void MakeUpperSolid() {
+  std::string meshFile = "F:/meshes/head/upper.obj";
+  std::string outFile = "F:/meshes/head/upper_soft.obj";
+  TrigMesh mesh;
+  mesh.LoadObj(meshFile);
+  //1.5 for skin + lattice. 2.5mm for remaing solid soft
+  TrigMesh rigid = GetInnerSurf(mesh, 0.25, 1.5);
+  rigid.SaveObj(outFile);
+}
+
+void MakeLowerSolid() {
+  std::string meshFile = "F:/meshes/head/lower.obj";
+  std::string outFile = "F:/meshes/head/lower_soft.obj";
+  TrigMesh mesh;
+  mesh.LoadObj(meshFile);
+  // 2.5 for skin + lattice. 1.5mm for remaing solid soft
+  TrigMesh rigid = GetInnerSurf(mesh, 0.25, 2.5);
+  rigid.SaveObj(outFile);
+}
+
 void TestSDF() { 
   //OrientFlatGroups();
   //GetInnerSurf();
@@ -836,5 +870,6 @@ void TestSDF() {
   //PadGridXY();
 
   //MakeFrontLatticeMesh();
-  MakeHollowMesh();
+  //MakeSkinMesh();
+  MakeLowerSolid();
 }
