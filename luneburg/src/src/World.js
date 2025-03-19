@@ -37,7 +37,7 @@ export default class World {
 
     
     
-    this.unitSphere = new THREE.Mesh(new THREE.IcosahedronGeometry(100, 10), this.defaultMaterial);
+    this.unitSphere = new THREE.Mesh(new THREE.IcosahedronGeometry(100, 50), this.defaultMaterial);
     this.scene.add(this.unitSphere);
 
     this.selectedInstance = [];
@@ -45,6 +45,52 @@ export default class World {
 
     this.instances = new THREE.Group();
     this.scene.add(this.instances);
+    this.MakeImageQuad();
+    this.scene.add(this.quad);
+  }
+
+  MakeImageQuad = ()=>{
+    const width = 512; // Texture width
+    const height = 512; // Texture height
+    const size = width * height;
+    const data = new Uint8Array(4 * size); // RGBA data
+    
+    // Generate a simple checkerboard pattern
+    for (let i = 0; i < size; i++) {
+      const stride = i * 4;
+      const x = (i % width);
+      const y = Math.floor(i / width);
+      const color = (x + y) % 2 === 0 ? 255 : 0; // Black or white
+      data[stride] = color;     // R
+      data[stride + 1] = color; // G
+      data[stride + 2] = color; // B
+      data[stride + 3] = 255;   // A
+    }
+    
+    const texture = new THREE.DataTexture(data, width, height);
+    texture.needsUpdate = true; // Important!
+
+    const geometry = new THREE.PlaneGeometry(1, 1);
+    const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
+    material.depthWrite = false;
+    const quad = new THREE.Mesh(geometry, material);
+
+    // Position and render setup (same as before)
+    const canvasWidth = 800
+    const canvasHeight = 800;
+
+    quad.position.set(canvasWidth / 2 - 0.5, -canvasHeight / 2 + 0.5, 0);
+
+    quad.renderOrder = 999;
+    quad.onBeforeRender = function (renderer) {
+      const canvasWidth = renderer.domElement.clientWidth;
+      const canvasHeight = renderer.domElement.clientHeight;
+      this.position.set(canvasWidth / 2 - 0.5, -canvasHeight / 2 + 0.5, 0);
+    };
+
+    quad.scale.set(100,100,100);
+    this.quad = quad;
+    this.imageBuf=data; 
   }
 
   GetInstanceById = (id) => {
