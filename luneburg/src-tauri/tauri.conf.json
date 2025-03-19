@@ -1,5 +1,4 @@
 {
-  "$schema": "https://schema.tauri.app/config/2",
   "productName": "viewer",
   "version": "0.1.0",
   "identifier": "inkbit3d.com",
@@ -29,5 +28,6 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
-  }
+  },
+  "plugins": {}
 }

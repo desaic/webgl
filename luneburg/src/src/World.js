@@ -16,15 +16,9 @@ export default class World {
     this.scene.background = new THREE.Color(0x333333);
 
     this.meshes = [];
-    this.images = [];
 
     const planeSize = [400, 250];
 
-    // this.ground = new THREE.Mesh(
-    //   //unit is mm
-    //   new THREE.PlaneGeometry(planeSize[0], planeSize[1]),
-    //   new THREE.MeshPhongMaterial({ color: 0x666666, specular: 0x101010 })
-    // );
     this.ground = new RectGrid(40,20,10,0x666666, 0x444444);
     this.ground.setRotationFromEuler(new THREE.Euler(1.5708,0,0));
     this.ground.receiveShadow = true;
@@ -40,6 +34,11 @@ export default class World {
       color: defaultcol,
       specular: defaultcol,
     });
+
+    
+    
+    this.unitSphere = new THREE.Mesh(new THREE.IcosahedronGeometry(100, 10), this.defaultMaterial);
+    this.scene.add(this.unitSphere);
 
     this.selectedInstance = [];
     this.geometries = [];

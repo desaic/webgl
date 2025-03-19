@@ -31,22 +31,24 @@
       border-radius: 5px;
       box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
     }
+
     .inputRow {
-    display: flex;
-    align-items: center;
-    width: 150px;
-  }
+      display: flex;
+      align-items: center;
+      width: 150px;
+    }
 
-  .inputLabel {
-    background-color: white;
-    margin-right: 5px;
-    width: 60px;
-    display: inline-block;
-  }
+    .inputLabel {
+      background-color: white;
+      margin-right: 5px;
+      width: 90px;
+      text-overflow: ellipsis;
+    }
 
-  .inputField {
-    width: 85px;
-  }
+    .inputField {
+      width: 85px;
+    }
+
     #widgetContainer {
       display: flex;
       flex-direction: column;
@@ -58,21 +60,21 @@
 
   <div id="myCanvas"></div>
   <div id="widgetContainer" style="position: absolute; top: 10px; left: 10px;width: 150px;">
-    <button>Button 1</button><br>
+    <button id="saveMesh">Save mesh</button><br>
     <button>Button 2</button><br>
     <button>Button 3</button><br>
-    <div  class="inputRow">
+    <div class="inputRow">
       <label for="diameterInput" class="inputLabel">Diameter (mm):</label>
       <input type="number" class="inputField" step="any" id="diameterInput" placeholder="60">
     </div><br>
-    <div  class="inputRow">
+    <div class="inputRow">
       <label for="cellSizeInput" class="inputLabel">cell size (mm):</label>
       <input type="number" class="inputField" step="any" id="cellSizeInput" placeholder="2">
     </div><br>
-    <div  class="inputRow">
+    <div class="inputRow">
       <label for="minThickInput" class="inputLabel">min thickness (mm):</label>
       <input type="number" class="inputField" step="any" id="cellSizeInput" placeholder="0.175">
-    </div><br>     
+    </div><br>
     <select id="shapeSelect">
       <option value="sphere">sphere</option>
       <option value="cylinder">cylinder</option>

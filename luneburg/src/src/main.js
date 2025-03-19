@@ -6,12 +6,17 @@ import { TransformControls } from "./TransformControls.js";
 import World from "./World.js";
 import { GPUPicker } from './gpupicker.js';
 import { LoadMeshes } from './LoadMeshes.js';
+import { OBJExporter } from './OBJExporter.js';
+
+const {save} = window.__TAURI__.dialog
+const {writeTextFile} = window.__TAURI__.fs
+
 var container, orbit;
 var renderer, mixer, clock, world;
 let control;
 var gpuPicker;
 var pixelRatio = 1.0;
-
+const exporter = new OBJExporter();
 function InitScene() {
   container = document.getElementById("myCanvas");
   world = new World();
@@ -52,9 +57,33 @@ const BindFileInput = () => {
   });
 };
 
+const SaveSphere = async ()=>{
+
+  const filename = await save({
+    filters: [{ name: "obj", extensions: ["obj"] }],
+    defaultPath: 'sphere.obj',
+  });
+
+  if (filename == undefined) {
+    return;
+  }
+  const objString = exporter.parse(world.unitSphere); // Replace world.sphere with your sphere object
+
+  try {
+    if(filename){
+        await writeTextFile(filename, objString);
+    }
+  } catch (err) {
+    console.error('Error saving OBJ:', err);
+  }
+}
+
 const bindEventListeners = () => {  
   window.addEventListener("resize", onWindowResize, false);
   container.addEventListener('click', selectObj)
+
+  const saveButton = document.getElementById('saveMesh');
+  saveButton.addEventListener('click', SaveSphere);
 }
 
 const selectObj = (event) => {
