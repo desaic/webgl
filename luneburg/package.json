@@ -1,0 +1,13 @@
+{
+  "name": "viewer",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+	"@tauri-apps/plugin-fs": "^2.2.0",
+	"@tauri-apps/plugin-dialog": "^2.0.0"}
+}
