@@ -35,9 +35,8 @@ export default class World {
       specular: defaultcol,
     });
 
-    
-    
-    this.unitSphere = new THREE.Mesh(new THREE.IcosahedronGeometry(100, 50), this.defaultMaterial);
+    this.unitSphere = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 50), this.defaultMaterial);
+    this.unitSphere.scale.set(30,30,30);
     this.scene.add(this.unitSphere);
 
     this.selectedInstance = [];
@@ -45,8 +44,14 @@ export default class World {
 
     this.instances = new THREE.Group();
     this.scene.add(this.instances);
-    this.MakeImageQuad();
-    this.scene.add(this.quad);
+
+
+    // scene for rendering a single flat quad on top.
+    this.quadScene = new THREE.Scene();
+    const quad = this.MakeImageQuad();
+    this.quadScene.add(quad);
+    this.quadCamera=new THREE.OrthographicCamera();
+    this.quadCamera.position.set(0.2, 0.5, 5);
   }
 
   MakeImageQuad = ()=>{
@@ -60,10 +65,10 @@ export default class World {
       const stride = i * 4;
       const x = (i % width);
       const y = Math.floor(i / width);
-      const color = (x + y) % 2 === 0 ? 255 : 0; // Black or white
+      const color = (Math.floor(x/100) + Math.floor(y/100)) % 2 === 0 ? 255 : 50; // Black or white
       data[stride] = color;     // R
       data[stride + 1] = color; // G
-      data[stride + 2] = color; // B
+      data[stride + 2] = color/2; // B
       data[stride + 3] = 255;   // A
     }
     
@@ -71,26 +76,11 @@ export default class World {
     texture.needsUpdate = true; // Important!
 
     const geometry = new THREE.PlaneGeometry(1, 1);
-    const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
-    material.depthWrite = false;
+    const material = new THREE.MeshBasicMaterial({ map: texture});
     const quad = new THREE.Mesh(geometry, material);
-
-    // Position and render setup (same as before)
-    const canvasWidth = 800
-    const canvasHeight = 800;
-
-    quad.position.set(canvasWidth / 2 - 0.5, -canvasHeight / 2 + 0.5, 0);
-
-    quad.renderOrder = 999;
-    quad.onBeforeRender = function (renderer) {
-      const canvasWidth = renderer.domElement.clientWidth;
-      const canvasHeight = renderer.domElement.clientHeight;
-      this.position.set(canvasWidth / 2 - 0.5, -canvasHeight / 2 + 0.5, 0);
-    };
-
-    quad.scale.set(100,100,100);
-    this.quad = quad;
-    this.imageBuf=data; 
+    quad.scale.set(0.5,0.5,0.5);
+    this.imageBuf=data;
+    return quad;
   }
 
   GetInstanceById = (id) => {

@@ -65,15 +65,15 @@
     <button>Button 3</button><br>
     <div class="inputRow">
       <label for="diameterInput" class="inputLabel">Diameter (mm):</label>
-      <input type="number" class="inputField" step="any" id="diameterInput" placeholder="60">
+      <input type="number" class="inputField" step="any" id="diameterInput" value="60" min="1" max="1000">
     </div><br>
     <div class="inputRow">
       <label for="cellSizeInput" class="inputLabel">cell size (mm):</label>
-      <input type="number" class="inputField" step="any" id="cellSizeInput" placeholder="2">
+      <input type="number" class="inputField" step="1" id="cellSizeInput" value="2" min="1" max="10">
     </div><br>
     <div class="inputRow">
       <label for="minThickInput" class="inputLabel">min thickness (mm):</label>
-      <input type="number" class="inputField" step="any" id="cellSizeInput" placeholder="0.175">
+      <input type="number" class="inputField" step="0.001" id="cellSizeInput" value="0.175"  min="0.01" max="1">
     </div><br>
     <select id="shapeSelect">
       <option value="sphere">sphere</option>

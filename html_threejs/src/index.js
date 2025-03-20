@@ -62,7 +62,8 @@ const MakeEmtpyScene = (element) => {
   controls.maxDistance = 100;
   controls.enablePan = true;
   controls.enableZoom = true;
-  controls.maxPolarAngle = 3;
+  controls.maxPolarAngle = 3.1;
+  controls.minPolarAngle = 0.04;
   scene.userData.controls = controls;
 
   const light = new DirectionalLight(0xffffff, 2);
@@ -217,6 +218,42 @@ function updateSize() {
   }
 }
 
+function RenderScene(scene){
+  // get the element that is a place holder for where we want to
+  // draw the scene
+  const element = scene.userData.element;
+
+  // get its position relative to the page's viewport
+  const rect = element.getBoundingClientRect();
+
+  // check if it's offscreen. If so skip it
+  if (
+    rect.bottom < 0 ||
+    rect.top > renderer.domElement.clientHeight ||
+    rect.right < 0 ||
+    rect.left > renderer.domElement.clientWidth
+  ) {
+    return; // it's off screen
+  }
+
+  // set the viewport
+  const width = rect.right - rect.left;
+  const height = rect.bottom - rect.top;
+  const left = rect.left;
+  const bottom = renderer.domElement.clientHeight - rect.bottom;
+  
+  renderer.setViewport(left, bottom, width, height);
+  renderer.setScissor(left, bottom, width, height);
+
+  const camera = scene.userData.camera;
+
+  camera.aspect = width / height;
+  camera.updateProjectionMatrix();
+  scene.userData.controls.update();
+
+  renderer.render(scene, camera);
+}
+
 function animate() {
   //updateSize();
 
@@ -227,41 +264,7 @@ function animate() {
 
   renderer.setScissorTest(true);
 
-  scenes.forEach(function (scene) {
-    // get the element that is a place holder for where we want to
-    // draw the scene
-    const element = scene.userData.element;
-
-    // get its position relative to the page's viewport
-    const rect = element.getBoundingClientRect();
-
-    // check if it's offscreen. If so skip it
-    if (
-      rect.bottom < 0 ||
-      rect.top > renderer.domElement.clientHeight ||
-      rect.right < 0 ||
-      rect.left > renderer.domElement.clientWidth
-    ) {
-      return; // it's off screen
-    }
-
-    // set the viewport
-    const width = rect.right - rect.left;
-    const height = rect.bottom - rect.top;
-    const left = rect.left;
-    const bottom = renderer.domElement.clientHeight - rect.bottom;
-
-    renderer.setViewport(left, bottom, width, height);
-    renderer.setScissor(left, bottom, width, height);
-
-    const camera = scene.userData.camera;
-
-    camera.aspect = width / height;
-    camera.updateProjectionMatrix();
-    scene.userData.controls.update();
-
-    renderer.render(scene, camera);
-  });
+  scenes.forEach(RenderScene);
 }
 
 const HandleKeyboard = (event) => {
@@ -280,11 +283,43 @@ const HandleKeyboard = (event) => {
   }
 };
 
+function handlePrintStart() {
+    window.scrollTo(0, 0); // Ensure the window is scrolled to the top
+
+    const mainSection = document.getElementById("mainSection");
+    const rect = mainSection.getBoundingClientRect();
+    renderer.setSize(rect.width, rect.height);
+	const asp = rect.width / rect.height;
+	for(let i = 0;i<scenes.length;i++){
+      RenderScene(scenes[i]);
+	}
+}
+ 
+function handlePrintEnd() {
+    // Reapply normal sizing after print
+    const mainSection = document.getElementById("mainSection");
+    const rect = mainSection.getBoundingClientRect();
+    renderer.setSize(rect.width, rect.height);
+	const asp = rect.width / rect.height;
+	for(let i = 0;i<scenes.length;i++){
+    const element = scenes[i].userData.element;
+    // get its position relative to the page's viewport
+    const rect = element.getBoundingClientRect();
+    console.log(rect.top + " " + rect.bottom);
+    RenderScene(scenes[i]);
+	}
+}
+
 const bindEventListeners = () => {
   window.addEventListener("keydown", HandleKeyboard);
   // window.addEventListener('scroll', function() {
   //   console.log('Scroll event detected');
   // });
+  
+	// Listen for print events
+	window.addEventListener("beforeprint", handlePrintStart);
+	window.addEventListener("afterprint", handlePrintEnd);
+
 };
 
 const setPackResult = (text) => {

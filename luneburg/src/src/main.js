@@ -30,6 +30,8 @@ function InitScene() {
   orbit = new OrbitControls(world.camera, renderer.domElement);
   orbit.minDistance = 2;
   orbit.maxDistance = 1000;
+  orbit.maxPolarAngle = 3.13;
+  orbit.minPolarAngle = 0.01;
   orbit.target.set(0, 0, -0.2);
   orbit.update();
   
@@ -67,7 +69,7 @@ const SaveSphere = async ()=>{
   if (filename == undefined) {
     return;
   }
-  const objString = exporter.parse(world.unitSphere); // Replace world.sphere with your sphere object
+  const objString = exporter.parse(world.unitSphere);
 
   try {
     if(filename){
@@ -84,6 +86,13 @@ const bindEventListeners = () => {
 
   const saveButton = document.getElementById('saveMesh');
   saveButton.addEventListener('click', SaveSphere);
+
+  document.getElementById('diameterInput').addEventListener('change', function() {
+    const diameter = this.value;
+    const r = diameter /2 ;
+    world.unitSphere.scale.set(r,r,r);
+    world.unitSphere.updateMatrix();
+  });
 }
 
 const selectObj = (event) => {
@@ -111,7 +120,12 @@ function Animate() {
 
   if (mixer) mixer.update(delta);
 
-  renderer.render(world.scene, world.camera);
+  renderer.render(world.scene, world.camera);  
+  renderer.autoClear = false;
+  const pr = renderer.getPixelRatio();
+  renderer.setPixelRatio(1);
+  renderer.render(world.quadScene, world.quadCamera);
+  renderer.setPixelRatio(pr);
 }
 
 export { InitScene, Animate };
