@@ -4,6 +4,7 @@ import { OrbitControls } from "./OrbitControls.js";
 import { TransformControls } from "./TransformControls.js";
 
 import World from "./World.js";
+import {Array3D} from "./Array3D.js"
 import { GPUPicker } from './gpupicker.js';
 import { LoadMeshes } from './LoadMeshes.js';
 import { OBJExporter } from './OBJExporter.js';
@@ -23,6 +24,8 @@ const uiConf = {
   z: 30,
   cellSize: 2,
 };
+
+const distGrid = new Array3D(65,65,65);
 
 function InitScene() {
   container = document.getElementById("myCanvas");
@@ -139,14 +142,24 @@ function DrawSlice(image, conf) {
   const w = image.width;
   const h = image.height;
   console.log(w + " x " + h);
+  const dx = conf.diameter / w;
+  const dy = conf.diameter / h;
+  const cellSize = conf.cellSize;
+  const R= conf.diameter / 2;
   for (let y = 0; y < h; y++) {
+    const ymm = (y + 0.5 - h/2 ) * dy;
     for (let x = 0; x < w; x++) {
-      let dx = (w/2-x);
-      let dy = (h/2-y);
-      dx = 4*dx*dx/w/w;
-      dy = 4*dy*dy/h/h;
-      const dist = Math.sqrt(dx + dy);
-      const color4b = [dist * 250, dist * 100, dist * 50,255];
+      const xmm = (x + 0.5 - w / 2) * dx;
+      const cellIndexX = Math.floor(xmm / cellSize);
+      const cellIndexY = Math.floor(ymm / cellSize);
+      const cellx = xmm - cellIndexX * cellSize;
+      const celly = ymm - cellIndexY * cellSize;
+
+      const r = Math.sqrt(xmm * xmm + ymm*ymm);
+      const ratio = r/R;
+      const rx = cellx / cellSize;
+      const ry = celly/cellSize;
+      const color4b = [ratio * rx * ry * 250,ratio * rx * ry * 150,ratio * rx * ry * 50,255];
       SetPixel(x,y,image,color4b);
     }
   }
