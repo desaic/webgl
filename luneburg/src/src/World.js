@@ -50,7 +50,7 @@ export default class World {
     this.quadScene = new THREE.Scene();
     const quad = this.MakeImageQuad();
     this.quadScene.add(quad);
-    this.quadCamera=new THREE.OrthographicCamera();
+    this.quadCamera=new THREE.OrthographicCamera(-aspect, aspect);
     this.quadCamera.position.set(0.2, 0.5, 5);
   }
 
@@ -73,13 +73,12 @@ export default class World {
     }
     
     const texture = new THREE.DataTexture(data, width, height);
-    texture.needsUpdate = true; // Important!
-
-    const geometry = new THREE.PlaneGeometry(1, 1);
+    texture.needsUpdate = true;
     const material = new THREE.MeshBasicMaterial({ map: texture});
+    const geometry = new THREE.PlaneGeometry(1, 1);
     const quad = new THREE.Mesh(geometry, material);
-    quad.scale.set(0.5,0.5,0.5);
-    this.imageBuf=data;
+    quad.scale.set(0.8,0.8,0.8);
+    this.quadTexture = texture;
     return quad;
   }
 

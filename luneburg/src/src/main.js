@@ -17,6 +17,13 @@ let control;
 var gpuPicker;
 var pixelRatio = 1.0;
 const exporter = new OBJExporter();
+
+const uiConf = {
+  diameter: 60,
+  z: 30,
+  cellSize: 2,
+};
+
 function InitScene() {
   container = document.getElementById("myCanvas");
   world = new World();
@@ -47,7 +54,7 @@ function InitScene() {
   
   bindEventListeners();
 
-  
+  DrawSlice(world.quadTexture.image, uiConf);
 }
 
 const BindFileInput = () => {
@@ -107,10 +114,42 @@ const selectObj = (event) => {
 }
 
 function onWindowResize() {
-  world.camera.aspect = window.innerWidth / window.innerHeight;
+  const aspect = window.innerWidth / window.innerHeight;
+  world.camera.aspect = aspect;
   world.camera.updateProjectionMatrix();
+  
+  const ocam = world.quadCamera;
+  ocam.left=-aspect;
+  ocam.right = aspect;
+  ocam.updateProjectionMatrix();
 
   renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function SetPixel(x,y,image,color4b){
+  const w = image.width;
+  const i0 = 4*(x+y*w);
+  image.data[i0] = color4b[0];
+  image.data[i0 + 1] = color4b[1];
+  image.data[i0 + 2] = color4b[2];
+  image.data[i0 + 3] = color4b[3];
+}
+
+function DrawSlice(image, conf) {
+  const w = image.width;
+  const h = image.height;
+  console.log(w + " x " + h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let dx = (w/2-x);
+      let dy = (h/2-y);
+      dx = 4*dx*dx/w/w;
+      dy = 4*dy*dy/h/h;
+      const dist = Math.sqrt(dx + dy);
+      const color4b = [dist * 250, dist * 100, dist * 50,255];
+      SetPixel(x,y,image,color4b);
+    }
+  }
 }
 
 function Animate() {
