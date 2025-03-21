@@ -15,18 +15,20 @@ const {save} = window.__TAURI__.dialog
 const {writeTextFile} = window.__TAURI__.fs
 
 var container, orbit;
-var renderer, mixer, clock, world;
+var renderer, clock, world;
 let control;
 var gpuPicker;
 var pixelRatio = 1.0;
 const exporter = new OBJExporter();
-
+const RENDER_FPS=60;
+const SLICE_FPS = 5;
 const lensConf = {
   diameter: 60,
   z: 30,
   cellSize: 2,
   type : 'diamond',
-  thickness : 0.3
+  thickness : 0.3,
+  minThickness : 0.175
 };
 
 const unitCell = new Array3D(65,65,65);
@@ -64,15 +66,6 @@ function InitScene() {
   DrawSlice(world.quadTexture.image, lensConf);
 }
 
-const BindFileInput = () => {
-  const fileInput = document.getElementById("file-input");
-  fileInput.addEventListener("change", (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-    LoadMeshes(event.target.files, world);
-  });
-};
-
 const SaveSphere = async ()=>{
 
   const filename = await save({
@@ -94,6 +87,11 @@ const SaveSphere = async ()=>{
   }
 }
 
+function UpdateSlice() {
+  DrawSlice(world.quadTexture.image, lensConf);
+  world.quadTexture.needsUpdate = true;
+}
+
 const bindEventListeners = () => {  
   window.addEventListener("resize", onWindowResize, false);
   container.addEventListener('click', selectObj)
@@ -106,6 +104,31 @@ const bindEventListeners = () => {
     const r = diameter /2 ;
     world.unitSphere.scale.set(r,r,r);
     world.unitSphere.updateMatrix();
+    lensConf.diameter = diameter;
+    UpdateSlice();
+  });
+  document.getElementById('cellSizeInput').addEventListener('change', function() {
+    lensConf.cellSize = this.value;
+    UpdateSlice();
+  });
+  document.getElementById('minThickInput').addEventListener('change', function() {
+    lensConf.minThickness = this.value;
+    UpdateSlice();
+  });
+  const zlayerSlider = document.getElementById('zlayer');
+  const zlayerLabel = document.getElementById('zlayerLabel');
+  zlayerSlider.addEventListener('change', function() {
+    lensConf.z = this.value * lensConf.diameter / 1000;
+    zlayerLabel.textContent = "z=" + lensConf.z +"mm";
+    UpdateSlice();
+  })
+  const setZLayerButton = document.getElementById('setZLayerButton');
+  setZLayerButton.addEventListener('click', () => {
+    if (zlayerSlider) {
+      zlayerSlider.value = 500;
+      const event = new Event('change');
+      zlayerSlider.dispatchEvent(event);
+    }
   });
 }
 
@@ -150,6 +173,9 @@ function ComputeUnitCell(grid, conf){
   MakeDiamondCell(voxelSize, cellSize, grid);
 }
 
+let drawing = false;
+
+const color4b = [100,100,100,255];
 function DrawSlice(image, conf) {
   const w = image.width;
   const h = image.height;
@@ -187,25 +213,26 @@ function DrawSlice(image, conf) {
       const ratio = r/R;
       const rx = cellx / cellSize;
       const ry = celly/cellSize;
-      const color4b = [ratio * c * 250,ratio * c * 150,ratio * c * 50,255];
+      color4b[0] = ratio * c * 250;
+      color4b[1] = ratio * c * 150;
+      color4b[2] = ratio * c * 50;
       SetPixel(x,y,image,color4b);
     }
   }
 }
 
-function Animate() {
-  requestAnimationFrame(Animate);
+let renderElapsed = 0;
 
+function Animate(time) {
   var delta = clock.getDelta();
-
-  if (mixer) mixer.update(delta);
-
-  renderer.render(world.scene, world.camera);  
-  renderer.autoClear = false;
-  const pr = renderer.getPixelRatio();
-  renderer.setPixelRatio(1);
-  renderer.render(world.quadScene, world.quadCamera);
-  renderer.setPixelRatio(pr);
+  renderElapsed += delta;
+  if (renderElapsed > 0.9 / RENDER_FPS) {
+    renderer.render(world.scene, world.camera);
+    renderer.autoClear = false;
+    renderer.render(world.quadScene, world.quadCamera);
+    renderElapsed = 0;
+  }
+  requestAnimationFrame(Animate);
 }
 
 export { InitScene, Animate };
