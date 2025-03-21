@@ -379,7 +379,7 @@ void ProcessFront0() {
 }
 
 void MakeFrontLatticeMesh() {
-  std::string surfFile = "F:/meshes/head/front.obj";
+  std::string surfFile = "F:/meshes/head/front_surf.obj";
   std::string headFile = "F:/meshes/head/head_trim.obj";
 
   TrigMesh frontMesh;
@@ -388,10 +388,9 @@ void MakeFrontLatticeMesh() {
   TrigMesh headMesh;
   headMesh.LoadObj(headFile);
   const float h = 0.25f;
-  const float narrowBand = 8;
   const float distUnit = 0.005f;
 
-  std::shared_ptr<AdapSDF> headSdf = ComputeSDF(distUnit, h, headMesh);
+  std::shared_ptr<AdapSDF> headSdf = ComputeSDF(distUnit, 2 * h, headMesh);
   std::shared_ptr<AdapUDF> surfUdf = ComputeUDF(distUnit, h, frontMesh);
 
   std::cout << surfUdf->origin[0] << " " << surfUdf->origin[1] << " "
@@ -403,9 +402,12 @@ void MakeFrontLatticeMesh() {
 
   // volume near surface
   Array3D<short> frontCopy = surfUdf->dist;
-
-  const float skinThickness = 0.4f;
-  const float latticeThickness = 3;
+  Array3D8u frozen;
+  FastSweepParUnsigned(frontCopy, h, surfUdf->distUnit, 30, frozen);
+  const float softLayerThickness = 3;
+  const float latticeThickness = 2.5;
+  const float softSolidDist = 3.0f;
+  const float rigidDist = 4.0f;
   Vec3u size = surfUdf->dist.GetSize();
   float MAX_POSITIVE_DIST = 100;
 
@@ -414,15 +416,15 @@ void MakeFrontLatticeMesh() {
     for (unsigned y = 0; y < size[1]; y++) {
       for (unsigned x = 0; x < size[0]; x++) {
         float frontd = frontCopy(x, y, z) * distUnit;
-        // set volume to between 0.5 to latticeThickness away from surface.
-        frontd = std::abs(frontd - (skinThickness + 0.5f * latticeThickness)) - 0.5f * latticeThickness;
-        // intersect volume with head volume
+        // set volume to 1mm away from rigid
+        frontd = std::abs(frontd - rigidDist) - 0.5f * softLayerThickness;
+        // intersect volume with 3mm away into head volume
         Vec3f worldCoord = surfUdf->WorldCoord(Vec3f(x, y, z));
         float headDist = headSdf->GetCoarseDist(worldCoord);
         if (headDist >= AdapDF::MAX_DIST) {
           headDist = MAX_POSITIVE_DIST;
         }
-        frontd = std::max(frontd, headDist + skinThickness);
+        frontd = std::max(frontd, headDist + softSolidDist);
         frontCopy(x, y, z) = frontd / distUnit;
       }
     }
@@ -436,7 +438,7 @@ void MakeFrontLatticeMesh() {
                                           surf.t);
 
   std::filesystem::path p(surfFile);
-  p.replace_extension("latt.obj");
+  p.replace_extension("solid.obj");
   surf.SaveObj(p.string());
 }
 
@@ -869,7 +871,7 @@ void TestSDF() {
   //ProcessFront();
   //PadGridXY();
 
-  //MakeFrontLatticeMesh();
+  MakeFrontLatticeMesh();
   //MakeSkinMesh();
-  MakeLowerSolid();
+  //MakeLowerSolid();
 }
