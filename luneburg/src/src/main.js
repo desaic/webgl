@@ -32,6 +32,9 @@ const lensConf = {
 };
 
 const unitCell = new Array3D(65,65,65);
+// +1 because sample values are defined on vertices instead of cell centers.
+const NUM_SAMPLES = 201;
+const thicknessArr = new Float32Array(NUM_SAMPLES);
 
 function InitScene() {
   container = document.getElementById("myCanvas");
@@ -64,6 +67,7 @@ function InitScene() {
   bindEventListeners();
   ComputeUnitCell(unitCell, lensConf);
   DrawSlice(world.quadTexture.image, lensConf);
+  FillThickness();
 }
 
 const SaveSphere = async ()=>{
@@ -175,6 +179,26 @@ function ComputeUnitCell(grid, conf){
 
 let drawing = false;
 
+function LuneRho (R, r){
+  // index of solid material.
+  const EpsI = 2.35;
+  const r2 = r*r;
+  let rho = (R * R - r2) * ((EpsI + 4) * R * R - 2 * r2);
+  rho /= 3 * R * R * (EpsI - 1) * (2 * R * R - r2);
+  return rho;
+}
+
+function FillThickness(){
+  const len = thicknessArr.length;
+  const R= 1.0;
+  for (let i = 0; i < len; i++) {
+    const r = i / len;
+    const rho = LuneRho(R,r);
+    const t= rho;
+    thicknessArr[i] = t;
+  }
+}
+
 const color4b = [100,100,100,255];
 function DrawSlice(image, conf) {
   const w = image.width;
@@ -183,7 +207,6 @@ function DrawSlice(image, conf) {
   const dy = conf.diameter / h;
   const cellSize = conf.cellSize;
   const R= conf.diameter / 2;
-  const t=conf.thickness;
   const z = conf.z;
   const unitSize = unitCell.size;
   const voxSize = cellSize / (unitSize[0] - 1);
@@ -199,23 +222,28 @@ function DrawSlice(image, conf) {
       const cellx = xmm - cellIndexX * cellSize;
       const celly = ymm - cellIndexY * cellSize;
 
-      const i = Math.floor(cellx/voxSize);
+      const i = Math.floor(cellx / voxSize);
       const j = Math.floor(celly / voxSize);
       let d = 1000;
       if(i< s[0] && j<s[1] && k<s[2]){
         d = unitCell.Get(i,j,k);
       }
       let c=0;
-      if(d < t){
-        c = 1;
-      }
       const r = Math.sqrt(xmm * xmm + ymm*ymm);
       const ratio = r/R;
+      let t=0;
+      const thicknessIdx=Math.floor(ratio * thicknessArr.length);
+      if (thicknessIdx < thicknessArr.length) {
+        t = thicknessArr[thicknessIdx]; 
+        if (d < t) {
+          c = 1;
+        }
+      }
       const rx = cellx / cellSize;
       const ry = celly/cellSize;
-      color4b[0] = ratio * c * 250;
-      color4b[1] = ratio * c * 150;
-      color4b[2] = ratio * c * 50;
+      color4b[0] = c * 250;
+      color4b[1] = c * 150;
+      color4b[2] = c * 50;
       SetPixel(x,y,image,color4b);
     }
   }
