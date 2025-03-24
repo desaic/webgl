@@ -122,6 +122,8 @@ extern void TestSDF();
 
 extern void SaveVolMesh();
 
+extern void JsToObj();
+
 int main(int argc, char** argv) {
   // RunCanvasApp();
   // RunInflateApp();
@@ -130,7 +132,8 @@ int main(int argc, char** argv) {
   //RunHeadApp();
   //MeshHeightMap();
   //MapDrawingToThickness();
-  TestSDF();
+  //TestSDF();
+  JsToObj(); 
    //SaveVolMesh();
   return 0;
 }
