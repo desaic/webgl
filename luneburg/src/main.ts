@@ -1,4 +1,4 @@
-import * as THREE from "./three.module.js";
+import * as THREE from "three";
 
 import { OrbitControls } from "./OrbitControls.js";
 import { TransformControls } from "./TransformControls.js";
@@ -15,8 +15,10 @@ import { DrawBeamDist, MakeDiamondCell, MakeGyroidCell,
 //map density to thickness
 import * as D2T from "./DensityToThickness.js";
 let d2t = [];
-const { save } = window.__TAURI__.dialog;
-const { writeTextFile } = window.__TAURI__.fs;
+
+import {save} from "@tauri-apps/plugin-dialog";
+
+import { writeTextFile } from "@tauri-apps/plugin-fs";
 
 var container, orbit;
 var renderer, clock, world;
@@ -401,4 +403,5 @@ function Animate(time) {
   requestAnimationFrame(Animate);
 }
 
-export { InitScene, Animate };
+InitScene();
+Animate();
