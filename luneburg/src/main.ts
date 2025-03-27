@@ -151,6 +151,10 @@ function UpdateThicknessUI(densityEle, thicknessEle){
   thicknessEle.textContent = "thickness=" + thickness.toFixed(3) + " mm";
 }
 
+const diameterInput = document.getElementById("diameterInput") as HTMLInputElement
+const cellSizeInput = document.getElementById("cellSizeInput") as HTMLInputElement
+const minThickInput = document.getElementById("minThickInput") as HTMLInputElement
+
 const bindEventListeners = () => {
   window.addEventListener("resize", onWindowResize, false);
   container.addEventListener("click", selectObj);
@@ -164,8 +168,7 @@ const bindEventListeners = () => {
     SaveTxt();
   });
 
-  document
-    .getElementById("diameterInput")
+  diameterInput
     .addEventListener("change", function () {
       const diameter = this.value;
       const r = diameter / 2;
@@ -174,15 +177,13 @@ const bindEventListeners = () => {
       lensConf.diameter = diameter;
       UpdateSlice();
     });
-  document
-    .getElementById("cellSizeInput")
+  cellSizeInput
     .addEventListener("change", function () {
       lensConf.cellSize = this.value;
       ComputeUnitCell(unitCell, lensConf);
       UpdateSlice();
     });
-  document
-    .getElementById("minThickInput")
+  minThickInput
     .addEventListener("change", function () {
       lensConf.minThickness = this.value;
       UpdateSlice();
