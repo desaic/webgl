@@ -8,6 +8,8 @@
 #include "HalfEdgeMesh.h"
 #include "MeshUtil.h"
 #include "MeshOptimization.h"
+#include "VoxIO.h"
+#include "Array3D.h"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -788,9 +790,9 @@ TrigMesh GetInnerSurf(TrigMesh & mesh, float h, float offset) {
   sdfMesh.Compute();
 
   //fast sweep whole grid
-  float band = 10000;
-  Array3D8u frozen;
-  FastSweepPar(sdf->dist, sdf->voxSize, sdf->distUnit, band, frozen);
+  //float band = 10000;
+  //Array3D8u frozen;
+  //FastSweepPar(sdf->dist, sdf->voxSize, sdf->distUnit, band, frozen);
 
   BBox box;
   ComputeBBox(mesh.v, box);
@@ -862,6 +864,269 @@ void MakeLowerSolid() {
   rigid.SaveObj(outFile);
 }
 
+void MakeGearMesh() {
+  std::string meshFile = "F:/meshes/motor_air/planet_gear.obj";
+  std::string outFile = "F:/meshes/motor_air/planet_gear_inner.obj";
+  TrigMesh mesh;
+  mesh.LoadObj(meshFile);
+  TrigMesh inner = GetInnerSurf(mesh, 0.06, 0.15);
+  inner.SaveObj(outFile);
+}
+
+void DisplaceVert() {
+  std::string meshFile = "F:/meshes/motor_air/planet_gear.obj";
+  std::string outFile = "F:/meshes/motor_air/planet_gear_disp.obj";
+  TrigMesh mesh;
+  mesh.LoadObj(meshFile);
+  mesh.ComputeVertNormals();
+  for (size_t i = 0; i < mesh.GetNumVerts(); i++) {
+    Vec3f v = mesh.GetVertex(i);
+    Vec3f n = mesh.nv[i];
+    v += -0.15f * n;
+    mesh.v[3 * i] = v[0];
+    mesh.v[3 * i+1] = v[1];
+    mesh.v[3 * i+2] = v[2];
+  }
+  mesh.SaveObj(outFile);
+}
+
+Array3D8u MirrorCubicStructure(Array3D8u& grid) {
+  Vec3u size = grid.GetSize();
+
+  Array3D8u out;
+  Vec3u outSize = 2u * size;
+  out.Allocate(outSize, 0);
+  for (unsigned z = 0; z < outSize[2]; z++) {
+    for (unsigned y = 0; y < outSize[1]; y++) {
+      for (unsigned x = 0; x < outSize[0]; x++) {
+        unsigned srcz = z;
+        unsigned srcy = y;
+        unsigned srcx = x;
+        if (srcz >= size[2]) {
+          srcz = outSize[2] - srcz - 1;
+        }
+        if (srcy >= size[1]) {
+          srcy = outSize[1] - srcy - 1;
+        }
+        if (srcx >= size[1]) {
+          srcx = outSize[1] - srcx - 1;
+        }
+        //sort xyz decreasing order
+        if (srcx < srcy) {
+          unsigned temp = srcx;
+          srcx = srcy;
+          srcy = temp;
+        }
+        if (srcy < srcz) {
+          unsigned temp = srcy;
+          srcy = srcz;
+          srcz = temp;
+        }
+        if (srcx < srcy) {
+          unsigned temp = srcx;
+          srcx = srcy;
+          srcy = temp;
+        }
+        out(x,y,z) = grid(srcx, srcy,srcz);
+      }
+    }
+  }  
+  return out;
+}
+
+void InvertVal(Array3D8u& grid) {
+  std::vector<uint8_t>& data = grid.GetData();
+  for (size_t i = 0; i < data.size(); i++) {
+    data[i] = 255 - data[i];
+  }
+}
+
+void Normalize(std::vector<float>& v) {
+  if (v.size() == 0) {
+    return;
+  }
+  float sum = 0;
+  for (size_t i = 0; i < v.size(); i++) {
+    sum += v[i];
+  }
+  if (sum == 0) {
+    return;
+  }
+  float scale = 1.0f / sum;
+  for (size_t i = 0; i < v.size(); i++) {
+    v[i] *= scale;
+  }
+}
+
+int GaussianFilter1D(float sigma, unsigned rad, std::vector<float>& filter) {
+  if (rad > 100) {
+    return -1;
+  }
+  if (sigma < 0.01f) {
+    sigma = 0.01f;
+  }
+  unsigned filterSize = 2 * rad + 1;
+  filter.resize(filterSize);
+  float pi = 3.14159f;
+  float factor = 1.0f / (sigma * std::sqrt(2 * pi));
+  filter[rad] = factor;
+  for (unsigned i = 0; i < rad; i++) {
+    float x = (float(i) + 1) / sigma;
+    float gauss = factor * std::exp(-0.5f * x * x);
+    filter[rad + i + 1] = gauss;
+    filter[rad - 1 - i] = gauss;
+  }
+  Normalize(filter);
+  return 0;
+}
+
+// with mirror boundary condition
+void FilterVec(uint8_t* v, size_t len, const std::vector<float>& kern) {
+  size_t halfKern = kern.size() / 2;
+
+  std::vector<uint8_t> padded(len + 2 * halfKern);
+  for (size_t i = 0; i < halfKern; i++) {
+    padded[i] = v[halfKern - i];
+    padded[len - i] = v[len - halfKern + i];
+  }
+  for (size_t i = 0; i < len; i++) {
+    padded[i + halfKern] = v[i];
+  }
+
+  for (size_t i = 0; i < len; i++) {
+    float sum = 0;
+    for (size_t j = 0; j < kern.size(); j++) {
+      sum += kern[j] * padded[i + j];
+    }
+    v[i] = uint8_t(sum);
+  }
+}
+
+void FilterDecomp(Array3D8u& grid, const std::vector<float>& kern) {
+  Vec3u gsize = grid.GetSize();
+  // z
+  for (unsigned i = 0; i < gsize[0]; i++) {
+    for (unsigned j = 0; j < gsize[1]; j++) {
+      uint8_t* vec = &grid(i, j, 0);
+      FilterVec(vec, gsize[2], kern);
+    }
+  }
+  // y
+  for (unsigned i = 0; i < gsize[0]; i++) {
+    for (unsigned k = 0; k < gsize[2]; k++) {
+      std::vector<uint8_t> v(gsize[1]);
+      for (unsigned j = 0; j < gsize[1]; j++) {
+        v[j] = grid(i, j, k);
+      }
+      FilterVec(v.data(), gsize[1], kern);
+      for (unsigned j = 0; j < gsize[1]; j++) {
+        grid(i, j, k) = v[j];
+      }
+    }
+  }
+  // x
+  for (unsigned j = 0; j < gsize[1]; j++) {
+    for (unsigned k = 0; k < gsize[2]; k++) {
+      std::vector<uint8_t> v(gsize[0]);
+      for (unsigned i = 0; i < gsize[0]; i++) {
+        v[i] = grid(i, j, k);
+      }
+      FilterVec(v.data(), gsize[0], kern);
+      for (unsigned i = 0; i < gsize[0]; i++) {
+        grid(i, j, k) = v[i];
+      }
+    }
+  }
+}
+
+
+void Upsample2x(const Array3D8u& gridIn, Array3D8u& gridOut) {
+  Vec3u oldSize = gridIn.GetSize();
+  gridOut.Allocate(oldSize[0] * 2, oldSize[1] * 2, oldSize[2] * 2);
+  Vec3u newSize = gridOut.GetSize();
+  for (unsigned i = 0; i < newSize[0]; i++) {
+    for (unsigned j = 0; j < newSize[1]; j++) {
+      for (unsigned k = 0; k < newSize[2]; k++) {
+        gridOut(i, j, k) = gridIn(i / 2, j / 2, k / 2);
+      }
+    }
+  }
+}
+
+void Downsample2x(const Array3D8u& gridIn, Array3D8u& gridOut) {
+  Vec3u oldSize = gridIn.GetSize();
+  gridOut.Allocate(oldSize[0] / 2, oldSize[1] / 2, oldSize[2] / 2);
+  Vec3u newSize = gridOut.GetSize();
+  for (unsigned i = 0; i < newSize[0]; i++) {
+    unsigned i0 = i * 2;
+    for (unsigned j = 0; j < newSize[1]; j++) {
+      unsigned j0 = j * 2;
+      for (unsigned k = 0; k < newSize[2]; k++) {
+        unsigned k0 = k * 2;
+        int sum = gridIn(i0, j0, k0);
+        sum += gridIn(i0 + 1, j0, k0);
+        sum += gridIn(i0, j0 + 1, k0);
+        sum += gridIn(i0 + 1, j0 + 1, k0);
+        sum += gridIn(i0, j0, k0 + 1);
+        sum += gridIn(i0 + 1, j0, k0 + 1);
+        sum += gridIn(i0, j0 + 1, k0 + 1);
+        sum += gridIn(i0 + 1, j0 + 1, k0 + 1);
+        sum /= 8;
+        gridOut(i, j, k) = sum;
+      }
+    }
+  }
+}
+void Scale(Array3D8u& grid, float scale) {
+  std::vector<uint8_t>& data = grid.GetData();
+  for (size_t i = 0; i < data.size(); i++) {
+    data[i] = uint8_t(scale * data[i]);
+  }
+}
+void Thresh(Array3D8u& grid, float t) {
+  std::vector<uint8_t>& data = grid.GetData();
+  for (size_t i = 0; i < data.size(); i++) {
+    if (data[i] > t) {
+      data[i] = 1;
+    } else {
+      data[i] = 0;
+    }
+  }
+}
+
+void LoadBinVox() {
+  std::string binFile = "F:/meshes/3dcubic64/5481.bin";
+  std::ifstream in(binFile, std::iostream::binary);
+  Vec3u size;
+  in.read((char*)(&size), 3 * sizeof(unsigned));
+  Array3D8u grid;
+  size_t inputBytes = size[0] * size[1] * size[2] / 8;
+  std::vector<uint8_t> binArr(inputBytes);
+  in.read((char*)binArr.data(),inputBytes);
+  grid.Allocate(size,0);
+  for (size_t i = 0; i < inputBytes; i++) {
+    for (size_t j = 0; j < 8; j++) {
+      grid.GetData()[i * 8 + j] = (binArr[i] >> j) & 1;
+    }
+  }
+  Vec3f voxRes(1, 1, 1);
+  Array3D8u mirrored = MirrorCubicStructure(grid);
+  SaveVolAsObjMesh("F:/dump/5481.obj", mirrored, (float*)(&voxRes), 1);
+  Array3D8u up;
+  Upsample2x(mirrored, up);
+  //SaveVoxTxt(mirrored, 1, "F:/dump/5481.txt");
+  std::vector<float> kern;
+  GaussianFilter1D(1, 3, kern);
+  Scale(up, 200);
+  FilterDecomp(up, kern);
+  FilterDecomp(up, kern);
+  Array3D8u down;
+  Downsample2x(up, down);
+  Thresh(down, 40);
+  SaveVolAsObjMesh("F:/dump/5481_big_smooth.obj", down, (float*)(&voxRes), 1);
+  SaveVoxTxt(down, 1, "F:/dump/5481.txt");
+}
+
 void TestSDF() { 
   //OrientFlatGroups();
   //GetInnerSurf();
@@ -871,7 +1136,9 @@ void TestSDF() {
   //ProcessFront();
   //PadGridXY();
 
-  MakeFrontLatticeMesh();
+  //MakeFrontLatticeMesh();
   //MakeSkinMesh();
   //MakeLowerSolid();
+  //MakeGearMesh();
+  LoadBinVox();
 }

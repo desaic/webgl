@@ -132,8 +132,8 @@ int main(int argc, char** argv) {
   //RunHeadApp();
   //MeshHeightMap();
   //MapDrawingToThickness();
-  //TestSDF();
-  JsToObj(); 
+  TestSDF();
+  //JsToObj(); 
    //SaveVolMesh();
   return 0;
 }
