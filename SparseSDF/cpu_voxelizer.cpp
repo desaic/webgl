@@ -33,7 +33,8 @@ void cpu_voxelize_mesh(voxconf conf, const TrigMesh* mesh,
     Vec3f e1 = v2 - v1;
     Vec3f e2 = v0 - v2;
     // Normal vector pointing up from the triangle
-    Vec3f n = mesh->GetTrigNormal(i);
+    Vec3f n = -e0.cross(e2);
+    n.normalize();
     cb.BeginTrig(i);
     // COMPUTE TRIANGLE BBOX IN GRID
     // Triangle bounding box in world coordinates is min(v0,v1,v2) and
@@ -42,6 +43,7 @@ void cpu_voxelize_mesh(voxconf conf, const TrigMesh* mesh,
     ComputeBBox(v0, v1, v2, t_bbox_world);
     // catch triangles exactly on voxel faces
     t_bbox_world.vmin = t_bbox_world.vmin - Vec3f(eps, eps, eps);
+    t_bbox_world.vmax = t_bbox_world.vmax + Vec3f(eps, eps, eps);
     // Triangle bounding box in voxel grid coordinates is the world bounding box
     // divided by the grid unit vector
     IntBox t_bbox_grid;
