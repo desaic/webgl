@@ -203,7 +203,7 @@ void TrigMesh::ComputePseudoNormals() {
 
 void TrigMesh::ComputeVertNormals() {
   size_t numVerts = v.size() / 3;
-  // std::vector<float> weight(numVerts, 0.0f);
+  std::vector<float> weight(numVerts, 0.0f);
   nv.resize(numVerts, Vec3f(0.0f));
   const float eps = 1e-10;
   for (size_t tIdx = 0; tIdx < t.size(); tIdx += 3) {
@@ -227,7 +227,7 @@ void TrigMesh::ComputeVertNormals() {
         angle = std::acos(dot / std::sqrt(denom));
       }
       size_t vIdx = t[tIdx + v0];
-      //  weight[vIdx] += angle;
+      weight[vIdx] += angle;
       nv[vIdx] += angle * n;
     }
   }
