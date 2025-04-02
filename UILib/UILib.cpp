@@ -638,7 +638,7 @@ void UILib::UILoop() {
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
     glfwSwapBuffers(_window);
-    std::this_thread::sleep_for(std::chrono::milliseconds(RENDER_INTERVAL_MS));
+    //std::this_thread::sleep_for(std::chrono::milliseconds(RENDER_INTERVAL_MS));
   }
   _running = false;
   ImGui_ImplOpenGL3_Shutdown();
