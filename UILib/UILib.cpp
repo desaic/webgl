@@ -12,6 +12,7 @@
 #include "imgui_impl_opengl3.h"
 #include "imfilebrowser.h"
 #include "Vec4.h"
+#include "Stopwatch.h"
 
 static void glfw_error_callback(int error, const char* description) {
   std::cout << "Glfw Error " << error << " " << description << "\n";
@@ -450,8 +451,13 @@ void UILib::UILoop() {
   io.ConfigWindowsMoveFromTitleBarOnly = true;
   ImGui_ImplGlfw_InitForOpenGL(_window, true);
   ImGui_ImplOpenGL3_Init(glsl_version);
-  const unsigned RENDER_INTERVAL_MS = 10;
+  const float RENDER_INTERVAL_MS =5;
+  Utils::Stopwatch timer;
+  timer.Start();
   while (!glfwWindowShouldClose(_window) && _running) {
+    float ms = timer.ElapsedMS();
+    timer.Start();
+    _fps = 1000 / ms;
     // Poll and handle events (inputs, window resize, etc.)
     // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to
     // tell if dear imgui wants to use your inputs.
@@ -637,7 +643,7 @@ void UILib::UILoop() {
     glClear(GL_COLOR_BUFFER_BIT);
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-    glfwSwapBuffers(_window);
+    glfwSwapBuffers(_window); 
     //std::this_thread::sleep_for(std::chrono::milliseconds(RENDER_INTERVAL_MS));
   }
   _running = false;

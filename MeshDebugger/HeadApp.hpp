@@ -24,6 +24,7 @@ public:
   const float ApproxSize = 200;
   int _outPrefixId = -1;
   int _statusLabel = -1;
+  int _fpsLabel = -1;
   std::shared_ptr<TrigMesh> _floor;
   int _floorInst = -1;
   std::vector<std::shared_ptr<TrigMesh>> _meshes;

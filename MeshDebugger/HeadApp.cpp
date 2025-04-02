@@ -27,6 +27,7 @@ void HeadApp::Init(UILib* ui) {
   conf.Load(conf._confFile);
   _ui->AddButton("Open Meshes", [&] { this->OpenMeshes(*_ui, conf); });
   _ui->SetChangeDirCb([&](const std::string& dir) { OnChangeDir(dir, conf); });
+  _fpsLabel = _ui->AddLabel("fps ");
   _statusLabel = ui->AddLabel("status");
   LogCb =
       std::bind(LogToUI, std::placeholders::_1, std::ref(*_ui), _statusLabel);
@@ -195,6 +196,11 @@ void HeadApp::Refresh() {
   if (_fileLoaded && !_processed) {
     
   }
+  float fps = _ui->GetFPS();
+  auto widget = std::dynamic_pointer_cast<Label> (_ui->GetWidget(_fpsLabel));
+  widget->_text = "fps: " + std::to_string(int(fps)) + "." +
+                  std::to_string(int(fps * 10) % 10);
+  
 }
 
 void HeadApp::OnOpenMeshes(const std::vector<std::string>& files) {

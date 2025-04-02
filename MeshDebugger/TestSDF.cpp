@@ -1127,6 +1127,74 @@ void LoadBinVox() {
   SaveVoxTxt(down, 1, "F:/dump/5481.txt");
 }
 
+void WriteDistField() {
+  TrigMesh mesh;
+  mesh.LoadObj("F:/meshes/acoustic/cyl90mm.obj");
+  std::shared_ptr<AdapSDF> sdf = std::make_shared<AdapSDF>();
+  float h = 0.5f;
+  SDFImpAdap* imp = new SDFImpAdap(sdf);
+  SDFMesh sdfMesh(imp);
+  sdfMesh.SetMesh(&mesh);
+  sdfMesh.SetVoxelSize(h);
+  sdfMesh.SetBand(16);
+  sdfMesh.Compute();
+
+  Array3D8u frozen;
+  FastSweepPar(sdf->dist, h, sdf->distUnit, 300, frozen);
+
+  Vec3f origin = sdf->origin;
+  std::cout << origin[0] << " " << origin[1] << " " << origin[2] << "\n";
+  const Array3D<short>& dist = sdf->dist;
+  Vec3u size = dist.GetSize();
+  std::cout << size[0] << " " << size[1] << " " << size[2] << "\n";
+
+  std::ofstream out("F:/meshes/acoustic/diskLayers.txt");
+
+  float outdx = 50;
+  Vec3u outSize(unsigned(size[0] * h / outdx) + 1,
+                unsigned(size[1] * h / outdx) + 1,
+                unsigned(size[2] * h / outdx) + 1);
+
+  out << "origin\n"
+      << origin[0] << " " << origin[1] << " " << origin[2] << "\n";
+  out << "voxelSize\n" << outdx << " " << outdx << " " << outdx << "\n";
+  out << "grid\n"
+      << outSize[0] << " " << outSize[1] << " " << outSize[2] << "\n";
+
+  out << std::fixed << std::setprecision(3);
+  float minThick = 0.305;
+  float maxThick = 1;
+  float dTdx = (maxThick - minThick) / 19;
+  for (unsigned z = 0; z < outSize[2]; z++) {
+    for (unsigned y = 0; y < outSize[1]; y++) {
+      for (unsigned x = 0; x < outSize[0]; x++) {
+        Vec3f coord(x * outdx, y*outdx,z*outdx);
+        coord += origin;
+        float d = sdfMesh.DistTrilinear(coord);
+        float t = 0;
+        t = z/float(outSize[2] - 1) ;
+        t = maxThick * t + (1 - t) * minThick;
+        //if (d > 0) {
+        //  t = minThick;
+        //} else {
+        //  t = minThick + std::abs(d) * dTdx;
+
+        //}
+          if (t > maxThick) {
+            t = maxThick;
+          }
+          if (t < minThick) {
+            t = minThick;
+          }
+        out << t << " ";
+      }
+      out << "\n";
+    }
+    out << "\n";
+  }
+
+}
+
 void TestSDF() { 
   //OrientFlatGroups();
   //GetInnerSurf();
@@ -1140,5 +1208,7 @@ void TestSDF() {
   //MakeSkinMesh();
   //MakeLowerSolid();
   //MakeGearMesh();
-  LoadBinVox();
+  //LoadBinVox();
+
+  WriteDistField();
 }

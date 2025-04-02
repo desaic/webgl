@@ -129,10 +129,10 @@ int main(int argc, char** argv) {
   // RunInflateApp();
   // RunPackApp();
   // VoxApp();
-  //RunHeadApp();
+  RunHeadApp();
   //MeshHeightMap();
   //MapDrawingToThickness();
-  TestSDF();
+  //TestSDF();
   //JsToObj(); 
    //SaveVolMesh();
   return 0;

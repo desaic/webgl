@@ -277,6 +277,8 @@ class UILib {
 
   std::shared_ptr<UIWidget> GetWidget(int id);
 
+  float GetFPS() const { return _fps; }
+
  private:
 
   void DrawImages();
@@ -291,7 +293,7 @@ class UILib {
 
   int _initImagePosX = 20;
   int _initImagePosY = 0;
-
+  std::atomic<float> _fps = 0;
   mutable std::mutex _widgetsLock;
   std::vector<std::shared_ptr<UIWidget> > uiWidgets_;
 
