@@ -19,6 +19,7 @@ include_directories("../UILib/inc")
 include_directories("../Util")
 include_directories("../SparseSDF")
 include_directories("../ZRayCast")
+include_directories("../tiny_bvh")
 link_directories("../UILib/extern/glfw3.3.8")
 link_directories("../UILib/extern/glew-2.1.0")
 

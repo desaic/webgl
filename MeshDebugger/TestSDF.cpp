@@ -1195,6 +1195,15 @@ void WriteDistField() {
 
 }
 
+void OffsetMesh() {
+  std::string meshFile = "F:/meshes/elliot/cushion.stl";
+  std::string outFile = "F:/meshes/head/head_skinsub.obj";
+  TrigMesh mesh;
+  mesh.LoadStl(meshFile);
+  TrigMesh rigid = GetInnerSurf(mesh, 0.5, 2);
+  rigid.SaveObj(outFile);
+}
+
 void TestSDF() { 
   //OrientFlatGroups();
   //GetInnerSurf();
@@ -1205,10 +1214,10 @@ void TestSDF() {
   //PadGridXY();
 
   //MakeFrontLatticeMesh();
-  //MakeSkinMesh();
+  MakeSkinMesh();
   //MakeLowerSolid();
   //MakeGearMesh();
   //LoadBinVox();
 
-  WriteDistField();
+  //WriteDistField();
 }

@@ -246,15 +246,17 @@ void ConnectorVox::VoxelizeMeshes() {
   float voxRes = conf.voxResMM;
   Vec3f unit = Vec3f(voxRes, voxRes, voxRes);
 
-  int band = 0;
-  box.vmin = box.vmin - float(band) * unit;
-  box.vmax = box.vmax + float(band) * unit;  
+  int band = 5;
+  box.vmin[0] -= float(band) * voxRes;
+  box.vmin[1] -= float(band) * voxRes;
+  box.vmax[0] += float(band) * voxRes;  
+  box.vmax[1] += float(band) * voxRes;
 
   Vec3f count = (box.vmax - box.vmin) / unit;
   Vec3u gridSize = Vec3u(count[0] + 1, count[1] + 1, count[2] + 1);
   if (conf.waxGapMM > 0.01) {
     //pad the grid except in minus z direction.
-    unsigned pad=std::round(conf.waxGapMM / voxRes);
+    unsigned pad = std::round(conf.waxGapMM / voxRes);
     gridSize[0] += 2 * pad;
     gridSize[1] += 2 * pad;
     gridSize[2] += pad;
@@ -263,7 +265,7 @@ void ConnectorVox::VoxelizeMeshes() {
     box.vmax = box.vmax + Vec3f(pad * voxRes);
   }
   //0 for void and 1 for wax therefore +2.
-  uint8_t mat0 = 2;
+  uint8_t mat0 = 1;
   grid.Allocate(gridSize, meshes.size() + mat0);
   for (unsigned i = 0; i < meshes.size(); i++) {
     VoxelizeMesh(uint8_t(i + mat0), box, voxRes, meshes[i], grid); 
