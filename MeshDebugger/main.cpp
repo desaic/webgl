@@ -123,19 +123,20 @@ extern void TestSDF();
 extern void SaveVolMesh();
 
 extern void JsToObj();
-extern void TestBVH();
+
+extern void TestSurfRaySample();
 
 int main(int argc, char** argv) {
   // RunCanvasApp();
   // RunInflateApp();
   // RunPackApp();
-   //VoxApp();
+  //VoxApp();
   // RunHeadApp();
   // MeshHeightMap();
-  // MapDrawingToThickness();
-  //TestSDF();
+   //MapDrawingToThickness();
+  TestSDF();
   // JsToObj(); 
-  // SaveVolMesh();
-  TestBVH();
+   //SaveVolMesh();
+  //TestSurfRaySample();
   return 0;
 }

@@ -246,14 +246,14 @@ void ConnectorVox::VoxelizeMeshes() {
   float voxRes = conf.voxResMM;
   Vec3f unit = Vec3f(voxRes, voxRes, voxRes);
 
-  int band = 5;
+  int band = 0;
   box.vmin[0] -= float(band) * voxRes;
   box.vmin[1] -= float(band) * voxRes;
   box.vmax[0] += float(band) * voxRes;  
   box.vmax[1] += float(band) * voxRes;
 
   Vec3f count = (box.vmax - box.vmin) / unit;
-  Vec3u gridSize = Vec3u(count[0] + 1, count[1] + 1, count[2] + 1);
+  Vec3u gridSize = Vec3u(count[0], count[1], count[2]);
   if (conf.waxGapMM > 0.01) {
     //pad the grid except in minus z direction.
     unsigned pad = std::round(conf.waxGapMM / voxRes);
@@ -274,6 +274,20 @@ void ConnectorVox::VoxelizeMeshes() {
     AddWaxGap(grid, voxRes, conf.waxGapMM, mat0);
   }
 
+  Vec3f removeBorderDist(0.1,0.1, 0.07);
+  Array3D8u oldGrid = grid;
+  Vec3u oldSize = oldGrid.GetSize();
+  Vec3u removal(removeBorderDist[0] / voxRes, removeBorderDist[1] / voxRes,
+                removeBorderDist[2] / voxRes);
+  Vec3u newSize=oldSize - 2u * removal;
+  grid.Allocate(newSize, uint8_t(0));
+  for (unsigned z = 0; z < newSize[2]; z++) {
+    for (unsigned y = 0; y < newSize[1]; y++) {
+      for (unsigned x = 0; x < newSize[0]; x++) {
+        grid(x, y, z) = oldGrid(x + removal[0], y + removal[1], z + removal[2]);
+      }
+    }
+  }
   _voxelized = true;
   for (unsigned i = 0; i < meshes.size(); i++) {
     uint8_t mat = i;

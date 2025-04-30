@@ -1204,6 +1204,77 @@ void OffsetMesh() {
   rigid.SaveObj(outFile);
 }
 
+void FloodSDFOutside() {
+  std::string meshFile = "F:/meshes/shoe_special/shoe_rough_asm.stl";
+  std::string outFile = "F:/meshes/shoe_special/shoe_march.obj";
+  TrigMesh mesh;
+  mesh.LoadStl(meshFile);
+
+  std::shared_ptr<AdapSDF> sdf = std::make_shared<AdapSDF>();
+  sdf->voxSize = 0.5;
+  sdf->band = 8;
+  sdf->distUnit = 0.01;
+  sdf->BuildTrigList(&mesh);
+  sdf->Compress();
+  mesh.ComputePseudoNormals();
+  sdf->ComputeCoarseDist();
+  CloseExteriorAndFillInterior(sdf->dist, sdf->MAX_DIST);
+  Array3D8u frozen;
+  sdf->FastSweepCoarse(frozen);
+
+  TrigMesh surf;
+  MarchingCubes(sdf->dist, 0.01, sdf->distUnit, sdf->voxSize, sdf->origin, &surf);
+  MergeCloseVertices(surf);
+  surf.SaveObj(outFile);
+}
+
+void WriteDiskField() {
+  
+  std::ofstream out("F:/meshes/gradient/coaster.txt");
+
+  float outdx = 0.5;
+  float radius = 44;
+  Vec3u outSize(unsigned(2 * radius / outdx) + 1,
+                unsigned(2 * radius / outdx) + 1, 2);
+  Vec3f origin(-radius, -radius, -radius);
+  out << "origin\n" << -radius << " " << -radius << " " << -radius << "\n";
+  out << "voxelSize\n" << outdx << " " << outdx << " " << 2*radius << "\n";
+  out << "grid\n"
+      << outSize[0] << " " << outSize[1] << " " << outSize[2] << "\n";
+
+  out << std::fixed << std::setprecision(3);
+  float minThick = 0.4;
+  float maxThick = 1.85;
+  float dTdx = (maxThick - minThick) / radius;  
+  for (unsigned z = 0; z < outSize[2]; z++) {
+    for (unsigned y = 0; y < outSize[1]; y++) {
+      for (unsigned x = 0; x < outSize[0]; x++) {
+        Vec3f coord(x * outdx, y * outdx, z * outdx);
+        coord += origin;
+        float d = coord[0] * coord[0] + coord[1] * coord[1];
+        d = std::sqrt(d) / radius;
+        float t = maxThick * d + (1 - d) * minThick;
+        // if (d > 0) {
+        //   t = minThick;
+        // } else {
+        //   t = minThick + std::abs(d) * dTdx;
+
+        //}
+        if (t > maxThick) {
+          t = maxThick;
+        }
+        if (t < minThick) {
+          t = minThick;
+        }
+        out << t << " ";
+      }
+      out << "\n";
+    }
+    out << "\n";
+  }
+  out.close();
+}
+
 void TestSDF() { 
   //OrientFlatGroups();
   //GetInnerSurf();
@@ -1214,10 +1285,12 @@ void TestSDF() {
   //PadGridXY();
 
   //MakeFrontLatticeMesh();
-  MakeSkinMesh();
+  //MakeSkinMesh();
   //MakeLowerSolid();
   //MakeGearMesh();
   //LoadBinVox();
 
   //WriteDistField();
+  WriteDiskField();
+  //FloodSDFOutside();
 }

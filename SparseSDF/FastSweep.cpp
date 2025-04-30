@@ -1,6 +1,8 @@
 #include "FastSweep.h"
 #include <iostream>
 #include <execution>
+#include "MeshUtil.h"
+#include "ImageIO.h"
 
 #define SWAP(fa, fb) \
   tmp = fa;          \
@@ -82,6 +84,89 @@ void CloseExterior(Array3D<short>& dist, short far) {
       }
     }
   }
+}
+
+void CloseExteriorAndFillInterior(Array3D<short>& dist, short far) {
+  Vec3u gridSize = dist.GetSize();
+  Array3D8u gridLabel(gridSize[0], gridSize[1], gridSize[2]);
+  const uint8_t UNVISITED = 0;
+  const uint8_t OUTSIDE = 1;
+  const uint8_t BOUNDARY = 2;
+  gridLabel.Fill(UNVISITED);
+  std::deque<size_t> voxQueue;
+  for (unsigned y = 0; y < gridSize[1]; y++) {
+    for (unsigned x = 0; x < gridSize[0]; x++) {
+      // boundary is outside thanks to margin padding.
+      gridLabel(x, y, 0) = OUTSIDE;
+      voxQueue.push_back(Array3DLinearIdx(x, y, 0, gridSize));
+    }
+  }
+  const unsigned NUM_NBR = 6;
+  const int nbrOffset[6][3] = {{1, 0, 0},  {-1, 0, 0}, {0, 1, 0},
+                               {0, -1, 0}, {0, 0, 1},  {0, 0, -1}};
+
+  while (!voxQueue.empty()) {
+    size_t linIdx = voxQueue.front();
+    voxQueue.pop_front();
+    Vec3u idx = linearToGridIdx(linIdx, gridSize);
+    for (unsigned ni = 0; ni < NUM_NBR; ni++) {
+      int nx = int(idx[0] + nbrOffset[ni][0]);
+      int ny = int(idx[1] + nbrOffset[ni][1]);
+      int nz = int(idx[2] + nbrOffset[ni][2]);
+      if (!InBound(nx, ny, nz, gridSize)) {
+        continue;
+      }
+      unsigned ux = unsigned(nx), uy = unsigned(ny), uz = unsigned(nz);
+      uint8_t nLabel = gridLabel(ux, uy, uz);
+      short nDist = dist(ux, uy, uz);
+      if (nDist < 0) {
+        dist(ux, uy, uz) = -nDist;
+        gridLabel(ux, uy, uz) = BOUNDARY;
+      } else if (nDist < far) {
+        gridLabel(ux, uy, uz) = BOUNDARY;
+      } else if (gridLabel(ux, uy, uz) == UNVISITED) {
+        gridLabel(ux, uy, uz) = OUTSIDE;
+        size_t nLinear = Array3DLinearIdx(ux, uy, uz, gridSize);
+        voxQueue.push_back(nLinear);
+      }
+    }
+  }
+  Vec3f voxRes(1);
+  short MAX_DIST = 32767;
+  //SaveVolAsObjMesh("F:/meshes/shoe_special/boundVox.obj", gridLabel, (float*)(&voxRes), 2);
+
+  for (size_t i = 0; i < gridLabel.GetData().size(); i++) {
+    if (gridLabel.GetData()[i] != OUTSIDE &&
+        gridLabel.GetData()[i] != BOUNDARY) {
+      if (dist.GetData()[i] > 0) {
+        dist.GetData()[i] = -dist.GetData()[i];
+      }
+    } else if (dist.GetData()[i] < 0) {
+      dist.GetData()[i] = -dist.GetData()[i];      
+    }
+  }
+  
+  Array2D8u slice(gridSize[0], gridSize[1]);
+  unsigned z = gridSize[2] / 2;
+  for (unsigned y = 0; y < gridSize[1]; y++) {
+    for (unsigned x = 0; x < gridSize[0]; x++) {
+      short sval = dist(x, y, z);
+      float d = sval * 0.005;
+      if (x < 5 && y < 5) {
+        std::cout << dist(x, y, z)<< " \n";
+      }
+      uint8_t val = 0;
+      if (sval > 32000) {
+        val = 255;
+      } else if (sval < -32000) {
+        val = 0;
+      } else {
+        val = 100 + d * 50;
+      }
+      slice(x, y) = val;
+    }
+  }
+  SavePngGrey("F:/meshes/shoe_special/sdf_slice.png", slice);
 }
 
 template<unsigned N>

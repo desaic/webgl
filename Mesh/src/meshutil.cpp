@@ -353,11 +353,11 @@ void SamplePointsOneTrig(unsigned tIdx, const TrigMesh& m, std::vector<SurfacePo
 }
 
 void SamplePoints(const TrigMesh& m, std::vector<SurfacePoint>& points,
-                  float spacing) {
-    size_t numTrigs = m.t.size() / 3;
-    for (size_t ti = 0; ti < numTrigs; ti++) {
-      SamplePointsOneTrig(ti, m, points, spacing);
-    }
+  float spacing) {
+  size_t numTrigs = m.t.size() / 3;
+  for (size_t ti = 0; ti < numTrigs; ti++) {
+    SamplePointsOneTrig(ti, m, points, spacing);
+  }
 }
 
 float SurfaceArea(const TrigMesh& m) {

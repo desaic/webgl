@@ -130,7 +130,8 @@ void MakeShearXGrid() {
 }
 
 void SaveVolMesh() {
-  const std::string volFile = "F:/meshes/dispmap/part_0.vol";
+  const std::string volFile = "F:/meshes/radome/radome.vol";
+  std::string outFile = "F:/meshes/radome/radome.obj";
   std::ifstream in(volFile, std::fstream::binary);
   Vec3u size;
   in.read((char*)(&size), 12);
@@ -148,6 +149,6 @@ void SaveVolMesh() {
       expanded.GetData()[outIdx] = outVal;
     }
   }
-  SaveVolAsObjMesh("F:/meshes/dispmap/part0_vol.obj", expanded, VoxRes, 1);
+  SaveVolAsObjMesh(outFile, expanded, VoxRes, 1);
 
 }

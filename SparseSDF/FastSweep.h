@@ -4,6 +4,7 @@
 #include "FixedGrid3D.h"
 
 void CloseExterior(Array3D<short>& dist, short far);
+void CloseExteriorAndFillInterior(Array3D<short>& dist, short far);
 
 /// <summary>
 /// 

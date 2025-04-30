@@ -85,3 +85,29 @@ void TestBVH() {
   }
   SavePngGrey("F:/meshes/shellVar/depth.png", depth);
 }
+
+void TestSurfRaySample(){
+  TrigMesh m;
+  m.LoadObj("F:/meshes/shellVar/cap_uv.obj");
+  size_t numTrigs = m.GetNumTrigs();
+
+  std::vector<tinybvh::bvhvec4> triangles(numTrigs * 3);
+  for (size_t t = 0; t < numTrigs; t++) {
+    for (size_t vi = 0; vi < 3; vi++) {
+      Vec3f vert = m.GetTriangleVertex(t, vi);
+      triangles[3 * t + vi].x = vert[0];
+      triangles[3 * t + vi].y = vert[1];
+      triangles[3 * t + vi].z = vert[2];
+    }
+  }
+
+  tinybvh::BVH bvh;
+  bvh.Build(triangles.data(), numTrigs);
+
+  Vec2u imageSize(800, 800);
+  Array2D8u texture(imageSize[0], imageSize[1]);
+
+  
+
+  SavePngGrey("F:/meshes/shellVar/texture.png", texture);
+}
