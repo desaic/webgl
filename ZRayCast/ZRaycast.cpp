@@ -154,8 +154,8 @@ int ZRaycastPoints4(float cx, float cy, float dx, float dy, HitList* hitLists, c
 int ZRaycast::RaycastPixel(int x, int y, ABufferf::SegList& segs) {
   float xcoord = conf_.box_.vmin[0] + (x + 0.5f) * conf_.voxelSize_[0];
   float ycoord = conf_.box_.vmin[1] + (y + 0.5f) * conf_.voxelSize_[1];
-  float dx = 0.4f * conf_.voxelSize_[0];
-  float dy = 0.4f * conf_.voxelSize_[1];
+  float dx = 0.41f * conf_.voxelSize_[0];
+  float dy = 0.42f * conf_.voxelSize_[1];
   // @TODO make configurable
   float zRes = abuf_->zRes;
   HitList hits;
