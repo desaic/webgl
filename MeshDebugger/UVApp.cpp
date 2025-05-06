@@ -242,11 +242,12 @@ void ShowTrigsUpToLevel(unsigned maxlevel, DebuggerState& debState) {
 
 void DebugUV(UILib & ui) {
   auto mesh = std::make_shared<TrigMesh>();
-  mesh->LoadObj("F:/dump/uv_out.obj");
-  int meshId = ui.AddMesh(mesh);
+  mesh->LoadObj("F:/nvTest/cyl_uv_out.obj");
+  int instId = ui.AddMeshAndInstance(mesh);
+  int meshId = ui.GetGLRender()->GetInstance(instId).bufId;
   ui.SetMeshColor(meshId, Vec3b(250, 180, 128));
   debState.SetMesh(mesh.get());
-  LoadUVSeg("F:/dump/seg.txt", debState.uvState);
+  LoadUVSeg("F:/nvTest/seg.txt", debState.uvState);
 
   Array2D8u texImage;
   LoadPngColor("F:/dump/checker.png", texImage);

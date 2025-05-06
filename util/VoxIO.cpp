@@ -1,14 +1,16 @@
 #include "VoxIO.h"
 #include <fstream>
 #include <iostream>
-void SaveVoxTxt(const Array3D8u& grid, float voxRes, const std::string& filename) {
+void SaveVoxTxt(const Array3D8u& grid, float voxRes, const std::string& filename, const Vec3f origin) {
   std::ofstream out(filename);
   if (!out.good()) {
     std::cout << "cannot open output " << filename << "\n";
     return;
   }
   out << "voxelSize\n" << voxRes << " " << voxRes << " " << voxRes << "\n";
-  out << "spacing\n0.2\ndirection\n0 0 1\ngrid\n";
+  out << "spacing\n0.2\ndirection\n0 0 1\n";
+  out << "origin\n" << origin[0] << " " << origin[1] << " " << origin[2] << "\n";
+  out << "grid\n";
   Vec3u gridsize = grid.GetSize();
   out << gridsize[0] << " " << gridsize[1] << " " << gridsize[2] << "\n";
   for (unsigned z = 0; z < gridsize[2]; z++) {

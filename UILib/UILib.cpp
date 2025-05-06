@@ -35,6 +35,9 @@ int UILib::AddImage() {
 int UILib::AddMesh(std::shared_ptr<TrigMesh> mesh) {
   std::lock_guard<std::mutex> lock(glLock_);
   int meshId = _glRender.CreateMeshBufs(mesh);
+  MeshInstance inst;
+  inst.bufId = meshId;
+  _glRender.AddInstance(inst);
   return meshId;
 }
 

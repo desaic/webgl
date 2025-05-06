@@ -6,6 +6,7 @@
 
 #include "CadApp.hpp"
 #include "CanvasApp.h"
+#include "UVApp.h"
 #include "InflateApp.h"
 #include "PackApp.hpp"
 #include "UIConf.h"
@@ -116,6 +117,18 @@ void RunHeadApp() {
   }
 }
 
+void RunUVApp() {
+  UILib ui;
+  ui.Run();
+  DebugUV(ui);
+
+  const unsigned PollFreqMs = 20;
+  while (ui.IsRunning()) {
+    // main thread not doing much
+    std::this_thread::sleep_for(std::chrono::milliseconds(PollFreqMs));
+  }
+}
+
 extern void MeshHeightMap();
 extern void MapDrawingToThickness();
 extern void TestSDF();
@@ -126,17 +139,22 @@ extern void JsToObj();
 
 extern void TestSurfRaySample();
 
+extern void VoxelizeUnitCell();
+extern void VoxelizeRaycast();
 int main(int argc, char** argv) {
+  //RunUVApp();
   // RunCanvasApp();
   // RunInflateApp();
   // RunPackApp();
-  //VoxApp();
+  // VoxApp();
   // RunHeadApp();
   // MeshHeightMap();
-   //MapDrawingToThickness();
-  TestSDF();
+  // MapDrawingToThickness();
+   //TestSDF();
   // JsToObj(); 
    //SaveVolMesh();
-  //TestSurfRaySample();
+  // TestSurfRaySample();
+  //VoxelizeUnitCell();
+  VoxelizeRaycast();
   return 0;
 }
