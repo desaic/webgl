@@ -152,9 +152,9 @@ int main(int argc, char** argv) {
   // MapDrawingToThickness();
    //TestSDF();
   // JsToObj(); 
-   //SaveVolMesh();
+   SaveVolMesh();
   // TestSurfRaySample();
   //VoxelizeUnitCell();
-  VoxelizeRaycast();
+  //VoxelizeRaycast();
   return 0;
 }

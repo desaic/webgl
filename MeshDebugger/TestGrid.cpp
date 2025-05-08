@@ -131,15 +131,16 @@ void MakeShearXGrid() {
 }
 
 void SaveVolMesh() {
-  const std::string volFile = "F:/meshes/bcc/102.vol";
-  std::string outFile = "F:/meshes/bcc/102.obj";
+  const std::string volFile = "F:/meshes/bcc/232_4x4.vol";
+  std::string outFile = "F:/meshes/bcc/232_4x4.obj";
   std::ifstream in(volFile, std::fstream::binary);
   Vec3u size;
   in.read((char*)(&size), 12);
   Array3D8u grid(size[0], size[1], size[2]);
   size_t bytes = size[0] * size_t(size[1]) * size[2];
   in.read((char*)(grid.DataPtr()), bytes);
-  float VoxRes[3] = {0.1, 0.1, 0.1};
+  const float VOX_DX = 0.064;
+  float VoxRes[3] = {VOX_DX, VOX_DX, VOX_DX};
 
   Array3D8u expanded(size[0] * 8,size[1], size[2]);
   for (size_t i = 0; i < grid.GetData().size(); i++) {
