@@ -45,7 +45,7 @@ export function DrawBeams(numBeams, beams, grid, voxelSize, cellSize) {
   }
 }
 
-export function MakeDiamondCell(voxelSize, cellSize, grid) {
+export function MakeDiamondCell(voxelSize, cellSize, grid: Array3D) {
   grid.data.fill(10000);
   const NUM_BEAMS = 28;
   // 16 beams within the cell and 12 beams for beams outside of the cell.
@@ -91,7 +91,7 @@ export function MakeDiamondCell(voxelSize, cellSize, grid) {
   return grid;
 }
 
-export function MakeGyroidCell(voxelSize, cellSize, grid) {
+export function MakeGyroidCell(_voxelSize, cellSize, grid) {
   grid.data.fill(10000);
   const twoPi = 6.2831853;
   const maxVal = 1.3;

@@ -1,4 +1,6 @@
 export class Array3D {
+  public size: [number, number, number];
+  public data: Float32Array;
   constructor(sx, sy, sz) {
     this.size = [sx, sy, sz];
     this.data = new Float32Array(sx * sy * sz);
@@ -22,9 +24,9 @@ export class Array3D {
   }
 
   TrilinearInterp(local, defaultVal = 0) {
-    const ix = Math.floor(local.x);
-    const iy = Math.floor(local.y);
-    const iz = Math.floor(local.z);
+    let ix = Math.floor(local.x);
+    let iy = Math.floor(local.y);
+    let iz = Math.floor(local.z);
 
     if (ix >= this.size[0] || iy >= this.size[1] || iz >= this.size[2]) {
       return defaultVal;

@@ -3,11 +3,11 @@ import { STLLoader } from "./STLLoader.js";
 import {OBJLoader} from "./OBJLoader.js"
 import World from "./World.js";
 
-function ReadSTL(filename, world){
+function ReadSTL(filename, world: World){
     const reader = new FileReader();
 	try{
 		reader.onload = function () {
-            const loader = new STLLoader();
+            const loader = new STLLoader(THREE.DefaultLoadingManager);
             const geometry = loader.parse(reader.result);			
             world.geometries.push(geometry);
             const mesh = new THREE.Mesh(geometry, world.defaultMaterial);
@@ -19,7 +19,7 @@ function ReadSTL(filename, world){
 	}
 }
 
-function ReadOBJ(filename, world) {
+function ReadOBJ(filename, world: World) {
   const reader = new FileReader();
   try {
     reader.onload = function () {
@@ -38,7 +38,7 @@ function ReadOBJ(filename, world) {
   }
 }
 
-function ParseMeshData(file, extension, world){
+function ParseMeshData(file, extension, world: World){
     if (extension === "stl"){
         ReadSTL(file, world);
     }else if(extension ==="obj"){
@@ -48,7 +48,7 @@ function ParseMeshData(file, extension, world){
     }
 }
 
-export const LoadMeshes = (files, world) => {
+export const LoadMeshes = (files, world: World) => {
     for (const file of files) {
         const extension = file.name.split('.').pop().toLowerCase();
         ParseMeshData(file, extension, world);
