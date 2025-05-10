@@ -115,7 +115,8 @@ function ParserState() {
 								groupStart: 0,
 								groupEnd: - 1,
 								groupCount: - 1,
-								inherited: false
+								inherited: false,
+								clone: ()=>{}
 							};
 							cloned.clone = this.clone.bind( cloned );
 							return cloned;

@@ -23,7 +23,7 @@ function ReadOBJ(filename, world: World) {
   const reader = new FileReader();
   try {
     reader.onload = function () {
-      var loader = new OBJLoader();
+      var loader = new OBJLoader(THREE.DefaultLoadingManager);
       const object = loader.parse(reader.result);
       if(object.isGroup){
         for(const child of object.children){

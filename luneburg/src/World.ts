@@ -2,6 +2,17 @@ import * as THREE from "three";
 import {RectGrid} from "./RectGrid.js";
 
 export default class World {
+  public camera: THREE.PerspectiveCamera;
+  public scene: THREE.Scene;
+  public geometries: any[];
+  public defaultMaterial: THREE.MeshPhongMaterial;
+  public ground: RectGrid;
+  public unitSphere :THREE.Mesh;
+  public selectedInstance: any[];
+  public instances: THREE.Group;
+  public quadScene: THREE.Scene;
+  public quadCamera: THREE.OrthographicCamera;
+  public quadTexture: THREE.DataTexture;
   constructor() {
     const fov = 50;
     const aspect = window.innerWidth / window.innerHeight;
@@ -14,10 +25,6 @@ export default class World {
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x333333);
-
-    this.meshes = [];
-
-    const planeSize = [400, 250];
 
     this.ground = new RectGrid(40,20,10,0x666666, 0x444444);
     this.ground.setRotationFromEuler(new THREE.Euler(1.5708,0,0));

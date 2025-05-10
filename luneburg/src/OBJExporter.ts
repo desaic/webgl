@@ -1,9 +1,7 @@
 import {
 	Color,
 	ColorManagement,
-	Matrix3,
 	SRGBColorSpace,
-	Vector2,
 	Vector3
 } from 'three';
 
@@ -19,8 +17,6 @@ class OBJExporter {
 
 		const vertex = new Vector3();
 		const color = new Color();
-		const normal = new Vector3();
-		const uv = new Vector2();
 
 		const face = [];
 
@@ -31,8 +27,6 @@ class OBJExporter {
 			let nbVertexUvs = 0;
 
 			const geometry = mesh.geometry;
-
-			const normalMatrixWorld = new Matrix3();
 
 			// shortcuts
 			const vertices = geometry.getAttribute( 'position' );
@@ -113,7 +107,7 @@ class OBJExporter {
 
 						const j = indices.getX( i + m ) + 1;
 
-						face[ m ] = ( indexVertex + j ) + ( normals || uvs ? '/' + ( uvs ? ( indexVertexUvs + j ) : '' ) + ( normals ? '/' + ( indexNormals + j ) : '' ) : '' );
+						face[ m ] = ( indexVertex + j );
 
 					}
 

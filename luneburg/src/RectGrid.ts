@@ -8,6 +8,8 @@ import {
 
 class RectGrid extends LineSegments {
 
+	declare public geometry: BufferGeometry;
+	declare public material;
 	/**
 	 * Constructs a new grid helper.
 	 *
@@ -16,10 +18,10 @@ class RectGrid extends LineSegments {
 	 * @param {number|Color|string} [color1=0x444444] - The color of the center line.
 	 * @param {number|Color|string} [color2=0x888888] - The color of the lines of the grid.
 	 */
-	constructor( nx = 10, ny = 10, dx = 1, color1 = 0x444444, color2 = 0x888888 ) {
+	constructor( nx = 10, ny = 10, dx = 1, colorVal1 = 0x444444, colorVal2 = 0x888888 ) {
 
-		color1 = new Color( color1 );
-		color2 = new Color( color2 );
+		const color1 = new Color( colorVal1 );
+		const color2 = new Color( colorVal2 );
 
 		const centerx = nx / 2;
     const centery = ny / 2;
@@ -54,9 +56,6 @@ class RectGrid extends LineSegments {
 		const material = new LineBasicMaterial( { vertexColors: true, toneMapped: false } );
 
 		super( geometry, material );
-
-		this.type = 'RectGrid';
-
 	}
 
 	/**

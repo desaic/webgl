@@ -8,7 +8,7 @@ import { Array3D } from "./Array3D.js";
 import { GPUPicker } from "./gpupicker.js";
 import { OBJExporter } from "./OBJExporter.js";
 import { Vec3f } from "./Vec3f.js";
-import { DrawBeamDist, MakeDiamondCell, MakeGyroidCell,
+import { MakeDiamondCell, MakeGyroidCell,
   MakeFluoriteCell,MakeOctetCell
  } from "./Lattice.js";
 
@@ -27,7 +27,6 @@ var gpuPicker;
 var pixelRatio = 1.0;
 const exporter = new OBJExporter();
 const RENDER_FPS = 60;
-const SLICE_FPS = 5;
 const lensConf = {
   diameter: 60,
   z: 30,
@@ -170,8 +169,8 @@ const bindEventListeners = () => {
 
   diameterInput
     .addEventListener("change", function () {
-      const diameter = this.value;
-      const r = diameter / 2;
+      const diameter = Number(this.value);
+      const r :number = diameter / 2;
       world.unitSphere.scale.set(r, r, r);
       world.unitSphere.updateMatrix();
       lensConf.diameter = diameter;
@@ -179,26 +178,26 @@ const bindEventListeners = () => {
     });
   cellSizeInput
     .addEventListener("change", function () {
-      lensConf.cellSize = this.value;
+      lensConf.cellSize = Number(this.value);
       ComputeUnitCell(unitCell, lensConf);
       UpdateSlice();
     });
   minThickInput
     .addEventListener("change", function () {
-      lensConf.minThickness = this.value;
+      lensConf.minThickness = Number(this.value);
       UpdateSlice();
     });
-  const zlayerSlider = document.getElementById("zlayer");
+  const zlayerSlider = document.getElementById("zlayer") as HTMLInputElement;
   const zlayerLabel = document.getElementById("zlayerLabel");
   zlayerSlider.addEventListener("change", function () {
-    lensConf.z = (this.value * lensConf.diameter) / 1000;
+    lensConf.z = (Number(zlayerSlider.value) * lensConf.diameter) / 1000;
     zlayerLabel.textContent = "z=" + lensConf.z + "mm";
     UpdateSlice();
   });
   const setZLayerButton = document.getElementById("setZLayerButton");
   setZLayerButton.addEventListener("click", () => {
     if (zlayerSlider) {
-      zlayerSlider.value = 500;
+      zlayerSlider.value = '500';
       const event = new Event("change");
       zlayerSlider.dispatchEvent(event);
     }
@@ -206,7 +205,7 @@ const bindEventListeners = () => {
 
   const densityEle = document.getElementById("densityInput");
   const thicknessEle = document.getElementById("thicknessLabel");
-  densityEle.addEventListener("change", (event) => {
+  densityEle.addEventListener("change", (_event) => {
     UpdateThicknessUI(densityEle, thicknessEle);
   });
   const lookupButton = document.getElementById("lookupThickness");
@@ -215,9 +214,9 @@ const bindEventListeners = () => {
   });
 
   
-  const selectType = document.getElementById("latticeType");
-  selectType.addEventListener("change", (event) => {
-    lensConf.type = event.target.value;
+  const selectType = document.getElementById("latticeType") as HTMLSelectElement;
+  selectType.addEventListener("change", (_event) => {
+    lensConf.type = selectType.value;
     ComputeUnitCell(unitCell, lensConf);
     UpdateSlice();
     UpdateThicknessUI(densityEle, thicknessEle);
@@ -279,8 +278,6 @@ function ComputeUnitCell(grid, conf) {
     MakeOctetCell(voxelSize, cellSize, grid);
   }
 }
-
-let drawing = false;
 
 function LuneRho(R, r) {
   // index of solid material.
@@ -380,8 +377,6 @@ function DrawSlice(image, conf) {
       if (d < t) {
         c = 1;
       }
-      const rx = cellx / cellSize;
-      const ry = celly / cellSize;
       color4b[0] = c * 250;
       color4b[1] = c * 150;
       color4b[2] = c * 50;
@@ -392,7 +387,7 @@ function DrawSlice(image, conf) {
 
 let renderElapsed = 0;
 
-function Animate(time) {
+function Animate(_time) {
   var delta = clock.getDelta();
   renderElapsed += delta;
   if (renderElapsed > 0.9 / RENDER_FPS) {
@@ -405,4 +400,4 @@ function Animate(time) {
 }
 
 InitScene();
-Animate();
+Animate(null);

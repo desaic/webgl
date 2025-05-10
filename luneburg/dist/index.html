@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tauri App</title>
+  <style>
+    body,
+    html {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      /* Prevent scrolling */
+      height: 100%;
+    }
+
+    #myCanvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    #file-input {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      z-index: 10;
+      background: white;
+      padding: 10px;
+      border-radius: 5px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+    }
+
+    .inputRow {
+      display: flex;
+      align-items: center;
+      width: 150px;
+    }
+
+    .inputLabel {
+      background-color: rgb(121, 121, 121);
+      margin-right: 5px;
+      width: 150px;
+      text-overflow: ellipsis;
+    }
+
+    .inputField {
+      width: 85px;
+    }
+
+    #widgetContainer {
+      display: flex;
+      flex-direction: column;
+    }
+  </style>
+  <script type="module" crossorigin src="/assets/index-Cz_3dKKn.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-DhEUBRcW.css">
+</head>
+
+<body>
+<div id="myCanvas"></div>
+<div id="widgetContainer" style="position: absolute; top: 10px; left: 10px;width: 150px;">
+  <button id="saveMesh">Save mesh</button><br>
+  <button id="saveGridTxt">Save grid text</button><br>
+  <button>Button 3</button><br>
+  <div class="inputRow">
+    <label for="diameterInput" class="inputLabel">Diameter (mm):</label>
+    <input type="number" class="inputField" step="any" id="diameterInput" value="60" min="1" max="1000">
+  </div><br>
+  <div class="inputRow">
+    <label for="cellSizeInput" class="inputLabel">cell size (mm):</label>
+    <input type="number" class="inputField" step="1" id="cellSizeInput" value="2" min="1" max="10">
+  </div><br>
+  <div class="inputRow">
+    <label for="minThickInput" class="inputLabel">min thickness (mm):</label>
+    <input type="number" class="inputField" step="0.001" id="minThickInput" value="0.175" min="0.01" max="1">
+  </div><br>
+  <select id="shapeSelect">
+    <option value="sphere">sphere</option>
+    <option value="cylinder">cylinder</option>
+  </select><br>
+  <select id="latticeType">
+    <option value="diamond">diamond</option>
+    <option value="gyroid">gyroid</option>
+    <option value="fluorite">fluorite</option>
+    <option value="octet">octet</option>
+  </select>
+  <div class="inputRow"></div>
+  <label id="zlayerLabel" for="zlayer" class="inputLabel">z layer:</label>
+  <input type="range" id="zlayer" min="0" max="1000" step="1">
+  <button id="setZLayerButton">Set Z middle</button>
+  <div class="inputRow">
+    <label for="density" class="inputLabel">densiy: </label>
+    <input type="number" class="inputField" step=0.01 id="densityInput" value=0.5 min=0.01 max=1>
+    <button id="lookupThickness">look up thickness</button>
+  </div><br>
+  <label id="thicknessLabel" class="inputLabel">thickness: </label>
+</div>
+</div>
+</body>
+
+</html>
