@@ -941,7 +941,7 @@ void InvertVal(Array3D8u& grid) {
   }
 }
 
-void Normalize(std::vector<float>& v) {
+static void Normalize(std::vector<float>& v) {
   if (v.size() == 0) {
     return;
   }
@@ -958,7 +958,7 @@ void Normalize(std::vector<float>& v) {
   }
 }
 
-int GaussianFilter1D(float sigma, unsigned rad, std::vector<float>& filter) {
+static int GaussianFilter1D(float sigma, unsigned rad, std::vector<float>& filter) {
   if (rad > 100) {
     return -1;
   }
@@ -981,7 +981,7 @@ int GaussianFilter1D(float sigma, unsigned rad, std::vector<float>& filter) {
 }
 
 // with mirror boundary condition
-void FilterVec(uint8_t* v, size_t len, const std::vector<float>& kern) {
+static void FilterVec(uint8_t* v, size_t len, const std::vector<float>& kern) {
   size_t halfKern = kern.size() / 2;
 
   std::vector<uint8_t> padded(len + 2 * halfKern);
@@ -1002,7 +1002,7 @@ void FilterVec(uint8_t* v, size_t len, const std::vector<float>& kern) {
   }
 }
 
-void FilterDecomp(Array3D8u& grid, const std::vector<float>& kern) {
+static void FilterDecomp(Array3D8u& grid, const std::vector<float>& kern) {
   Vec3u gsize = grid.GetSize();
   // z
   for (unsigned i = 0; i < gsize[0]; i++) {

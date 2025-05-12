@@ -3,6 +3,7 @@
 #define TINYBVH_IMPLEMENTATION
 #include "tiny_bvh.h"
 #include "TrigMesh.h"
+#include "MeshUtil.h"
 #include "ImageIO.h"
 #include "BBox.h"
 
@@ -107,7 +108,12 @@ void TestSurfRaySample(){
   Vec2u imageSize(800, 800);
   Array2D8u texture(imageSize[0], imageSize[1]);
 
-  
+  std::vector<SurfacePoint> points;
+  SamplePoints(m, points, 0.5);
 
+  for (size_t i = 0; i < points.size(); i++) {
+    Vec2f uv = points[i].uv;
+    
+  }
   SavePngGrey("F:/meshes/shellVar/texture.png", texture);
 }

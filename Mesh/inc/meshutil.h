@@ -21,13 +21,12 @@ void SaveVolAsObjMesh(std::string outfile, const Array3D8u& vol, float* voxRes, 
 void SaveVolAsObjMesh(std::string outfile, const Array3D8u& vol, float* voxRes,
                       float* origin, int mat);
 
-TrigMesh MarchCubes(std::vector<uint8_t>& vol, std::array<unsigned, 3>& gsize);
-
 void SamplePointsOneTrig(unsigned tIdx, const TrigMesh& m,
                          std::vector<SurfacePoint>& points, float spacing);
 
 void SamplePoints(const TrigMesh& m, std::vector<SurfacePoint>& points,
                   float spacing);
+
 void MergeCloseVertices(TrigMesh& m);
 
 float SurfaceArea(const TrigMesh& m);

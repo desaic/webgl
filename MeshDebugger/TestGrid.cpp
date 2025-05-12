@@ -1,9 +1,13 @@
 #include "Array3D.h"
 #include "Array3DUtils.h"
+#include "AdapSDF.h"
 #include "BBox.h"
 #include "cpu_voxelizer.h"
+#include "FastSweep.h"
 #include "Lattice.h"
 #include "Grid3Df.h"
+#include "MarchingCubes.h"
+#include "MeshOptimization.h"
 #include "VoxIO.h"
 #include "MeshUtil.h"
 #include "ZRaycast.h"
@@ -130,9 +134,9 @@ void MakeShearXGrid() {
   SaveVoxTxt(binGrid, h, "F:/meshes/lattice_fablet/shearmy.txt");
 }
 
-void SaveVolMesh() {
+void SaveVolMeshAsVox() {
   const std::string volFile = "F:/meshes/bcc/232_4x4.vol";
-  std::string outFile = "F:/meshes/bcc/232_4x4.obj";
+  std::string outFile = "F:/meshes/bcc/232_4x4_vox.obj";
   std::ifstream in(volFile, std::fstream::binary);
   Vec3u size;
   in.read((char*)(&size), 12);
@@ -153,6 +157,155 @@ void SaveVolMesh() {
   }
   SaveVolAsObjMesh(outFile, expanded, VoxRes, 1);
 
+}
+
+// with mirror boundary condition
+static void FilterVec(short* v, size_t len, const std::vector<float>& kern) {
+  size_t halfKern = kern.size() / 2;
+
+  std::vector<uint8_t> padded(len + 2 * halfKern);
+  for (size_t i = 0; i < halfKern; i++) {
+    padded[i] = v[halfKern - i];
+    padded[len - i] = v[len - halfKern + i];
+  }
+  for (size_t i = 0; i < len; i++) {
+    padded[i + halfKern] = v[i];
+  }
+
+  for (size_t i = 0; i < len; i++) {
+    float sum = 0;
+    for (size_t j = 0; j < kern.size(); j++) {
+      sum += kern[j] * padded[i + j];
+    }
+    v[i] = uint8_t(sum);
+  }
+}
+
+static void FilterDecomp(Array3D<short>& grid, const std::vector<float>& kern) {
+  Vec3u gsize = grid.GetSize();
+  // z
+  for (unsigned i = 0; i < gsize[0]; i++) {
+    for (unsigned j = 0; j < gsize[1]; j++) {
+      short* vec = &grid(i, j, 0);
+      FilterVec(vec, gsize[2], kern);
+    }
+  }
+  // y
+  for (unsigned i = 0; i < gsize[0]; i++) {
+    for (unsigned k = 0; k < gsize[2]; k++) {
+      std::vector<short> v(gsize[1]);
+      for (unsigned j = 0; j < gsize[1]; j++) {
+        v[j] = grid(i, j, k);
+      }
+      FilterVec(v.data(), gsize[1], kern);
+      for (unsigned j = 0; j < gsize[1]; j++) {
+        grid(i, j, k) = v[j];
+      }
+    }
+  }
+  // x
+  for (unsigned j = 0; j < gsize[1]; j++) {
+    for (unsigned k = 0; k < gsize[2]; k++) {
+      std::vector<short> v(gsize[0]);
+      for (unsigned i = 0; i < gsize[0]; i++) {
+        v[i] = grid(i, j, k);
+      }
+      FilterVec(v.data(), gsize[0], kern);
+      for (unsigned i = 0; i < gsize[0]; i++) {
+        grid(i, j, k) = v[i];
+      }
+    }
+  }
+}
+
+void SaveVolMeshAsSurf() {
+  const std::string volFile = "F:/meshes/radome/radome0.064mm.vol";
+  std::string outFile = "F:/meshes/radome/radome_surf.obj";
+  std::ifstream in(volFile, std::fstream::binary);
+  Vec3u size;
+  in.read((char*)(&size), 12);
+  Array3D8u grid(size[0], size[1], size[2]);
+  size_t bytes = size[0] * size_t(size[1]) * size[2];
+  in.read((char*)(grid.DataPtr()), bytes);
+  const float VOX_DX = 0.064;
+  float VoxRes[3] = {VOX_DX, VOX_DX, VOX_DX};
+
+  Array3D8u expanded(size[0] * 8, size[1], size[2]);
+  for (size_t i = 0; i < grid.GetData().size(); i++) {
+    uint8_t val = grid.GetData()[i];
+    for (size_t j = 0; j < 8; j++) {
+      size_t outIdx = i * 8 + j;
+      uint8_t outVal = (val >> j) & 1;
+      expanded.GetData()[outIdx] = outVal;
+    }
+  }
+
+  AdapSDF sdf;
+  Vec3u eSize = expanded.GetSize();
+  Vec3u sdfSize = expanded.GetSize() + Vec3u(3, 3, 3);
+  Vec3u dstOffset(1, 1, 1);
+  sdf.Allocate(sdfSize[0], sdfSize[1], sdfSize[2]);
+  const unsigned NUM_CORNERS = 8;
+  Vec3u voxCorners[NUM_CORNERS] = {{0, 0, 0}, {1, 0, 0}, {0, 1, 0}, {1, 1, 0},
+                                   {0, 0, 1}, {1, 0, 1}, {0, 1, 1}, {1, 1, 1}};
+  sdf.distUnit = 0.005;
+  sdf.voxSize = VOX_DX;
+  for (unsigned z = 0; z < eSize[2]; z++) {
+    for (unsigned y = 0; y < eSize[1]; y++) {
+      for (unsigned x = 0; x < eSize[0]; x++) {
+        uint8_t val = expanded(x, y, z);
+        if (val > 0) {
+          for (unsigned i = 0; i < NUM_CORNERS; i++) {
+            Vec3u ptIdx = Vec3u(x, y, z) + voxCorners[i] + dstOffset;
+            sdf.dist(ptIdx[0], ptIdx[1], ptIdx[2]) = 0;
+          }
+        }
+      }
+    }
+  }
+
+  //mark '0' with only '0' neighbors as inside with negative values
+  //looks at 6 neighbors
+  const unsigned NUM_NBRS = 6;
+  Vec3i NBRS[NUM_NBRS] = {{-1, 0, 0}, {1, 0, 0},  {0, -1, 0},
+                          {0, 1, 0},  {0, 0, -1}, {0, 0, 1}};
+  for (unsigned z = 1; z < sdfSize[2] - 1; z++) {
+    for (unsigned y = 1; y < sdfSize[1] - 1; y++) {
+      for (unsigned x = 1; x < sdfSize[0] - 1; x++) {
+        short val = sdf.dist(x, y, z);
+        if (val != 0) {
+          continue;
+        }
+        bool hasOutside = false;
+        for (unsigned n = 0; n < NUM_NBRS; n++) {
+          Vec3i index((int)x, (int)y, (int)z);
+          index += NBRS[n];
+          short nbrVal = sdf.dist(unsigned(index[0]), unsigned(index[1]), unsigned(index[2]));
+          if (nbrVal > 0) {
+            hasOutside = true;
+            break;
+          }
+        }
+        if (!hasOutside) {
+          sdf.dist(x, y, z) = -VOX_DX;
+        }
+      }
+    }
+  }
+  Array3D8u frozen;
+  FastSweepPar(sdf.dist, sdf.voxSize, sdf.distUnit, 3, frozen);
+  std::vector<float> kern(3);
+  kern[0] = 0.25;
+  kern[2] = 0.25;
+  kern[1] = 0.5;
+  FilterDecomp(sdf.dist, kern);
+  TrigMesh surfMesh;
+  Vec3f origin(0, 0, 0);
+  MarchingCubes(sdf.dist, 0.01, sdf.distUnit, sdf.voxSize, origin, &surfMesh);
+  MergeCloseVertices(surfMesh);
+  //MeshOptimization::ComputeSimplifiedMesh(surfMesh.v, surfMesh.t, 0.01, 0.4,
+  //                                        surfMesh.v, surfMesh.t);
+  surfMesh.SaveObj(outFile);    
 }
 
 static bool InBound(int x, int y, int z, const Vec3u& size) {

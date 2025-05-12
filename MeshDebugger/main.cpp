@@ -133,7 +133,7 @@ extern void MeshHeightMap();
 extern void MapDrawingToThickness();
 extern void TestSDF();
 
-extern void SaveVolMesh();
+extern void SaveVolMeshAsSurf();
 
 extern void JsToObj();
 
@@ -150,10 +150,10 @@ int main(int argc, char** argv) {
   // RunHeadApp();
   // MeshHeightMap();
   // MapDrawingToThickness();
-   //TestSDF();
+  //TestSDF();
   // JsToObj(); 
-   SaveVolMesh();
-  // TestSurfRaySample();
+  SaveVolMeshAsSurf();
+  //TestSurfRaySample();
   //VoxelizeUnitCell();
   //VoxelizeRaycast();
   return 0;
