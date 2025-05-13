@@ -6,6 +6,7 @@
 #include <iostream>
 #include <fstream>
 #include <thread>
+#include <ctime>
 #include <unordered_map>
 struct QuadMesh {
     std::vector<std::array<unsigned,4> > q;
@@ -44,6 +45,17 @@ void savePointsObj(const std::string & fileName, const std::vector<std::array<fl
 		out << "v " << points[i][0] <<" "<< points[i][1] << " " << points[i][2] << "\n";
 	}
 	out.close();
+}
+
+void savePointsObj(const std::string& fileName, const std::vector<Vec3f>& points) {
+  std::ofstream out(fileName);
+  if (!out.good()) {
+    return;
+  }
+  for (size_t i = 0; i < points.size(); i++) {
+    out << "v " << points[i][0] << " " << points[i][1] << " " << points[i][2] << "\n";
+  }
+  out.close();
 }
 
 void addQuad(QuadMesh& m, const std::vector<Vec3f>& v) {
@@ -274,6 +286,55 @@ void ComputeUVTangents(Vec3f& tx, Vec3f& ty, const Vec3f& e1, const Vec3f& e2, c
   ty = l1 * e1 + l2 * e2;
 }
 
+float RandomUniform01() {
+  return (float)(rand()) / (float)(RAND_MAX);
+}
+
+void SampleRandomPoints(unsigned tIdx, const TrigMesh& m, std::vector<SurfacePoint>& points,
+  float spacing) {
+  Vec3f v0 = m.GetTriangleVertex(tIdx, 0);
+  Vec3f v1 = m.GetTriangleVertex(tIdx, 1);
+  Vec3f v2 = m.GetTriangleVertex(tIdx, 2);
+  Vec3f e1 = v1 - v0;
+  Vec3f e2 = v2 - v0;
+  Vec3f cross = e1.cross(e2);
+  float norm = cross.norm();
+  Vec3f n = (1.0f / norm) * cross;
+  //can by less than 1.
+  //since random points are less uniform, increase
+  //number of points be factor of 2.
+  float expectedNumPoints = norm / spacing / spacing;
+  int numPoints = int(expectedNumPoints);
+  float remainder = expectedNumPoints - numPoints;
+  float rand = RandomUniform01();
+  if (rand < remainder) {
+    numPoints++;
+  }
+  Vec2f uv0 = m.GetTriangleUV(tIdx, 0);
+  Vec2f uv1 = m.GetTriangleUV(tIdx, 1);
+  Vec2f uv2 = m.GetTriangleUV(tIdx, 2);
+  Vec2f uve1 = uv1 - uv0;
+  Vec2f uve2 = uv2 - uv0;
+  Vec3f tx, ty;
+  // same within a triangle.
+  ComputeUVTangents(tx, ty, e1, e2, uve1, uve2);
+  for (int i = 0; i < numPoints; i++) {
+    //https://www.cs.princeton.edu/~funk/tog02.pdf section 4.2
+    float r1 = std::sqrt(RandomUniform01());
+    float r2 = RandomUniform01();
+    float a = 1 - r1;
+    float b = r1 * (1 - r2);
+    float c = r1 * r2;
+    SurfacePoint sp;
+    sp.v = a * v0 + b * v1 + c * v2;
+    sp.n = n;
+    sp.uv = a * uv0 + b * uv1 + c * uv2;
+    sp.tx = tx;
+    sp.ty = ty;
+    points.push_back(sp);
+  }
+}
+
 void SamplePointsOneTrig(unsigned tIdx, const TrigMesh& m, std::vector<SurfacePoint>& points,
                          float spacing) {
   Vec3f v0 = m.GetTriangleVertex(tIdx, 0);
@@ -292,6 +353,11 @@ void SamplePointsOneTrig(unsigned tIdx, const TrigMesh& m, std::vector<SurfacePo
     // degenerate triangle.
     return;
   }
+  if (area < 20 * spacing * spacing) {
+    //use random sampling instead of fixed spacing.
+    SampleRandomPoints(tIdx, m, points, spacing);
+    return;
+  }
 
   Vec2f uv0 = m.GetTriangleUV(tIdx, 0);
   Vec2f uv1 = m.GetTriangleUV(tIdx, 1);
@@ -308,12 +374,8 @@ void SamplePointsOneTrig(unsigned tIdx, const TrigMesh& m, std::vector<SurfacePo
   sp.uv = oneThird * (uv0 + uv1 + uv2);
   sp.tx = tx;
   sp.ty = ty;
-  points.push_back(sp);
-  if (area < spacing * spacing) {
-    // small triangle. one center point is enough.
-    return;
-  }
 
+  points.push_back(sp);
   float e1Len = e1.norm();
   Vec3f x = (1.0f / e1Len) * e1;
   float e2Len = e2.norm();
@@ -333,17 +395,19 @@ void SamplePointsOneTrig(unsigned tIdx, const TrigMesh& m, std::vector<SurfacePo
     // between 0 to 1
     float y = (hi + 0.5f) / numHSteps;
     float xlen = y * e3len;
-    int numXSteps = int(xlen / spacing);
-    if (numXSteps == 0) {
-      // very narrow area, nothing to sample.
-      continue;
+    float floatSteps = xlen / spacing;
+    int intSteps = int(floatSteps);
+    float remain = floatSteps - intSteps;
+    float r = RandomUniform01();
+    if (r < remain) {
+      intSteps++;
     }
-    for (int xi = 0; xi < numXSteps; xi++) {
-      float x = (xi + 0.5f) / numXSteps;
-      Vec3f point = v0 + (1 - y) * (x * e1 + (1 - x) * e2);
+    for (int xi = 0; xi < intSteps; xi++) {
+      float x = (xi + 0.5f) / intSteps;
+      Vec3f point = v0 + y * (x * e1 + (1 - x) * e2);
       SurfacePoint sp;
       sp.v = point;
-      sp.uv = (1 - y) * x * uv1 + (1 - y) * (1 - x) * uv2 + y * uv0;
+      sp.uv = y * x * uv1 + y * (1 - x) * uv2 + (1 - y) * uv0;
       sp.n = n;
       sp.tx = tx;
       sp.ty = ty;
@@ -355,6 +419,7 @@ void SamplePointsOneTrig(unsigned tIdx, const TrigMesh& m, std::vector<SurfacePo
 void SamplePoints(const TrigMesh& m, std::vector<SurfacePoint>& points,
   float spacing) {
   size_t numTrigs = m.t.size() / 3;
+  srand(time(0));
   for (size_t ti = 0; ti < numTrigs; ti++) {
     SamplePointsOneTrig(ti, m, points, spacing);
   }

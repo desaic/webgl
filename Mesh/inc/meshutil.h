@@ -15,6 +15,7 @@ void saveCalibObj(const float * table, const int * tsize,
 
 //save list of 3d points to .obj mesh file.
 void savePointsObj(const std::string & fileName, const std::vector<std::array<float, 3 > > & points);
+void savePointsObj(const std::string& fileName, const std::vector<Vec3f>& points);
 
 void SaveVolAsObjMesh(std::string outfile, const Array3D8u& vol, float* voxRes, int mat);
 

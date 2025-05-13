@@ -87,6 +87,22 @@ void TestBVH() {
   SavePngGrey("F:/meshes/shellVar/depth.png", depth);
 }
 
+static inline float ModUV(float u) { 
+  if (u < 0) {
+    return u - int(u) + 1;
+  } else {
+    return u - int(u);
+  }
+}
+
+struct LineSeg {
+  Vec3f v0, v1;
+};
+
+void SaveLineSegsObj(const std::string & filename, const std::vector<LineSeg> & lines) {
+
+}
+
 void TestSurfRaySample(){
   TrigMesh m;
   m.LoadObj("F:/meshes/shellVar/cap_uv.obj");
@@ -105,15 +121,42 @@ void TestSurfRaySample(){
   tinybvh::BVH bvh;
   bvh.Build(triangles.data(), numTrigs);
 
-  Vec2u imageSize(800, 800);
+  Vec2u imageSize(1600, 1600);
   Array2D8u texture(imageSize[0], imageSize[1]);
 
   std::vector<SurfacePoint> points;
   SamplePoints(m, points, 0.5);
+  const float MIN_T = 0.01;
 
+  
+  std::vector<LineSeg> rays(points.size());
   for (size_t i = 0; i < points.size(); i++) {
+    Vec3f rayDir = points[i].n;
+    tinybvh::bvhvec3 O(points[i].v[0],points[i].v[1],points[i].v[2]);
+    tinybvh::bvhvec3 D(rayDir[0], rayDir[1], rayDir[2]);
+    O[0] += MIN_T * D[0];
+    O[1] += MIN_T * D[1];
+    O[2] += MIN_T * D[2];
+    tinybvh::Ray ray(O, D);
+    int steps = bvh.Intersect(ray);
+    float t = ray.hit.t;
+
     Vec2f uv = points[i].uv;
-    
+    uv[0] = unsigned(imageSize[0] * ModUV(uv[0]));
+    uv[1] = unsigned(imageSize[1] * ModUV(uv[1]));
+    if (uv[0] >= imageSize[0]) {
+      uv[0] = imageSize[0] - 1;
+    }
+    if (uv[1] >= imageSize[1]) {
+      uv[1] = imageSize[1] - 1;
+    }
+    if (t < 0) {
+      t = 0;
+    }
+    if (t > 4) {
+      t = 4;
+    }
+    texture(uv[0], imageSize[1] - uv[1]- 1) = t * 50 + 50;
   }
-  SavePngGrey("F:/meshes/shellVar/texture.png", texture);
+  SavePngGrey("F:/meshes/shellVar/textureThickness.png", texture);
 }
