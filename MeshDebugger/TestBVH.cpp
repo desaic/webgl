@@ -99,8 +99,50 @@ struct LineSeg {
   Vec3f v0, v1;
 };
 
-void SaveLineSegsObj(const std::string & filename, const std::vector<LineSeg> & lines) {
+void SaveLineSegsObj(const std::string& filename,
+                     const std::vector<LineSeg>& lines) {
+  std::ofstream out(filename);
+  for (size_t i = 0; i < lines.size(); i++) {
+    out << "v " << lines[i].v0[0] << " " << lines[i].v0[1] << " "
+        << lines[i].v0[2] << "\n";
+    out << "v " << lines[i].v1[0] << " " << lines[i].v1[1] << " "
+        << lines[i].v1[2] << "\n";
+  }
+  for (size_t i = 0; i < lines.size(); i++) {
+    out << "l " << (2 * i + 1) << " " << (2 * i + 2) << "\n";
+  }
+}
 
+Vec3u heatmapColor(float value) {
+  if (value < 0.0f ){    
+    return Vec3u(0, 0, 0);
+  }
+  if (value > 10) {
+    return Vec3u(255,255,255);
+  }
+  float normalizedValue = value / 10.0f;  // Normalize to 0-1
+
+  if (normalizedValue < 0.25f) {
+    // Blue to Cyan
+    int blue = 255;
+    int green = static_cast<int>(255 * normalizedValue * 4);
+    return Vec3u(0, green, blue);
+  } else if (normalizedValue < 0.5f) {
+    // Cyan to Green
+    int blue = static_cast<int>(255 * (1 - (normalizedValue - 0.25f) * 4));
+    int green = 255;
+    return Vec3u(0, green, blue);
+  } else if (normalizedValue < 0.75f) {
+    // Green to Yellow
+    int green = 255;
+    int red = static_cast<int>(255 * (normalizedValue - 0.5f) * 4);
+    return Vec3u(red, green, 0);
+  } else {
+    // Yellow to Red
+    int green = static_cast<int>(255 * (1 - (normalizedValue - 0.75f) * 4));
+    int red = 255;
+    return Vec3u(red, green, 0);
+  }
 }
 
 void TestSurfRaySample(){
@@ -122,16 +164,23 @@ void TestSurfRaySample(){
   bvh.Build(triangles.data(), numTrigs);
 
   Vec2u imageSize(1600, 1600);
-  Array2D8u texture(imageSize[0], imageSize[1]);
+  Array2D8u texture(imageSize[0] * 3, imageSize[1]);
 
   std::vector<SurfacePoint> points;
   SamplePoints(m, points, 0.5);
   const float MIN_T = 0.01;
-
-  
+  Vec3f debugPoint(9.3965,6.2887,-24.962);
+  const size_t MAX_RAY_DIST = 1e20;
   std::vector<LineSeg> rays(points.size());
   for (size_t i = 0; i < points.size(); i++) {
-    Vec3f rayDir = points[i].n;
+    Vec3f debugVec = points[i].v - debugPoint;
+    float debugDist = debugVec.norm();
+    Vec3f n = points[i].n;
+    if (debugDist < 0.1) {
+      std::cout << n[0] << " " << n[1] << " " << n[2] << "\n";
+      std::cout << "debug\n";
+    }
+    Vec3f rayDir = -points[i].n;
     tinybvh::bvhvec3 O(points[i].v[0],points[i].v[1],points[i].v[2]);
     tinybvh::bvhvec3 D(rayDir[0], rayDir[1], rayDir[2]);
     O[0] += MIN_T * D[0];
@@ -140,7 +189,14 @@ void TestSurfRaySample(){
     tinybvh::Ray ray(O, D);
     int steps = bvh.Intersect(ray);
     float t = ray.hit.t;
-
+    if (t > MAX_RAY_DIST) {
+      t = 0.01;
+    }
+    if (steps < 0) {
+      t = 0.001;
+    }
+    LineSeg seg = {points[i].v, points[i].v + t * rayDir};
+    rays[i]=seg;
     Vec2f uv = points[i].uv;
     uv[0] = unsigned(imageSize[0] * ModUV(uv[0]));
     uv[1] = unsigned(imageSize[1] * ModUV(uv[1]));
@@ -153,10 +209,15 @@ void TestSurfRaySample(){
     if (t < 0) {
       t = 0;
     }
-    if (t > 4) {
-      t = 4;
+    if (t > 10) {
+      t = 10;
     }
-    texture(uv[0], imageSize[1] - uv[1]- 1) = t * 50 + 50;
+    Vec3u color = heatmapColor(10-t);
+    texture(uv[0] * 3, imageSize[1] - uv[1] - 1) = color[0];
+    texture(uv[0] * 3 + 1, imageSize[1] - uv[1] - 1) = color[1];
+    texture(uv[0] * 3 + 2, imageSize[1] - uv[1] - 1) = color[2];
   }
-  SavePngGrey("F:/meshes/shellVar/textureThickness.png", texture);
+  SaveLineSegsObj("F:/meshes/shellVar/rays.obj", rays);
+  //SavePngGrey("F:/meshes/shellVar/textureThickness.png", texture);
+  SavePngColor("F:/meshes/shellVar/colorThickness.png", texture);
 }
