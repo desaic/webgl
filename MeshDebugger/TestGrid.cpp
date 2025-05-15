@@ -461,3 +461,28 @@ void VoxelizeRaycast() {
   SaveVolAsObjMesh("F:/meshes/bcc/cell_ray_vol.obj", vox, (float*)(&rcConf.voxelSize_), 1);
   SaveVoxTxt(vox, h, "F:/meshes/bcc/ibc_102.txt");
 }
+
+void TestVoxelizer() {
+  TrigMesh mesh ;
+  mesh.LoadStl("F:/meshes/shellVar/breakVox.stl");
+  Box3f box = ComputeBBox(mesh.v);
+  VoxFun callback;
+  Array3D8u voxGrid;
+  voxconf conf;
+  const float h = 0.5f;
+  conf.unit = Vec3f(h, h, h);
+  conf.origin = Vec3f(33.25,-46,5);
+  Vec3f gridLen = box.vmax - conf.origin;
+  conf.gridSize = Vec3u(unsigned(gridLen[0] / h+ 1), unsigned(gridLen[1] / h)+1,
+                        unsigned(gridLen[2] / h)+ 1);
+  voxGrid.Allocate(conf.gridSize, 0);
+  callback.fun = [&voxGrid](unsigned x, unsigned y, unsigned z, size_t tIdx) {
+    const Vec3u& size = voxGrid.GetSize();
+    if (x < size[0] && y < size[1] && z < size[2]) {
+      voxGrid(x, y, z) = 1;
+    }
+  };
+  cpu_voxelize_mesh(conf, &mesh, callback);
+  SaveVolAsObjMesh("F:/meshes/shellVar/debugVox_out.obj", voxGrid,
+                   (float*)(&conf.unit), (float*)(&conf.origin),1);
+}

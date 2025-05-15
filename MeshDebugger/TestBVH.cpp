@@ -6,6 +6,9 @@
 #include "MeshUtil.h"
 #include "ImageIO.h"
 #include "BBox.h"
+#include "AdapSDF.h"
+#include "AdapUDF.h"
+#include "SDFMesh.h"
 
 void TestBVH() {
   TrigMesh m;
@@ -162,24 +165,20 @@ void TestSurfRaySample(){
 
   tinybvh::BVH bvh;
   bvh.Build(triangles.data(), numTrigs);
+  m.ComputeVertNormals();
 
   Vec2u imageSize(1600, 1600);
   Array2D8u texture(imageSize[0] * 3, imageSize[1]);
 
   std::vector<SurfacePoint> points;
+
   SamplePoints(m, points, 0.5);
   const float MIN_T = 0.01;
-  Vec3f debugPoint(9.3965,6.2887,-24.962);
   const size_t MAX_RAY_DIST = 1e20;
   std::vector<LineSeg> rays(points.size());
   for (size_t i = 0; i < points.size(); i++) {
-    Vec3f debugVec = points[i].v - debugPoint;
-    float debugDist = debugVec.norm();
     Vec3f n = points[i].n;
-    if (debugDist < 0.1) {
-      std::cout << n[0] << " " << n[1] << " " << n[2] << "\n";
-      std::cout << "debug\n";
-    }
+
     Vec3f rayDir = -points[i].n;
     tinybvh::bvhvec3 O(points[i].v[0],points[i].v[1],points[i].v[2]);
     tinybvh::bvhvec3 D(rayDir[0], rayDir[1], rayDir[2]);
@@ -217,7 +216,26 @@ void TestSurfRaySample(){
     texture(uv[0] * 3 + 1, imageSize[1] - uv[1] - 1) = color[1];
     texture(uv[0] * 3 + 2, imageSize[1] - uv[1] - 1) = color[2];
   }
-  SaveLineSegsObj("F:/meshes/shellVar/rays.obj", rays);
+
+
+  TrigMesh meshIn;
+  meshIn.LoadStl("F:/meshes/shellVar/cap.stl");
+  const float h = 0.5f;
+  //std::shared_ptr<AdapSDF> sdf = std::make_shared<AdapSDF>();
+  std::shared_ptr<AdapUDF> sdf = std::make_shared<AdapUDF>();
+  SDFImpAdap* imp = new SDFImpAdap(sdf);
+  SDFMesh sdfMesh(imp);
+  sdfMesh.SetMesh(&meshIn);
+  sdfMesh.SetVoxelSize(h);
+  sdfMesh.SetBand(5);
+  sdfMesh.Compute();
+  Vec3u sdfSize = sdf->dist.GetSize();
+
+  TrigMesh surf;
+  sdfMesh.MarchingCubes(1, &surf);
+
+  //SaveLineSegsObj("F:/meshes/shellVar/rays.obj", rays);
   //SavePngGrey("F:/meshes/shellVar/textureThickness.png", texture);
-  SavePngColor("F:/meshes/shellVar/colorThickness.png", texture);
+  //SavePngColor("F:/meshes/shellVar/colorThickness.png", texture);
+  surf.SaveObj("F:/meshes/shellVar/unsigned_surf.obj");
 }

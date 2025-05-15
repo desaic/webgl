@@ -85,7 +85,7 @@ Box3f ComputeBBox(const std::vector<float>& verts) {
     box.vmin[j] = verts[j];
     box.vmax[j] = verts[j];
   }
-  for (size_t i = 1; i < verts.size(); i += 3) {
+  for (size_t i = 3; i < verts.size(); i += 3) {
     for (unsigned j = 0; j < 3; j++) {
       box.vmin[j] = std::min(box.vmin[j], verts[i+j]);
       box.vmax[j] = std::max(box.vmax[j], verts[i+j]);

@@ -133,7 +133,6 @@ void CloseExteriorAndFillInterior(Array3D<short>& dist, short far) {
   }
   Vec3f voxRes(1);
   short MAX_DIST = 32767;
-  //SaveVolAsObjMesh("F:/meshes/shoe_special/boundVox.obj", gridLabel, (float*)(&voxRes), 2);
 
   for (size_t i = 0; i < gridLabel.GetData().size(); i++) {
     if (gridLabel.GetData()[i] != OUTSIDE &&
@@ -146,27 +145,6 @@ void CloseExteriorAndFillInterior(Array3D<short>& dist, short far) {
     }
   }
   
-  Array2D8u slice(gridSize[0], gridSize[1]);
-  unsigned z = gridSize[2] / 2;
-  for (unsigned y = 0; y < gridSize[1]; y++) {
-    for (unsigned x = 0; x < gridSize[0]; x++) {
-      short sval = dist(x, y, z);
-      float d = sval * 0.005;
-      if (x < 5 && y < 5) {
-        std::cout << dist(x, y, z)<< " \n";
-      }
-      uint8_t val = 0;
-      if (sval > 32000) {
-        val = 255;
-      } else if (sval < -32000) {
-        val = 0;
-      } else {
-        val = 100 + d * 50;
-      }
-      slice(x, y) = val;
-    }
-  }
-  SavePngGrey("F:/meshes/shoe_special/sdf_slice.png", slice);
 }
 
 template<unsigned N>
@@ -239,7 +217,7 @@ void FastSweep(FixedGrid3D<N> & dist, float voxSize, float unit, float band,
               minSignedVal = dist(ix, iy, iz + 1);
             }
           }
-          if (iz > 0 && adjVal[0] > abs(dist(ix, iy, iz - 1))) {
+          if (iz > 0 && adjVal[2] > abs(dist(ix, iy, iz - 1))) {
             adjVal[2] = abs(dist(ix, iy, iz - 1));
             if (adjVal[2] < abs(minSignedVal)) {
               minSignedVal = dist(ix, iy, iz - 1);
@@ -631,7 +609,7 @@ void SolveOnePointUnsigned(unsigned ix, unsigned iy, unsigned iz, Array3D<short>
       minVal = dist(ix, iy, iz + 1);
     }
   }
-  if (iz > 0 && adjVal[0] > dist(ix, iy, iz - 1)) {
+  if (iz > 0 && adjVal[2] > dist(ix, iy, iz - 1)) {
     adjVal[2] = dist(ix, iy, iz - 1);
     if (adjVal[2] < minVal) {
       minVal = dist(ix, iy, iz - 1);

@@ -1,7 +1,6 @@
 #include "cpu_voxelizer.h"
 
 #include <algorithm>
-
 #include "BBox.h"
 #include "Vec2.h"
 
@@ -15,11 +14,12 @@ void cpu_voxelize_mesh(voxconf conf, const TrigMesh* mesh,
                        VoxCallback& cb) {
   // Common variables used in the voxelization process
   size_t n_triangles = mesh->t.size() / 3;
-  Vec3f delta_p = conf.unit;
+  float eps = 1e-3f;
+  Vec3f delta_p = conf.unit + Vec3f(eps);
   Vec3f grid_max(
       conf.gridSize[0] - 1, conf.gridSize[1] - 1,
       conf.gridSize[2] - 1);  // grid max (grid runs from 0 to gridsize-1)
-  float eps = 1e-3f;
+
   for (size_t i = 0; i < n_triangles; i++) {
     Vec3f c(0.0f, 0.0f, 0.0f);  // critical point
     // COMPUTE COMMON TRIANGLE PROPERTIES
@@ -33,7 +33,7 @@ void cpu_voxelize_mesh(voxconf conf, const TrigMesh* mesh,
     Vec3f e1 = v2 - v1;
     Vec3f e2 = v0 - v2;
     // Normal vector pointing up from the triangle
-    Vec3f n = -e0.cross(e2);
+    Vec3f n = e0.cross(e1);
     n.normalize();
     cb.BeginTrig(i);
     // COMPUTE TRIANGLE BBOX IN GRID
@@ -43,7 +43,6 @@ void cpu_voxelize_mesh(voxconf conf, const TrigMesh* mesh,
     ComputeBBox(v0, v1, v2, t_bbox_world);
     // catch triangles exactly on voxel faces
     t_bbox_world.vmin = t_bbox_world.vmin - Vec3f(eps, eps, eps);
-    t_bbox_world.vmax = t_bbox_world.vmax + Vec3f(eps, eps, eps);
     // Triangle bounding box in voxel grid coordinates is the world bounding box
     // divided by the grid unit vector
     IntBox t_bbox_grid;
@@ -56,13 +55,13 @@ void cpu_voxelize_mesh(voxconf conf, const TrigMesh* mesh,
 
     // PREPARE PLANE TEST PROPERTIES
     if (n[0] > 0.0f) {
-      c[0] = conf.unit[0];
+      c[0] = delta_p[0];
     }
     if (n[1] > 0.0f) {
-      c[1] = conf.unit[1];
+      c[1] = delta_p[1];
     }
     if (n[2] > 0.0f) {
-      c[2] = conf.unit[2];
+      c[2] = delta_p[2];
     }
     float d1 = n.dot(c - v0);
     float d2 = n.dot((delta_p - c) - v0);
@@ -78,14 +77,14 @@ void cpu_voxelize_mesh(voxconf conf, const TrigMesh* mesh,
       n_xy_e2 = -n_xy_e2;
     }
     float d_xy_e0 = (-1.0f * n_xy_e0.dot(Vec2f(v0[0], v0[1]))) +
-                    std::max(0.0f, conf.unit[0] * n_xy_e0[0]) +
-                    std::max(0.0f, conf.unit[1] * n_xy_e0[1]);
+                    std::max(0.0f, delta_p[0] * n_xy_e0[0]) +
+                    std::max(0.0f, delta_p[1] * n_xy_e0[1]);
     float d_xy_e1 = (-1.0f * n_xy_e1.dot(Vec2f(v1[0], v1[1]))) +
-                    std::max(0.0f, conf.unit[0] * n_xy_e1[0]) +
-                    std::max(0.0f, conf.unit[1] * n_xy_e1[1]);
+                    std::max(0.0f, delta_p[0] * n_xy_e1[0]) +
+                    std::max(0.0f, delta_p[1] * n_xy_e1[1]);
     float d_xy_e2 = (-1.0f * n_xy_e2.dot(Vec2f(v2[0], v2[1]))) +
-                    std::max(0.0f, conf.unit[0] * n_xy_e2[0]) +
-                    std::max(0.0f, conf.unit[1] * n_xy_e2[1]);
+                    std::max(0.0f, delta_p[0] * n_xy_e2[0]) +
+                    std::max(0.0f, delta_p[1] * n_xy_e2[1]);
     // YZ plane
     Vec2f n_yz_e0(-1.0f * e0[2], e0[1]);
     Vec2f n_yz_e1(-1.0f * e1[2], e1[1]);
@@ -96,14 +95,14 @@ void cpu_voxelize_mesh(voxconf conf, const TrigMesh* mesh,
       n_yz_e2 = -n_yz_e2;
     }
     float d_yz_e0 = (-1.0f * n_yz_e0.dot(Vec2f(v0[1], v0[2]))) +
-                    std::max(0.0f, conf.unit[1] * n_yz_e0[0]) +
-                    std::max(0.0f, conf.unit[2] * n_yz_e0[1]);
+                    std::max(0.0f, delta_p[1] * n_yz_e0[0]) +
+                    std::max(0.0f, delta_p[2] * n_yz_e0[1]);
     float d_yz_e1 = (-1.0f * n_yz_e1.dot(Vec2f(v1[1], v1[2]))) +
-                    std::max(0.0f, conf.unit[1] * n_yz_e1[0]) +
-                    std::max(0.0f, conf.unit[2] * n_yz_e1[1]);
+                    std::max(0.0f, delta_p[1] * n_yz_e1[0]) +
+                    std::max(0.0f, delta_p[2] * n_yz_e1[1]);
     float d_yz_e2 = (-1.0f * n_yz_e2.dot(Vec2f(v2[1], v2[2]))) +
-                    std::max(0.0f, conf.unit[1] * n_yz_e2[0]) +
-                    std::max(0.0f, conf.unit[2] * n_yz_e2[1]);
+                    std::max(0.0f, delta_p[1] * n_yz_e2[0]) +
+                    std::max(0.0f, delta_p[2] * n_yz_e2[1]);
     // ZX plane
     Vec2f n_zx_e0(-1.0f * e0[0], e0[2]);
     Vec2f n_zx_e1(-1.0f * e1[0], e1[2]);
@@ -114,14 +113,14 @@ void cpu_voxelize_mesh(voxconf conf, const TrigMesh* mesh,
       n_zx_e2 = -n_zx_e2;
     }
     float d_xz_e0 = (-1.0f * n_zx_e0.dot(Vec2f(v0[2], v0[0]))) +
-                    std::max(0.0f, conf.unit[0] * n_zx_e0[0]) +
-                    std::max(0.0f, conf.unit[2] * n_zx_e0[1]);
+                    std::max(0.0f, delta_p[0] * n_zx_e0[0]) +
+                    std::max(0.0f, delta_p[2] * n_zx_e0[1]);
     float d_xz_e1 = (-1.0f * n_zx_e1.dot(Vec2f(v1[2], v1[0]))) +
-                    std::max(0.0f, conf.unit[0] * n_zx_e1[0]) +
-                    std::max(0.0f, conf.unit[2] * n_zx_e1[1]);
+                    std::max(0.0f, delta_p[0] * n_zx_e1[0]) +
+                    std::max(0.0f, delta_p[2] * n_zx_e1[1]);
     float d_xz_e2 = (-1.0f * n_zx_e2.dot(Vec2f(v2[2], v2[0]))) +
-                    std::max(0.0f, conf.unit[0] * n_zx_e2[0]) +
-                    std::max(0.0f, conf.unit[2] * n_zx_e2[1]);
+                    std::max(0.0f, delta_p[0] * n_zx_e2[0]) +
+                    std::max(0.0f, delta_p[2] * n_zx_e2[1]);
 
     // test possible grid boxes for overlap
     for (int z = t_bbox_grid.min[2]; z <= t_bbox_grid.max[2]; z++) {
@@ -129,6 +128,8 @@ void cpu_voxelize_mesh(voxconf conf, const TrigMesh* mesh,
         for (int x = t_bbox_grid.min[0]; x <= t_bbox_grid.max[0]; x++) {
           // TRIANGLE PLANE THROUGH BOX TEST
           Vec3f p(x * conf.unit[0], y * conf.unit[1], z * conf.unit[2]);
+          p -= 0.5f * Vec3f(eps);
+
           float nDOTp = n.dot(p);
           if (((nDOTp + d1) * (nDOTp + d2)) > 0.0f) {
             continue;
