@@ -1278,9 +1278,9 @@ void WriteDiskField() {
 void TestSDF() { 
   //OrientFlatGroups();
   TrigMesh mesh;
-  mesh.LoadStl("F:/meshes/chess_board/dunnage_cut.stl");
+  mesh.LoadStl("F:/meshes/mlhead/v2/Total volume/right_ear_outer1.stl");
   TrigMesh surf = GetInnerSurf(mesh, 0.5, 0.5);
-  surf.SaveObj("F:/meshes/chess_board/dunnage_erode.obj");
+  surf.SaveObj("F:/meshes/mlhead/v2/Total volume/right_ear_inner.obj");
 
   //ExtrudeAlongNormal("F:/meshes/head/front.obj", 0.52);
   // ProcessNose();

@@ -148,6 +148,12 @@ Vec3u heatmapColor(float value) {
   }
 }
 
+//acceleration grid.
+template <typename T>
+struct AccGrid {
+
+};
+
 void TestSurfRaySample(){
   TrigMesh m;
   m.LoadObj("F:/meshes/shellVar/cap_uv.obj");
@@ -221,8 +227,8 @@ void TestSurfRaySample(){
   TrigMesh meshIn;
   meshIn.LoadStl("F:/meshes/shellVar/cap.stl");
   const float h = 0.5f;
-  //std::shared_ptr<AdapSDF> sdf = std::make_shared<AdapSDF>();
-  std::shared_ptr<AdapUDF> sdf = std::make_shared<AdapUDF>();
+  std::shared_ptr<AdapSDF> sdf = std::make_shared<AdapSDF>();
+  //std::shared_ptr<AdapUDF> sdf = std::make_shared<AdapUDF>();
   SDFImpAdap* imp = new SDFImpAdap(sdf);
   SDFMesh sdfMesh(imp);
   sdfMesh.SetMesh(&meshIn);
@@ -231,11 +237,38 @@ void TestSurfRaySample(){
   sdfMesh.Compute();
   Vec3u sdfSize = sdf->dist.GetSize();
 
+  Array2D8u debugsdf(sdfSize[0], sdfSize[1]);
+  unsigned z = unsigned(sdfSize[2] * 0.75);
+
+  for (z = 120; z < 180; z++) {
+    for (unsigned y = 0; y < sdfSize[1]; y++) {
+      for (unsigned x = 0; x < sdfSize[0]; x++) {
+        short val = sdf->dist(x, y, z);
+        if (val > 32760) {
+          val = 0;
+        }
+        val /= 50;
+        if (val < -100) {
+          val = -100;
+        }
+        if (val > 125) {
+          val = 125;
+        }
+        debugsdf(x, y) = 100 + val;
+      }
+    }
+    SavePngGrey("F:/meshes/shellVar/sdfSlice" + std::to_string(z) + ".png",
+                debugsdf);
+  }
+
   TrigMesh surf;
-  sdfMesh.MarchingCubes(1, &surf);
+  sdfMesh.MarchingCubes(-0.2, &surf);
+
+  float minThick = 0.2;
+  float maxThick = 0.75;
 
   //SaveLineSegsObj("F:/meshes/shellVar/rays.obj", rays);
   //SavePngGrey("F:/meshes/shellVar/textureThickness.png", texture);
   //SavePngColor("F:/meshes/shellVar/colorThickness.png", texture);
-  surf.SaveObj("F:/meshes/shellVar/unsigned_surf.obj");
+  surf.SaveObj("F:/meshes/shellVar/surf_-0.2.obj");
 }
