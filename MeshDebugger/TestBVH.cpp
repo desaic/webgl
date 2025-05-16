@@ -149,9 +149,89 @@ Vec3u heatmapColor(float value) {
 }
 
 //acceleration grid.
-template <typename T>
 struct AccGrid {
+  //0 for empty cell
+  Array3D<unsigned> grid;
+  //first entry reserved for empty cells
+  std::vector<std::vector<unsigned> > lists;
+  
+  // first entry reserved for empty cells
+  AccGrid():lists(1) {}
 
+  void Allocate(const Vec3u& size) { grid.Allocate(size, 0);
+  }
+
+  Vec3i GetGridIndex(const Vec3f& x) const {
+    Vec3f local = x - origin;
+    Vec3i index(int(local[0] / h), int(local[1] / h), int(local[2] / h));
+    return index;
+  }
+
+  bool IsInside(const Vec3i& index) const {
+    const Vec3u& size = grid.GetSize();
+    if (index[0] < 0 || index[0] >= int(size[0])) {
+      return false;
+    }
+    if (index[1] < 0 || index[1] >= int(size[1])) {
+      return false;
+    }
+    if (index[2] < 0 || index[2] >= int(size[2])) {
+      return false;
+    }
+    return true;
+  }
+
+  //
+  void Add(const Vec3f& x, unsigned id) {
+    Vec3i gi=GetGridIndex(x);
+    if (IsInside(gi)) {
+      unsigned linearIndex = grid(gi[0], gi[1], gi[2]);
+      
+      if (linearIndex == 0) {
+        linearIndex = lists.size();
+        grid(gi[0], gi[1], gi[2]) = linearIndex;
+        lists.push_back(std::vector<unsigned>(1, id));
+      } else {
+        lists[linearIndex].push_back(id);
+      }
+    }
+  }
+
+  std::vector<unsigned> GetNearby(const Vec3f &coord)const {
+    std::vector<unsigned> l;
+    Vec3i index0 = GetGridIndex(coord);
+    //search +-1 around index0
+    int searchRange = 1;
+    for (int z = index0[2] - searchRange; z <= index0[2] + searchRange; z++) {
+      for (int y = index0[1] - searchRange; y <= index0[1] + searchRange; y++) {
+        for (int x = index0[0] - searchRange; x <= index0[0] + searchRange;
+             x++) {
+          if (!IsInside(Vec3i(x,y,z))) {
+            continue;
+          }
+          unsigned listIndex = grid(unsigned(x), unsigned(y), unsigned(z));
+          if (listIndex == 0) {
+            continue;
+          }
+          const std::vector<unsigned> list = lists[listIndex];
+          l.insert(l.end(), list.begin(), list.end());
+        }
+      }
+    }
+    return l;
+  }
+
+  Array3D8u GetDebugGrid() {
+    Array3D8u d;
+    d.Allocate(grid.GetSize(), 0);
+    for (size_t i = 0; i < d.GetData().size(); i++) {
+      d.GetData()[i] = grid.GetData()[i] > 0;
+    }
+    return d;
+  }
+
+  Vec3f origin;
+  float h = 1.0f;
 };
 
 void TestSurfRaySample(){
@@ -177,11 +257,12 @@ void TestSurfRaySample(){
   Array2D8u texture(imageSize[0] * 3, imageSize[1]);
 
   std::vector<SurfacePoint> points;
-
+  std::vector<float> thickness;
   SamplePoints(m, points, 0.5);
   const float MIN_T = 0.01;
   const size_t MAX_RAY_DIST = 1e20;
   std::vector<LineSeg> rays(points.size());
+  thickness.resize(points.size());
   for (size_t i = 0; i < points.size(); i++) {
     Vec3f n = points[i].n;
 
@@ -200,6 +281,7 @@ void TestSurfRaySample(){
     if (steps < 0) {
       t = 0.001;
     }
+    thickness[i] = t;
     LineSeg seg = {points[i].v, points[i].v + t * rayDir};
     rays[i]=seg;
     Vec2f uv = points[i].uv;
@@ -222,8 +304,27 @@ void TestSurfRaySample(){
     texture(uv[0] * 3 + 1, imageSize[1] - uv[1] - 1) = color[1];
     texture(uv[0] * 3 + 2, imageSize[1] - uv[1] - 1) = color[2];
   }
+  Box3f box;
+  std::vector<Vec3f> coords(points.size());
+  for (size_t i = 0; i < points.size(); i++) {
+    coords[i] = points[i].v;
+  }
+  box = ComputeBBox(coords);
 
-
+  AccGrid grid;
+  grid.h = 1;
+  float padding = grid.h / 2;  
+  grid.origin = box.vmin-Vec3f(padding);
+  Vec3f gridDim = box.vmax - box.vmin + 2.0f * Vec3f(padding);
+  Vec3u gridSize(unsigned(gridDim[0] / grid.h) + 1, unsigned(gridDim[1] / grid.h) + 1,
+                 unsigned(gridDim[2] / grid.h) + 1);
+  grid.Allocate(gridSize);
+  for (size_t i = 0; i < points.size();i++) {
+    grid.Add(points[i].v, i);
+  }
+  //Array3D8u dg = grid.GetDebugGrid();
+  //Vec3f voxRes(1);
+  //SaveVolAsObjMesh("F:/meshes/shellVar/pt_accel.obj", dg, (float*)(&voxRes), 1);
   TrigMesh meshIn;
   meshIn.LoadStl("F:/meshes/shellVar/cap.stl");
   const float h = 0.5f;
@@ -237,32 +338,64 @@ void TestSurfRaySample(){
   sdfMesh.Compute();
   Vec3u sdfSize = sdf->dist.GetSize();
 
-  Array2D8u debugsdf(sdfSize[0], sdfSize[1]);
-  unsigned z = unsigned(sdfSize[2] * 0.75);
+  //Array2D8u debugsdf(sdfSize[0], sdfSize[1]);
+  //unsigned z = unsigned(sdfSize[2] * 0.75);
+  //for (z = 120; z < 180; z++) {
+  //  for (unsigned y = 0; y < sdfSize[1]; y++) {
+  //    for (unsigned x = 0; x < sdfSize[0]; x++) {
+  //      short val = sdf->dist(x, y, z);
+  //      if (val > 32760) {
+  //        val = 0;
+  //      }
+  //      val /= 50;
+  //      if (val < -100) {
+  //        val = -100;
+  //      }
+  //      if (val > 125) {
+  //        val = 125;
+  //      }
+  //      debugsdf(x, y) = 100 + val;
+  //    }
+  //  }
+  //  SavePngGrey("F:/meshes/shellVar/sdfSlice" + std::to_string(z) + ".png",
+  //              debugsdf);
+  //}
+  float minShell = 0.2;
+  float maxShell = 0.75;
 
-  for (z = 120; z < 180; z++) {
+  for (unsigned z = 0; z < sdfSize[2]; z++) {
     for (unsigned y = 0; y < sdfSize[1]; y++) {
       for (unsigned x = 0; x < sdfSize[0]; x++) {
-        short val = sdf->dist(x, y, z);
-        if (val > 32760) {
-          val = 0;
+        Vec3f coord(x * h, y * h, z * h);
+        coord += sdf->origin;
+        std::vector<unsigned> nearby = grid.GetNearby(coord);
+        if (nearby.size() == 0) {
+          sdf->dist(x, y, z) += maxShell/sdf->distUnit;
+          continue;
         }
-        val /= 50;
-        if (val < -100) {
-          val = -100;
+        unsigned closestIndex = 0;
+        float minDist = -1;
+        for (size_t i = 0; i < nearby.size(); i++) {
+          const SurfacePoint& sp = points[nearby[i]];
+          float dist = (sp.v - coord).norm2();
+          if (i == 0 || dist < minDist) {
+            closestIndex = nearby[i];
+            minDist = dist;
+          }
         }
-        if (val > 125) {
-          val = 125;
+        float t = thickness[closestIndex];
+        float offset = maxShell;
+        //std::cout << t << "\n";
+        if (t < maxShell * 10) {
+          offset = std::max(minShell, t * 0.1f); 
         }
-        debugsdf(x, y) = 100 + val;
-      }
+        sdf->dist(x, y, z) += offset / sdf->distUnit;
+      }      
     }
-    SavePngGrey("F:/meshes/shellVar/sdfSlice" + std::to_string(z) + ".png",
-                debugsdf);
   }
 
   TrigMesh surf;
-  sdfMesh.MarchingCubes(-0.2, &surf);
+  sdfMesh.MarchingCubes(0, &surf);
 
   float minThick = 0.2;
   float maxThick = 0.75;
