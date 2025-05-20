@@ -142,6 +142,8 @@ extern void TestSurfRaySample();
 extern void VoxelizeUnitCell();
 extern void VoxelizeRaycast();
 
+extern void TestGrin();
+
 int main(int argc, char** argv) {
   //RunUVApp();
   // RunCanvasApp();
@@ -154,7 +156,10 @@ int main(int argc, char** argv) {
   //TestSDF();
   // JsToObj(); 
   //SaveVolMeshAsSurf();
-  TestSurfRaySample();
+  //TestSurfRaySample();
+  
+  TestGrin();
+
   //VoxelizeUnitCell();
   //VoxelizeRaycast();
   return 0;
