@@ -153,12 +153,12 @@ int main(int argc, char** argv) {
   // RunHeadApp();
   // MeshHeightMap();
   // MapDrawingToThickness();
-  //TestSDF();
+  TestSDF();
   // JsToObj(); 
   //SaveVolMeshAsSurf();
   //TestSurfRaySample();
   
-  TestGrin();
+  //TestGrin();
 
   //VoxelizeUnitCell();
   //VoxelizeRaycast();

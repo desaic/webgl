@@ -444,6 +444,53 @@ void MakeFrontLatticeMesh() {
   surf.SaveObj(p.string());
 }
 
+void MakeOverallSkinMesh() {
+  std::string surfFile = "F:/meshes/mlhead/head_exterior.stl";
+  std::string headFile = "F:/meshes/mlhead/total.stl";
+
+  TrigMesh exteriorMesh;
+  exteriorMesh.LoadStl(surfFile);
+  MergeCloseVertices(exteriorMesh);
+  TrigMesh headMesh;
+  headMesh.LoadStl(headFile);
+  const float h = 0.25f;
+  const float distUnit = 0.005f;
+
+  std::shared_ptr<AdapSDF> headUdf = ComputeSDF(distUnit, h, headMesh);
+  std::shared_ptr<AdapUDF> surfUdf = ComputeUDF(distUnit, h, exteriorMesh);
+
+  //(head + 0.25mm) - (surf+0.5mm)
+  //expand narrow band value to whole grid
+  Array3D8u frozen;
+  FastSweepParUnsigned(surfUdf->dist, h, surfUdf->distUnit, 30, frozen);
+  
+  float MAX_POSITIVE_DIST = 100; 
+  Vec3u size = headUdf->dist.GetSize();
+  Array3D<short> newDist(size, 0);
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      for (unsigned x = 0; x < size[0]; x++) {
+        float head_d = headUdf->dist(x, y, z) * headUdf->distUnit;
+        Vec3f worldCoord = headUdf->WorldCoord(Vec3f(x, y, z));
+        float surfDist = surfUdf->GetCoarseDist(worldCoord);
+
+        if (surfDist >= AdapDF::MAX_DIST) {
+          surfDist = MAX_POSITIVE_DIST;
+        }
+        head_d = std::max(head_d - 0.25, 0.5-surfDist);
+        newDist(x, y, z) = head_d / distUnit;
+      }
+    }
+  }
+
+  TrigMesh surf;
+  MarchingCubes(newDist, 0, distUnit, headUdf->voxSize, headUdf->origin,
+                &surf);
+  MergeCloseVertices(surf);
+  std::filesystem::path p(surfFile);
+  p.replace_extension("solid.obj");
+  surf.SaveObj(p.string());
+}
 
 void OrientFlatGroups() {
   std::string softFile = "F:/meshes/head/extruded0.obj";
@@ -1277,10 +1324,10 @@ void WriteDiskField() {
 
 void TestSDF() { 
   //OrientFlatGroups();
-  TrigMesh mesh;
-  mesh.LoadStl("F:/meshes/mlhead/v2/Total volume/right_ear_outer1.stl");
-  TrigMesh surf = GetInnerSurf(mesh, 0.5, 0.5);
-  surf.SaveObj("F:/meshes/mlhead/v2/Total volume/right_ear_inner.obj");
+  //TrigMesh mesh;
+  //mesh.LoadStl("F:/meshes/mlhead/v2/Total volume/right_ear_outer1.stl");
+  //TrigMesh surf = GetInnerSurf(mesh, 0.5, 0.5);
+  //surf.SaveObj("F:/meshes/mlhead/v2/Total volume/right_ear_inner.obj");
 
   //ExtrudeAlongNormal("F:/meshes/head/front.obj", 0.52);
   // ProcessNose();
@@ -1297,4 +1344,6 @@ void TestSDF() {
   //WriteDistField();
   //WriteDiskField();
   //FloodSDFOutside();
+
+  MakeOverallSkinMesh();
 }
