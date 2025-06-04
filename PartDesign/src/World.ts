@@ -7,7 +7,6 @@ export default class World {
   public geometries: any[];
   public defaultMaterial: THREE.MeshPhongMaterial;
   public ground: RectGrid;
-  public unitSphere :THREE.Mesh;
   public selectedInstance: any[];
   public instances: THREE.Group;
   public quadScene: THREE.Scene;
@@ -24,7 +23,7 @@ export default class World {
     this.camera.lookAt(200, 125, 0);
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x333333);
+    this.scene.background = new THREE.Color(0xeeeeee);
 
     this.ground = new RectGrid(40,20,10,0x666666, 0x444444);
     this.ground.setRotationFromEuler(new THREE.Euler(1.5708,0,0));
@@ -42,16 +41,11 @@ export default class World {
       specular: defaultcol,
     });
 
-    this.unitSphere = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 50), this.defaultMaterial);
-    this.unitSphere.scale.set(30,30,30);
-    this.scene.add(this.unitSphere);
-
     this.selectedInstance = [];
     this.geometries = [];
 
     this.instances = new THREE.Group();
     this.scene.add(this.instances);
-
 
     // scene for rendering a single flat quad on top.
     this.quadScene = new THREE.Scene();

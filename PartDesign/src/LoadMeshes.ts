@@ -1,25 +1,24 @@
 import * as THREE from 'three'
 import { STLLoader } from "./STLLoader.js";
 import {OBJLoader} from "./OBJLoader.js"
-import World from "./World.js";
 
-function ReadSTL(filename, world: World){
-    const reader = new FileReader();
-	try{
-		reader.onload = function () {
-            const loader = new STLLoader(THREE.DefaultLoadingManager);
-            const geometry = loader.parse(reader.result);			
-            world.geometries.push(geometry);
-            const mesh = new THREE.Mesh(geometry, world.defaultMaterial);
-            world.instances.add(mesh);
-		}
-		reader.readAsArrayBuffer(filename)
-	}catch(err){
-		console.log(err.message);
-	}
+type GeometryCallback = (filename: string, geometry: THREE.BufferGeometry) => void;
+
+function ReadSTL(filename, onLoadGeometry : GeometryCallback) {
+  const reader = new FileReader();
+  try {
+    reader.onload = function () {
+      const loader = new STLLoader(THREE.DefaultLoadingManager);
+      const geometry = loader.parse(reader.result);
+      onLoadGeometry(filename, geometry);
+    };
+    reader.readAsArrayBuffer(filename);
+  } catch (err) {
+    console.log(err.message);
+  }
 }
 
-function ReadOBJ(filename, world: World) {
+function ReadOBJ(filename, onLoadGeometry : GeometryCallback) {
   const reader = new FileReader();
   try {
     reader.onload = function () {
@@ -27,10 +26,11 @@ function ReadOBJ(filename, world: World) {
       const object = loader.parse(reader.result);
       if(object.isGroup){
         for(const child of object.children){
-            world.instances.add(child);
+            
         }
-      }else{world.instances.add(object);}
-      
+      }else{
+
+      }
     };
     reader.readAsText(filename);
   } catch (err) {
@@ -38,7 +38,7 @@ function ReadOBJ(filename, world: World) {
   }
 }
 
-function ParseMeshData(file, extension, world: World){
+function ParseMeshData(file, extension){
     if (extension === "stl"){
         ReadSTL(file, world);
     }else if(extension ==="obj"){
