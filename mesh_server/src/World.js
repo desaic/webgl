@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import {RectGrid} from "./RectGrid.js";
 
 export default class World {
   constructor() {
@@ -7,9 +8,9 @@ export default class World {
     const near = 1;
     const far = 2000;
     this.camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
-    this.camera.up.set(0, 1, 0);
-    this.camera.position.set(0, 1, -4);
-    this.camera.lookAt(2, 0, 2);
+    this.camera.up.set(0, 0, 1);
+    this.camera.position.set(0, -400, 200);
+    this.camera.lookAt(0, 0, 0);
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xeeeeee);
@@ -19,15 +20,10 @@ export default class World {
 
     const planeSize = [400, 250];
 
-    this.ground = new THREE.Mesh(
-      //unit is mm
-      new THREE.PlaneGeometry(planeSize[0], planeSize[1]),
-      new THREE.MeshPhongMaterial({ color: 0x666666, specular: 0x101010 })
-    );
-    this.ground.position.x = 0;
-    this.ground.position.y = 0;
-    this.ground.position.z = 0; // = - 0.5;
+    this.ground = new RectGrid(40,20,10,0x666666, 0x444444);
+    this.ground.setRotationFromEuler(new THREE.Euler(1.5708,0,0));
     this.ground.receiveShadow = true;
+    this.scene.add(this.ground);
     //this.scene.add(this.ground);
 
     //lights

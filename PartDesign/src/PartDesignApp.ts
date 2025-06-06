@@ -32,6 +32,8 @@ export class PartDesignApp {
 
   private pixelRatio: number;
 
+  private loadingManager: THREE.LoadingManager;
+
   /**
    * @constructor
    * @description
@@ -47,6 +49,7 @@ export class PartDesignApp {
       this.world.camera
     );
     this.showSlice = false;
+    this.loadingManager = new THREE.LoadingManager();
     this.objExporter = new OBJExporter();
 
     this.pixelRatio = window.devicePixelRatio ? window.devicePixelRatio : 1.0;
@@ -73,7 +76,16 @@ export class PartDesignApp {
 
     this.world.scene.add(this.control.getHelper());
 
+    this.SetupLoadingManager();
     this.bindEventListeners();
+  }
+
+  public SetupLoadingManager(){
+    this.loadingManager.onProgress=(url, loaded, number)=>{
+      console.log(url);
+      console.log(loaded);
+      console.log(number);
+    };
   }
 
   public bindEventListeners() {
@@ -90,10 +102,10 @@ export class PartDesignApp {
    * @method init
    * @description
    */
-  public init(): void {}
+  public init(): void {}  
 
   public LoadMesh(file: File) {
-
+    LoadMeshes(file, this.loadingManager);
   }
 
   public LoadMeshes(files: FileList) {

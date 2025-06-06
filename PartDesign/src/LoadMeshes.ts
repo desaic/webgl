@@ -2,15 +2,12 @@ import * as THREE from 'three'
 import { STLLoader } from "./STLLoader.js";
 import {OBJLoader} from "./OBJLoader.js"
 
-type GeometryCallback = (filename: string, geometry: THREE.BufferGeometry) => void;
-
-function ReadSTL(filename, onLoadGeometry : GeometryCallback) {
+function ReadSTL(filename, man: THREE.LoadingManager) {
   const reader = new FileReader();
   try {
     reader.onload = function () {
-      const loader = new STLLoader(THREE.DefaultLoadingManager);
+      const loader = new STLLoader(man);
       const geometry = loader.parse(reader.result);
-      onLoadGeometry(filename, geometry);
     };
     reader.readAsArrayBuffer(filename);
   } catch (err) {
@@ -18,11 +15,11 @@ function ReadSTL(filename, onLoadGeometry : GeometryCallback) {
   }
 }
 
-function ReadOBJ(filename, onLoadGeometry : GeometryCallback) {
+function ReadOBJ(filename, man: THREE.LoadingManager) {
   const reader = new FileReader();
   try {
     reader.onload = function () {
-      var loader = new OBJLoader(THREE.DefaultLoadingManager);
+      var loader = new OBJLoader(man);
       const object = loader.parse(reader.result);
       if(object.isGroup){
         for(const child of object.children){
@@ -38,19 +35,14 @@ function ReadOBJ(filename, onLoadGeometry : GeometryCallback) {
   }
 }
 
-function ParseMeshData(file, extension){
-    if (extension === "stl"){
-        ReadSTL(file, world);
-    }else if(extension ==="obj"){
-        ReadOBJ(file,world);
-    }else{
-        console.log(file , "unknown file type");
-    }
-}
-
-export const LoadMeshes = (files, world: World) => {
-    for (const file of files) {
-        const extension = file.name.split('.').pop().toLowerCase();
-        ParseMeshData(file, extension, world);
-    }
-}
+/// a single file may contain multiple meshes.
+export const LoadMeshes = (file, man: THREE.LoadingManager) => {
+  const extension = file.name.split(".").pop().toLowerCase();
+  if (extension === "stl") {
+    ReadSTL(file, man);
+  } else if (extension === "obj") {
+    ReadOBJ(file, man);
+  } else {
+    console.log(file, "unknown file type");
+  }
+};

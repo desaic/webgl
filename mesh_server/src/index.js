@@ -12,6 +12,8 @@ let control;
 var gpuPicker;
 var pixelRatio = 1.0;
 
+var meshScale = 1.0;
+
 export function InitScene() {
   container = document.getElementById("threejs-container");
   world = new World();
@@ -24,7 +26,7 @@ export function InitScene() {
 
   orbit = new OrbitControls(world.camera, renderer.domElement);
   orbit.minDistance = 1;
-  orbit.maxDistance = 100;
+  orbit.maxDistance = 10000;
   orbit.target.set(0, 0, 0);
   orbit.update();
   
@@ -35,7 +37,7 @@ export function InitScene() {
 
   world.scene.add(control.getHelper());
 
-  pixelRatio = window.devicePixelRatio ? 1.0 / window.devicePixelRatio : 1.0;
+  pixelRatio = window.devicePixelRatio ? window.devicePixelRatio : 1.0;
   gpuPicker = new GPUPicker(THREE, renderer, world.scene, world.camera);
   
   bindEventListeners();
@@ -56,6 +58,12 @@ const bindEventListeners = () => {
   window.addEventListener("resize", onWindowResize, false);
   container.addEventListener('click', selectObj);
     
+  const meshscaleSlider= document.getElementById("meshScale");
+  meshscaleSlider.addEventListener("input", (event) => {
+    document.getElementById('meshScaleVal').innerText = meshscaleSlider.value;
+    meshScale = 10**parseFloat(meshscaleSlider.value);
+    SetMeshScales(world, meshScale);
+  });
   // Download button functionality
 //  document.getElementById('downloadButton').addEventListener('click', () => {
 //    downloadJSON(world.scene.toJSON(), 'scene-data.json');
@@ -64,8 +72,7 @@ const bindEventListeners = () => {
 }
 
 const selectObj = (event) => {
-  var inversePixelRatio = 1.0 / pixelRatio;
-  var objId = gpuPicker.pick(event.clientX * inversePixelRatio, event.clientY * inversePixelRatio);
+  var objId = gpuPicker.pick(event.clientX * pixelRatio, event.clientY * pixelRatio);
   if(objId<0){return null;}
   console.log("pick", objId);
   const selected = world.GetInstanceById(objId);
@@ -92,6 +99,12 @@ function downloadJSON(json, filename = 'data.json') {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(link.href);
+}
+
+function SetMeshScales(world, scale){
+    world.instances.scale.set(scale, scale, scale);
+    world.instances.updateMatrix();
+  
 }
 
 export function Animate() {
