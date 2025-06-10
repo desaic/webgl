@@ -1,13 +1,5 @@
 import * as THREE from "three";
 
-import { OrbitControls } from "./OrbitControls.js";
-import { TransformControls } from "./TransformControls.js";
-
-import World from "./World.js";
-import { Array3D } from "./Array3D.js";
-import { GPUPicker } from "./gpupicker.js";
-import { OBJExporter } from "./OBJExporter.js";
-import { Vec3f } from "./Vec3f.js";
 import {PartDesignApp} from "./PartDesignApp"
 
 let app : PartDesignApp;

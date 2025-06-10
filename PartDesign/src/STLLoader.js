@@ -16,50 +16,7 @@ import {
  *
  * The loader returns a non-indexed buffer geometry.
  *
- * Limitations:
- *  Binary decoding supports "Magics" color format (http://en.wikipedia.org/wiki/STL_(file_format)#Color_in_binary_STL).
- *  There is perhaps some question as to how valid it is to always assume little-endian-ness.
- *  ASCII decoding assumes file is UTF-8.
- *
- * Usage:
- *  const loader = new STLLoader();
- *  loader.load( './models/stl/slotted_disk.stl', function ( geometry ) {
- *    scene.add( new THREE.Mesh( geometry ) );
- *  });
- *
- * For binary STLs geometry might contain colors for vertices. To use it:
- *  // use the same code to load STL as above
- *  if (geometry.hasColors) {
- *    material = new THREE.MeshPhongMaterial({ opacity: geometry.alpha, vertexColors: true });
- *  } else { .... }
- *  const mesh = new THREE.Mesh( geometry, material );
- *
- * For ASCII STLs containing multiple solids, each solid is assigned to a different group.
- * Groups can be used to assign a different color by defining an array of materials with the same length of
- * geometry.groups and passing it to the Mesh constructor:
- *
- * const mesh = new THREE.Mesh( geometry, material );
- *
- * For example:
- *
- *  const materials = [];
- *  const nGeometryGroups = geometry.groups.length;
- *
- *  const colorMap = ...; // Some logic to index colors.
- *
- *  for (let i = 0; i < nGeometryGroups; i++) {
- *
- *		const material = new THREE.MeshPhongMaterial({
- *			color: colorMap[i],
- *			wireframe: false
- *		});
- *
- *  }
- *
- *  materials.push(material);
- *  const mesh = new THREE.Mesh(geometry, materials);
- */
-
+*/
 
 class STLLoader extends Loader {
 
@@ -206,28 +163,6 @@ class STLLoader extends Loader {
 				const normalY = reader.getFloat32( start + 4, true );
 				const normalZ = reader.getFloat32( start + 8, true );
 
-				if ( hasColors ) {
-
-					const packedColor = reader.getUint16( start + 48, true );
-
-					if ( ( packedColor & 0x8000 ) === 0 ) {
-
-						// facet has its own unique color
-
-						r = ( packedColor & 0x1F ) / 31;
-						g = ( ( packedColor >> 5 ) & 0x1F ) / 31;
-						b = ( ( packedColor >> 10 ) & 0x1F ) / 31;
-
-					} else {
-
-						r = defaultR;
-						g = defaultG;
-						b = defaultB;
-
-					}
-
-				}
-
 				for ( let i = 1; i <= 3; i ++ ) {
 
 					const vertexstart = start + i * 12;
@@ -241,30 +176,12 @@ class STLLoader extends Loader {
 					normals[ componentIdx + 1 ] = normalY;
 					normals[ componentIdx + 2 ] = normalZ;
 
-					if ( hasColors ) {
-
-						color.setRGB( r, g, b, SRGBColorSpace );
-
-						colors[ componentIdx ] = color.r;
-						colors[ componentIdx + 1 ] = color.g;
-						colors[ componentIdx + 2 ] = color.b;
-
-					}
-
 				}
 
 			}
 
 			geometry.setAttribute( 'position', new BufferAttribute( vertices, 3 ) );
 			geometry.setAttribute( 'normal', new BufferAttribute( normals, 3 ) );
-
-			if ( hasColors ) {
-
-				geometry.setAttribute( 'color', new BufferAttribute( colors, 3 ) );
-				geometry.hasColors = true;
-				geometry.alpha = alpha;
-
-			}
 
 			return geometry;
 

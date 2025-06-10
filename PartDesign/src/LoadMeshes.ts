@@ -1,12 +1,13 @@
 import * as THREE from 'three'
-import { STLLoader } from "./STLLoader.js";
+import { STLLoader } from "./STLLoader.js"
 import {OBJLoader} from "./OBJLoader.js"
+import {LoadingMan} from "./LoadingMan.ts"
 
-function ReadSTL(filename, man: THREE.LoadingManager) {
+function ReadSTL(filename, man: LoadingMan) {
   const reader = new FileReader();
   try {
     reader.onload = function () {
-      const loader = new STLLoader(man);
+      const loader = new STLLoader();
       const geometry = loader.parse(reader.result);
     };
     reader.readAsArrayBuffer(filename);
@@ -15,7 +16,7 @@ function ReadSTL(filename, man: THREE.LoadingManager) {
   }
 }
 
-function ReadOBJ(filename, man: THREE.LoadingManager) {
+function ReadOBJ(filename, man: LoadingMan) {
   const reader = new FileReader();
   try {
     reader.onload = function () {
@@ -36,7 +37,7 @@ function ReadOBJ(filename, man: THREE.LoadingManager) {
 }
 
 /// a single file may contain multiple meshes.
-export const LoadMeshes = (file, man: THREE.LoadingManager) => {
+export const LoadMeshes = (file, man: LoadingMan) => {
   const extension = file.name.split(".").pop().toLowerCase();
   if (extension === "stl") {
     ReadSTL(file, man);

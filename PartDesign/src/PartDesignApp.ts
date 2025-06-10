@@ -6,6 +6,7 @@ import World from "./World.js";
 import { OBJExporter } from "./OBJExporter.js";
 import { GPUPicker } from "./gpupicker.js";
 import { LoadMeshes } from './LoadMeshes';
+import { LoadingMan } from "./LoadMan.ts";
 
 export class PartDesignApp {
   // HTML element that will contain the renderer's canvas
@@ -32,7 +33,7 @@ export class PartDesignApp {
 
   private pixelRatio: number;
 
-  private loadingManager: THREE.LoadingManager;
+  private loadingMan: LoadingMan;
 
   /**
    * @constructor
@@ -49,7 +50,7 @@ export class PartDesignApp {
       this.world.camera
     );
     this.showSlice = false;
-    this.loadingManager = new THREE.LoadingManager();
+    this.loadingMan = new LoadingMan();
     this.objExporter = new OBJExporter();
 
     this.pixelRatio = window.devicePixelRatio ? window.devicePixelRatio : 1.0;
@@ -81,11 +82,25 @@ export class PartDesignApp {
   }
 
   public SetupLoadingManager(){
-    this.loadingManager.onProgress=(url, loaded, number)=>{
-      console.log(url);
-      console.log(loaded);
-      console.log(number);
+    this.loadingMan.onLoad = (name, obj)=>{
+      console.log(name + 'loaded');
+      this.AddObject3D(name, obj);
     };
+    this.loadingMan.onProgress=(name, loaded, total)=>{
+      console.log(name);
+      console.log(loaded);
+      console.log(total);
+    };
+  }
+
+  public AddObject3D(name: string, obj:THREE.Object3D){
+    if(obj instanceof THREE.Mesh){
+      console.log('adding mesh' + name);
+    }else if(obj instanceof THREE.BufferGeometry){
+      console.log('adding a BufferedGeometry ' + name);
+    }else{
+      console.log('unknown mesh object type ' + name);
+    }
   }
 
   public bindEventListeners() {
@@ -105,7 +120,7 @@ export class PartDesignApp {
   public init(): void {}  
 
   public LoadMesh(file: File) {
-    LoadMeshes(file, this.loadingManager);
+    LoadMeshes(file, this.loadingMan);
   }
 
   public LoadMeshes(files: FileList) {

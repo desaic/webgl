@@ -4,11 +4,16 @@ import {RectGrid} from "./RectGrid.js";
 export default class World {
   public camera: THREE.PerspectiveCamera;
   public scene: THREE.Scene;
-  public geometries: any[];
+  // Parts should have their own types. using THREE.Mesh for now.
+  // holds a single copy of the part's geometry so that instances
+  // don't need to copy geometry.
+  public parts: any[];
   public defaultMaterial: THREE.MeshPhongMaterial;
   public ground: RectGrid;
   public selectedInstance: any[];
+  // instances of parts.
   public instances: THREE.Group;
+  //scene with a single quad for drawing 2d images.
   public quadScene: THREE.Scene;
   public quadCamera: THREE.OrthographicCamera;
   public quadTexture: THREE.DataTexture;
@@ -42,7 +47,7 @@ export default class World {
     });
 
     this.selectedInstance = [];
-    this.geometries = [];
+    this.parts = [];
 
     this.instances = new THREE.Group();
     this.scene.add(this.instances);
@@ -92,14 +97,16 @@ export default class World {
     return null;
   };
 
-  GetGeometryById = (id) => {
-    for (let i = 0; i < this.geometries.length; i++) {
-      if (this.geometries[i].id == id) {
-        return this.geometries[i];
+  GetPartById = (id) => {
+    for (let i = 0; i < this.parts.length; i++) {
+      if (this.parts[i].id == id) {
+        return this.parts[i];
       }
     }
     return null;
   };
+
+  AddPart = (Part:any)=>{};
 
   addShadowedLight = (x, y, z, color, intensity, scene) => {
     const directionalLight = new THREE.DirectionalLight(color, intensity);
