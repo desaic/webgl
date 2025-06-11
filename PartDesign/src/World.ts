@@ -17,6 +17,8 @@ export default class World {
   public quadScene: THREE.Scene;
   public quadCamera: THREE.OrthographicCamera;
   public quadTexture: THREE.DataTexture;
+  private nextPartId : number;
+  private nextInstanceId:number;
   constructor() {
     const fov = 50;
     const aspect = window.innerWidth / window.innerHeight;
@@ -58,6 +60,9 @@ export default class World {
     this.quadScene.add(quad);
     this.quadCamera=new THREE.OrthographicCamera(-aspect, aspect);
     this.quadCamera.position.set(0.2, 0.5, 5);
+
+    this.nextPartId = 0;
+    this.nextInstanceId =0;
   }
 
   MakeImageQuad = ()=>{
@@ -90,8 +95,9 @@ export default class World {
 
   GetInstanceById = (id) => {
     for (let i = 0; i < this.instances.children.length; i++) {
-      if (this.instances.children[i].id == id) {
-        return this.instances.children[i];
+      const child = this.instances.children[i];
+      if (child.userData.id == id) {
+        return child;
       }
     }
     return null;
@@ -99,14 +105,36 @@ export default class World {
 
   GetPartById = (id) => {
     for (let i = 0; i < this.parts.length; i++) {
-      if (this.parts[i].id == id) {
+      if (this.parts[i].userData.id == id) {
         return this.parts[i];
       }
     }
     return null;
   };
 
-  AddPart = (Part:any)=>{};
+  AddPart = (part:any)=>{
+    const partId = this.nextPartId;
+    this.nextPartId ++;
+    part.userData.id = partId;
+    this.parts.push(part);
+    return partId;
+  };
+
+  // create an instance for partId, and add it to scene for rendering
+  AddInstance = (pos: THREE.Vector3, rot:THREE.Euler, partId : number) => {
+    const instanceId = this.nextInstanceId;
+    this.nextInstanceId ++;
+    const part=this.GetPartById(partId);
+    if(part == null){
+      return -1;
+    }
+    const instance = new THREE.Mesh(part.geometry, part.material.clone());
+    instance.position.copy(pos);
+    instance.setRotationFromEuler(rot);
+    instance.userData.id= instanceId;
+    this.instances.add(instance);
+    return instanceId;
+  }
 
   addShadowedLight = (x, y, z, color, intensity, scene) => {
     const directionalLight = new THREE.DirectionalLight(color, intensity);

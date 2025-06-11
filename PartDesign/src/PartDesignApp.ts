@@ -6,7 +6,7 @@ import World from "./World.js";
 import { OBJExporter } from "./OBJExporter.js";
 import { GPUPicker } from "./gpupicker.js";
 import { LoadMeshes } from './LoadMeshes';
-import { LoadingMan } from "./LoadMan.ts";
+import { LoadingMan } from "./LoadingMan.ts";
 
 export class PartDesignApp {
   // HTML element that will contain the renderer's canvas
@@ -98,6 +98,13 @@ export class PartDesignApp {
       console.log('adding mesh' + name);
     }else if(obj instanceof THREE.BufferGeometry){
       console.log('adding a BufferedGeometry ' + name);
+      const mesh = new THREE.Mesh(obj, this.world.defaultMaterial);
+      const partId = this.world.AddPart(mesh);
+      this.world.AddInstance(
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Euler(0, 0, 0),
+        partId
+      );
     }else{
       console.log('unknown mesh object type ' + name);
     }
