@@ -16,10 +16,6 @@ import { MakeDiamondCell, MakeGyroidCell,
 import * as D2T from "./DensityToThickness.js";
 let d2t = [];
 
-import {save} from "@tauri-apps/plugin-dialog";
-
-import { writeTextFile } from "@tauri-apps/plugin-fs";
-
 var container, orbit;
 var renderer, clock, world;
 let control;
@@ -84,25 +80,22 @@ function InitScene() {
   DrawSlice(world.quadTexture.image, lensConf);
 }
 
+function DownloadTxtFile(filename:string, blobString:string){
+  const blob = new Blob([blobString], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const downTmp = document.createElement("a") as HTMLAnchorElement;
+  downTmp.href = url;
+  downTmp.download = filename;
+  document.body.appendChild(downTmp);
+  downTmp.click();
+  document.body.removeChild(downTmp);
+  URL.revokeObjectURL(url);
+}
+
 const SaveSphere = async () => {
   const defaultName = "sp_d"+lensConf.diameter.toFixed(0) + ".obj";
-  const filename = await save({
-    filters: [{ name: "obj", extensions: ["obj"] }],
-    defaultPath: defaultName,
-  });
-
-  if (filename == undefined) {
-    return;
-  }
   const objString = exporter.parse(world.unitSphere);
-
-  try {
-    if (filename) {
-      await writeTextFile(filename, objString);
-    }
-  } catch (err) {
-    console.error("Error saving OBJ:", err);
-  }
+  DownloadTxtFile(defaultName, objString);
 };
 
 const SaveTxt = async () => {
@@ -110,14 +103,6 @@ const SaveTxt = async () => {
   const intCell = Math.floor(lensConf.cellSize).toString();
   const type = lensConf.type;
   const defaultName = type+"D"+intRad+"c"+intCell+".txt";
-  const filename = await save({
-    filters: [{ name: "txt", extensions: ["txt"] }],
-    defaultPath: defaultName,
-  });
-
-  if (filename == undefined) {
-    return;
-  }
   const sampleDist = (lensConf.diameter / 2) / (NUM_SAMPLES - 1);
   let outString = "origin 0 0 0\n";
   outString += "voxelSize " + sampleDist.toString() + " " + sampleDist.toString() + " " + 
@@ -126,18 +111,12 @@ const SaveTxt = async () => {
   const size = thicknessArr.length;
   outString += size.toString() + " 1 1\n";  
   
-      for (let x = 0; x < size; x++) {
-        outString += thicknessArr[x].toFixed(4)+" ";
-      }
-      outString += "\n";
- 
-  try {
-    if (filename) {
-      await writeTextFile(filename, outString);
-    }
-  } catch (err) {
-    console.error("Error saving Txt:", err);
+  for (let x = 0; x < size; x++) {
+    outString += thicknessArr[x].toFixed(4)+" ";
   }
+  outString += "\n";
+ DownloadTxtFile(defaultName, outString);
+
 };
 
 function UpdateSlice() {
