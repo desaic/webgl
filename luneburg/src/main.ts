@@ -103,8 +103,9 @@ const SaveSphere = async () => {
 const SaveTxt = async () => {
   const intRad = Math.floor(lensConf.diameter).toString();
   const intCell = Math.floor(lensConf.cellSize).toString();
+  const epsStr = lensConf.dielectric.toFixed(2);
   const type = lensConf.type;
-  const defaultName = type+"D"+intRad+"c"+intCell+".txt";
+  const defaultName = type+"E"+epsStr+"D"+intRad+"c"+intCell+".txt";
   const sampleDist = (lensConf.diameter / 2) / (NUM_SAMPLES - 1);
   let outString = "origin 0 0 0\n";
   outString += "voxelSize " + sampleDist.toString() + " " + sampleDist.toString() + " " + 
