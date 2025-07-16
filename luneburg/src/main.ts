@@ -21,6 +21,7 @@ var renderer, clock, world;
 let control;
 var gpuPicker;
 var pixelRatio = 1.0;
+
 const exporter = new OBJExporter();
 const RENDER_FPS = 60;
 const lensConf = {
@@ -30,6 +31,7 @@ const lensConf = {
   type: "diamond",
   thickness: 0.3,
   minThickness: 0.175,
+  dielectric: 2.35
 };
 let unitCelldx = 2 / 64;
 const unitCell = new Array3D(65, 65, 65);
@@ -129,9 +131,10 @@ function UpdateThicknessUI(densityEle, thicknessEle){
   thicknessEle.textContent = "thickness=" + thickness.toFixed(3) + " mm";
 }
 
-const diameterInput = document.getElementById("diameterInput") as HTMLInputElement
-const cellSizeInput = document.getElementById("cellSizeInput") as HTMLInputElement
-const minThickInput = document.getElementById("minThickInput") as HTMLInputElement
+const diameterInput = document.getElementById("diameterInput") as HTMLInputElement;
+const cellSizeInput = document.getElementById("cellSizeInput") as HTMLInputElement;
+const minThickInput = document.getElementById("minThickInput") as HTMLInputElement;
+const dielectricInput = document.getElementById("dielectricInput") as HTMLInputElement;
 
 const bindEventListeners = () => {
   window.addEventListener("resize", onWindowResize, false);
@@ -153,6 +156,12 @@ const bindEventListeners = () => {
       world.unitSphere.scale.set(r, r, r);
       world.unitSphere.updateMatrix();
       lensConf.diameter = diameter;
+      UpdateSlice();
+    });
+  dielectricInput
+    .addEventListener("change", function () {
+      const dieleInput = Number(this.value);
+      lensConf.dielectric = dieleInput;
       UpdateSlice();
     });
   cellSizeInput
@@ -258,12 +267,16 @@ function ComputeUnitCell(grid, conf) {
   }
 }
 
-function LuneRho(R, r) {
-  // index of solid material.
-  const EpsI = 2.35;
+function LuneRho(R, r, epsI) {
   const r2 = r * r;
-  let rho = (R * R - r2) * ((EpsI + 4) * R * R - 2 * r2);
-  rho /= 3 * R * R * (EpsI - 1) * (2 * R * R - r2);
+  let rho = (R * R - r2) * ((epsI + 4) * R * R - 2 * r2);
+  rho /= 3 * R * R * (epsI - 1) * (2 * R * R - r2);
+  if (rho < 0) {
+    rho = 0;
+  }
+  if (rho > 1) {
+    rho = 1;
+  }
   return rho;
 }
 
@@ -297,9 +310,10 @@ function FillThickness() {
   const len = thicknessArr.length;
   const R = 1.0;
   d2t = SelectD2TArray(lensConf);
+  const epsI = lensConf.dielectric;
   for (let i = 0; i < len; i++) {
     const r = i / len;
-    const rho = LuneRho(R, r);
+    const rho = LuneRho(R, r, epsI);
     let t = LinearInterp(d2t, rho, D2T.DENSITY_STEP);
     if (t < lensConf.minThickness) {
       t = lensConf.minThickness;

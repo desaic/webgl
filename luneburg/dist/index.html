@@ -14,10 +14,13 @@
 <div id="widgetContainer" style="position: absolute; top: 10px; left: 10px;width: 150px;">
   <button id="saveMesh">Save mesh</button><br>
   <button id="saveGridTxt">Save grid text</button><br>
-  <button>Button 3</button><br>
   <div class="inputRow">
     <label for="diameterInput" class="inputLabel">Diameter (mm):</label>
     <input type="number" class="inputField" step="any" id="diameterInput" value="60" min="1" max="1000">
+  </div><br>
+  <div class="inputRow">
+    <label for="dielectric" class="inputLabel">Dielectric: </label>
+    <input type="number" class="inputField" step="0.01" id="dielectricInput" value="2.35" min="1.1" max="10">
   </div><br>
   <div class="inputRow">
     <label for="cellSizeInput" class="inputLabel">cell size (mm):</label>
