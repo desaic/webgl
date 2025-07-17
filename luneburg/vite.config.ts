@@ -37,11 +37,11 @@ export default defineConfig({
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
     rollupOptions: {
       output: {
-        entryFileNames: 'main.js', 
+        entryFileNames: "[name].js", 
         // For asynchronously loaded chunks
-        chunkFileNames: 'chunks.js', 
+        chunkFileNames: "[name]-.js", 
         // For other assets (images, CSS, etc.)
-        assetFileNames: 'styles.css',
+        assetFileNames: "assets/[name]-[extname]",
       },
     },
   },

@@ -15,18 +15,6 @@ function InitScene() {
   clock = new THREE.Clock();
 }
 
-function DownloadTxtFile(filename:string, blobString:string){
-  const blob = new Blob([blobString], { type: "text/plain" });
-  const url = URL.createObjectURL(blob);
-  const downTmp = document.createElement("a") as HTMLAnchorElement;
-  downTmp.href = url;
-  downTmp.download = filename;
-  document.body.appendChild(downTmp);
-  downTmp.click();
-  document.body.removeChild(downTmp);
-  URL.revokeObjectURL(url);
-}
-
 let renderElapsed = 0;
 
 function Animate(_time) {

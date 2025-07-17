@@ -1,4 +1,3 @@
-import * as THREE from 'three'
 import { STLLoader } from "./STLLoader.js"
 import {OBJLoader} from "./OBJLoader.js"
 import {LoadingMan} from "./LoadingMan.ts"
@@ -9,6 +8,7 @@ function ReadSTL(filename, man: LoadingMan) {
     reader.onload = function () {
       const loader = new STLLoader();
       const geometry = loader.parse(reader.result);
+      man.onLoad(filename, geometry);
     };
     reader.readAsArrayBuffer(filename);
   } catch (err) {
@@ -24,7 +24,7 @@ function ReadOBJ(filename, man: LoadingMan) {
       const object = loader.parse(reader.result);
       if(object.isGroup){
         for(const child of object.children){
-            
+            man.onLoad(filename, child);
         }
       }else{
 

@@ -3,7 +3,6 @@ import { OrbitControls } from "./OrbitControls.js";
 import { TransformControls } from "./TransformControls.js";
 
 import World from "./World.js";
-import { OBJExporter } from "./OBJExporter.js";
 import { GPUPicker } from "./gpupicker.js";
 import { LoadMeshes } from './LoadMeshes';
 import { LoadingMan } from "./LoadingMan.ts";
@@ -29,8 +28,6 @@ export class PartDesignApp {
   // Flag to indicate whether a slice view should be shown
   private showSlice: boolean;
 
-  private objExporter: OBJExporter;
-
   private pixelRatio: number;
 
   private loadingMan: LoadingMan;
@@ -51,7 +48,6 @@ export class PartDesignApp {
     );
     this.showSlice = false;
     this.loadingMan = new LoadingMan();
-    this.objExporter = new OBJExporter();
 
     this.pixelRatio = window.devicePixelRatio ? window.devicePixelRatio : 1.0;
 
@@ -86,8 +82,9 @@ export class PartDesignApp {
       console.log(name + 'loaded');
       this.AddObject3D(name, obj);
     };
-    this.loadingMan.onProgress=(name, loaded, total)=>{
+    this.loadingMan.onProgress=(name, step, loaded, total)=>{
       console.log(name);
+      console.log(step);
       console.log(loaded);
       console.log(total);
     };
