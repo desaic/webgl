@@ -1,6 +1,6 @@
 /// a wrapper for callback functions during mesh loading
 export class LoadingMan {
-    constructor(
+    constructor(        
         onLoad?: (name: string, obj: any) => void,
         onProgress?: (name: string, step: string, loaded: number, total: number) => void,
         onError?: (url: string) => void,
@@ -8,8 +8,8 @@ export class LoadingMan {
         this.onLoad = onLoad;
         this.onProgress = onProgress;
         this.onError = onError;
-    }
 
+    }
     /**
      * Will be called when an item finished loading
      */

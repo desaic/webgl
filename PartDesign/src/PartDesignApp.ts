@@ -92,7 +92,13 @@ export class PartDesignApp {
 
   public AddObject3D(name: string, obj:THREE.Object3D){
     if(obj instanceof THREE.Mesh){
-      console.log('adding mesh' + name);
+      console.log("adding mesh" + name);
+      const partId = this.world.AddPart(obj);
+      this.world.AddInstance(
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Euler(0, 0, 0),
+        partId
+      );
     }else if(obj instanceof THREE.BufferGeometry){
       console.log('adding a BufferedGeometry ' + name);
       const mesh = new THREE.Mesh(obj, this.world.defaultMaterial);

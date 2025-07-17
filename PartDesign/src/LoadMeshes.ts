@@ -1,5 +1,5 @@
 import { STLLoader } from "./STLLoader.js"
-import {OBJLoader} from "./OBJLoader.js"
+import {OBJLoader} from "./OBJLoader.ts"
 import {LoadingMan} from "./LoadingMan.ts"
 
 function ReadSTL(filename, man: LoadingMan) {
@@ -20,14 +20,13 @@ function ReadOBJ(filename, man: LoadingMan) {
   const reader = new FileReader();
   try {
     reader.onload = function () {
-      var loader = new OBJLoader(man);
+      var loader = new OBJLoader(man, filename);
       const object = loader.parse(reader.result);
-      if(object.isGroup){
-        for(const child of object.children){
-            man.onLoad(filename, child);
+      if (object.isGroup) {
+        for (const child of object.children) {
+          man.onLoad(child.name, child);
         }
-      }else{
-
+      } else {
       }
     };
     reader.readAsText(filename);
