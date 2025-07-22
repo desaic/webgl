@@ -18,7 +18,6 @@ export default class World {
   public quadCamera: THREE.OrthographicCamera;
   public quadTexture: THREE.DataTexture;
   private nextPartId : number;
-  private nextInstanceId:number;
   constructor() {
     const fov = 50;
     const aspect = window.innerWidth / window.innerHeight;
@@ -62,7 +61,6 @@ export default class World {
     this.quadCamera.position.set(0.2, 0.5, 5);
 
     this.nextPartId = 0;
-    this.nextInstanceId =0;
   }
 
   MakeImageQuad = ()=>{
@@ -96,7 +94,7 @@ export default class World {
   GetInstanceById = (id) => {
     for (let i = 0; i < this.instances.children.length; i++) {
       const child = this.instances.children[i];
-      if (child.userData.id == id) {
+      if (child.id == id) {
         return child;
       }
     }
@@ -122,8 +120,6 @@ export default class World {
 
   // create an instance for partId, and add it to scene for rendering
   AddInstance = (pos: THREE.Vector3, rot:THREE.Euler, partId : number) => {
-    const instanceId = this.nextInstanceId;
-    this.nextInstanceId ++;
     const part=this.GetPartById(partId);
     if(part == null){
       return -1;
@@ -131,9 +127,8 @@ export default class World {
     const instance = new THREE.Mesh(part.geometry, part.material.clone());
     instance.position.copy(pos);
     instance.setRotationFromEuler(rot);
-    instance.userData.id= instanceId;
     this.instances.add(instance);
-    return instanceId;
+    return instance.id;
   }
 
   addShadowedLight = (x, y, z, color, intensity, scene) => {

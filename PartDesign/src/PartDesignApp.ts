@@ -67,7 +67,7 @@ export class PartDesignApp {
       this.world.camera,
       this.renderer.domElement
     );
-    this.control.addEventListener("dragging-changed", function (event) {
+    this.control.addEventListener("dragging-changed", (event) =>{
       this.orbit.enabled = !event.value;
     });
 

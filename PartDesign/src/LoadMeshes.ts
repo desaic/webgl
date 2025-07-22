@@ -2,25 +2,25 @@ import { STLLoader } from "./STLLoader.js"
 import {OBJLoader} from "./OBJLoader.ts"
 import {LoadingMan} from "./LoadingMan.ts"
 
-function ReadSTL(filename, man: LoadingMan) {
+function ReadSTL(file: File, man: LoadingMan) {
   const reader = new FileReader();
   try {
     reader.onload = function () {
       const loader = new STLLoader();
       const geometry = loader.parse(reader.result);
-      man.onLoad(filename, geometry);
+      man.onLoad(file.name, geometry);
     };
-    reader.readAsArrayBuffer(filename);
+    reader.readAsArrayBuffer(file);
   } catch (err) {
     console.log(err.message);
   }
 }
 
-function ReadOBJ(filename, man: LoadingMan) {
+function ReadOBJ(file: File, man: LoadingMan) {
   const reader = new FileReader();
   try {
     reader.onload = function () {
-      var loader = new OBJLoader(man, filename);
+      var loader = new OBJLoader(man, file.name);
       const object = loader.parse(reader.result);
       if (object.isGroup) {
         for (const child of object.children) {
@@ -29,14 +29,14 @@ function ReadOBJ(filename, man: LoadingMan) {
       } else {
       }
     };
-    reader.readAsText(filename);
+    reader.readAsText(file);
   } catch (err) {
     console.log(err.message);
   }
 }
 
 /// a single file may contain multiple meshes.
-export const LoadMeshes = (file, man: LoadingMan) => {
+export const LoadMeshes = (file: File, man: LoadingMan) => {
   const extension = file.name.split(".").pop().toLowerCase();
   if (extension === "stl") {
     ReadSTL(file, man);
