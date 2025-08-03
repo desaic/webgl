@@ -76,7 +76,9 @@ void TestPerm() {
   
 }
 
+extern void pe800();
+
 int main(int argc, char * argv[]) {
-  dm2();
+  pe800();
   return 0;
 }
