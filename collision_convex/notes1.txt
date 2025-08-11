@@ -1,0 +1,9 @@
+r    center
+Q^T  rotation matrix
+C d    6 planes
+y slack variable
+R radius of small sphere convolved with cuboid
+AQ^T(x-r) < alpha b
+
+||x-(r+Qy)||<alpha R
+Cy<=alpha d
