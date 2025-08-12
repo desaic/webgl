@@ -4,7 +4,7 @@ import { TransformControls } from "./TransformControls.js";
 
 import World from "./World.js";
 import { GPUPicker } from "./gpupicker.js";
-import { GUI } from 'lil-gui';
+import { GUI, Controller } from 'lil-gui';
 import { RoundedBoxGeometry } from "./RoundedBoxGeometry.js";
 
 import { RoundedCuboid } from './RoundedCuboid'
@@ -33,6 +33,8 @@ export class CollisionApp {
 
   private gui: GUI;
   private cuboidArr: RoundedCuboid[];
+  public alpha: number;
+  public scaleControl:Controller;
   /**
    * @constructor
    * @description
@@ -46,7 +48,7 @@ export class CollisionApp {
       this.world.scene,
       this.world.camera
     );
-    
+    this.alpha = 1.0;
     const cuboidA = new RoundedCuboid();
     const cuboidB = new RoundedCuboid();
     cuboidB.conf.x = 200;
@@ -99,6 +101,21 @@ export class CollisionApp {
     folderB.add(confB, 'rx', -4, 4, 0.1);
     folderB.add(confB, 'ry', -4, 4, 0.1);
     folderB.add(confB, 'rz', -4, 4, 0.1);
+
+    const guiFun = {
+      solveScale : ()=>{
+        this.SolveScale();
+        if(this.scaleControl){
+          this.scaleControl.updateDisplay();
+        }
+      }
+    };
+    this.gui.add(guiFun, 'solveScale').name('Solve Scale');
+    this.scaleControl = this.gui.add(this, 'alpha');  
+  }
+
+  public SolveScale(){
+    this.alpha = 2;
   }
 
   public AddCuboidsToScene() {
