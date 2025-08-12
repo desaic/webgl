@@ -2,6 +2,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <random>
 #include <sstream>
 
 #include "CadApp.hpp"
@@ -153,9 +154,9 @@ int main(int argc, char** argv) {
   // RunHeadApp();
   // MeshHeightMap();
   // MapDrawingToThickness();
-  TestSDF();
+  //TestSDF();
   // JsToObj(); 
-  //SaveVolMeshAsSurf();
+  SaveVolMeshAsSurf();
   //TestSurfRaySample();
   
   //TestGrin();

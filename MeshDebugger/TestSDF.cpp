@@ -855,6 +855,15 @@ TrigMesh GetInnerSurf(TrigMesh & mesh, float h, float offset) {
   return surf;
 }
 
+void MakeHandInner() {
+  std::string meshFile = "F:/meshes/fruitHand/m/hand2.obj";
+  std::string outFile = "F:/meshes/fruitHand/m/hand2_inner1.obj";
+  TrigMesh mesh;
+  mesh.LoadObj(meshFile);
+  TrigMesh out = GetInnerSurf(mesh, 0.25, 1);
+  out.SaveObj(outFile);
+}
+
 void MakeEarCore() {
   std::string meshFile = "F:/meshes/head/ear_l.obj";
   std::string outFile = "F:/meshes/head/ear_l_inner.obj";
@@ -1322,6 +1331,50 @@ void WriteDiskField() {
   out.close();
 }
 
+//mirrors mesh in x. also changes triangle vertex indices to maintain winding.
+void MirrorMesh(TrigMesh & m) {
+  for (size_t v = 0; v < m.GetNumVerts(); v++) {
+    m.v[3 * v] *= -1;
+  }
+  for (size_t t = 0; t < m.GetNumTrigs(); t++) {
+    unsigned tmp = m.t[3 * t];
+    m.t[3 * t] = m.t[3 * t + 1];
+    m.t[3 * t + 1] = tmp;
+  }
+}
+
+void ScaleAndMirrorFruits() {
+  std::string inputDir = "F:/meshes/fruitHand/fruits_coarse";
+  std::string outDir = "F:/meshes/fruitHand/fruits_scale";
+  std::filesystem::path inPath(inputDir);
+  float scale = 10;
+
+  for (const auto &entry: std::filesystem::directory_iterator(inPath)) {
+    if (entry.is_regular_file()) {
+      auto meshPath = entry.path();
+      std::string ext= meshPath.extension().string();
+      std::transform(ext.begin(), ext.end(), ext.begin(),
+                     [](unsigned char c) { return std::tolower(c); });
+      std::cout<<meshPath.filename().string()<<" ";
+      std::cout << ext << "\n";
+      if (ext == ".obj") {
+        TrigMesh m;
+        m.LoadObj(meshPath.string());
+        m.scale(10);
+        std::string fileName = meshPath.filename().string();
+        std::string stem = meshPath.stem().string();
+        std::string outFile = outDir + "/" + fileName;
+        m.SaveObj(outFile);
+        MirrorMesh(m);
+        outFile = outDir + "/" + stem + "_m.obj";
+        m.SaveObj(outFile);
+      } else {
+        continue;
+      }
+    }
+  }
+}
+
 void TestSDF() { 
   //OrientFlatGroups();
   //TrigMesh mesh;
@@ -1345,5 +1398,7 @@ void TestSDF() {
   //WriteDiskField();
   //FloodSDFOutside();
 
-  MakeOverallSkinMesh();
+  //MakeOverallSkinMesh();
+  //MakeHandInner();
+  ScaleAndMirrorFruits();
 }

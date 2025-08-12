@@ -219,8 +219,8 @@ static void FilterDecomp(Array3D<short>& grid, const std::vector<float>& kern) {
 }
 
 void SaveVolMeshAsSurf() {
-  const std::string volFile = "F:/meshes/radome/radome0.064mm.vol";
-  std::string outFile = "F:/meshes/radome/radome_surf_2x2.obj";
+  const std::string volFile = "F:/meshes/vols/part_0.vol";
+  std::string outFile = "F:/meshes/vols/0.obj";
   std::ifstream in(volFile, std::fstream::binary);
   Vec3u size;
   in.read((char*)(&size), 12);
@@ -241,21 +241,21 @@ void SaveVolMeshAsSurf() {
   }
 
   //cut off a lot of it
-  Array3D8u old = expanded;
-  Vec3u oldSize = expanded.GetSize();
-  Vec3u newSize = oldSize;
-  newSize[0] /= 5;
-  newSize[1] /= 5;
-  expanded.Allocate(newSize, 0);
+  //Array3D8u old = expanded;
+  //Vec3u oldSize = expanded.GetSize();
+  //Vec3u newSize = oldSize;
+  //newSize[0] /= 5;
+  //newSize[1] /= 5;
+  //expanded.Allocate(newSize, 0);
 
   Vec3u eSize = expanded.GetSize();
-  for (unsigned z = 0; z < eSize[2]; z++) {
-    for (unsigned y = 0; y < eSize[1]; y++) {
-      for (unsigned x = 0; x < eSize[0]; x++) {
-        expanded(x, y, z) = old(x, y, z);
-      }
-    }
-  }
+  //for (unsigned z = 0; z < eSize[2]; z++) {
+  //  for (unsigned y = 0; y < eSize[1]; y++) {
+  //    for (unsigned x = 0; x < eSize[0]; x++) {
+  //      expanded(x, y, z) = old(x, y, z);
+  //    }
+  //  }
+  //}
 
   AdapSDF sdf;
   Vec3u sdfSize = expanded.GetSize() + Vec3u(3, 3, 3);
