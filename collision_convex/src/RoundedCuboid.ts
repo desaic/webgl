@@ -19,7 +19,7 @@ export class RoundedCuboid {
         //identity
         this.rotation = new Matrix4();
         this.size = new Vector3(200,100,50);
-        this.sphereRadius = 1;
+        this.sphereRadius = 5;
         this.conf = new CuboidConf();
         this.id = -1;
     }
