@@ -8,29 +8,26 @@
  * nice little library!
  *
  */
+import { WebGLRenderTarget, Color, NearestFilter, RGBAFormat, Scene,ShaderChunk, ShaderMaterial } from "three";
 
-var THREE;
-
-var GPUPicker = function(three, renderer, scene, camera) {
-  THREE = three;
+var GPUPicker = function(renderer, scene, camera) {
   // This is the 1x1 pixel render target we use to do the picking
-  var pickingTarget = new THREE.WebGLRenderTarget(1, 1, {
-    minFilter: THREE.NearestFilter,
-    magFilter: THREE.NearestFilter,
-    format: THREE.RGBAFormat,
-    encoding: THREE.LinearEncoding
+  var pickingTarget = new WebGLRenderTarget(1, 1, {
+    minFilter: NearestFilter,
+    magFilter: NearestFilter,
+    format: RGBAFormat
   });
   // We need to be inside of .render in order to call renderBufferDirect in renderList() so create an empty scene
   // and use the onAfterRender callback to actually render geometry for picking.
-  var emptyScene = new THREE.Scene();
+  var emptyScene = new Scene();
   emptyScene.onAfterRender = renderList;
   // RGBA is 4 channels.
   var pixelBuffer = new Uint8Array(4 * pickingTarget.width * pickingTarget.height);
-  var clearColor = new THREE.Color(0xffffff);
+  var clearColor = new Color(0xffffff);
   var materialCache = [];
   var shouldPickObjectCB = undefined;
 
-  var currClearColor = new THREE.Color();
+  var currClearColor = new Color();
 
   this.pick = function(x, y, shouldPickObject) {
     shouldPickObjectCB = shouldPickObject;
@@ -76,8 +73,8 @@ var GPUPicker = function(three, renderer, scene, camera) {
     var index = 0;
     var renderMaterial = renderItem.object.pickingMaterial ? renderItem.object.pickingMaterial : materialCache[index];
     if (!renderMaterial) {
-      let vertexShader = THREE.ShaderChunk.meshbasic_vert;
-      renderMaterial = new THREE.ShaderMaterial({
+      let vertexShader = ShaderChunk.meshbasic_vert;
+      renderMaterial = new ShaderMaterial({
         vertexShader: vertexShader,
         fragmentShader: `
           uniform vec4 objectId;
