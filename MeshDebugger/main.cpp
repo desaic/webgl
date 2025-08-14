@@ -156,10 +156,10 @@ int main(int argc, char** argv) {
   // MapDrawingToThickness();
   //TestSDF();
   // JsToObj(); 
-  SaveVolMeshAsSurf();
+  //SaveVolMeshAsSurf();
   //TestSurfRaySample();
   
-  //TestGrin();
+  TestGrin();
 
   //VoxelizeUnitCell();
   //VoxelizeRaycast();

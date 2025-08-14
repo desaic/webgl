@@ -92,6 +92,7 @@ int TestGripper() {
 }
 
 int main() {
-  TestGripper(); 
+  TestSimpCube();
+  //TestGripper(); 
   return 0;
 }
