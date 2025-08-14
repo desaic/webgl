@@ -12,6 +12,7 @@
 #include "MeshUtil.h"
 #include "ZRaycast.h"
 #include <deque>
+#include <iostream>
 #include <fstream>
 #include <functional>
 
@@ -460,6 +461,32 @@ void VoxelizeRaycast() {
   }
   SaveVolAsObjMesh("F:/meshes/bcc/cell_ray_vol.obj", vox, (float*)(&rcConf.voxelSize_), 1);
   SaveVoxTxt(vox, h, "F:/meshes/bcc/ibc_102.txt");
+}
+
+void CountVoxelsInVol() {
+  const std::string volFile = "F:/meshes/lunehuge/20250801lune_cot.vol"; 
+  std::ifstream in(volFile, std::fstream::binary);
+  Vec3u size;
+  in.read((char*)(&size), 12);
+  Array3D8u grid(size[0], size[1], size[2]);
+  size_t bytes = size[0] * size_t(size[1]) * size[2];
+  in.read((char*)(grid.DataPtr()), bytes);
+  const float VOX_DX = 0.256;
+  float VoxRes[3] = {VOX_DX, VOX_DX, VOX_DX};
+  size_t count = 0;
+  Array3D8u expanded(size[0] * 8, size[1], size[2]);
+  for (size_t i = 0; i < grid.GetData().size(); i++) {
+    uint8_t val = grid.GetData()[i];
+    for (size_t j = 0; j < 8; j++) {
+      size_t outIdx = i * 8 + j;
+      uint8_t outVal = (val >> j) & 1;
+      expanded.GetData()[outIdx] = outVal;
+      count += outVal;
+    }
+  }
+  std::cout << count << "\n";
+  float voxRes[3] = {0.256, 0.256, 0.256};
+  //SaveVolAsObjMesh("F:/meshes/lunehuge/20250801vol.obj", expanded, voxRes, 1);
 }
 
 void TestVoxelizer() {

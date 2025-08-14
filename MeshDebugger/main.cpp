@@ -144,6 +144,9 @@ extern void VoxelizeUnitCell();
 extern void VoxelizeRaycast();
 
 extern void TestGrin();
+extern void CountVoxelsInVol();
+extern void EstMass();
+
 
 int main(int argc, char** argv) {
   //RunUVApp();
@@ -159,7 +162,9 @@ int main(int argc, char** argv) {
   //SaveVolMeshAsSurf();
   //TestSurfRaySample();
   
-  TestGrin();
+  //TestGrin();
+  EstMass();
+  //CountVoxelsInVol();
 
   //VoxelizeUnitCell();
   //VoxelizeRaycast();
