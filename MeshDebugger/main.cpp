@@ -144,6 +144,7 @@ extern void VoxelizeUnitCell();
 extern void VoxelizeRaycast();
 
 extern void TestGrin();
+extern void TestGrinDiamond();
 extern void CountVoxelsInVol();
 extern void EstMass();
 
@@ -163,7 +164,8 @@ int main(int argc, char** argv) {
   //TestSurfRaySample();
   
   //TestGrin();
-  EstMass();
+  TestGrinDiamond();
+  //EstMass();
   //CountVoxelsInVol();
 
   //VoxelizeUnitCell();
