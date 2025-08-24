@@ -5,5 +5,32 @@ y slack variable
 R radius of small sphere convolved with cuboid
 AQ^T(x-r) < alpha b
 
-||x-(r+Qy)||<alpha R
-Cy<=alpha d
+||x-(r1+Q1y1)||<alpha R
+||x-(r2+Q2y2)||<alpha R
+Cy1<=alpha d
+Cy2<=alpha d
+
+alpha0 = ||(r1-r2)||/2 / min(w,h,d)
+x0 = 1/2 *(r1 + r2)
+y1_0 = Q1^T 1/2(r2-r1)
+y2_0 = Q2^T 1/2(r1-r2)
+
+L = alpha + u1(||x-y1|| - aR) + u2(||x-y2||-aR) + u3(Cy1-ad) + u4(Cy2-ad)
+
+
+update x
+x = (u1 * y1 + u2 * y2)/ (u1+u2)
+
+update y
+y1 = arg min ||x-y1|| + u3 (Cy1-ad)
+y2 = arg min ||x-y2|| + u4 (Cy2-ad)
+
+update alpha
+alpha = min (||x-y1||/R, ||x-y2||/R, Cy1/d, Cy2/d)
+
+update u
+u1 += rho(||x-y1|| - aR)
+u2 += rho(||x-y2|| - aR)
+u3 += rho(Cy1-ad)
+u4 += rho(Cy2 - ad);
+

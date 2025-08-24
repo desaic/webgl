@@ -9,6 +9,29 @@ import { RoundedBoxGeometry } from "./RoundedBoxGeometry.js";
 
 import { RoundedCuboid } from './RoundedCuboid'
 
+  //solver variables for two cuboids
+  class SolverVars {
+    // intersection point
+    x : Vector3;
+    // slack variables in cuboids 1 and 2.
+    y1 : Vector3;
+    y2 : Vector3;
+    // lagrange multiplier for ||x - R1y1||<=R1    
+    l1x : number;
+    l1y : number;
+    l2x : number;
+    l2y : number;
+    constructor(){
+      this.x = new Vector3(0);
+      this.y1 = new Vector3(0);
+      this.y2 = new Vector3(0);
+      this.l1x = 0;
+      this.l1y = 0;
+      this.l2x = 0;
+      this.l2y = 0;
+    }
+  }
+
 export class CollisionApp {
   // HTML element that will contain the renderer's canvas
   private container: HTMLElement;
@@ -35,6 +58,7 @@ export class CollisionApp {
   private cuboidArr: RoundedCuboid[];
   public alpha: number;
   public scaleControl:Controller;
+  public solverState: SolverVars;
   /**
    * @constructor
    * @description
@@ -53,6 +77,7 @@ export class CollisionApp {
     const cuboidB = new RoundedCuboid();
     cuboidB.conf.x = 200;
     this.cuboidArr =[cuboidA, cuboidB];
+    this.solverState = new SolverVars();
     this.gui = new GUI();    
     this.SetupGUI();
 
@@ -103,10 +128,14 @@ export class CollisionApp {
     folderB.add(confB, 'rz', -4, 4, 0.1);
 
     const guiFun = {
-      solveScale : ()=>{
-        this.SolveScale();
+      solveScale : ()=>{        
+        this.SolveScale(this.cuboidArr[0], this.cuboidArr[1]);
         if(this.scaleControl){
           this.scaleControl.updateDisplay();
+        }
+        if(this.cuboidArr.length>=2){
+          this.cuboidArr[0].alpha = this.alpha;
+          this.cuboidArr[1].alpha = this.alpha;
         }
       }
     };
@@ -114,7 +143,12 @@ export class CollisionApp {
     this.scaleControl = this.gui.add(this, 'alpha');  
   }
 
-  public SolveScale(){
+  public SolveScale(ca: RoundedCuboid, cb:RoundedCuboid){
+    const MAX_ITER = 10;
+    //initialize to a conservative feasible point.
+    for(let iter = 0;iter<MAX_ITER;iter++){
+      
+    }
     this.alpha = 2;
   }
 
