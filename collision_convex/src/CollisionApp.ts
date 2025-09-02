@@ -145,6 +145,27 @@ export class CollisionApp {
 
   public SolveScale(ca: RoundedCuboid, cb:RoundedCuboid){
     const MAX_ITER = 10;
+    // does not handle infinitely thin parts due to laziness.
+    const eps = 1e-3;
+    // maximum value alpha possibly needs.
+    const minA = ca.MinSideLength();
+    const minB = cb.MinSideLength();
+    // displacement from a to b
+    const displacement = new Vector3();
+    displacement.subVectors(ca.position, cb.position);
+    const dist = displacement.length();
+    console.log("center distance "+dist);
+    const alphaMax = dist / Math.max(minA + minB, eps);
+
+    // k scaling for quadratic constraint term
+    var Fx = (x) =>{return x[0];};
+    var Lagrangian = (x,u,k)=>{};
+    // inequality constraints.
+    var IneqConstraints = [];
+    var dLdx = (x, u, k) => {};
+    var dLdu = (x, u, k) => {};
+
+
     //initialize to a conservative feasible point.
     for(let iter = 0;iter<MAX_ITER;iter++){
       

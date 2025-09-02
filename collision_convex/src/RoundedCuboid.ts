@@ -31,4 +31,8 @@ export class RoundedCuboid {
         const e = new Euler(this.conf.rx, this.conf.ry, this.conf.rz);
         this.rotation.makeRotationFromEuler(e);
     }
+
+    MinSideLength(){
+        return Math.min(this.size.x, this.size.y, this.size.z);
+    }
 }
