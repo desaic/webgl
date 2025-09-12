@@ -1,9 +1,11 @@
 #include <iostream>
+#include <execution>
 #include "UT_SolidAngle.h"
 #include "TrigMesh.h"
 #include "Array3D.h"
 #include "BBox.h"
 #include "MeshUtil.h"
+#include "Range.h"
 
 using UTVec3 = HDK_Sample::UT_Vector3T<float> ;
 
@@ -69,30 +71,36 @@ int TestGripper() {
   Vec3u gridSize(boxSize[0]/h + 1, boxSize[1]/h + 1, boxSize[2]/h + 1);
   Array3D8u grid(gridSize, 0);
   std::cout << gridSize[0] << " " << gridSize[1] << " " << gridSize[2] << "\n";
-  for (unsigned z = 0; z < gridSize[2]; z++) {
-    if (z % 10 == 0) {
-      std::cout << z << "\n";
-    }
-    for (unsigned y = 0; y < gridSize[1]; y++) {
-      for (unsigned x = 0; x < gridSize[0]; x++) {
-        Vec3f coord(x, y, z);
-        Vec3f pt = box.vmin + h * (Vec3f(0.5f) + coord);
-        UTVec3 query;
-        query[0] = pt[0];
-        query[1] = pt[1];
-        query[2] = pt[2];
-        float ang = sa.computeSolidAngle(query);
-        grid(x, y, z) = ang >= 6.28;
-      }
-    }
-  }
+  std::vector<Range> ranges = divideRange(gridSize[2], 8);
+  std::for_each(std::execution::par_unseq, ranges.begin(), ranges.end(),
+                [&grid, &box, h,&sa](const Range& r) {
+                  Vec3u gridSize = grid.GetSize();
+                  for (unsigned z = r.begin(); z < r.end(); z++) {
+                    if (z % 10 == 0) {
+                      std::cout << z << "\n";
+                    }
+                    for (unsigned y = 0; y < gridSize[1]; y++) {
+                      for (unsigned x = 0; x < gridSize[0]; x++) {
+                        Vec3f coord(x, y, z);
+                        Vec3f pt = box.vmin + h * (Vec3f(0.5f) + coord);
+                        UTVec3 query;
+                        query[0] = pt[0];
+                        query[1] = pt[1];
+                        query[2] = pt[2];
+                        float ang = sa.computeSolidAngle(query);
+                        grid(x, y, z) = ang >= 6.28;
+                      }
+                    }
+                  }
+                });
+
   float voxRes[3] = {h, h, h};
   SaveVolAsObjMesh("F:/meshes/winding/gripper_vox.obj", grid, voxRes, 1);
   return 0;
 }
 
 int main() {
-  TestSimpCube();
-  //TestGripper(); 
+  //TestSimpCube();
+  TestGripper();
   return 0;
 }

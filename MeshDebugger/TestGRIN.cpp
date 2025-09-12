@@ -590,9 +590,9 @@ void TestGrin() {
   float rho0 = 0.01;
   float drho = 0.01;
   //cot
-  //const float eps0 = 2.35;
+  const float eps0 = 2.35;
   //epoxy
-  const float eps0 = 2.7;
+  //const float eps0 = 2.7;
   for (size_t i = 0; i < rhoToE.size(); i++) {
     float rho = rho0 + i * drho;
     float eps = RhoToEpsBruggeman(rho, eps0);
@@ -631,8 +631,11 @@ void TestGrin() {
 
   Array3Df field(gridSize, 0);
 
-  float rho1 = lut.Lookup(1.1);
+  float rho1 = lut.Lookup(1.2);
   float t1 = r2t.Lookup(rho1);
+  std::cout << rho0 << " " << t1 << "\n";
+  rho1 = lut.Lookup(1.15);
+  t1 = r2t.Lookup(rho1);
   std::cout << rho0 << " " << t1 << "\n";
   for (size_t i = 0; i < points.size(); i++) {
     Vec3f p = points[i].pos - box.vmin;

@@ -163,8 +163,8 @@ int main(int argc, char** argv) {
   //SaveVolMeshAsSurf();
   //TestSurfRaySample();
   
-  //TestGrin();
-  TestGrinDiamond();
+  TestGrin();
+  //TestGrinDiamond();
   //EstMass();
   //CountVoxelsInVol();
 
