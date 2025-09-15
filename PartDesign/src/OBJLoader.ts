@@ -149,11 +149,7 @@ class OBJLoader {
 
     const lines = text.split("\n");
     let result = [];
-    const reportFreq = 100000;
     for (let i = 0; i < lines.length; i++) {
-      if (i % reportFreq == 0) {
-        this.manager.onProgress(this.baseName, "parse", i, lines.length);
-      }
       const line = lines[i].trimStart();
 
       if (line.length === 0) continue;

@@ -4,7 +4,6 @@ import { TransformControls } from "./TransformControls.js";
 
 import World from "./World.js";
 import { GPUPicker } from "./gpupicker.js";
-import { LoadMeshes } from './LoadMeshes';
 import { LoadingMan } from "./LoadingMan.ts";
 
 export class PartDesignApp {
@@ -67,7 +66,7 @@ export class PartDesignApp {
       this.world.camera,
       this.renderer.domElement
     );
-    this.control.addEventListener("dragging-changed", (event) =>{
+    this.control.addEventListener("dragging-changed", (event) => {
       this.orbit.enabled = !event.value;
     });
 
@@ -77,21 +76,15 @@ export class PartDesignApp {
     this.bindEventListeners();
   }
 
-  public SetupLoadingManager(){
-    this.loadingMan.onLoad = (name, obj)=>{
-      console.log(name + 'loaded');
+  public SetupLoadingManager() {
+    this.loadingMan.onLoad = (name, obj) => {
+      console.log(name + "loaded");
       this.AddObject3D(name, obj);
-    };
-    this.loadingMan.onProgress=(name, step, loaded, total)=>{
-      console.log(name);
-      console.log(step);
-      console.log(loaded);
-      console.log(total);
     };
   }
 
-  public AddObject3D(name: string, obj:THREE.Object3D){
-    if(obj instanceof THREE.Mesh){
+  public AddObject3D(name: string, obj: THREE.Object3D) {
+    if (obj instanceof THREE.Mesh) {
       console.log("adding mesh" + name);
       const partId = this.world.AddPart(obj);
       this.world.AddInstance(
@@ -99,8 +92,8 @@ export class PartDesignApp {
         new THREE.Euler(0, 0, 0),
         partId
       );
-    }else if(obj instanceof THREE.BufferGeometry){
-      console.log('adding a BufferedGeometry ' + name);
+    } else if (obj instanceof THREE.BufferGeometry) {
+      console.log("adding a BufferedGeometry " + name);
       const mesh = new THREE.Mesh(obj, this.world.defaultMaterial);
       const partId = this.world.AddPart(mesh);
       this.world.AddInstance(
@@ -108,8 +101,8 @@ export class PartDesignApp {
         new THREE.Euler(0, 0, 0),
         partId
       );
-    }else{
-      console.log('unknown mesh object type ' + name);
+    } else {
+      console.log("unknown mesh object type " + name);
     }
   }
 
@@ -127,20 +120,20 @@ export class PartDesignApp {
    * @method init
    * @description
    */
-  public init(): void {}  
-
-  public LoadMesh(file: File) {
-    LoadMeshes(file, this.loadingMan);
-  }
+  public init(): void {}
 
   public LoadMeshes(files: FileList) {
     if (!files) {
       return;
     }
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      this.LoadMesh(file);
+    if(this.loadingMan.busy){
+      console.log("Error: file loading busy");
+      return;
     }
+    this.loadingMan.SetBusy(true);
+    console.log(this.loadingMan.busy);
+    this.loadingMan.LoadMeshes(files);
+    console.log(this.loadingMan.busy);
   }
 
   /**
