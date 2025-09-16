@@ -52,7 +52,7 @@ export class LoadingMan {
   ReadOBJ(file: File) {
     const reader = new FileReader();
     try {        
-      reader.onload = async () => {
+      reader.onload = () => {
         var loader = new OBJLoader(this, file.name);
         console.log("upload done");
         const object = loader.parse(reader.result);
@@ -63,7 +63,7 @@ export class LoadingMan {
           }
         } else {
         }
-        console.log("copy to gpu done");
+        console.log("copy to gpu done");   
       };
       reader.readAsText(file);
     } catch (err) {
@@ -72,7 +72,7 @@ export class LoadingMan {
   }
 
   /// a single file may contain multiple meshes.
-  LoadMesh(file: File) {
+  async LoadMesh(file: File) {
     const extension = file.name.split(".").pop().toLowerCase();
     if (extension === "stl") {
       this.ReadSTL(file);
