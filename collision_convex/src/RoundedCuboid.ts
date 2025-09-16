@@ -3,11 +3,12 @@ import { Euler, Vector3, Matrix4 } from 'three';
 import { CuboidConf } from './CuboidConf';
 
 export class RoundedCuboid {
-    //scale.
+    //scale for rendering.
     public alpha: number;
     //postion of center when cuboid is axis aligned.
     public position: Vector3;
     public rotation: Matrix4;
+    // chamfer radius
     public sphereRadius: number;
     public size: Vector3;
     // configuration from ui
@@ -22,6 +23,15 @@ export class RoundedCuboid {
         this.sphereRadius = 5;
         this.conf = new CuboidConf();
         this.id = -1;
+    }
+    //@brief copy values from other to this
+    Copy(other:RoundedCuboid){
+        this.alpha = other.alpha;
+        this.position.copy(other.position);        
+        this.rotation.copy(other.rotation);
+        this.size.copy(other.size);
+        this.sphereRadius = other.sphereRadius;        
+        this.id = other.id;
     }
     // copy configuration into cuboid's state
     UpdateFromConf(){
