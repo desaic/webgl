@@ -8,30 +8,7 @@ import { GUI, Controller } from 'lil-gui';
 import { RoundedBoxGeometry } from "./RoundedBoxGeometry.js";
 
 import { RoundedCuboid } from './RoundedCuboid'
-
-  //solver variables for two cuboids
-  class SolverVars {
-    // intersection point
-    x : Vector3;
-    // slack variables in cuboids 1 and 2.
-    y1 : Vector3;
-    y2 : Vector3;
-    // lagrange multiplier for ||x - R1y1||<=R1    
-    l1x : number;
-    l1y : number;
-    l2x : number;
-    l2y : number;
-    constructor(){
-      this.x = new Vector3(0);
-      this.y1 = new Vector3(0);
-      this.y2 = new Vector3(0);
-      this.l1x = 0;
-      this.l1y = 0;
-      this.l2x = 0;
-      this.l2y = 0;
-    }
-  }
-
+import { SolverVars, InteriorPtCuboid } from "./InteriorPtCuboid.js";
 export class CollisionApp {
   // HTML element that will contain the renderer's canvas
   private container: HTMLElement;
@@ -75,7 +52,8 @@ export class CollisionApp {
     this.alpha = 1.0;
     const cuboidA = new RoundedCuboid();
     const cuboidB = new RoundedCuboid();
-    cuboidB.conf.x = 200;
+    cuboidA.conf.x = -50;
+    cuboidB.conf.x = 150;
     this.cuboidArr =[cuboidA, cuboidB];
     this.solverState = new SolverVars();
     this.gui = new GUI();    
@@ -143,10 +121,19 @@ export class CollisionApp {
     this.scaleControl = this.gui.add(this, 'alpha');  
   }
 
-  public SolveScale(ca: RoundedCuboid, cb:RoundedCuboid){
+  public SolveScale(ca_in: RoundedCuboid, cb_in:RoundedCuboid){
     const MAX_ITER = 10;
     // does not handle infinitely thin parts due to laziness.
     const eps = 1e-3;
+    const ca = new RoundedCuboid();
+    ca.Copy(ca_in);
+    const cb = new RoundedCuboid();
+    cb.Copy(cb_in);
+
+    //move cuboids so that cuboid A is centered around the origin.    
+    cb.position.sub(ca.position);
+    ca.position.setScalar(0);    
+
     // maximum value alpha possibly needs.
     const minA = ca.MinSideLength();
     const minB = cb.MinSideLength();
@@ -157,20 +144,10 @@ export class CollisionApp {
     console.log("center distance "+dist);
     const alphaMax = dist / Math.max(minA + minB, eps);
 
-    // k scaling for quadratic constraint term
-    var Fx = (x) =>{return x[0];};
-    var Lagrangian = (x,u,k)=>{};
-    // inequality constraints.
-    var IneqConstraints = [];
-    var dLdx = (x, u, k) => {};
-    var dLdu = (x, u, k) => {};
-
-
-    //initialize to a conservative feasible point.
     for(let iter = 0;iter<MAX_ITER;iter++){
       
     }
-    this.alpha = 2;
+    this.alpha = alphaMax;
   }
 
   public AddCuboidsToScene() {

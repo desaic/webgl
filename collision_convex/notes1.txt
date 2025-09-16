@@ -43,3 +43,9 @@ u1 += rho(||x-y1|| - aR)
 u2 += rho(||x-y2|| - aR)
 u3 += rho(Cy1-ad)
 u4 += rho(Cy2 - ad);
+
+df + \sum u dh = 0
+ui hi = -1/t
+
+on70
+
