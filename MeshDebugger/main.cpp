@@ -148,6 +148,7 @@ extern void TestGrinDiamond();
 extern void CountVoxelsInVol();
 extern void EstMass();
 
+extern void RaycastMeshes();
 
 int main(int argc, char** argv) {
   //RunUVApp();
@@ -163,12 +164,14 @@ int main(int argc, char** argv) {
   //SaveVolMeshAsSurf();
   //TestSurfRaySample();
   
-  TestGrin();
+  //TestGrin();
   //TestGrinDiamond();
   //EstMass();
   //CountVoxelsInVol();
 
   //VoxelizeUnitCell();
   //VoxelizeRaycast();
+
+  RaycastMeshes();
   return 0;
 }

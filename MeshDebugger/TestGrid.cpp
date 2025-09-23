@@ -463,6 +463,57 @@ void VoxelizeRaycast() {
   SaveVoxTxt(vox, h, "F:/meshes/bcc/ibc_102.txt");
 }
 
+// for making spatially varying lattice beam thickness 
+// svlattice.
+void RaycastMeshes() {
+  
+  std::string meshFile = "F:/meshes/bcc/IBC_102.stl";
+  float gridLengthMM = 3;
+  Vec3f gridOrigin(-gridLengthMM, -gridLengthMM, -gridLengthMM);
+  gridOrigin *= 2;
+  TrigMesh latt;
+  latt.LoadStl(meshFile);
+  Array3D8u vox;
+  const float h = 0.03f;
+  Vec3u gridSize = Vec3u(unsigned(gridLengthMM / h));
+  Vec3u startIndex = gridSize + gridSize / 2u;
+  ZRaycast raycast;
+  RaycastConf rcConf;
+  rcConf.voxelSize_ = Vec3f(h, h, h);
+  BBox box;
+  box.vmin = gridOrigin;
+  box.vmax = -gridOrigin;
+  rcConf.box_ = box;
+  rcConf.ComputeCoarseRes();
+  ABufferf abuf;
+  int ret = raycast.Raycast(latt, abuf, rcConf);
+
+  float z0 = box.vmin[2];
+  // expand abuf to vox grid
+  vox.Allocate(gridSize, 0);
+  for (unsigned y = 0; y < gridSize[1]; y++) {
+    unsigned srcy = y + startIndex[1];
+    for (unsigned x = 0; x < gridSize[0]; x++) {
+      unsigned srcx = x + startIndex[0];
+      const auto intersections = abuf(srcx, srcy);
+      for (auto seg : intersections) {
+        unsigned zIdx0 = seg.t0 / h + 0.5f;
+        unsigned zIdx1 = seg.t1 / h + 0.5f;
+        for (unsigned z = zIdx0; z < zIdx1; z++) {
+          int dstz = int(z) - startIndex[2];
+          if (dstz < 0 || dstz >= int(gridSize[2])) {
+            continue;
+          }
+          vox(x, y, unsigned(dstz)) = 1;
+        }
+      }
+    }
+  }
+  SaveVolAsObjMesh("F:/meshes/bcc/cell_ray_vol.obj", vox,
+                   (float*)(&rcConf.voxelSize_), 1);
+  SaveVoxTxt(vox, h, "F:/meshes/bcc/ibc_102.txt");
+}
+
 void CountVoxelsInVol() {
   const std::string volFile = "F:/meshes/lunehuge/20250801lune_cot.vol"; 
   std::ifstream in(volFile, std::fstream::binary);
