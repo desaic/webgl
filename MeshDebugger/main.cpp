@@ -150,6 +150,7 @@ extern void EstMass();
 
 extern void RaycastMeshes();
 
+extern void TestBLD();
 int main(int argc, char** argv) {
   //RunUVApp();
   // RunCanvasApp();
@@ -172,6 +173,7 @@ int main(int argc, char** argv) {
   //VoxelizeUnitCell();
   //VoxelizeRaycast();
 
-  RaycastMeshes();
+  //RaycastMeshes();
+  TestBLD();
   return 0;
 }

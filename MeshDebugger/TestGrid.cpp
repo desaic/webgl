@@ -14,6 +14,7 @@
 #include <deque>
 #include <iostream>
 #include <fstream>
+#include <filesystem>
 #include <functional>
 
 slicer::Grid3Df MakeOctetUnitCell() {
@@ -159,12 +160,12 @@ void SaveVolMeshAsVox() {
   SaveVolAsObjMesh(outFile, expanded, VoxRes, 1);
 
 }
-
+template <typename T>
 // with mirror boundary condition
-static void FilterVec(short* v, size_t len, const std::vector<float>& kern) {
+static void FilterVec(T* v, size_t len, const std::vector<float>& kern) {
   size_t halfKern = kern.size() / 2;
 
-  std::vector<uint8_t> padded(len + 2 * halfKern);
+  std::vector<T> padded(len + 2 * halfKern);
   for (size_t i = 0; i < halfKern; i++) {
     padded[i] = v[halfKern - i];
     padded[len - i] = v[len - halfKern + i];
@@ -174,27 +175,27 @@ static void FilterVec(short* v, size_t len, const std::vector<float>& kern) {
   }
 
   for (size_t i = 0; i < len; i++) {
-    float sum = 0;
+    T sum = 0;
     for (size_t j = 0; j < kern.size(); j++) {
       sum += kern[j] * padded[i + j];
     }
-    v[i] = uint8_t(sum);
+    v[i] = T(sum);
   }
 }
-
-static void FilterDecomp(Array3D<short>& grid, const std::vector<float>& kern) {
+template <typename T>
+static void FilterDecomp(Array3D<T>& grid, const std::vector<float>& kern) {
   Vec3u gsize = grid.GetSize();
   // z
   for (unsigned i = 0; i < gsize[0]; i++) {
     for (unsigned j = 0; j < gsize[1]; j++) {
-      short* vec = &grid(i, j, 0);
+      T* vec = &grid(i, j, 0);
       FilterVec(vec, gsize[2], kern);
     }
   }
   // y
   for (unsigned i = 0; i < gsize[0]; i++) {
     for (unsigned k = 0; k < gsize[2]; k++) {
-      std::vector<short> v(gsize[1]);
+      std::vector<T> v(gsize[1]);
       for (unsigned j = 0; j < gsize[1]; j++) {
         v[j] = grid(i, j, k);
       }
@@ -207,7 +208,7 @@ static void FilterDecomp(Array3D<short>& grid, const std::vector<float>& kern) {
   // x
   for (unsigned j = 0; j < gsize[1]; j++) {
     for (unsigned k = 0; k < gsize[2]; k++) {
-      std::vector<short> v(gsize[0]);
+      std::vector<T> v(gsize[0]);
       for (unsigned i = 0; i < gsize[0]; i++) {
         v[i] = grid(i, j, k);
       }
@@ -467,51 +468,94 @@ void VoxelizeRaycast() {
 // svlattice.
 void RaycastMeshes() {
   
-  std::string meshFile = "F:/meshes/bcc/IBC_102.stl";
-  float gridLengthMM = 3;
-  Vec3f gridOrigin(-gridLengthMM, -gridLengthMM, -gridLengthMM);
-  gridOrigin *= 2;
-  TrigMesh latt;
-  latt.LoadStl(meshFile);
+  std::string meshDir = "F:/meshes/carseat/sections/";
+  std::vector<std::string> stls;
+  
+  try {
+    auto iter = std::filesystem::directory_iterator(meshDir);
+    for (const auto& entry : iter) {
+      if (entry.is_regular_file()) {
+        stls.push_back(entry.path().string());
+        std::cout << stls.back() << "\n";
+      }
+    }
+  } catch (const std::filesystem::filesystem_error& ex) {
+    std::cout << ex.what() << "\n";
+  }
+
+  std::vector<TrigMesh> meshes;
+  BBox box;
+  for (size_t i = 0; i < stls.size(); i++) {
+    TrigMesh m;
+    m.LoadStl(stls[i]);
+    if (!m.v.empty()) {
+      meshes.push_back(m);
+    }
+    UpdateBBox(m.v, box);
+  }  
+  Vec3f gridOrigin = box.vmin;
+  std::cout << gridOrigin[0] << " " << gridOrigin[1] << " " << gridOrigin[2]
+            << "\n";
+  std::cout << box.vmax[0] << " " << box.vmax[1] << " " << box.vmax[2]
+            << "\n";
+
+  box.vmin -= gridOrigin;
+  box.vmax -= gridOrigin;
+  //move all meshes to positive quadrant
+
+  for (size_t i = 0; i < meshes.size(); i++) {
+    meshes[i].translate(-gridOrigin[0], -gridOrigin[1], -gridOrigin[2]);
+  }
+
   Array3D8u vox;
-  const float h = 0.03f;
-  Vec3u gridSize = Vec3u(unsigned(gridLengthMM / h));
-  Vec3u startIndex = gridSize + gridSize / 2u;
-  ZRaycast raycast;
+  const float h = 2.0f;
+  Vec3f boxSize = box.vmax - box.vmin;
+  Vec3u gridSize(unsigned(boxSize[0]/h) + 1, unsigned(boxSize[1]/h) + 1, unsigned(boxSize[2]/h) + 1 ); 
+  std::cout << "grid size " << gridSize[0] << " " << gridSize[1] << " "
+            << gridSize[2] << "\n";
+  
   RaycastConf rcConf;
   rcConf.voxelSize_ = Vec3f(h, h, h);
-  BBox box;
-  box.vmin = gridOrigin;
-  box.vmax = -gridOrigin;
   rcConf.box_ = box;
   rcConf.ComputeCoarseRes();
-  ABufferf abuf;
-  int ret = raycast.Raycast(latt, abuf, rcConf);
+  
+  std::vector<ABufferf> abufs(meshes.size());
+  for (unsigned i = 0; i < meshes.size(); i++) {
+    ZRaycast raycast;
+    int ret = raycast.Raycast(meshes[i], abufs[i], rcConf);
+
+  }
 
   float z0 = box.vmin[2];
   // expand abuf to vox grid
   vox.Allocate(gridSize, 0);
-  for (unsigned y = 0; y < gridSize[1]; y++) {
-    unsigned srcy = y + startIndex[1];
-    for (unsigned x = 0; x < gridSize[0]; x++) {
-      unsigned srcx = x + startIndex[0];
-      const auto intersections = abuf(srcx, srcy);
-      for (auto seg : intersections) {
-        unsigned zIdx0 = seg.t0 / h + 0.5f;
-        unsigned zIdx1 = seg.t1 / h + 0.5f;
-        for (unsigned z = zIdx0; z < zIdx1; z++) {
-          int dstz = int(z) - startIndex[2];
-          if (dstz < 0 || dstz >= int(gridSize[2])) {
-            continue;
+  Array3Df vals(gridSize, 1.0);
+  float tvals[] = {0.53, 1.1, 2.7, 1.2,1.2};
+  for (unsigned i = 0; i < abufs.size(); i++) {
+    float t = tvals[i];
+    for (unsigned y = 0; y < gridSize[1]; y++) {
+      for (unsigned x = 0; x < gridSize[0]; x++) {
+        const auto intersections = abufs[i](x, y);
+        for (auto seg : intersections) {
+          unsigned zIdx0 = seg.t0 / h + 0.5f;
+          unsigned zIdx1 = seg.t1 / h + 0.5f;
+          for (unsigned z = zIdx0; z < zIdx1; z++) {
+            if (z >= int(gridSize[2])) {
+              continue;
+            }
+            vox(x, y, z) = 1;
+            vals(x, y, z) = t;
           }
-          vox(x, y, unsigned(dstz)) = 1;
         }
       }
     }
   }
-  SaveVolAsObjMesh("F:/meshes/bcc/cell_ray_vol.obj", vox,
-                   (float*)(&rcConf.voxelSize_), 1);
-  SaveVoxTxt(vox, h, "F:/meshes/bcc/ibc_102.txt");
+  std::vector<float> kern(3, 0.3333f);
+  FilterDecomp(vals, kern);
+  SaveVolAsObjMesh("F:/meshes/carseat/ray_vol.obj", vox,
+                   (float*)(&rcConf.voxelSize_), 1);  
+  SaveVoxTxt(vals, rcConf.voxelSize_, "F:/meshes/carseat/thickness.txt",
+             gridOrigin);
 }
 
 void CountVoxelsInVol() {
