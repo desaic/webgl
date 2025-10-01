@@ -1,8 +1,8 @@
 import * as THREE from "three";
 
-import {PartDesignApp} from "./PartDesignApp"
+import {ExplosionApp} from "./ExplosionApp"
 
-let app : PartDesignApp;
+let app : ExplosionApp;
 
 // Three.js Clock for managing time in animations
 let clock: THREE.Clock;
@@ -11,7 +11,9 @@ const RENDER_FPS = 60;
 
 function InitScene() {
   const canvas = document.getElementById("myCanvas");
-  app = new PartDesignApp(canvas);
+  const treeContainer = document.getElementById('treeContainer');
+  app = new ExplosionApp(canvas);
+  app.treeContainer = treeContainer;
   clock = new THREE.Clock();
 }
 

@@ -166,3 +166,63 @@ html {
   user-select: none;
   /* Prevent text selection */
 }
+
+/* Custom styles for the tree view aesthetics */
+:root {
+  --primary-color: #3b82f6;
+  /* blue-500 */
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: #f8fafc;
+  /* slate-50 */
+}
+
+.tree-node-item {
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  padding: 4px 8px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+}
+
+.tree-node-item:hover {
+  background-color: #e0f2fe;
+  /* sky-100 */
+}
+
+.tree-node-item.selected {
+  background-color: var(--primary-color);
+  color: white;
+  font-weight: 600;
+}
+
+.tree-node-item.selected .icon {
+  color: white;
+}
+
+.tree-node-item:not(.selected) .icon {
+  color: var(--primary-color);
+}
+
+.tree-list {
+  margin-left: 1.5rem;
+  /* space-x-6 */
+  list-style: none;
+  padding: 0;
+  margin-top: 4px;
+}
+
+.collapse-transition {
+  max-height: 2000px;
+  /* Large enough to handle expansion */
+  overflow: hidden;
+  transition: max-height 0.4s ease-out, opacity 0.4s ease-out;
+}
+
+.collapse-transition.collapsed {
+  max-height: 0;
+  opacity: 0;
+}

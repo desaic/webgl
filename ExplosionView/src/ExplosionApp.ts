@@ -5,8 +5,9 @@ import { TransformControls } from "./TransformControls.js";
 import World from "./World.js";
 import { GPUPicker } from "./gpupicker.js";
 import { LoadingMan } from "./LoadingMan.ts";
+import { ExplosionGraph } from "./ExplosionGraph.ts";
 
-export class PartDesignApp {
+export class ExplosionApp {
   // HTML element that will contain the renderer's canvas
   private container: HTMLElement;
 
@@ -31,12 +32,16 @@ export class PartDesignApp {
 
   private loadingMan: LoadingMan;
 
+  public treeContainer: HTMLElement;
+
+  private explosionGraph: ExplosionGraph;
   /**
    * @constructor
    * @description
    */
   constructor(canvas: HTMLElement) {
     this.container = canvas;
+    this.explosionGraph = new ExplosionGraph();
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.world = new World();
     this.gpuPicker = new GPUPicker(
@@ -45,6 +50,7 @@ export class PartDesignApp {
       this.world.scene,
       this.world.camera
     );
+    this.treeContainer = null;
     this.showSlice = false;
     this.loadingMan = new LoadingMan();
 
@@ -74,18 +80,19 @@ export class PartDesignApp {
 
     this.SetupLoadingManager();
     this.bindEventListeners();
+
   }
 
   public SetupLoadingManager() {
     this.loadingMan.onLoad = (name, obj) => {
-      console.log(name + "loaded");
+      console.log(name + " loaded");
       this.AddObject3D(name, obj);
     };
   }
 
   public AddObject3D(name: string, obj: THREE.Object3D) {
     if (obj instanceof THREE.Mesh) {
-      console.log("adding mesh" + name);
+      console.log("adding mesh " + name);
       const partId = this.world.AddPart(obj);
       this.world.AddInstance(
         new THREE.Vector3(0, 0, 0),

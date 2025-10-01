@@ -1,4 +1,6 @@
 import { defineConfig } from "vite";
+//use tailwind because gemini loves it lol lol lol
+import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   server: {
@@ -16,4 +18,7 @@ export default defineConfig({
       },
     },
   },
+  plugins: [
+    tailwindcss(),
+  ],
 });
