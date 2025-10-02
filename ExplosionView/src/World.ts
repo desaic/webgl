@@ -13,10 +13,6 @@ export default class World {
   public selectedInstance: any[];
   // instances of parts.
   public instances: THREE.Group;
-  //scene with a single quad for drawing 2d images.
-  public quadScene: THREE.Scene;
-  public quadCamera: THREE.OrthographicCamera;
-  public quadTexture: THREE.DataTexture;
   private nextPartId : number;
   constructor() {
     const fov = 50;
@@ -53,42 +49,7 @@ export default class World {
     this.instances = new THREE.Group();
     this.scene.add(this.instances);
 
-    // scene for rendering a single flat quad on top.
-    this.quadScene = new THREE.Scene();
-    const quad = this.MakeImageQuad();
-    this.quadScene.add(quad);
-    this.quadCamera=new THREE.OrthographicCamera(-aspect, aspect);
-    this.quadCamera.position.set(0.2, 0.5, 5);
-
     this.nextPartId = 0;
-  }
-
-  MakeImageQuad = ()=>{
-    const width = 512; // Texture width
-    const height = 512; // Texture height
-    const size = width * height;
-    const data = new Uint8Array(4 * size); // RGBA data
-    
-    // Generate a simple checkerboard pattern
-    for (let i = 0; i < size; i++) {
-      const stride = i * 4;
-      const x = (i % width);
-      const y = Math.floor(i / width);
-      const color = (Math.floor(x/100) + Math.floor(y/100)) % 2 === 0 ? 255 : 50; // Black or white
-      data[stride] = color;     // R
-      data[stride + 1] = color; // G
-      data[stride + 2] = color/2; // B
-      data[stride + 3] = 255;   // A
-    }
-    
-    const texture = new THREE.DataTexture(data, width, height);
-    texture.needsUpdate = true;
-    const material = new THREE.MeshBasicMaterial({ map: texture});
-    const geometry = new THREE.PlaneGeometry(1, 1);
-    const quad = new THREE.Mesh(geometry, material);
-    quad.scale.set(0.8,0.8,0.8);
-    this.quadTexture = texture;
-    return quad;
   }
 
   GetInstanceById = (id) => {

@@ -8,13 +8,38 @@
   <link rel="icon" type="image/x-icon" href="src/assets/favicon.ico">
   <title>Explosion View</title>
 </head>
-
 <body>
-<div id="myCanvas"></div>
-<div id="widgetContainer" style="position: absolute; top: 10px; left: 10px;width: 150px;">
-  <input type="file" id="file-input" accept=".obj,.stl,.3mf" multiple/>
-</div>
-</div>
+  <div id="myCanvas" class="absolute inset-0 z-0"></div>
+
+  <div id="widgetContainer" class="absolute top-5 left-5 z-10 w-full max-w-sm p-4 bg-white/75 backdrop-blur-md rounded-lg shadow-lg space-y-4 sm:space-y-6">
+
+    <div class="space-y-2">
+      <label for="file-input" class="block text-sm font-medium text-gray-700">Load 3D Model</label>
+      <input type="file" id="file-input" accept=".obj,.stl,.3mf" multiple
+        class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 cursor-pointer" />
+    </div>
+
+    <div id="scaleSliderContainer" class="space-y-2">
+      <div class="flex justify-between items-center">
+        <label for="scaleSlider" class="text-sm font-medium text-gray-700">Mesh Input Scale</label>
+        <span id="meshScaleDisplay"
+          class="min-w-[4rem] text-center text-sm font-bold text-violet-700 bg-violet-50 px-3 py-1 rounded-full shadow-inner">1</span>
+      </div>
+      <input type="range" id="scaleSlider" min="0" max="6" value="3" step="1"
+        class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer range-lg [&::-webkit-slider-thumb]:bg-violet-600 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-moz-range-thumb]:bg-violet-600 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full">
+    </div>
+
+    <div class="space-y-2">
+      <label for="graph-input" class="block text-sm font-medium text-gray-700">Load Graph Data</label>
+      <input type="file" id="graph-input" accept=".txt"
+        class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 cursor-pointer" />
+    </div>
+
+    <div id="treeContainer" class="p-4 bg-gray-50 border border-gray-200 rounded-lg overflow-auto h-96">
+      <p class="text-sm text-gray-400 italic">Graph data will be displayed here.</p>
+    </div>
+
+  </div>
   <script type="module" src="./src/main.ts"></script>
 </body>
 

@@ -13,6 +13,11 @@ export class ExplosionNode {
   public parent: ExplosionNode | null;
   public children: ExplosionNode[];
 
+  //ui garbage shouldn't be here
+  public isCollapsed: boolean;
+  // disassembly order , the opposite of assembly order
+  // smaller number goes out first or comes in last.
+  public disasOrder: number;
   // Visualization Properties
   public direction: Vector3;
   public distance: number; // A numeric value representing the distance to explode, e.g., in world units.
@@ -32,11 +37,12 @@ export class ExplosionNode {
     this.children = [];
     this.distance = distance;
     this.direction = direction;
-
+    this.disasOrder = 0;
     // Automatically link the new node to its parent's children list
     if (this.parent) {
       this.parent.children.push(this);
     }
+    this.isCollapsed=true;
   }
 
   /**
@@ -88,14 +94,33 @@ export class ExplosionNode {
     }
   }
 
+  public destroy(){
+    if(this.parent ){
+      this.parent.removeChild(this);
+    }
+    this.parent = null;
+    for(let i = 0;i<this.children.length;i++){
+      this.children[i].parent = null;
+    }
+    this.children = [];
+  }
 }
 
 /**
  * Class to manage the overall Explosion Graph structure.
  */
 export class ExplosionGraph {
-  private nodes: ExplosionNode[] = [];
-  private nodeMap: Map<string, ExplosionNode> = new Map();
+  private nodes: ExplosionNode[];
+  private nodeMap: Map<string, ExplosionNode> ;
+
+  public needsUpdate: boolean;
+  constructor(
+  ) {
+    this.nodes = [];
+    this.nodeMap = new Map();
+    this.needsUpdate = false;
+  }
+
 
   /**
    * Adds a node to the graph and maps it by ID for fast lookup.
@@ -146,5 +171,12 @@ export class ExplosionGraph {
           `distance: ${dist}`
       );
     });
+  }
+  public destroy(){
+    this.nodeMap.clear();
+    for(let i = 0;i<this.nodes.length;i++){
+      this.nodes[i].destroy();      
+    }
+    this.nodes = [];
   }
 }
