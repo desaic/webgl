@@ -19,9 +19,12 @@ export class ExplosionNode {
   // smaller number goes out first or comes in last.
   public disasOrder: number;
   // Visualization Properties
+  // explosion direction relative to parent
   public direction: Vector3;
+  // explosion distance relative to parent
   public distance: number; // A numeric value representing the distance to explode, e.g., in world units.
-
+  // global displacement adding all parents.
+  public globalDisp: Vector3;
   /**
    * @param name - Display name of the node.
    * @param parent - Optional reference to the parent node.
@@ -29,7 +32,7 @@ export class ExplosionNode {
   constructor(
     name: string,
     parent: ExplosionNode | null = null,
-    distance: number = 0,
+    distance: number = 1.0,
     direction: Vector3 = new Vector3(1, 0, 0)
   ) {
     this.name = name;
@@ -38,6 +41,7 @@ export class ExplosionNode {
     this.distance = distance;
     this.direction = direction;
     this.disasOrder = 0;
+    this.globalDisp = new Vector3(0,0,0);
     // Automatically link the new node to its parent's children list
     if (this.parent) {
       this.parent.children.push(this);
@@ -121,7 +125,9 @@ export class ExplosionGraph {
     this.needsUpdate = false;
   }
 
-
+  public empty():boolean{
+    return this.nodes.length == 0;
+  }
   /**
    * Adds a node to the graph and maps it by ID for fast lookup.
    * @param node - The ExplosionNode instance to add.

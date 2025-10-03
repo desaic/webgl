@@ -1,5 +1,6 @@
 import {
   BufferGeometry,
+  DoubleSide,
   Float32BufferAttribute,
   Group,
   Mesh,
@@ -10,7 +11,7 @@ import {LoadingMan} from "./LoadingMan.ts"
 const _object_pattern = /^[og]\s*(.+)?/;
 const _face_vertex_data_separator_pattern = /\s+/;
 
-const defaultObjMaterial = new MeshPhongMaterial({color:0x808080, specular: 0x808080});
+const defaultObjMaterial = new MeshPhongMaterial({color:0x808080, specular: 0x808080, side:DoubleSide});
 function ParserState(baseName) {
   const state = {
     objects: [],

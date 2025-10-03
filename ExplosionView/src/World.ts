@@ -41,6 +41,7 @@ export default class World {
     this.defaultMaterial = new THREE.MeshPhongMaterial({
       color: defaultcol,
       specular: defaultcol,
+      side:THREE.DoubleSide
     });
 
     this.selectedInstance = [];
@@ -83,13 +84,13 @@ export default class World {
   AddInstance = (pos: THREE.Vector3, rot:THREE.Euler, partId : number) => {
     const part=this.GetPartById(partId);
     if(part == null){
-      return -1;
+      return null;
     }
     const instance = new THREE.Mesh(part.geometry, part.material.clone());
     instance.position.copy(pos);
     instance.setRotationFromEuler(rot);
     this.instances.add(instance);
-    return instance.id;
+    return instance;
   }
 
   addShadowedLight = (x, y, z, color, intensity, scene) => {

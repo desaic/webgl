@@ -34,6 +34,9 @@ export class ExplosionApp {
   public inputScale: number;
   public explosionGraph: ExplosionGraph;
   public selectedPartName: string;
+  public explosionScale: number;
+  //map from a name to mesh instance
+  public nameToMesh: Map<string, THREE.Mesh>;
   /**
    * @constructor
    * @description
@@ -80,6 +83,8 @@ export class ExplosionApp {
     this.SetupLoadingManager();
     this.bindEventListeners();
     this.selectedPartName = "";
+    this.explosionScale = 1.0;
+    this.nameToMesh = new Map<string, THREE.Mesh<any, any>>();
   }
 
   public SetupLoadingManager() {
@@ -98,29 +103,38 @@ export class ExplosionApp {
   }
 
   public AddObject3D(name: string, obj: THREE.Object3D) {
+    let instance = null;
+    //horrible hack to use the file name without suffix as mesh name.
+    if (name && name.indexOf(".")>0) {
+      name = name.substring(0, name.indexOf("."));
+    }
     if (obj instanceof THREE.Mesh) {
       console.log("adding mesh " + name);
       this.ScaleMesh(obj, this.inputScale);
 
       const partId = this.world.AddPart(obj);
-      this.world.AddInstance(
+      instance = this.world.AddInstance(
         new THREE.Vector3(0, 0, 0),
         new THREE.Euler(0, 0, 0),
         partId
       );
+      this.nameToMesh.set(name, instance);
     } else if (obj instanceof THREE.BufferGeometry) {
       console.log("adding a BufferedGeometry " + name);
       const mesh = new THREE.Mesh(obj, this.world.defaultMaterial);
       this.ScaleMesh(mesh, this.inputScale);
-
       const partId = this.world.AddPart(mesh);
-      this.world.AddInstance(
+      instance = this.world.AddInstance(
         new THREE.Vector3(0, 0, 0),
         new THREE.Euler(0, 0, 0),
         partId
       );
     } else {
       console.log("unknown mesh object type " + name);
+    }
+    if (instance) {
+      instance.name = name;
+      this.nameToMesh.set(name, instance);
     }
   }
 
@@ -145,6 +159,17 @@ export class ExplosionApp {
       const e: HTMLInputElement = target;
       e.value = "";
     });
+
+    const dxSlider = document.getElementById("dxSlider") as HTMLInputElement;
+    const dxDisplay = document.getElementById("dxDisplay");
+
+    dxSlider.addEventListener("input", () => {
+      // Display the value directly, fixed to one decimal place
+      dxDisplay.textContent = parseFloat(dxSlider.value).toFixed(1);
+      this.explosionScale = Number(dxSlider.value);
+    });
+    // Set initial value
+    dxDisplay.textContent = parseFloat(dxSlider.value).toFixed(1);
   }
   /**
    * @method init
@@ -216,11 +241,46 @@ export class ExplosionApp {
     console.log(this.loadingMan.busy);
   }
 
+  public updateNodes(nodes: ExplosionNode[], visited: Set<string> = new Set()) {
+    const localDisp = new THREE.Vector3();
+    for (const node of nodes) {
+      if (!visited.has(node.name)) {
+        visited.add(node.name);
+      } else {
+        continue;
+      }
+      const parent = node.parent;
+      if(parent){
+        //first copy parent's global displacement
+        node.globalDisp.copy(parent.globalDisp);
+      }else{
+        node.globalDisp.set(0,0,0);
+      }
+      localDisp.copy(node.direction);
+      localDisp.multiplyScalar(node.distance * this.explosionScale);
+      node.globalDisp.add(localDisp);
+      const mesh = this.nameToMesh.get(node.name);
+      if(mesh){
+        mesh.position.copy(node.globalDisp);
+        mesh.matrixWorldNeedsUpdate = true;
+      }
+      this.updateNodes(node.children, visited);      
+    }
+  }
+
+  public updateExplosion() {
+    if (!this.explosionGraph || this.explosionGraph.empty()) {
+      return;
+    }
+    this.updateNodes(this.explosionGraph.getRootNodes());
+  }
   /**
    * @method render
    * @description to be called in the main animation loop.
    */
   public render(): void {
+    this.updateExplosion();
+
     this.renderer.render(this.world.scene, this.world.camera);
     this.renderer.autoClear = false;
   }
@@ -237,8 +297,12 @@ export class ExplosionApp {
       this.explosionGraph.needsUpdate = true;
     }
   }
-  
-  public updateTreeHTML(nodes: ExplosionNode[], depth = 0) {
+
+  public updateTreeHTML(
+    nodes: ExplosionNode[],
+    rendered: Set<string> = new Set(),
+    depth = 0
+  ) {
     if (!nodes || nodes.length === 0) {
       return "";
     }
@@ -246,6 +310,10 @@ export class ExplosionApp {
     const paddingLeft = depth * 1.5; // Tailwind spacing unit (e.g., pl-6 for level 2)
 
     for (const node of nodes) {
+      if (rendered.has(node.name)) {
+        continue;
+      }
+      rendered.add(node.name);
       const expanded = !node.isCollapsed;
       const hasChildren = node.children && node.children.length > 0;
 
@@ -268,7 +336,7 @@ export class ExplosionApp {
 
       if (hasChildren) {
         html += `<div class="children">`;
-        html += this.updateTreeHTML(node.children, depth + 1);
+        html += this.updateTreeHTML(node.children, rendered, depth + 1);
         html += `</div>`;
       }
 

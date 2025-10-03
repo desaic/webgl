@@ -88,3 +88,4 @@ const scaleSlider = document.getElementById('scaleSlider') as HTMLInputElement;
 scaleSlider.oninput=()=>{updateMeshScale(scaleSlider.value);}
 InitScene();
 Animate(null);
+updateMeshScale(scaleSlider.value);
