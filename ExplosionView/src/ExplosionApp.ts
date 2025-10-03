@@ -320,9 +320,9 @@ export class ExplosionApp {
     zAxis.crossVectors(xAxis, yAxis);
     zAxis.normalize();
     yAxis.crossVectors(zAxis, xAxis);
-    const mat = new THREE.Matrix4(xAxis.x,xAxis.y, xAxis.z, v0.x,
-      yAxis.x, yAxis.y, yAxis.z, v0.y,
-      zAxis.x, zAxis.y, zAxis.z, v0.z,
+    const mat = new THREE.Matrix4(xAxis.x,yAxis.x, zAxis.x, 0,
+      xAxis.y, yAxis.y, zAxis.y, 0,
+      xAxis.z, yAxis.z, zAxis.z, 0,
       0,0,0,1
     );
     edge.quaternion.setFromRotationMatrix(mat);
