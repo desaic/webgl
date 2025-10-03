@@ -25,6 +25,8 @@ export class ExplosionNode {
   public distance: number; // A numeric value representing the distance to explode, e.g., in world units.
   // global displacement adding all parents.
   public globalDisp: Vector3;
+  public selected:boolean;
+  public meshCenter:Vector3;
   /**
    * @param name - Display name of the node.
    * @param parent - Optional reference to the parent node.
@@ -47,6 +49,8 @@ export class ExplosionNode {
       this.parent.children.push(this);
     }
     this.isCollapsed=true;
+    this.selected = false;
+    this.meshCenter = new Vector3(0,0,0);
   }
 
   /**
@@ -114,15 +118,17 @@ export class ExplosionNode {
  * Class to manage the overall Explosion Graph structure.
  */
 export class ExplosionGraph {
-  private nodes: ExplosionNode[];
+  public nodes: ExplosionNode[];
   private nodeMap: Map<string, ExplosionNode> ;
 
+  public selectedNode: ExplosionNode;
   public needsUpdate: boolean;
   constructor(
   ) {
     this.nodes = [];
     this.nodeMap = new Map();
     this.needsUpdate = false;
+    this.selectedNode = null;
   }
 
   public empty():boolean{

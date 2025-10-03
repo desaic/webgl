@@ -51,3 +51,16 @@ body {
 .node-collapsed>.children {
   display: none;
 }
+
+.tree-node-item {
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+}
+.tree-node-item:hover {
+    background-color: #e0f2fe; /* sky-100 */
+}
+.tree-node-item.selected {
+    background-color: var(--primary-color);
+    color: white;
+    font-weight: 600;
+}

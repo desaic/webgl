@@ -6,6 +6,17 @@ import World from "./World.js";
 import { GPUPicker } from "./gpupicker.js";
 import { LoadingMan } from "./LoadingMan.ts";
 import { ExplosionNode, ExplosionGraph } from "./ExplosionGraph.ts";
+import { Vec3f } from "./Vec3f.ts";
+
+const MESH_COLOR_PALETTE = [
+    { x: 0.1, y: 0.45, z: 0.65, name: "Deep Ocean Blue" },
+    { x: 0.9, y: 0.45, z: 0.1, name: "Sunset Orange" },
+    { x: 0.4, y: 0.6, z: 0.35, name: "Muted Sage Green" },
+    { x: 0.75, y: 0.65, z: 0.9, name: "Soft Lavender" },
+    { x: 0.1, y: 0.85, z: 0.8, name: "Electric Cyan" },
+    { x: 0.7, y: 0.2, z: 0.2, name: "Brick Red" },
+    { x: 0.8, y: 0.75, z: 0.7, name: "Light Taupe" },
+];
 
 export class ExplosionApp {
   // HTML element that will contain the renderer's canvas
@@ -37,6 +48,9 @@ export class ExplosionApp {
   public explosionScale: number;
   //map from a name to mesh instance
   public nameToMesh: Map<string, THREE.Mesh>;
+  public edges:Map<string, THREE.Mesh>;
+  public arcId:number;
+  public arcMesh:THREE.Mesh;
   /**
    * @constructor
    * @description
@@ -85,6 +99,10 @@ export class ExplosionApp {
     this.selectedPartName = "";
     this.explosionScale = 1.0;
     this.nameToMesh = new Map<string, THREE.Mesh<any, any>>();
+
+    this.arcMesh = this.MakeArc();
+    this.arcId = this.world.AddPart(this.arcMesh)
+    this.edges = new Map();
   }
 
   public SetupLoadingManager() {
@@ -118,6 +136,10 @@ export class ExplosionApp {
         new THREE.Euler(0, 0, 0),
         partId
       );
+      let m = obj as THREE.Mesh;
+      if(m.geometry){
+        m.geometry.computeBoundingBox();
+      }
       this.nameToMesh.set(name, instance);
     } else if (obj instanceof THREE.BufferGeometry) {
       console.log("adding a BufferedGeometry " + name);
@@ -134,6 +156,11 @@ export class ExplosionApp {
     }
     if (instance) {
       instance.name = name;
+      const mat = instance.material;
+      if(mat instanceof THREE.MeshPhongMaterial){
+        const randColor = MESH_COLOR_PALETTE[instance.id % MESH_COLOR_PALETTE.length];
+        mat.color.set(randColor.x, randColor.y,randColor.z);
+      }
       this.nameToMesh.set(name, instance);
     }
   }
@@ -224,6 +251,15 @@ export class ExplosionApp {
     const oldGraph = this.explosionGraph;
     this.explosionGraph = g;
     g.needsUpdate = true;
+    for (const [k, v] of this.edges) {
+      this.world.instances.remove(v);
+    }
+    this.edges.clear();
+    for(let i = 0;i<g.nodes.length;i++){
+      const instance = this.world.AddInstance(this.arcMesh.position, this.arcMesh.rotation, this.arcId);
+      this.edges.set(g.nodes[i].name, instance);
+    }
+
     oldGraph.destroy();
   }
 
@@ -241,9 +277,66 @@ export class ExplosionApp {
     console.log(this.loadingMan.busy);
   }
 
+  public updateEdge(edge: THREE.Mesh, node :ExplosionNode, mesh:THREE.Mesh){
+    const v0 = new THREE.Vector3(0,0,0);
+    const v1 = new THREE.Vector3(1,1,1);
+    v1.copy(mesh.position);
+    const boxCenter = new THREE.Vector3(0,0,0);
+    if(mesh.geometry.boundingBox){
+      const box = mesh.geometry.boundingBox;
+      boxCenter.copy(box.max);
+      boxCenter.add(box.min);
+      boxCenter.multiplyScalar(0.5);
+    }
+    v1.add(boxCenter);
+    const parentNode = node.parent;
+    if (parentNode) {
+      const m = this.nameToMesh.get(parentNode.name);
+      const parent = m as THREE.Mesh;
+      if (parent) {
+        v0.copy(parent.position);
+        const box = parent.geometry.boundingBox;
+        boxCenter.set(0, 0, 0);
+        boxCenter.copy(box.max);
+        boxCenter.add(box.min);
+        boxCenter.multiplyScalar(0.5);
+        v0.add(boxCenter);
+      }
+    }
+    const xAxis = new THREE.Vector3(v1.x, v1.y, v1.z);
+    xAxis.sub(v0);
+    let len = xAxis.lengthSq();
+    if(len<1){
+      xAxis.set(1,0,0);
+    }else{
+      xAxis.normalize();
+    }
+    len = Math.max(1.0, Math.sqrt(len));
+    const yAxis = new THREE.Vector3(0,1,0);
+    if(Math.abs(xAxis.y)>0.95){
+      yAxis.set(0,0,1);
+    }
+    const zAxis = new THREE.Vector3(0,0,1);
+    zAxis.crossVectors(xAxis, yAxis);
+    zAxis.normalize();
+    yAxis.crossVectors(zAxis, xAxis);
+    const mat = new THREE.Matrix4(xAxis.x,xAxis.y, xAxis.z, v0.x,
+      yAxis.x, yAxis.y, yAxis.z, v0.y,
+      zAxis.x, zAxis.y, zAxis.z, v0.z,
+      0,0,0,1
+    );
+    edge.quaternion.setFromRotationMatrix(mat);
+    const scale = len;
+    edge.scale.set(scale, scale, scale);
+    edge.position.copy(v0);
+    edge.matrixWorldNeedsUpdate;
+    
+  }
+
   public updateNodes(nodes: ExplosionNode[], visited: Set<string> = new Set()) {
     const localDisp = new THREE.Vector3();
-    for (const node of nodes) {
+    for (let i = 0;i<nodes.length;i++) {
+      const node = nodes[i];
       if (!visited.has(node.name)) {
         visited.add(node.name);
       } else {
@@ -264,7 +357,11 @@ export class ExplosionApp {
         mesh.position.copy(node.globalDisp);
         mesh.matrixWorldNeedsUpdate = true;
       }
-      this.updateNodes(node.children, visited);      
+      this.updateNodes(node.children, visited);
+      const edge = this.edges.get(node.name);
+      if(edge){
+        this.updateEdge(edge, node, mesh);
+      }
     }
   }
 
@@ -298,6 +395,34 @@ export class ExplosionApp {
     }
   }
 
+  public MakeArc(){
+    // Define two points for the arc, and a control point to lift it.
+    const p1 = new THREE.Vector3(0, 0, 0);
+    const p2 = new THREE.Vector3(1, 0, 0);
+    // Control point for a nice upward curve
+    const controlPoint = new THREE.Vector3(0.5, 0, 0.5);
+
+    // Create a Quadratic Bezier Curve
+    const curve = new THREE.QuadraticBezierCurve3(p1, controlPoint, p2);
+
+    // Create geometry by sweeping a circle along the path (TubeGeometry)
+    const tubeGeometry = new THREE.TubeGeometry(
+        curve,       // path
+        16,          // segments
+        0.01,        // radius (thickness of the arc)
+        4,           // radial segments
+        false        // closed
+    );
+
+    // Main Material
+    const arcMaterial = new THREE.MeshPhongMaterial({
+        color: new THREE.Color(0.3,0.4,0.4),
+        side: THREE.DoubleSide
+    });
+    const arcMesh = new THREE.Mesh(tubeGeometry, arcMaterial);
+    return arcMesh;
+  }
+
   public updateTreeHTML(
     nodes: ExplosionNode[],
     rendered: Set<string> = new Set(),
@@ -322,7 +447,8 @@ export class ExplosionApp {
       const icon = hasChildren ? (expanded ? "▼" : "►") : "•";
       const nodeTypeColor = hasChildren ? "text-indigo-600" : "text-gray-700";
       const nodeFont = hasChildren ? "font-medium" : "font-normal";
-
+      const isSelected = node === this.explosionGraph.selectedNode;
+      const itemClasses = isSelected ? 'selected' : '';
       html += `
             <div id="node-${node.name}"
                  class="tree-node ${nodeClass} ${nodeFont}"
@@ -331,7 +457,7 @@ export class ExplosionApp {
                  onclick="window.app.toggleNode('${node.name}', event)"
             >
               <span class="inline-block w-4 mr-1 ${nodeTypeColor}" node-name="${node.name}">${icon}</span>
-              <span class="text-sm ${nodeTypeColor}" node-name="${node.name}">${node.name}</span>
+              <span class="tree-node-item text-sm ${nodeTypeColor} ${itemClasses}" node-name="${node.name}">${node.name}</span>
           `;
 
       if (hasChildren) {
@@ -365,6 +491,12 @@ export class ExplosionApp {
     const selected = this.world.GetInstanceById(objId);
     if (selected) {
       this.control.attach(selected);
+      const name = selected.name;
+      const node = this.explosionGraph.getNodeByName(name);
+      if(node){
+        this.explosionGraph.selectedNode = node;
+        this.explosionGraph.needsUpdate = true;
+      }
     }
   }
 }
