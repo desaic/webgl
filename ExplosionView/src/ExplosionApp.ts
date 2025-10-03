@@ -279,15 +279,20 @@ export class ExplosionApp {
   public updateEdge(edge: THREE.Mesh, node :ExplosionNode, mesh:THREE.Mesh){
     const v0 = new THREE.Vector3(0,0,0);
     const v1 = new THREE.Vector3(1,1,1);
-    v1.copy(mesh.position);
-    const boxCenter = new THREE.Vector3(0,0,0);
-    if(mesh.geometry.boundingBox){
-      const box = mesh.geometry.boundingBox;
-      boxCenter.copy(box.max);
-      boxCenter.add(box.min);
-      boxCenter.multiplyScalar(0.5);
+    const boxCenter = new THREE.Vector3(0, 0, 0);
+    if(mesh){
+      v1.copy(mesh.position);
+      if (mesh.geometry.boundingBox) {
+        const box = mesh.geometry.boundingBox;
+        boxCenter.copy(box.max);
+        boxCenter.add(box.min);
+        boxCenter.multiplyScalar(0.5);
+      }
+      v1.add(boxCenter);
+    }else{
+      v1.copy(node.globalDisp);
     }
-    v1.add(boxCenter);
+
     const parentNode = node.parent;
     if (parentNode) {
       const m = this.nameToMesh.get(parentNode.name);
@@ -300,6 +305,8 @@ export class ExplosionApp {
         boxCenter.add(box.min);
         boxCenter.multiplyScalar(0.5);
         v0.add(boxCenter);
+      }else{
+        v0.copy(parentNode.globalDisp);
       }
     }
     const xAxis = new THREE.Vector3(v1.x, v1.y, v1.z);

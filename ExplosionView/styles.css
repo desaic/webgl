@@ -12,7 +12,10 @@ body {
   background-color: #f8fafc;
   /* slate-50 */
 }
-
+.no-drag {
+    user-select: none;
+    -webkit-user-drag: none;
+}
 .custom-range::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
