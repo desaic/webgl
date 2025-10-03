@@ -6,7 +6,6 @@ import World from "./World.js";
 import { GPUPicker } from "./gpupicker.js";
 import { LoadingMan } from "./LoadingMan.ts";
 import { ExplosionNode, ExplosionGraph } from "./ExplosionGraph.ts";
-import { Vec3f } from "./Vec3f.ts";
 
 const MESH_COLOR_PALETTE = [
     { x: 0.1, y: 0.45, z: 0.65, name: "Deep Ocean Blue" },
@@ -251,7 +250,7 @@ export class ExplosionApp {
     const oldGraph = this.explosionGraph;
     this.explosionGraph = g;
     g.needsUpdate = true;
-    for (const [k, v] of this.edges) {
+    for (const [, v] of this.edges) {
       this.world.instances.remove(v);
     }
     this.edges.clear();
