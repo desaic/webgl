@@ -1,5 +1,7 @@
 #include "TrigMesh.h"
 #include "TriangulateContour.h"
+#include "Transformations.h"
+
 #define JSMN_HEADER
 #include "jsmn.h"
 #include <iostream>
@@ -65,7 +67,18 @@ Vec3f ParseVec3f(const JsonData& j, int tok_index) {
   return v;
 }
 
+void SaveInstances(const std::string & filename, const std::vector<Instance> & instances) {
+  std::ofstream out(filename);
+  for (size_t i = 0; i < instances.size(); i++) {
+    out << instances[i].fileName <<"\n";
+    out << instances[i].pos[0] << " " << instances[i].pos[1] << " "
+        << instances[i].pos[2] <<"\n";
+    out << instances[i].rot[0] << " " << instances[i].rot[1] << " "
+        << instances[i].rot[2] << "\n";
 
+  }
+
+}
 
 void TestBLD() {
   std::string bldFile = "F:/meshes/skeleton/center_bld/build.json";
@@ -170,5 +183,41 @@ void TestBLD() {
   }
   std::cout << instances_token_index << "\n";
   
+  const float INPUT_MESH_SCALE = 10.0f;
+  const std::string meshDir = "F:/meshes/skeleton/center/";
+  const std::string meshOutDir = "F:/meshes/skeleton/centerOut/";
+  
+  //move instances to center around z plane.
+  //move obj meshes so that its origin is bounding box center
+  for (size_t i = 0; i < instances.size(); i++) {
+    auto& inst = instances[i]; 
+    std::string name = inst.fileName;
+    size_t strPos = name.find('.');
+    name = name.substr(0, strPos);
+    std::cout << "prefix " << name << "\n";
+    std::string objIn = meshDir + name + ".obj";
+    TrigMesh mesh;
+    mesh.LoadObj(objIn);
+    mesh.scale(INPUT_MESH_SCALE);
+    Box3f box = ComputeBBox(mesh.v);
+    Vec3f dx = -0.5f * (box.vmax+box.vmin);
+    // move mesh so that its bounding box is centered.
+    mesh.translate(dx[0], dx[1], dx[2]);
+    std::string objOut = meshOutDir + name + ".obj";
+    mesh.SaveObj(objOut);
+    
+    TrigMesh rotated = mesh;
+    rotateVerts(mesh.v, rotated.v, inst.rot[0], inst.rot[1], inst.rot[2]);
+    Box3f rotBox = ComputeBBox(rotated.v);
+    inst.pos[0] -= rotBox.vmin[0];
+    inst.pos[1] -= rotBox.vmin[1];
+    //convert instance position from frontend coordinates to world coordinates
+    //move instance so that its z coordinate is 0.
+    
+    inst.pos[2] = 0;
+    inst.fileName = name;
+  }
+
+  SaveInstances("F:/meshes/skeleton/center_pos.txt" ,instances);
 }
 
