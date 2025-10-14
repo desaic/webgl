@@ -261,6 +261,121 @@ class OBJLoader {
 
     return container;
   }
+
+  parse_lines(lines) {
+    const state = ParserState(this.baseName);
+    let result = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trimStart();
+
+      if (line.length === 0) continue;
+
+      const lineFirstChar = line.charAt(0);
+
+      // @todo invoke passed in handler if any
+      if (lineFirstChar === "#") continue; // skip comments
+
+      if (lineFirstChar === "v") {
+        const data = line.split(_face_vertex_data_separator_pattern);
+
+        switch (data[0]) {
+          case "v":
+            state.vertices.push(
+              parseFloat(data[1]),
+              parseFloat(data[2]),
+              parseFloat(data[3])
+            );
+            break;
+          case "vt":
+            state.uvs.push(parseFloat(data[1]), parseFloat(data[2]));
+            break;
+        }
+      } else if (lineFirstChar === "f") {
+        const lineData = line.slice(1).trim();
+        const vertexData = lineData.split(_face_vertex_data_separator_pattern);
+        const faceVertices = [];
+
+        // Parse the face vertex data into an easy to work with format
+
+        for (let j = 0, jl = vertexData.length; j < jl; j++) {
+          const vertex = vertexData[j];
+
+          if (vertex.length > 0) {
+            const vertexParts = vertex.split("/");
+            faceVertices.push(vertexParts);
+          }
+        }
+
+        // Draw an edge between the first vertex and all subsequent vertices to form an n-gon
+        // does not work for concave faces.
+
+        const v1 = faceVertices[0];
+
+        for (let j = 1, jl = faceVertices.length - 1; j < jl; j++) {
+          const v2 = faceVertices[j];
+          const v3 = faceVertices[j + 1];
+
+          state.addFace(v1[0], v2[0], v3[0], v1[1], v2[1], v3[1]);
+        }
+      } else if ((result = _object_pattern.exec(line)) !== null) {
+        // o object_name
+        // or
+        // g group_name
+
+        // WORKAROUND: https://bugs.chromium.org/p/v8/issues/detail?id=2869
+        // let name = result[ 0 ].slice( 1 ).trim();
+        const name = (" " + result[0].slice(1).trim()).slice(1);
+
+        state.startObject(this.baseName + "_" + name, true);
+      } else {
+        // Handle null terminated files without exception
+        if (line === "\0") continue;
+      }
+    }
+
+    const container = new Group();
+
+    const hasPrimitives = !(
+      state.objects.length === 1 &&
+      state.objects[0].geometry.vertices.length === 0
+    );
+
+    if (hasPrimitives === true) {
+      for (let i = 0, l = state.objects.length; i < l; i++) {
+        const object = state.objects[i];
+        const geometry = object.geometry;
+
+        // Skip o/g line declarations that did not follow with any faces
+        if (geometry.vertices.length === 0) continue;
+
+        const buffergeometry = new BufferGeometry();
+
+        buffergeometry.setAttribute(
+          "position",
+          new Float32BufferAttribute(geometry.vertices, 3)
+        );
+
+        if (geometry.hasUVIndices === true) {
+          buffergeometry.setAttribute(
+            "uv",
+            new Float32BufferAttribute(geometry.uvs, 2)
+          );
+        }
+
+        // Create mesh
+
+        let mesh;
+        buffergeometry.computeVertexNormals();
+        mesh = new Mesh(buffergeometry, defaultObjMaterial);
+
+        mesh.name = object.name;
+        
+        container.add(mesh);
+      }
+    }
+
+    return container;
+  }
 }
 
 export { OBJLoader };

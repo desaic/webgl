@@ -49,14 +49,66 @@ export class LoadingMan {
     }
   }
 
+  readHugeFileInLines (file, onComplete) {
+    const CHUNK_SIZE = 1024 * 1024; // 1MB chunks
+    let offset = 0;
+    let buffer = '';
+    let all_lines = []
+    function readNextChunk() {
+        if (offset >= file.size) {
+            // Process any remaining data in the buffer as the last line
+            if (buffer.length > 0) {
+              all_lines.push(buffer);
+            }
+            onComplete(all_lines);
+            return;
+        }
+
+        const slice = file.slice(offset, offset + CHUNK_SIZE);
+        const reader = new FileReader();
+
+        reader.onload = function(e) {
+            buffer += e.target.result;
+            const lines = buffer.split(/\r?\n/);
+
+            // Process all complete lines
+            for (let i = 0; i < lines.length - 1; i++) {
+                all_lines.push(lines[i]);
+            }
+
+            // Store the last part as a potential incomplete line
+            buffer = lines[lines.length - 1];
+
+            offset += CHUNK_SIZE;
+            readNextChunk(); // Read the next chunk
+        };
+
+        reader.readAsText(slice);
+    }
+    readNextChunk(); // Start reading    
+  }
+
   ReadOBJ(file: File) {
     const reader = new FileReader();
     try {        
-      reader.onload = () => {
+      // reader.onload = () => {
+      //   var loader = new OBJLoader(this, file.name);
+      //   console.log("upload done");
+      //   const object = loader.parse(reader.result);
+      //   console.log("parsing done");
+      //   if (object.isGroup) {
+      //     for (const child of object.children) {
+      //       this.onLoad(child.name, child);
+      //     }
+      //   } else {
+      //   }
+      //   console.log("copy to gpu done");   
+      // };
+
+      //reader.readAsText(file);
+      const onComplete = (all_lines) =>{
         var loader = new OBJLoader(this, file.name);
-        console.log("upload done");
-        const object = loader.parse(reader.result);
-        console.log("parsing done");
+        const object = loader.parse_lines(all_lines);
         if (object.isGroup) {
           for (const child of object.children) {
             this.onLoad(child.name, child);
@@ -64,8 +116,8 @@ export class LoadingMan {
         } else {
         }
         console.log("copy to gpu done");   
-      };
-      reader.readAsText(file);
+      }
+      this.readHugeFileInLines(file, onComplete);
     } catch (err) {
       console.log(err.message);
     }
