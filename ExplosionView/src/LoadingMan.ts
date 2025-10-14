@@ -89,23 +89,7 @@ export class LoadingMan {
   }
 
   ReadOBJ(file: File) {
-    const reader = new FileReader();
     try {        
-      // reader.onload = () => {
-      //   var loader = new OBJLoader(this, file.name);
-      //   console.log("upload done");
-      //   const object = loader.parse(reader.result);
-      //   console.log("parsing done");
-      //   if (object.isGroup) {
-      //     for (const child of object.children) {
-      //       this.onLoad(child.name, child);
-      //     }
-      //   } else {
-      //   }
-      //   console.log("copy to gpu done");   
-      // };
-
-      //reader.readAsText(file);
       const onComplete = (all_lines) =>{
         var loader = new OBJLoader(this, file.name);
         const object = loader.parse_lines(all_lines);
