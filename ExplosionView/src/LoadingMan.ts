@@ -1,6 +1,7 @@
 import { STLLoader } from "./STLLoader.js";
 import { OBJLoader } from "./OBJLoader.ts";
-
+import { Mesh } from "three";
+import {FileStream} from "./FileStream.js"
 /// file loading manager
 export class LoadingMan {
   constructor(
@@ -49,59 +50,68 @@ export class LoadingMan {
     }
   }
 
-  readHugeFileInLines (file, onComplete) {
-    const CHUNK_SIZE = 1024 * 1024; // 1MB chunks
-    let offset = 0;
-    let buffer = '';
-    let all_lines = []
-    function readNextChunk() {
-        if (offset >= file.size) {
-            // Process any remaining data in the buffer as the last line
-            if (buffer.length > 0) {
-              all_lines.push(buffer);
-            }
-            onComplete(all_lines);
-            return;
-        }
-
-        const slice = file.slice(offset, offset + CHUNK_SIZE);
-        const reader = new FileReader();
-
-        reader.onload = function(e) {
-            buffer += e.target.result;
-            const lines = buffer.split(/\r?\n/);
-
-            // Process all complete lines
-            for (let i = 0; i < lines.length - 1; i++) {
-                all_lines.push(lines[i]);
-            }
-
-            // Store the last part as a potential incomplete line
-            buffer = lines[lines.length - 1];
-
-            offset += CHUNK_SIZE;
-            readNextChunk(); // Read the next chunk
-        };
-
-        reader.readAsText(slice);
-    }
-    readNextChunk(); // Start reading    
+  async readChunkAsText(chunkBlob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (event) => resolve(event.target.result);
+      reader.onerror = (event) => reject(event.target.error);
+      reader.readAsText(chunkBlob);
+    });
   }
 
-  ReadOBJ(file: File) {
-    try {        
-      const onComplete = (all_lines) =>{
-        var loader = new OBJLoader(this, file.name);
-        const object = loader.parse_lines(all_lines);
-        if (object.isGroup) {
-          for (const child of object.children) {
-            this.onLoad(child.name, child);
+  async splitHugeFileLines(file) {
+    const CHUNK_SIZE = 1024 * 1024; // 1MB chunks
+    let all_lines = [];
+    const numChunks = Math.ceil(file.size / CHUNK_SIZE);
+    let lineBuffer = "";
+
+    // 2. Use a for loop to iterate over the chunks
+    for (let i = 0; i < numChunks; i++) {
+      const start = i * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, file.size);
+      const chunk = file.slice(start, end);
+
+      const text = await this.readChunkAsText(chunk);
+
+      lineBuffer += text;
+      const lines = lineBuffer.split("\n");
+
+      const lastLine = lines.pop();
+
+      all_lines.push(...lines)
+      
+      lineBuffer = lastLine;
+    }
+
+    // Process any remaining content
+    if (lineBuffer) {
+      all_lines.push(lineBuffer)
+    }
+    return all_lines;
+  }
+
+  async ReadOBJ(file: File) {
+    try {
+      const ten_megs = 1024 * 10240;
+      const fs = new FileStream(file, ten_megs);
+      var loader = new OBJLoader(this, file.name);
+      const object = await loader.parse_lines(fs);
+      if (object.isGroup) {
+        console.log('loaded no. meshes ' + object.children.length);
+        for (let i = 0; i < object.children.length; i++) {
+          const child = object.children[i];
+          const mesh = child as Mesh;
+          if(mesh && mesh.geometry){
+            mesh.geometry.computeVertexNormals();
           }
-        } else {
+          this.onLoad(child.name, child);
+          if (i % 20 == 0) {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+          }
         }
-        console.log("copy to gpu done");   
+      } else {
       }
-      this.readHugeFileInLines(file, onComplete);
+      console.log("copy to gpu done");
     } catch (err) {
       console.log(err.message);
     }
@@ -126,7 +136,7 @@ export class LoadingMan {
       proms.push(this.LoadMesh(file));
     }
     await Promise.all(proms);
-    this.busy = false;    
+    this.busy = false;
   }
 
   SetBusy(b: boolean) {

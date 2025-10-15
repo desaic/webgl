@@ -7,6 +7,8 @@ import {
   MeshPhongMaterial
 } from "three";
 import {LoadingMan} from "./LoadingMan.ts"
+import {FileStream} from "./FileStream.js"
+
 // o object_name | g group_name
 const _object_pattern = /^[og]\s*(.+)?/;
 const _face_vertex_data_separator_pattern = /\s+/;
@@ -262,12 +264,28 @@ class OBJLoader {
     return container;
   }
 
-  parse_lines(lines) {
+  async parse_lines(fs: FileStream) {
     const state = ParserState(this.baseName);
     let result = [];
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trimStart();
+    await fs.buffer();
+    let line = ""
+    while (true) {
+      line = fs.get_line();
 
+      if (line === FileStream.NEEDS_BUFFER) {
+        console.log('--- Buffer Exhausted, Awaiting Next Chunk ---');
+        const success = await fs.buffer();        
+        if (!success) {
+            // Should not happen if logic is correct, but safe guard against infinite loop
+            break; 
+        }
+        continue; // Go back and try get_line() again
+      }
+
+      if (line === null) {
+        // Absolute End of File reached
+        break;
+      }
       if (line.length === 0) continue;
 
       const lineFirstChar = line.charAt(0);
@@ -365,7 +383,6 @@ class OBJLoader {
         // Create mesh
 
         let mesh;
-        buffergeometry.computeVertexNormals();
         mesh = new Mesh(buffergeometry, defaultObjMaterial);
 
         mesh.name = object.name;
