@@ -217,20 +217,25 @@ export class ExplosionApp {
     console.log(lines[0]);
     const g = new ExplosionGraph();
     const parentMap: Map<string, string> = new Map();
-    for (let i = 0; i < lines.length; i++) {
+    //skip first line, assumed to be column names
+    for (let i = 1; i < lines.length; i++) {
       const tokens = lines[i].split(",").map((token) => token.trim());
       if (tokens.length < 2) {
         continue;
       }
-      const name = tokens[0];
+      const name = tokens[1];
+      if(name.length == 0){
+        // skip empty names
+        continue;
+      }
       const node = new ExplosionNode(name);
-      node.disasOrder = parseInt(tokens[1]);
+      node.disasOrder = 0;
       node.direction.set(
         parseFloat(tokens[2]),
         parseFloat(tokens[3]),
         parseFloat(tokens[4])
       );
-      const parentName = tokens[5];
+      const parentName = tokens[0];
       parentMap.set(name, parentName);
       g.addNode(node);
     }
@@ -240,7 +245,14 @@ export class ExplosionApp {
         continue;
       }
       const childNode = g.getNodeByName(child);
-      const parentNode = g.getNodeByName(parent);
+      //only child nodes are added in the first pass
+      let parentNode;
+      if(!g.hasNode(parent)){
+        parentNode = new ExplosionNode(parent);
+        g.addNode(parentNode);
+      }else{
+         parentNode = g.getNodeByName(parent);
+      }      
       if (!childNode || !parent) {
         //something's fcked up
         continue;
@@ -352,12 +364,14 @@ export class ExplosionApp {
       if(parent){
         //first copy parent's global displacement
         node.globalDisp.copy(parent.globalDisp);
+        localDisp.copy(node.direction);
+        localDisp.multiplyScalar(node.distance * this.explosionScale);
+        node.globalDisp.add(localDisp);
       }else{
+        //root don't move
         node.globalDisp.set(0,0,0);
       }
-      localDisp.copy(node.direction);
-      localDisp.multiplyScalar(node.distance * this.explosionScale);
-      node.globalDisp.add(localDisp);
+
       const mesh = this.nameToMesh.get(node.name);
       if(mesh){
         mesh.position.copy(node.globalDisp);

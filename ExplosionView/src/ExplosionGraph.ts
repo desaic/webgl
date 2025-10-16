@@ -156,6 +156,10 @@ export class ExplosionGraph {
     return this.nodeMap.get(name);
   }
 
+  public hasNode(name: string): boolean{
+    return this.nodeMap.has(name);
+  }
+
   /**
    * Gets all root nodes (nodes without a parent).
    * @returns An array of root ExplosionNodes.
