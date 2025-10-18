@@ -126,6 +126,7 @@ export class ExplosionGraph {
 
   public selectedNode: ExplosionNode;
   public needsUpdate: boolean;
+  public lastRoot: ExplosionNode;
   constructor(
   ) {
     this.nodes = [];
@@ -169,7 +170,12 @@ export class ExplosionGraph {
    */
   public getRootNodes(): ExplosionNode[] {
     // Filter nodes where the parent is null
-    return this.nodes.filter((node) => node.parent === null);
+    const roots = this.nodes.filter((node) => node.parent === null);
+    if(roots.length == 0){
+      return [this.lastRoot];
+    }
+    this.lastRoot = roots[0];
+    return roots;
   }
 
   /**

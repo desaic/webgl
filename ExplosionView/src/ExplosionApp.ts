@@ -356,6 +356,7 @@ export class ExplosionApp {
         toon = new THREE.MeshToonMaterial({
           color: color,
           gradientMap: threeTone,
+          side:THREE.DoubleSide
         });
         this.toonMap.set(name, toon);
       }
