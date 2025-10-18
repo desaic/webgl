@@ -8,28 +8,30 @@ import { LoadingMan } from "./LoadingMan.ts";
 import { ExplosionNode, ExplosionGraph } from "./ExplosionGraph.ts";
 
 const textureLoader = new THREE.TextureLoader();
-const threeTone = textureLoader.load( 'threeTone.jpg' ,
-    function (texture) {
-        // This function is called when the texture successfully loads
-        console.log('Texture loaded successfully.');
-        console.log('Image width:', texture.image.width);
-        console.log('Image height:', texture.image.height);
-    },
-    undefined, // onProgress callback (optional)
-    function (err) {
-        // This function is called if there's an error loading the texture
-        console.error('An error occurred loading the texture:', err);
-    });
-				threeTone.minFilter = THREE.NearestFilter;
-				threeTone.magFilter = THREE.NearestFilter;
+const threeTone = textureLoader.load(
+  "threeTone.jpg",
+  function (texture) {
+    // This function is called when the texture successfully loads
+    console.log("Texture loaded successfully.");
+    console.log("Image width:", texture.image.width);
+    console.log("Image height:", texture.image.height);
+  },
+  undefined, // onProgress callback (optional)
+  function (err) {
+    // This function is called if there's an error loading the texture
+    console.error("An error occurred loading the texture:", err);
+  }
+);
+threeTone.minFilter = THREE.NearestFilter;
+threeTone.magFilter = THREE.NearestFilter;
 const MESH_COLOR_PALETTE = [
-    { x: 0.1, y: 0.45, z: 0.65, name: "Deep Ocean Blue" },
-    { x: 0.9, y: 0.45, z: 0.1, name: "Sunset Orange" },
-    { x: 0.4, y: 0.6, z: 0.35, name: "Muted Sage Green" },
-    { x: 0.75, y: 0.65, z: 0.9, name: "Soft Lavender" },
-    { x: 0.1, y: 0.85, z: 0.8, name: "Electric Cyan" },
-    { x: 0.7, y: 0.2, z: 0.2, name: "Brick Red" },
-    { x: 0.8, y: 0.75, z: 0.7, name: "Light Taupe" },
+  { x: 0.1, y: 0.45, z: 0.65, name: "Deep Ocean Blue" },
+  { x: 0.9, y: 0.45, z: 0.1, name: "Sunset Orange" },
+  { x: 0.4, y: 0.6, z: 0.35, name: "Muted Sage Green" },
+  { x: 0.75, y: 0.65, z: 0.9, name: "Soft Lavender" },
+  { x: 0.1, y: 0.85, z: 0.8, name: "Electric Cyan" },
+  { x: 0.7, y: 0.2, z: 0.2, name: "Brick Red" },
+  { x: 0.8, y: 0.75, z: 0.7, name: "Light Taupe" },
 ];
 function getSubstringBeforeLast(str, char) {
   const lastIndex = str.lastIndexOf(char);
@@ -229,7 +231,10 @@ export class ExplosionApp {
     if (child.parent == parent) {
       return;
     }
-
+    if(parent.parent == child){
+      //avoid direct loop
+      return;
+    }
     if (child.parent != null) {
       const edgeName = child.name + "_edge";
       this.DeleteEdgeByName(edgeName);
@@ -253,12 +258,14 @@ export class ExplosionApp {
     window.addEventListener("keydown", (event) => {
       // Ensure the key is an uppercase letter for case-insensitive check
       const key = event.key.toUpperCase();
-      if (key === "C") {
+      if (key === "S") {
         this.CycleDirection();
       } else if (key === "D") {
         this.DeleteEdge();
-      } else if (key === "M") {
+      } else if (key === "A") {
         this.ConnectEdge();
+      } else if (key == " ") {
+        this.ClearSelection();
       }
     });
   }
@@ -356,7 +363,7 @@ export class ExplosionApp {
         toon = new THREE.MeshToonMaterial({
           color: color,
           gradientMap: threeTone,
-          side:THREE.DoubleSide
+          side: THREE.DoubleSide,
         });
         this.toonMap.set(name, toon);
       }
@@ -379,10 +386,10 @@ export class ExplosionApp {
     this.ShowEdges(this.showEdges);
   }
 
-  public ShowEdges(show){
+  public ShowEdges(show) {
     this.world.ground.visible = show;
     for (const [, v] of this.edges) {
-      if(v){
+      if (v) {
         v.visible = show;
       }
     }
@@ -439,8 +446,7 @@ export class ExplosionApp {
     const buttonClear = document.getElementById("clearSelectionButton");
     if (buttonClear) {
       buttonClear.addEventListener("click", () => {
-        this.selection = [];
-        this.updateSelectedDisplay();
+        this.ClearSelection();
       });
     }
     const buttonConnect = document.getElementById("connect-button");
@@ -450,19 +456,23 @@ export class ExplosionApp {
       });
     }
 
-        const buttonSwitch = document.getElementById("switch-dir-button");
+    const buttonSwitch = document.getElementById("switch-dir-button");
     if (buttonSwitch) {
       buttonSwitch.addEventListener("click", () => {
         this.CycleDirection();
       });
     }
 
-        const buttonDelete = document.getElementById("delete-button");
+    const buttonDelete = document.getElementById("delete-button");
     if (buttonDelete) {
       buttonDelete.addEventListener("click", () => {
         this.DeleteEdge();
       });
     }
+  }
+  public ClearSelection() {
+    this.selection = [];
+    this.updateSelectedDisplay();
   }
   /**
    * @method init
@@ -716,8 +726,6 @@ export class ExplosionApp {
    */
   public render(): void {
     this.updateExplosion();
-
-
 
     this.renderer.render(this.world.scene, this.world.camera);
     this.renderer.autoClear = false;
