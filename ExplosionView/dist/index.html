@@ -32,7 +32,7 @@
 
     <div class="space-y-2">
       <label for="graph-input" class="block text-sm font-medium text-gray-700">Load Graph Data</label>
-      <input type="file" id="graph-input" accept=".txt"
+      <input type="file" id="graph-input" accept=".txt,.csv"
         class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 cursor-pointer" />
     </div>
 
@@ -40,9 +40,9 @@
       <div class="flex justify-between items-center">
         <label for="dxSlider" class="text-sm font-medium text-gray-700">dx</label>
         <span id="dxDisplay"
-          class="no-drag min-w-[4rem] text-center text-sm font-bold text-purple-700 bg-purple-50 px-3 py-1 rounded-full shadow-inner">5.0</span>
+          class="no-drag min-w-[4rem] text-center text-sm font-bold text-purple-700 bg-purple-50 px-3 py-1 rounded-full shadow-inner">10.0</span>
       </div>
-      <input type="range" id="dxSlider" min="0" max="100" value="1" step="1"
+      <input type="range" id="dxSlider" min="0" max="50" value="5" step="0.25"
         class="no-drag w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer custom-range">
     </div>
 
@@ -51,7 +51,95 @@
     </div>
 
   </div>
+<div id="list-container"
+  style="position: absolute; top: 20px; left: 420px; padding: 10px; background-color: rgba(0, 0, 0, 0.7); color: white; border-radius: 5px; z-index: 10;"
+  class="flex flex-col gap-4">
+  <h3>Selected:</h3>
+  <ul id="selected-list">
+  </ul>
+  <div class="flex flex-col gap-4">
+  <div class="flex gap-4">
+  <button id="connect-button" class="
+ w-30 
+                  px-2 py-2 text-base
+                bg-blue-600 text-white 
+                        rounded-base 
+                        shadow-lg 
+                        hover:bg-blue-700 
+                        transition-colors
+                    ">
+    Connect
+  </button>
+  <button id="delete-button" class="
+  w-30 
+                  px-2 py-2 text-base
+                bg-blue-600 text-white 
+                        rounded-base 
+                        shadow-lg 
+                        hover:bg-blue-700 
+                        transition-colors
+                    ">
+    Delete
+  </button>
+  </div>
+  <div class="flex gap-4">
+    <button id="switch-dir-button" class="
+ w-30 
+                  px-2 py-2 text-base
+              bg-blue-600 text-white 
+                      rounded-base 
+                      shadow-lg 
+                      hover:bg-blue-700 
+                      transition-colors
+                  ">
+      Switch Dir
+    </button>
+    <button id="clearSelectionButton" class="
+  w-30 
+                  px-2 py-2 text-base
+              bg-blue-600 text-white 
+                      rounded-base 
+                      shadow-lg 
+                      hover:bg-blue-700 
+                      transition-colors
+                  ">
+      Deselect
+    </button>
+  </div>
+  </div>
+
+
+</div>
+
     <div class="absolute top-4 right-4 z-10">
+      <button 
+            id="switch3dButton" 
+            class="
+                absolute top-4 right-20   
+                px-4 py-2 
+                bg-blue-600 text-white 
+                rounded-lg 
+                shadow-lg 
+                hover:bg-blue-700 
+                transition-colors
+            "
+        >
+          3D View
+        </button>
+        <button 
+            id="switch2dButton" 
+            class="
+                absolute top-4 right-40   
+                px-4 py-2 
+                bg-blue-600 text-white 
+                rounded-lg 
+                shadow-lg 
+                hover:bg-blue-700 
+                transition-colors
+            "
+        >
+          2D View
+        </button>
       <a href="./help.html" target="_blank" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-lg transition duration-200 ease-in-out transform hover:scale-105">
           Help
       </a>
