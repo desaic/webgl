@@ -27,6 +27,8 @@ export class ExplosionNode {
   public globalDisp: Vector3;
   public selected:boolean;
   public meshCenter:Vector3;
+  // coordinate of this node if it has no parent
+  public rootCoord: Vector3;
   /**
    * @param name - Display name of the node.
    * @param parent - Optional reference to the parent node.
@@ -51,6 +53,7 @@ export class ExplosionNode {
     this.isCollapsed=true;
     this.selected = false;
     this.meshCenter = new Vector3(0,0,0);
+    this.rootCoord = new Vector3(0,0,0);
   }
 
   /**
@@ -123,6 +126,7 @@ export class ExplosionGraph {
 
   public selectedNode: ExplosionNode;
   public needsUpdate: boolean;
+  public lastRoot: ExplosionNode;
   constructor(
   ) {
     this.nodes = [];
@@ -156,13 +160,22 @@ export class ExplosionGraph {
     return this.nodeMap.get(name);
   }
 
+  public hasNode(name: string): boolean{
+    return this.nodeMap.has(name);
+  }
+
   /**
    * Gets all root nodes (nodes without a parent).
    * @returns An array of root ExplosionNodes.
    */
   public getRootNodes(): ExplosionNode[] {
     // Filter nodes where the parent is null
-    return this.nodes.filter((node) => node.parent === null);
+    const roots = this.nodes.filter((node) => node.parent === null);
+    if(roots.length == 0){
+      return [this.lastRoot];
+    }
+    this.lastRoot = roots[0];
+    return roots;
   }
 
   /**

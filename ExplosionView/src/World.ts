@@ -3,6 +3,7 @@ import {RectGrid} from "./RectGrid.js";
 
 export default class World {
   public camera: THREE.PerspectiveCamera;
+  public orthoCamera: THREE.OrthographicCamera;
   public scene: THREE.Scene;
   // Parts should have their own types. using THREE.Mesh for now.
   // holds a single copy of the part's geometry so that instances
@@ -23,6 +24,23 @@ export default class World {
     this.camera.up.set(0, 0, 1);
     this.camera.position.set(0, -400, 150);
     this.camera.lookAt(200, 125, 0);
+
+
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    this.orthoCamera = new THREE.OrthographicCamera(
+      width / -2,
+      width / 2,
+      height / 2,
+      height / -2,
+      1,
+      1000
+    );
+    this.camera.up.set(0, 0, 1);
+    this.camera.position.set(0, -400, 150);
+    this.camera.lookAt(200, 125, 0);
+
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xeeeeee);
@@ -61,6 +79,10 @@ export default class World {
       }
     }
     return null;
+  };
+
+  RemoveInstanceByName = (name) => {
+    this.instances.children = this.instances.children.filter(child => child.name != name);
   };
 
   GetPartById = (id) => {
