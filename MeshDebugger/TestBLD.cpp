@@ -81,7 +81,7 @@ void SaveInstances(const std::string & filename, const std::vector<Instance> & i
 }
 
 void TestBLD() {
-  std::string bldFile = "F:/meshes/skeleton/center_bld/build.json";
+  std::string bldFile = "F:/meshes/skeleton/left_and_center/build.json";
   JsonData j = LoadJson(bldFile);
   int mmp_token_index = -1;
   size_t skipTo = 0;
@@ -184,8 +184,8 @@ void TestBLD() {
   std::cout << instances_token_index << "\n";
   
   const float INPUT_MESH_SCALE = 10.0f;
-  const std::string meshDir = "F:/meshes/skeleton/center/";
-  const std::string meshOutDir = "F:/meshes/skeleton/centerOut/";
+  const std::string meshDir = "F:/meshes/skeleton/left/";
+  const std::string meshOutDir = "F:/meshes/skeleton/leftOut/";
   
   //move instances to center around z plane.
   //move obj meshes so that its origin is bounding box center
@@ -211,13 +211,14 @@ void TestBLD() {
     Box3f rotBox = ComputeBBox(rotated.v);
     inst.pos[0] -= rotBox.vmin[0];
     inst.pos[1] -= rotBox.vmin[1];
+    inst.pos[2] -= rotBox.vmin[2];
     //convert instance position from frontend coordinates to world coordinates
     //move instance so that its z coordinate is 0.
     
-    inst.pos[2] = 0;
+    //inst.pos[2] = 0;
     inst.fileName = name;
   }
 
-  SaveInstances("F:/meshes/skeleton/center_pos.txt" ,instances);
+  SaveInstances("F:/meshes/skeleton/left_pos.txt" ,instances);
 }
 
