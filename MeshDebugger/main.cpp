@@ -16,7 +16,7 @@
 #include "HeadApp.hpp"
 #include "TrigMesh.h"
 #include "BBox.h"
-
+namespace fs = std::filesystem;
 void VoxApp() {
   UILib ui;
   ConnectorVox app;
@@ -206,8 +206,53 @@ void MoveFiles() {
   }
 }
 
+void CombineLattice() { 
+  std::string dir = "F:/meshes/granular/2mm1"; 
+  unsigned numRows = 16;
+  TrigMesh all;
+
+  const float D = 2.0;
+  std::vector<std::string> fileNames(numRows * numRows);
+  for (const auto& entry : fs::directory_iterator(dir)) {
+    // 2. Check if the entry is a regular file
+    if (fs::is_regular_file(entry.status())) {
+      
+      std::string filename = entry.path().filename().string();
+      size_t pos = filename.find('_');
+      // 2. Check if the delimiter was found
+      if (pos != std::string::npos) {
+        // Delimiter found: Extract the substring from the beginning (index 0)
+        // up to 'pos' characters long.
+        filename = filename.substr(0, pos);
+        int index = std::stoi(filename);
+        fileNames[index] = entry.path().string();
+      }
+
+      // 3. Print the file path
+      std::cout << "  - " << entry.path().filename().string() << "\n";
+    }
+  }
+
+  const float L = D * 1.514;
+  //y
+  for (int i = 0; i < numRows; i++) {
+    //x
+    for (int j = 0; j < numRows; j++) {
+      TrigMesh m;
+      m.LoadStl(fileNames[i * numRows + j]);      
+      m.translate(j * L, i * L, 0);
+      all.append(m);
+      m.translate(0, 0, L);
+      all.append(m);
+
+    }
+  }
+  all.SaveObj("F:/meshes/granular/2mm_2.obj");
+}
+
 int main(int argc, char** argv) {
- // MoveFiles();
+  CombineLattice();
+  // MoveFiles();
   //RunUVApp();
   // RunCanvasApp();
   // RunInflateApp();
@@ -230,6 +275,6 @@ int main(int argc, char** argv) {
   //VoxelizeRaycast();
 
   //RaycastMeshes();
-  TestBLD();
+  //TestBLD();
   return 0;
 }
