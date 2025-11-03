@@ -207,11 +207,13 @@ void MoveFiles() {
 }
 
 void CombineLattice() { 
-  std::string dir = "F:/meshes/granular/2mm1"; 
-  unsigned numRows = 16;
+  //std::string dir = "F:/meshes/granular/2mm_0.5"; 
+  //unsigned numRows = 16;
+   std::string dir = "F:/meshes/granular/3mm_0.75";
+  unsigned numRows = 12;
   TrigMesh all;
 
-  const float D = 2.0;
+  const float D = 3.0;
   std::vector<std::string> fileNames(numRows * numRows);
   for (const auto& entry : fs::directory_iterator(dir)) {
     // 2. Check if the entry is a regular file
@@ -247,7 +249,8 @@ void CombineLattice() {
 
     }
   }
-  all.SaveObj("F:/meshes/granular/2mm_2.obj");
+  //all.SaveObj("F:/meshes/granular/2mm_0.5.obj");
+  all.SaveObj("F:/meshes/granular/3mm_0.75.obj");
 }
 
 int main(int argc, char** argv) {
