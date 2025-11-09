@@ -23,6 +23,34 @@ export async function InitImGui() {
   }
 }
 
+function MakeDemoDonut(){
+  const radius = 1;
+  const tubeRadius = 0.3;
+  const radialSegments = 16;
+  const tubularSegments = 100;
+  const arc = Math.PI * 2; // Full 360-degree circle
+
+  const geometry = new THREE.TorusGeometry(
+    radius,
+    tubeRadius,
+    radialSegments,
+    tubularSegments,
+    arc
+  );
+
+  // 2. Create the Material (the color/texture)
+  // Use a MeshStandardMaterial to interact with lighting
+  const material = new THREE.MeshStandardMaterial({
+    color: 0xffa500, // A nice orange color
+    roughness: 0.5,
+    metalness: 0.8
+  });
+
+  // 3. Create the Mesh (combines geometry and material)
+  const donut = new THREE.Mesh(geometry, material);
+  return donut
+}
+
 export class MinesApp {
   // HTML element that will contain the renderer's canvas
   private container: HTMLCanvasElement;
@@ -49,6 +77,7 @@ export class MinesApp {
 
   public context2d: CanvasRenderingContext2D;
   public clear_color: ImGui.Vec4;
+  public mouse_in_imgui:boolean;
 
   constructor(canvas: HTMLCanvasElement) {
     if(!ImGui){
@@ -58,14 +87,16 @@ export class MinesApp {
     this.container = canvas;
     ImGui_Impl.Init(canvas);
     this.clear_color = new ImGui.Vec4(0.9,0.8,0.7,1);
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    this.renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
     this.world = new World();
 
+    const donut = MakeDemoDonut();
+    this.world.AddInstance(donut);
     this.pixelRatio = window.devicePixelRatio ? window.devicePixelRatio : 1.0;
 
     this.renderer.setPixelRatio(this.pixelRatio);
     this.onWindowResize();
-    this.container.appendChild(this.renderer.domElement);
+    // this.container.appendChild(this.renderer.domElement);
 
     this.orbit = new OrbitControls(this.world.camera, this.renderer.domElement);
     this.orbit.minDistance = 0.1;
@@ -79,6 +110,7 @@ export class MinesApp {
    
     this.mouse_global = new MouseCoord();   
     this.SetupKbdEvents();
+    this.mouse_in_imgui = false;
   }
 
   public SetupKbdEvents() {
@@ -95,10 +127,21 @@ export class MinesApp {
 
   public bindEventListeners() {
     window.addEventListener("resize", () => this.onWindowResize());
-    
+    this.container.addEventListener("mousemove", (e)=>this.onMouseMove(e));
   }
 
   public onMouseMove(e) {
+    const io = ImGui.GetIO();
+    
+    // Check if ImGui is capturing the mouse. If so, exit the handler.
+    if (io.WantCaptureMouse) {
+      this.mouse_in_imgui=true;
+      this.orbit.enabled = false;
+      return; 
+    }
+    this.mouse_in_imgui = false;
+    this.orbit.enabled = true;
+
     this.mouse_global.x = e.clientX;
     this.mouse_global.y = e.clientY;
 
@@ -128,7 +171,6 @@ export class MinesApp {
     this.renderer.render(this.world.scene, this.world.camera);    
     this.renderer.autoClear = false;
 
-
     ImGui_Impl.NewFrame(time);
     ImGui.NewFrame();
     
@@ -157,24 +199,17 @@ export class MinesApp {
     ImGui.SetNextWindowBgAlpha(1.0);
     ImGui.Render();
 
-    const gl = ImGui_Impl.gl;
-    if(gl){
-      gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
-      gl.clearColor(this.clear_color.x, this.clear_color.y, this.clear_color.z, this.clear_color.w);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-    }
-
-
     ImGui_Impl.RenderDrawData(ImGui.GetDrawData());
   }
 
   public onWindowResize(): void {
-    const width = this.container.clientWidth;
-    const height = this.container.clientHeight;
+    const width = window.innerWidth;
+    const height = window.innerHeight;
     const aspect = width / height;
     this.world.camera.aspect = aspect;
     this.world.camera.updateProjectionMatrix();
-
+    //@ts-ignore
+    ImGui.IO.DisplaySize = new ImGui.Vec2(width, height);
     this.renderer.setSize(width, height);
   }
 

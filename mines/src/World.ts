@@ -48,18 +48,31 @@ export default class World {
     this.parts.children = this.parts.children.filter(child => child.name != name);
   };
 
-  AddPart = (part: any) => {
-    this.parts.add(part);
-    return part.id;    
-  };
+  AddInstance = (part : THREE.Object3D) => {
+    var instance = null;
+    //edge does not need material cloning by choice
+    // if(part.material instanceof LineMaterial){
+    //   instance = new THREE.Mesh(part.geometry, part.material);
+    //   instance.position.copy(pos);
+    //   instance.setRotationFromEuler(rot);
+    //   instance.scale.copy(scale);
+    //   this.instances.add(instance);
+    // }
+    // else 
+    if(part instanceof THREE.Mesh){
+      instance = new THREE.Mesh(part.geometry, part.material.clone());
+      instance.position.copy(part.position);
+      instance.setRotationFromEuler(part.rotation);
+      instance.scale.copy(part.scale);
+      this.parts.add(instance);
+    } else if( part instanceof THREE.Group){
 
+    }
+    return instance;
+  }
   // create an instance for partId, and add it to scene for rendering
   // spawns it at exact same location scale and rotation so be careful.
-  AddInstance = (pos: THREE.Vector3, rot:THREE.Euler, scale: THREE.Vector3 = new THREE.Vector3(1,1,1), partId : number) => {
-    const part=this.GetPartById(partId);
-    if(part == null){
-      return null;
-    }
+  AddInstanceAt = (pos: THREE.Vector3, rot:THREE.Euler, scale: THREE.Vector3 = new THREE.Vector3(1,1,1), part : THREE.Object3D) => {
     var instance = null;
     //edge does not need material cloning by choice
     // if(part.material instanceof LineMaterial){
