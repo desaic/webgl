@@ -1,23 +1,27 @@
-import {MinesApp} from "./MinesApp"
+import { InitImGui, MinesApp } from "./MinesApp"
 
-let app : MinesApp;
+let app: MinesApp;
 
 declare global {
-    // Note the capital "W"
-    interface Window { app: MinesApp; }
+  // Note the capital "W"
+  interface Window { app: MinesApp; }
 }
 
 function InitScene() {
+  InitImGui().then(() => {
+    const canvas = document.getElementById("myCanvas");
+    app = new MinesApp(canvas as HTMLCanvasElement);
+    window.app = app;
+  });
 
-  const canvas = document.getElementById("myCanvas");
-  app = new MinesApp(canvas as HTMLCanvasElement);
-
-  window.app = app;
 }
 
-function Animate(_time) {
-  app.render();
+function Animate(time) {
+  if (app) {
+    app.render(time);
+  }
   requestAnimationFrame(Animate);
+
 }
 
 InitScene();

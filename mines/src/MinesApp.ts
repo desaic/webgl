@@ -1,9 +1,10 @@
 import * as THREE from "three";
 import { OrbitControls } from "./OrbitControls.js";
-import { TransformControls } from "./TransformControls.js";
 
 import World from "./World.js";
-import { GPUPicker } from "./gpupicker.js";
+
+import * as ImGui from "./utils/imgui/imgui";
+import * as ImGui_Impl from "./utils/imgui/imgui_impl"
 
 class MouseCoord {
   public x: number;
@@ -13,6 +14,14 @@ class MouseCoord {
     this.y = 0;
   }
 };
+
+export async function InitImGui() {
+  if (ImGui) {
+    await ImGui.default();
+    // 2. Initialize ImGui
+    ImGui.CreateContext();
+  }
+}
 
 export class MinesApp {
   // HTML element that will contain the renderer's canvas
@@ -27,13 +36,6 @@ export class MinesApp {
   // meshes
   private world: World;
 
-  private control: TransformControls;
-
-  // GPU Picker for object selection (e.g., using a picking texture)
-  private gpuPicker: any;
-
-  private selection: string[];
-
   private pixelRatio: number;
 
   public selectedList: HTMLElement;
@@ -46,17 +48,19 @@ export class MinesApp {
   public mouse_global: MouseCoord;
 
   public context2d: CanvasRenderingContext2D;
-  
+  public clear_color: ImGui.Vec4;
+
   constructor(canvas: HTMLCanvasElement) {
-    this.container = canvas;   
+    if(!ImGui){
+      console.log("imgui lib not found\n");
+    }
+
+    this.container = canvas;
+    ImGui_Impl.Init(canvas);
+    this.clear_color = new ImGui.Vec4(0.9,0.8,0.7,1);
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.world = new World();
-    this.gpuPicker = new GPUPicker(
-      THREE,
-      this.renderer,
-      this.world.scene,
-      this.world.camera
-    );
+
     this.pixelRatio = window.devicePixelRatio ? window.devicePixelRatio : 1.0;
 
     this.renderer.setPixelRatio(this.pixelRatio);
@@ -73,7 +77,6 @@ export class MinesApp {
 
     this.bindEventListeners();
    
-    this.selection = [];
     this.mouse_global = new MouseCoord();   
     this.SetupKbdEvents();
   }
@@ -121,9 +124,48 @@ export class MinesApp {
 
   }
 
-  public render(): void {
+  public render(time): void {
     this.renderer.render(this.world.scene, this.world.camera);    
     this.renderer.autoClear = false;
+
+
+    ImGui_Impl.NewFrame(time);
+    ImGui.NewFrame();
+    
+    if (ImGui.Begin("My First ImGui Window")) {
+      // Display some text
+      ImGui.Text("Hello from ImGui.js!");
+      ImGui.Text("The quick brown fox jumps over the lazy dog.");
+
+      ImGui.Text("Window is currently ACTIVE");
+      
+      // An interactive element
+      if (ImGui.Button("Close Window")) {
+        console.log("close");
+      }
+
+      // End the window call
+      ImGui.End();
+    }
+
+    // -------------------------------------
+
+    // 4. Finalize the ImGui frame and render
+    ImGui.EndFrame();
+
+    // Rendering commands
+    ImGui.SetNextWindowBgAlpha(1.0);
+    ImGui.Render();
+
+    const gl = ImGui_Impl.gl;
+    if(gl){
+      gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+      gl.clearColor(this.clear_color.x, this.clear_color.y, this.clear_color.z, this.clear_color.w);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+    }
+
+
+    ImGui_Impl.RenderDrawData(ImGui.GetDrawData());
   }
 
   public onWindowResize(): void {
