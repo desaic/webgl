@@ -209,7 +209,7 @@ void MoveFiles() {
 void CombineLattice() { 
   //std::string dir = "F:/meshes/granular/2mm_0.5"; 
   //unsigned numRows = 16;
-   std::string dir = "F:/meshes/granular/3mm_0.75";
+  std::string dir = "F:/meshes/granular/3mm_0.75";
   unsigned numRows = 12;
   TrigMesh all;
 
@@ -254,13 +254,13 @@ void CombineLattice() {
 }
 
 int main(int argc, char** argv) {
-  CombineLattice();
+  // CombineLattice();
   // MoveFiles();
-  //RunUVApp();
+  // RunUVApp();
   // RunCanvasApp();
   // RunInflateApp();
   // RunPackApp();
-  // VoxApp();
+   VoxApp();
   // RunHeadApp();
   // MeshHeightMap();
   // MapDrawingToThickness();

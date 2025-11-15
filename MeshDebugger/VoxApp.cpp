@@ -253,7 +253,7 @@ void ConnectorVox::VoxelizeMeshes() {
   box.vmax[1] += float(band) * voxRes;
 
   Vec3f count = (box.vmax - box.vmin) / unit;
-  Vec3u gridSize = Vec3u(count[0], count[1], count[2]);
+  Vec3u gridSize = Vec3u(std::ceil(count[0]), std::ceil(count[1]), std::ceil(count[2]));
   if (conf.waxGapMM > 0.01) {
     //pad the grid except in minus z direction.
     unsigned pad = std::round(conf.waxGapMM / voxRes);
@@ -274,7 +274,7 @@ void ConnectorVox::VoxelizeMeshes() {
     AddWaxGap(grid, voxRes, conf.waxGapMM, mat0);
   }
 
-  Vec3f removeBorderDist(0.1,0.1, 0.07);
+  Vec3f removeBorderDist(0.1,0.1, 0.06);
   Array3D8u oldGrid = grid;
   Vec3u oldSize = oldGrid.GetSize();
   Vec3u removal(removeBorderDist[0] / voxRes, removeBorderDist[1] / voxRes,
