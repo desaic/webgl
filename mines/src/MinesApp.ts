@@ -49,6 +49,7 @@ export async function InitImGui() {
           console.error("Failed to load Montserrat.ttf. Check the path and file existence!");
       }
     }
+    SetupUbuntuStyle();
   }
 }
 
@@ -204,11 +205,7 @@ export class MinesApp {
     ImGui.NewFrame();
     
     if (ImGui.Begin("My First ImGui Window")) {
-      // Display some text
-      ImGui.Text("Hello from ImGui.js!");
-      ImGui.Text("The quick brown fox jumps over the lazy dog.");
-
-      ImGui.Text("Window is currently ACTIVE");
+      ImGui.Text("Yo yo yo Imgui js");
       
       // An interactive element
       if (ImGui.Button("Close Window")) {
@@ -287,4 +284,58 @@ export class MinesApp {
     return { x: x - canvasRect.left, y: y - canvasRect.top };
   }
 
+}
+
+function SetupUbuntuStyle() {
+    const style = ImGui.GetStyle();
+    const colors = style.Colors;
+
+    // Helper function for quick color creation
+    // ImGui uses x, y, z, w for R, G, B, A
+    const color = (r: number, g: number, b: number, a: number = 1.0) => new ImGui.ImVec4(r, g, b, a);
+
+    // --- Core Window & Title Bar Colors (Dark Charcoal) ---
+    const charcoalBg = color(0.18, 0.18, 0.18, 1.00);
+    const darkerCharcoal = color(0.15, 0.15, 0.15, 1.00);
+    const activeCharcoal = color(0.60, 0.30, 0.20, 1.00);
+    
+    colors[ImGui.Col.WindowBg]         = charcoalBg;
+    colors[ImGui.Col.ChildBg]          = darkerCharcoal;
+    colors[ImGui.Col.TitleBg]          = darkerCharcoal;
+    colors[ImGui.Col.TitleBgActive]    = activeCharcoal;
+    colors[ImGui.Col.TitleBgCollapsed] = color(0.10, 0.10, 0.10, 1.00);
+    
+    // --- Text and Frame ---
+    colors[ImGui.Col.Text]             = color(0.95, 0.95, 0.95, 1.00);
+    colors[ImGui.Col.FrameBg]          = color(0.25, 0.25, 0.25, 1.00);
+    colors[ImGui.Col.FrameBgHovered]   = color(0.30, 0.30, 0.30, 1.00);
+    colors[ImGui.Col.FrameBgActive]    = color(0.35, 0.35, 0.35, 1.00);
+
+    // --- Button (Orange/Red Accent) ---
+    const ubuntuOrangeHover = color(0.85, 0.27, 0.07, 1.00);
+    const ubuntuOrangeActive = color(0.65, 0.17, 0.05, 1.00);
+    
+    colors[ImGui.Col.Button]           = color(0.25, 0.25, 0.25, 1.00);
+    colors[ImGui.Col.ButtonHovered]    = ubuntuOrangeHover;
+    colors[ImGui.Col.ButtonActive]     = ubuntuOrangeActive;
+
+    // --- Header / Selection (Blue Accent) ---
+    const selectionBlueHover = color(0.26, 0.44, 0.53, 1.00);
+    const selectionBlueActive = color(0.20, 0.34, 0.42, 1.00);
+    
+    colors[ImGui.Col.Header]           = color(0.25, 0.25, 0.25, 1.00);
+    colors[ImGui.Col.HeaderHovered]    = selectionBlueHover;
+    colors[ImGui.Col.HeaderActive]     = selectionBlueActive;
+
+    // --- Sliders, Checkboxes, and Popups ---
+    colors[ImGui.Col.SliderGrab]       = ubuntuOrangeHover;
+    colors[ImGui.Col.SliderGrabActive] = ubuntuOrangeActive;
+    colors[ImGui.Col.CheckMark]        = ubuntuOrangeHover;
+    colors[ImGui.Col.PopupBg]          = color(0.20, 0.20, 0.20, 1.00);
+    
+    // --- General Style Tweaks (Ubuntu-like geometry) ---
+    style.WindowRounding = 4.0; 
+    style.FrameRounding = 3.0;
+    style.GrabRounding = 3.0;
+    style.WindowTitleAlign.x = 0.5; // Center title text
 }
