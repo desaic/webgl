@@ -20,6 +20,35 @@ export async function InitImGui() {
     await ImGui.default();
     // 2. Initialize ImGui
     ImGui.CreateContext();
+    const io = ImGui.GetIO();
+    
+    // --- STEP 3A: Load the Font ---
+    // The path is relative to the *runtime environment* (usually the root of your web server)
+    const fontPath = "./assets/Montserrat-Regular.ttf"; 
+    const fontSize = 15.0; 
+    let fontData;
+    try {
+      const response = await fetch(fontPath);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // Get the font data as an ArrayBuffer
+      fontData = await response.arrayBuffer();
+    } catch (error) {
+      console.error("Failed to fetch or load Montserrat font:", error);
+    }
+    if(fontData){
+      // AddFontFromFileTTF returns an ImFont pointer (object)
+      const myMontserratFont = io.Fonts.AddFontFromMemoryTTF(fontData, fontSize);
+      if (myMontserratFont) {
+          // Optional: Make Montserrat the new default font
+          io.FontDefault = myMontserratFont;          
+          console.log("Montserrat loaded successfully!");
+      } else {
+          console.error("Failed to load Montserrat.ttf. Check the path and file existence!");
+      }
+    }
   }
 }
 
@@ -186,11 +215,43 @@ export class MinesApp {
         console.log("close");
       }
 
+      // Check if the window is fully visible (or at least its title bar)
+      // and if it's being dragged, you might want to wait until the drag is over,
+      // but for a simple snap-back, you can clamp every frame.
+
+      // --- Clamping Logic ---
+      const window_pos = ImGui.GetWindowPos();
+      const window_size = ImGui.GetWindowSize();
+      const viewport_size = ImGui.GetMainViewport().Size;
+
+      // Define the boundaries (e.g., minimum visible area on the top-left)
+      // Let's ensure at least 50 pixels are visible on the edge.
+      const padding = 5.0;
+
+      const min_pos = new ImGui.ImVec2(padding , padding );
+      const max_pos = new ImGui.ImVec2(viewport_size.x - window_size.x, viewport_size.y - window_size.y);
+
+      // Clamp the position
+      const new_pos = {...window_pos};
+      if (new_pos.x < min_pos.x) new_pos.x = min_pos.x;
+      if (new_pos.y < min_pos.y) new_pos.y = min_pos.y;
+      if (new_pos.x > max_pos.x) new_pos.x = max_pos.x;
+      if (new_pos.y > max_pos.y) new_pos.y = max_pos.y;
+
+      // Only apply the position if it changed
+      if (new_pos.x != window_pos.x || new_pos.y != window_pos.y)
+      {
+          // Use SetWindowPos to apply the clamped position
+          // ImGuiCond_Always is often used here, but you might use ImGuiCond_Once 
+          // or ImGuiCond_Appearing if you only want to set the initial position, 
+          // or no condition if you want to force it every frame.
+          ImGui.SetWindowPos(new_pos, ImGui.ImGuiCond.Always);
+      }
+
+
       // End the window call
       ImGui.End();
     }
-
-    // -------------------------------------
 
     // 4. Finalize the ImGui frame and render
     ImGui.EndFrame();
