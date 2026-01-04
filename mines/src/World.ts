@@ -4,7 +4,6 @@ export default class World {
   public camera: THREE.PerspectiveCamera;
   public scene: THREE.Scene;
   public defaultMaterial: THREE.MeshPhongMaterial;
-  public selectedInstance: any[];
   public parts: THREE.Group;
   constructor() {
     const fov = 50;
@@ -29,70 +28,16 @@ export default class World {
       side:THREE.DoubleSide
     });
 
-    this.selectedInstance = [];
     this.parts = new THREE.Group();
     this.scene.add(this.parts);
   }
-
-  GetPartById = (id) => {
-    for (let i = 0; i < this.parts.children.length; i++) {
-      const child = this.parts.children[i];
-      if (child.id == id) {
-        return child;
-      }
-    }
-    return null;
-  };
 
   RemovePartByName = (name) => {
     this.parts.children = this.parts.children.filter(child => child.name != name);
   };
 
-  AddInstance = (part : THREE.Object3D) => {
-    var instance = null;
-    //edge does not need material cloning by choice
-    // if(part.material instanceof LineMaterial){
-    //   instance = new THREE.Mesh(part.geometry, part.material);
-    //   instance.position.copy(pos);
-    //   instance.setRotationFromEuler(rot);
-    //   instance.scale.copy(scale);
-    //   this.instances.add(instance);
-    // }
-    // else 
-    if(part instanceof THREE.Mesh){
-      instance = new THREE.Mesh(part.geometry, part.material.clone());
-      instance.position.copy(part.position);
-      instance.setRotationFromEuler(part.rotation);
-      instance.scale.copy(part.scale);
-      this.parts.add(instance);
-    } else if( part instanceof THREE.Group){
-
-    }
-    return instance;
-  }
-  // create an instance for partId, and add it to scene for rendering
-  // spawns it at exact same location scale and rotation so be careful.
-  AddInstanceAt = (pos: THREE.Vector3, rot:THREE.Euler, scale: THREE.Vector3 = new THREE.Vector3(1,1,1), part : THREE.Object3D) => {
-    var instance = null;
-    //edge does not need material cloning by choice
-    // if(part.material instanceof LineMaterial){
-    //   instance = new THREE.Mesh(part.geometry, part.material);
-    //   instance.position.copy(pos);
-    //   instance.setRotationFromEuler(rot);
-    //   instance.scale.copy(scale);
-    //   this.instances.add(instance);
-    // }
-    // else 
-    if(part instanceof THREE.Mesh){
-      instance = new THREE.Mesh(part.geometry, part.material.clone());
-      instance.position.copy(pos);
-      instance.setRotationFromEuler(rot);
-      instance.scale.copy(scale);
-      this.parts.add(instance);
-    } else if( part instanceof THREE.Group){
-
-    }
-    return instance;
+  Add(obj3d: THREE.Object3D){
+    this.parts.add(obj3d);
   }
 
   addShadowedLight = (x, y, z, color, intensity, scene) => {

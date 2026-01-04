@@ -53,40 +53,16 @@ export async function InitImGui() {
   }
 }
 
-function MakeDemoDonut(){
-  const radius = 1;
-  const tubeRadius = 0.3;
-  const radialSegments = 16;
-  const tubularSegments = 100;
-  const arc = Math.PI * 2; // Full 360-degree circle
-
-  const geometry = new THREE.TorusGeometry(
-    radius,
-    tubeRadius,
-    radialSegments,
-    tubularSegments,
-    arc
-  );
-
-  // 2. Create the Material (the color/texture)
-  // Use a MeshStandardMaterial to interact with lighting
-  const material = new THREE.MeshStandardMaterial({
-    color: 0xffa500, // A nice orange color
-    roughness: 0.5,
-    metalness: 0.8
-  });
-
-  // 3. Create the Mesh (combines geometry and material)
-  const donut = new THREE.Mesh(geometry, material);
-  return donut
-}
-
 export class MinesApp {
   // HTML element that will contain the renderer's canvas
   private container: HTMLCanvasElement;
 
   // Three.js OrbitControls for camera manipulation
   private orbit: OrbitControls;
+
+  private board: THREE.Mesh;
+  private boardSize: number[];
+  private boardMaterial: THREE.Material;
 
   // Three.js WebGL Renderer for rendering the 3D scene
   private renderer: THREE.WebGLRenderer;
@@ -120,8 +96,6 @@ export class MinesApp {
     this.renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
     this.world = new World();
 
-    const donut = MakeDemoDonut();
-    this.world.AddInstance(donut);
     this.pixelRatio = window.devicePixelRatio ? window.devicePixelRatio : 1.0;
 
     this.renderer.setPixelRatio(this.pixelRatio);
@@ -136,11 +110,20 @@ export class MinesApp {
     this.orbit.target.set(0, 0, 0);
     this.orbit.update();
 
+    this.ResizeBoard(9,9);
+
     this.bindEventListeners();
    
     this.mouse_global = new MouseCoord();   
     this.SetupKbdEvents();
     this.mouse_in_imgui = false;
+    this.boardSize = [1,1]
+  }
+
+  public ResizeBoard(rows:number, cols:number){
+    if(this.board){
+
+    }
   }
 
   public SetupKbdEvents() {
@@ -201,10 +184,14 @@ export class MinesApp {
     this.renderer.render(this.world.scene, this.world.camera);    
     this.renderer.autoClear = false;
 
+    this.renderImgui(time);
+  }
+
+  public renderImgui(time){
     ImGui_Impl.NewFrame(time);
     ImGui.NewFrame();
     
-    if (ImGui.Begin("My First ImGui Window")) {
+    if (ImGui.Begin("Menu")) {
       ImGui.Text("Yo yo yo Imgui js");
       
       // An interactive element
