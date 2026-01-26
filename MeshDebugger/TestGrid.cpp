@@ -608,3 +608,26 @@ void TestVoxelizer() {
   SaveVolAsObjMesh("F:/meshes/shellVar/debugVox_out.obj", voxGrid,
                    (float*)(&conf.unit), (float*)(&conf.origin),1);
 }
+
+void VolToMesh(const std::string &volFile) {
+  std::string outFile = "F:/meshes/siena/siena_50Mb.obj";
+  std::ifstream in(volFile, std::fstream::binary);
+  Vec3u size;
+  in.read((char*)(&size), 12);
+  Array3D8u grid(size[0], size[1], size[2]);
+  size_t bytes = size[0] * size_t(size[1]) * size[2];
+  in.read((char*)(grid.DataPtr()), bytes);
+  const float VOX_DX = 0.512;
+  float VoxRes[3] = {VOX_DX, VOX_DX, VOX_DX};
+
+  Array3D8u expanded(size[0] * 8, size[1], size[2]);
+  for (size_t i = 0; i < grid.GetData().size(); i++) {
+    uint8_t val = grid.GetData()[i];
+    for (size_t j = 0; j < 8; j++) {
+      size_t outIdx = i * 8 + j;
+      uint8_t outVal = (val >> j) & 1;
+      expanded.GetData()[outIdx] = outVal;
+    }
+  }
+  SaveVolAsObjMesh(outFile, expanded, VoxRes, 1);
+}

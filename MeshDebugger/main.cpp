@@ -253,6 +253,8 @@ void CombineLattice() {
   all.SaveObj("F:/meshes/granular/3mm_0.75.obj");
 }
 
+extern void VolToMesh(const std::string &volFile);
+
 int main(int argc, char** argv) {
   // CombineLattice();
   // MoveFiles();
@@ -260,7 +262,7 @@ int main(int argc, char** argv) {
   // RunCanvasApp();
   // RunInflateApp();
   // RunPackApp();
-   VoxApp();
+  // VoxApp();
   // RunHeadApp();
   // MeshHeightMap();
   // MapDrawingToThickness();
@@ -279,5 +281,6 @@ int main(int argc, char** argv) {
 
   //RaycastMeshes();
   //TestBLD();
+  VolToMesh("F:/meshes/siena/siena_0.512.vol");
   return 0;
 }
