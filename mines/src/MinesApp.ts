@@ -60,8 +60,9 @@ export class MinesApp {
   // Three.js OrbitControls for camera manipulation
   private orbit: OrbitControls;
 
-  // a single quad for drawing texture image
-  private board: THREE.Mesh;
+  // quads for drawing texture image
+  private boardMesh: THREE.Mesh;
+  // rows then cols
   private boardSize: number[];
   private boardMaterial: THREE.Material;
 
@@ -118,14 +119,20 @@ export class MinesApp {
     this.mouse_global = new MouseCoord();   
     this.SetupKbdEvents();
     this.mouse_in_imgui = false;
-    this.boardSize = [1,1]
-    this.board = 
+    this.boardSize = [10,10];
+    this.ResizeBoard(this.boardSize);
+  }
+
+  public MakeBoardMesh(rows: number, cols:number){
+
   }
 
   public ResizeBoard(rows:number, cols:number){
-    if(this.board){
-
+    if(this.boardMesh){
+      this.world.scene.remove(this.boardMesh);
+      this.boardMesh.geometry.dispose();
     }
+    this.boardMesh = this.MakeBoardMesh(rows, cols);
   }
 
   public SetupKbdEvents() {
