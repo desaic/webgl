@@ -118,14 +118,28 @@ export class MinesApp {
     this.mouse_global = new MouseCoord();   
     this.SetupKbdEvents();
     this.mouse_in_imgui = false;
-    this.boardSize = [1,1]
-    this.board = 
+    this.boardSize = [8,8];
+    this.board = this.ResizeBoard(this.boardSize[0], this.boardSize[1]);
   }
 
-  public ResizeBoard(rows:number, cols:number){
+  public ResizeBoard(rows:number, cols:number):THREE.Mesh{
     if(this.board){
-
+      this.world.scene.remove(this.board);
+      this.board.geometry.dispose();
     }
+    const mesh =new THREE.Mesh();
+    const numSquares = rows * cols;
+    const numVerts = 4 * numSquares;    
+    const position = new Float32Array(3 * numVerts)
+
+    for(let y = 0;y<rows;y++){
+      for(let x = 0;x<cols;x++){
+        // each quad uses 12 floats
+        const i0 = 12 * (y * cols + x);
+
+      }
+    }
+    return mesh;
   }
 
   public SetupKbdEvents() {
