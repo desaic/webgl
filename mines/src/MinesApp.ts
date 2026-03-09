@@ -6,6 +6,8 @@ import World from "./World.js";
 import * as ImGui from "./utils/imgui/imgui";
 import * as ImGui_Impl from "./utils/imgui/imgui_impl"
 
+import {GridMesh} from "./GridMesh"
+
 class MouseCoord {
   public x: number;
   public y: number;
@@ -61,10 +63,8 @@ export class MinesApp {
   private orbit: OrbitControls;
 
   // quads for drawing texture image
-  private boardMesh: THREE.Mesh;
-  // rows then cols
-  private boardSize: number[];
-  private boardMaterial: THREE.Material;
+  private board: GridMesh;
+
 
   // Three.js WebGL Renderer for rendering the 3D scene
   private renderer: THREE.WebGLRenderer;
@@ -111,37 +111,22 @@ export class MinesApp {
     this.orbit.minPolarAngle = 0.01;
     this.orbit.target.set(0, 0, 0);
     this.orbit.update();
-
-    this.ResizeBoard(9,9);
-
     this.bindEventListeners();
    
     this.mouse_global = new MouseCoord();   
     this.SetupKbdEvents();
     this.mouse_in_imgui = false;
 
-    this.boardSize = [8,8];
-    this.boardMesh = this.ResizeBoard(this.boardSize[0], this.boardSize[1]);
+    this.board = new GridMesh(8,8);
+
   }
 
-  public ResizeBoard(rows:number, cols:number):THREE.Mesh{
-    if(this.boardMesh){
-      this.world.scene.remove(this.boardMesh);
-      this.boardMesh.geometry.dispose();
+  public ResizeBoard(size_x:number, size_y:number){
+    if(this.board){
+      this.world.scene.remove(this.board.mesh);
+      this.board.dispose();
     }
-    const mesh =new THREE.Mesh();
-    const numSquares = rows * cols;
-    const numVerts = 4 * numSquares;    
-    const position = new Float32Array(3 * numVerts)
-
-    for(let y = 0;y<rows;y++){
-      for(let x = 0;x<cols;x++){
-        // each quad uses 12 floats
-        const i0 = 12 * (y * cols + x);
-
-      }
-    }
-    return mesh;
+    this.board.resize(size_x, size_y);
   }
 
   public SetupKbdEvents() {
