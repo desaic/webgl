@@ -17,6 +17,7 @@ export class GridMesh {
     const numVerts = 4 * numSquares;
     const p = new Float32Array(3 * numVerts);
     const uv = new Float32Array(2 * numVerts);
+    const indices=  new Uint32Array(6 * numSquares);
 
     for (let y = 0; y < size_y; y++) {
       for (let x = 0; x < size_x; x++) {
@@ -33,11 +34,14 @@ export class GridMesh {
         this.SetUV(uv, v0 + 1, 1, 0);
         this.SetUV(uv, v0 + 2, 0, 1);
         this.SetUV(uv, v0 + 3, 1, 1);
+
+
       }
     }
     const geom = new THREE.BufferGeometry()
     geom.setAttribute("position", new THREE.BufferAttribute(p, 3));
     geom.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+
     this.mesh = new THREE.Mesh(geom);
   }
 
@@ -58,7 +62,9 @@ export class GridMesh {
     return 4 * (x + y * this.size[0]);
   }
 
-
+  public QuadIndex0(x:number, y : number){
+    return 6 * (x + y * this.size[0]);
+  }
   public dispose() {
     this.mesh.geometry.dispose();
   }
