@@ -87,6 +87,8 @@ export class MinesApp {
   public clear_color: ImGui.Vec4;
   public mouse_in_imgui:boolean;
 
+  public mines_tex : THREE.Texture;
+  public board_material: THREE.MeshBasicMaterial;
   constructor(canvas: HTMLCanvasElement) {
     if(!ImGui){
       console.log("imgui lib not found\n");
@@ -94,6 +96,18 @@ export class MinesApp {
 
     this.container = canvas;
     ImGui_Impl.Init(canvas);
+    this.mines_tex = this.MakeBlackTex1x1();
+    this.board_material = new THREE.MeshBasicMaterial({ map: this.mines_tex })
+    const loader = new THREE.TextureLoader();
+      // 2. Load the texture from your assets folder
+      // Note: The path is relative to your 'public' or server root
+      loader.load('assets/debug_tex.png', (texture) => {          
+          this.mines_tex = texture;
+          this.mines_tex.needsUpdate = true;
+          this.board_material.map = this.mines_tex;
+          this.board_material.needsUpdate = true;
+      });
+
     this.clear_color = new ImGui.Vec4(0.9,0.8,0.7,1);
     this.renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
     this.world = new World();
@@ -118,6 +132,8 @@ export class MinesApp {
     this.mouse_in_imgui = false;
 
     this.board = new GridMesh(8,8);
+    this.board.mesh.material = this.board_material;
+    this.world.Add(this.board.mesh);
 
   }
 
@@ -127,6 +143,14 @@ export class MinesApp {
       this.board.dispose();
     }
     this.board.resize(size_x, size_y);
+  }
+
+  public MakeBlackTex1x1():THREE.Texture{const width = 1;
+    const height = 1;
+    const data = new Uint8Array([255, 255, 255, 255]);
+    const texture = new THREE.DataTexture(data, width, height);
+    texture.needsUpdate = true;
+    return texture;
   }
 
   public SetupKbdEvents() {

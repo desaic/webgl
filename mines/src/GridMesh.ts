@@ -50,7 +50,7 @@ export class GridMesh {
 
   public SetUV(uv: Float32Array, vIdx: number, u: number, v: number) {
     uv[2 * vIdx] = u;
-    v[2 * vIdx + 1] = v;
+    uv[2 * vIdx + 1] = v;
   }
 
   //first vertex index for quad (x,y)
