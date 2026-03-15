@@ -35,13 +35,19 @@ export class GridMesh {
         this.SetUV(uv, v0 + 2, 0, 1);
         this.SetUV(uv, v0 + 3, 1, 1);
 
-
+        const i0 = this.QuadIndex0(x,y);
+        indices[i0] = v0;
+        indices[i0 + 1] = v0 + 1;
+        indices[i0 + 2] = v0 + 2;
+        indices[i0+3] = v0 + 1;
+        indices[i0+4] = v0 + 3;
+        indices[i0+5] = v0 + 2;
       }
     }
     const geom = new THREE.BufferGeometry()
     geom.setAttribute("position", new THREE.BufferAttribute(p, 3));
     geom.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
-
+    geom.setIndex(new THREE.BufferAttribute(indices,1));
     this.mesh = new THREE.Mesh(geom);
   }
 

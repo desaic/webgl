@@ -63,8 +63,8 @@ export class MinesApp {
   private orbit: OrbitControls;
 
   // quads for drawing texture image
-  private board: GridMesh;
-
+  private boardMesh: GridMesh;
+  private board: Grid2D;
 
   // Three.js WebGL Renderer for rendering the 3D scene
   private renderer: THREE.WebGLRenderer;
@@ -88,7 +88,7 @@ export class MinesApp {
   public mouse_in_imgui:boolean;
 
   public mines_tex : THREE.Texture;
-  public board_material: THREE.MeshBasicMaterial;
+  public boardMaterial: THREE.MeshBasicMaterial;
   constructor(canvas: HTMLCanvasElement) {
     if(!ImGui){
       console.log("imgui lib not found\n");
@@ -97,15 +97,15 @@ export class MinesApp {
     this.container = canvas;
     ImGui_Impl.Init(canvas);
     this.mines_tex = this.MakeBlackTex1x1();
-    this.board_material = new THREE.MeshBasicMaterial({ map: this.mines_tex })
+    this.boardMaterial = new THREE.MeshBasicMaterial({ map: this.mines_tex })
     const loader = new THREE.TextureLoader();
       // 2. Load the texture from your assets folder
       // Note: The path is relative to your 'public' or server root
       loader.load('assets/debug_tex.png', (texture) => {          
           this.mines_tex = texture;
           this.mines_tex.needsUpdate = true;
-          this.board_material.map = this.mines_tex;
-          this.board_material.needsUpdate = true;
+          this.boardMaterial.map = this.mines_tex;
+          this.boardMaterial.needsUpdate = true;
       });
 
     this.clear_color = new ImGui.Vec4(0.9,0.8,0.7,1);
@@ -123,26 +123,29 @@ export class MinesApp {
     this.orbit.maxDistance = 30;
     this.orbit.maxPolarAngle = 3.13;
     this.orbit.minPolarAngle = 0.01;
-    this.orbit.target.set(0, 0, 0);
+    const pos = this.world.camera.position;
+    this.orbit.target.set(pos.x, pos.y, 0);
     this.orbit.update();
+    this.orbit.enabled = false;
     this.bindEventListeners();
    
     this.mouse_global = new MouseCoord();   
     this.SetupKbdEvents();
     this.mouse_in_imgui = false;
 
-    this.board = new GridMesh(8,8);
-    this.board.mesh.material = this.board_material;
-    this.world.Add(this.board.mesh);
+    this.boardMesh = new GridMesh(8,8);
+    this.boardMesh.mesh.material = this.boardMaterial;
+    this.world.Add(this.boardMesh.mesh);
 
   }
 
   public ResizeBoard(size_x:number, size_y:number){
-    if(this.board){
-      this.world.scene.remove(this.board.mesh);
-      this.board.dispose();
+    if(this.boardMesh){
+      this.world.scene.remove(this.boardMesh.mesh);
+      this.boardMesh.dispose();
     }
-    this.board.resize(size_x, size_y);
+    this.boardMesh.resize(size_x, size_y);
+    this.boardMesh.mesh.material = this.boardMaterial;
   }
 
   public MakeBlackTex1x1():THREE.Texture{const width = 1;
@@ -180,7 +183,7 @@ export class MinesApp {
       return; 
     }
     this.mouse_in_imgui = false;
-    this.orbit.enabled = true;
+    //this.orbit.enabled = true;
 
     this.mouse_global.x = e.clientX;
     this.mouse_global.y = e.clientY;
@@ -278,7 +281,17 @@ export class MinesApp {
     const width = window.innerWidth;
     const height = window.innerHeight;
     const aspect = width / height;
-    this.world.camera.aspect = aspect;
+    if (this.world.camera instanceof THREE.PerspectiveCamera) {
+      this.world.camera.aspect = aspect;
+    }
+    else {
+      const cam = this.world.camera;
+      const camSize = this.world.cameraSize;
+      cam.left = (camSize * aspect) / -2;
+      cam.right = (camSize * aspect) / 2;
+      cam.top = camSize / 2;
+      cam.bottom = camSize / -2;
+    }
     this.world.camera.updateProjectionMatrix();
     //@ts-ignore
     ImGui.IO.DisplaySize = new ImGui.Vec2(width, height);
