@@ -7,9 +7,14 @@ export class GridMesh {
   // rows then cols
   private size: number[];
 
+  public uvStep: number;
+  public uvGridSize: number;
   constructor(size_x, size_y) {
+    this.uvGridSize = 8;
+    this.uvStep = 1.0/this.uvGridSize;
     this.size = [size_x, size_y];
     this.resize(size_x, size_y);
+    
   }
 
   public resize(size_x: number, size_y: number, dx: number = 1) {
@@ -30,10 +35,12 @@ export class GridMesh {
         this.SetVertex(p, v0 + 2, x * dx, (y + 1) * dx, 0);
         this.SetVertex(p, v0 + 3, (x + 1) * dx, (y + 1) * dx, 0);
 
-        this.SetUV(uv, v0, 0, 0);
-        this.SetUV(uv, v0 + 1, 1, 0);
-        this.SetUV(uv, v0 + 2, 0, 1);
-        this.SetUV(uv, v0 + 3, 1, 1);
+        const uvX = ((x + 3)% this.uvGridSize) * this.uvStep;
+        const uvY = ((y + 5) % this.uvGridSize) * this.uvStep;
+        this.SetUV(uv, v0, uvX, uvY);
+        this.SetUV(uv, v0 + 1, uvX + this.uvStep, uvY);
+        this.SetUV(uv, v0 + 2, uvX, uvY + this.uvStep);
+        this.SetUV(uv, v0 + 3, uvX + this.uvStep, uvY + this.uvStep);
 
         const i0 = this.QuadIndex0(x,y);
         indices[i0] = v0;
