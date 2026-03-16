@@ -7,6 +7,7 @@ import * as ImGui from "./utils/imgui/imgui";
 import * as ImGui_Impl from "./utils/imgui/imgui_impl"
 
 import {GridMesh} from "./GridMesh"
+import { Grid2D } from "./Grid2D.js";
 
 class MouseCoord {
   public x: number;
@@ -89,6 +90,9 @@ export class MinesApp {
 
   public mines_tex : THREE.Texture;
   public boardMaterial: THREE.MeshBasicMaterial;
+
+  private prevTime : number;
+  private lastRefreshTime:number;
   constructor(canvas: HTMLCanvasElement) {
     if(!ImGui){
       console.log("imgui lib not found\n");
@@ -133,10 +137,20 @@ export class MinesApp {
     this.SetupKbdEvents();
     this.mouse_in_imgui = false;
 
-    this.boardMesh = new GridMesh(8,8);
+    this.board = new Grid2D(8,8,0);    
+    const size = this.board.getSize();
+    for(let y = 0;y<size.y;y++){
+      for(let x = 0;x<size.x;x++){
+        this.board.set(x,y, Math.floor(Math.random() * 16));
+      }
+    }
+    this.boardMesh = new GridMesh(size.x, size.y);
+
     this.boardMesh.mesh.material = this.boardMaterial;
     this.world.Add(this.boardMesh.mesh);
-
+    this.UpdateGridDisplay();
+    this.prevTime = 0;
+    this.lastRefreshTime = 0;
   }
 
   public ResizeBoard(size_x:number, size_y:number){
@@ -146,6 +160,19 @@ export class MinesApp {
     }
     this.boardMesh.resize(size_x, size_y);
     this.boardMesh.mesh.material = this.boardMaterial;
+  }
+
+  public UpdateGridDisplay(){
+    //update uv coordinates of boardmesh based on board state.
+    const size = this.board.getSize();
+    for(let y = 0;y<size.y;y++){
+      for(let x = 0;x<size.x;x++){
+        const val = this.board.get(x,y);
+        this.board.set(x,y, (val + 1) % 16);
+        this.boardMesh.SetCellUV(x,y, this.board.get(x,y));
+      }
+    }
+    this.boardMesh.mesh.geometry.attributes.uv.needsUpdate = true;
   }
 
   public MakeBlackTex1x1():THREE.Texture{const width = 1;
@@ -213,8 +240,14 @@ export class MinesApp {
   public render(time): void {
     this.renderer.render(this.world.scene, this.world.camera);    
     this.renderer.autoClear = false;
-
+    const elapsedMs = time - this.lastRefreshTime;
+    this.prevTime = time;
+    if(elapsedMs > 100){
+      this.UpdateGridDisplay();
+      this.lastRefreshTime = time;
+    }
     this.renderImgui(time);
+
   }
 
   public renderImgui(time){
@@ -322,7 +355,7 @@ function SetupUbuntuStyle() {
     const color = (r: number, g: number, b: number, a: number = 1.0) => new ImGui.ImVec4(r, g, b, a);
 
     // --- Core Window & Title Bar Colors (Dark Charcoal) ---
-    const charcoalBg = color(0.18, 0.18, 0.18, 1.00);
+    const charcoalBg = color(0.18, 0.18, 0.18, 0.5);
     const darkerCharcoal = color(0.15, 0.15, 0.15, 1.00);
     const activeCharcoal = color(0.60, 0.30, 0.20, 1.00);
     

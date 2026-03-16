@@ -70,6 +70,22 @@ export class GridMesh {
     uv[2 * vIdx + 1] = v;
   }
 
+  // set uv coordinate of cell (x,y) by val
+  public SetCellUV(x:number, y:number, val:number){
+    const uvCol = val % this.uvGridSize;
+    const uvRow = Math.floor(val/this.uvGridSize);
+    const uvX = uvCol * this.uvStep;
+    const uvY = uvRow * this.uvStep;
+    const v0 = this.V0(x, y);
+    
+    const uv = this.mesh.geometry.attributes.uv.array as Float32Array;
+    this.SetUV(uv, v0, uvX, uvY);
+    this.SetUV(uv, v0 + 1, uvX + this.uvStep, uvY);
+    this.SetUV(uv, v0 + 2, uvX, uvY + this.uvStep);
+    this.SetUV(uv, v0 + 3, uvX + this.uvStep, uvY + this.uvStep);
+  
+  }
+
   //first vertex index for quad (x,y)
   public V0(x: number, y: number) {
     return 4 * (x + y * this.size[0]);
