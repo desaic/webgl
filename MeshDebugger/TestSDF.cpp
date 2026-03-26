@@ -11,6 +11,8 @@
 #include "MeshOptimization.h"
 #include "VoxIO.h"
 #include "Array3D.h"
+#include "Array2D.h"
+#include "ImageIO.h"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -1427,10 +1429,23 @@ void CarSeatField() {
   Array3D8u outside = FloodOutside(perimSdf->dist, 0);
   for (size_t i = 0; i < outside.GetData().size(); i++) {
     short& d = perimSdf->dist.GetData()[i];
-    if (!outside.GetData()[i] && d>=AdapSDF::MAX_DIST) {
-      d = short(-20.0 / perimSdf->distUnit);
+    if (!outside.GetData()[i] && d > 0) {
+      d = -d;
     }
   }
+  Vec3u size = perimSdf->dist.GetSize();
+  Array2D8u slice(size[0], size[1]);
+  for (unsigned y = 0; y < size[1]; y++) {
+    for (unsigned x = 0; x < size[0]; x++) {
+      short sd = perimSdf->dist(x, y, 100);
+      float d = (sd * perimSdf->distUnit);
+      if (d < -100) {
+        d = -100;
+      }
+      slice(x, y) = d + 100;
+    }
+  }
+  SavePngGrey("F:/meshes/tes/sdf_slice.png", slice);
   TrigMesh softer;
   softer.LoadStl("F:/meshes/tes/back_soft.stl");
   std::shared_ptr<AdapSDF> softSdf = ComputeSDF(0.01, 1, softer);
@@ -1446,8 +1461,8 @@ void CarSeatField() {
   outside = FloodOutside(softSdf->dist, 0);
   for (size_t i = 0; i < outside.GetData().size(); i++) {
     short& d = softSdf->dist.GetData()[i];
-    if (!outside.GetData()[i] && d >= AdapSDF::MAX_DIST) {
-      d = short(-20.0 / softSdf->distUnit);
+    if (!outside.GetData()[i] && d > 0) {
+      d = -d;
     }
   }
 

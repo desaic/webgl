@@ -67,7 +67,7 @@ void FloodOutsideSeed(Vec3u seed, const Array3D<short>& dist, float distThresh, 
       uint8_t nbrLabel = label(ux, uy, uz);
       size_t nbrLinear = LinearIdx(ux, uy, uz, size);
       if (nbrLabel == 0) {
-        uint16_t nbrDist = dist(ux, uy, uz);
+        short nbrDist = dist(ux, uy, uz);
         if (nbrDist >= distThresh) {
           label(ux, uy, uz) = 1;
           q.push_back(nbrLinear);
@@ -170,7 +170,7 @@ Array3D8u FloodOutside(const Array3D<short>& dist, float distThresh) {
           }
           uint8_t nbrLabel = label(ux, uy, uz);
           if (nbrLabel == 0) {
-            uint16_t nbrDist = dist(ux, uy, uz);
+            short nbrDist = dist(ux, uy, uz);
             if (nbrDist >= distThresh) {
               FloodOutsideSeed(Vec3u(x, y, z), dist, distThresh, label);
             }
