@@ -1403,6 +1403,17 @@ void FloodSDFOutside(const std::string & meshFile, const std::string & outFile) 
 void CarSeatField() { 
   TrigMesh perim; 
   perim.LoadStl("F:/meshes/tes/perim.stl");
+  
+  Box3f box = ComputeBBox(perim.v);
+  float thin = 0.75, medium = 1.5, thick = 2.24;
+  Vec3f bSize = box.vmax - box.vmin;
+  float blendingZone = 10;
+  float dx = 2;
+  Vec3u gridSize(unsigned(bSize[0] / dx) + 2, unsigned(bSize[1] / dx) + 2,
+                 unsigned(bSize[2] / dx) + 2);
+
+  Array3Df grid(gridSize, medium);
+
   std::shared_ptr<AdapSDF> perimSdf = ComputeSDF(0.01, 1, perim);
 
   bool debugMarching = false;
@@ -1413,7 +1424,13 @@ void CarSeatField() {
     MergeCloseVertices(surf);
     surf.SaveObj("F:/meshes/tes/debug_perim_sdf.obj");
   }
-
+  Array3D8u outside = FloodOutside(perimSdf->dist, 0);
+  for (size_t i = 0; i < outside.GetData().size(); i++) {
+    short& d = perimSdf->dist.GetData()[i];
+    if (!outside.GetData()[i] && d>=AdapSDF::MAX_DIST) {
+      d = short(-20.0 / perimSdf->distUnit);
+    }
+  }
   TrigMesh softer;
   softer.LoadStl("F:/meshes/tes/back_soft.stl");
   std::shared_ptr<AdapSDF> softSdf = ComputeSDF(0.01, 1, softer);
@@ -1425,6 +1442,40 @@ void CarSeatField() {
     MergeCloseVertices(surf);
     surf.SaveObj("F:/meshes/tes/debug_softer_sdf.obj");
   }
+
+  outside = FloodOutside(softSdf->dist, 0);
+  for (size_t i = 0; i < outside.GetData().size(); i++) {
+    short& d = softSdf->dist.GetData()[i];
+    if (!outside.GetData()[i] && d >= AdapSDF::MAX_DIST) {
+      d = short(-20.0 / softSdf->distUnit);
+    }
+  }
+
+  Vec3f origin = box.vmin;
+  for (unsigned z = 0; z < gridSize[2]; z++) {
+    for (unsigned y = 0; y < gridSize[1]; y++) {
+      for (unsigned x = 0; x < gridSize[0]; x++) {
+        Vec3f coord = origin + Vec3f(x * dx, y * dx, z * dx);
+        float rimDist = perimSdf->GetCoarseDist(coord);
+        float softerDist = softSdf->GetCoarseDist(coord);
+        float t = medium; 
+        if (softerDist < 0) {
+          t = thin;
+        } else if (softerDist < blendingZone) {
+          float alpha = softerDist / blendingZone;
+          t = alpha * medium + (1 - alpha) * thin;
+        } else if(rimDist < -blendingZone){
+          t = thick;
+        } else if (rimDist < blendingZone) {
+          float alpha = (blendingZone - rimDist) / (2 * blendingZone);
+          alpha = std::clamp(alpha, 0.0f, 1.0f);
+          t = alpha * thick + (1 - alpha) * medium;
+        }
+        grid(x, y, z) = t;
+      }
+    }
+  }
+  SaveVoxTxt(grid, Vec3f(dx), "F:/meshes/tes/back_t.txt", origin);
 }
 
 void TestSDF() { 
