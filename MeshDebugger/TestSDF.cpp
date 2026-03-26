@@ -5,6 +5,7 @@
 #include "BBox.h"
 #include "MarchingCubes.h"
 #include "FastSweep.h"
+#include "FloodOutside.h"
 #include "HalfEdgeMesh.h"
 #include "MeshUtil.h"
 #include "MeshOptimization.h"
@@ -1375,6 +1376,57 @@ void ScaleAndMirrorFruits() {
   }
 }
 
+void FloodSDFOutside(const std::string & meshFile, const std::string & outFile) {
+  TrigMesh mesh;
+  mesh.LoadObj(meshFile);
+
+  std::shared_ptr<AdapUDF> sdf = std::make_shared<AdapUDF>();
+  sdf->voxSize = 0.02;
+  sdf->band = 8;
+  sdf->distUnit = 0.002;
+  sdf->BuildTrigList(&mesh);
+  sdf->Compress();
+  mesh.ComputePseudoNormals();
+  sdf->ComputeCoarseDist();
+  FloodOutside(sdf->dist, 0.02);
+ // CloseExteriorAndFillInterior(sdf->dist, sdf->MAX_DIST);
+  Array3D8u frozen;
+  sdf->FastSweepCoarse(frozen);
+
+  TrigMesh surf;
+  MarchingCubes(sdf->dist, 0.03, sdf->distUnit, sdf->voxSize, sdf->origin,
+                &surf);
+  MergeCloseVertices(surf);
+  surf.SaveObj(outFile);
+}
+
+void CarSeatField() { 
+  TrigMesh perim; 
+  perim.LoadStl("F:/meshes/tes/perim.stl");
+  std::shared_ptr<AdapSDF> perimSdf = ComputeSDF(0.01, 1, perim);
+
+  bool debugMarching = false;
+  if (debugMarching) {
+    TrigMesh surf;
+    MarchingCubes(perimSdf->dist, 0.5, perimSdf->distUnit, perimSdf->voxSize,
+                  perimSdf->origin, &surf);
+    MergeCloseVertices(surf);
+    surf.SaveObj("F:/meshes/tes/debug_perim_sdf.obj");
+  }
+
+  TrigMesh softer;
+  softer.LoadStl("F:/meshes/tes/back_soft.stl");
+  std::shared_ptr<AdapSDF> softSdf = ComputeSDF(0.01, 1, softer);
+  bool debugSoftSurf = true;
+  if (debugSoftSurf) {
+    TrigMesh surf;
+    MarchingCubes(softSdf->dist, 0.5, softSdf->distUnit, softSdf->voxSize,
+                  softSdf->origin, &surf);
+    MergeCloseVertices(surf);
+    surf.SaveObj("F:/meshes/tes/debug_softer_sdf.obj");
+  }
+}
+
 void TestSDF() { 
   //OrientFlatGroups();
   //TrigMesh mesh;
@@ -1400,5 +1452,7 @@ void TestSDF() {
 
   //MakeOverallSkinMesh();
   //MakeHandInner();
-  ScaleAndMirrorFruits();
+  //ScaleAndMirrorFruits();
+  //FloodSDFOutside("F:/meshes/skeleton/center/0_039.obj", "F:/meshes/skeleton/039_march.obj");
+  CarSeatField();
 }

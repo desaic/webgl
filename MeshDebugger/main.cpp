@@ -255,7 +255,7 @@ void CombineLattice() {
 
 extern void VolToMesh(const std::string &volFile);
 extern void MakeRhombicLattice();
-
+extern void TestSDF();
 int main(int argc, char** argv) {
   // CombineLattice();
   // MoveFiles();
@@ -283,6 +283,7 @@ int main(int argc, char** argv) {
   //RaycastMeshes();
   //TestBLD();
   //VolToMesh("F:/meshes/siena/siena_0.512.vol");
-  MakeRhombicLattice();
+  //MakeRhombicLattice();
+  TestSDF();
   return 0;
 }
