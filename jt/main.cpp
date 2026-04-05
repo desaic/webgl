@@ -78,17 +78,14 @@ struct CompressionHeader {
 	uint8_t compressionAlgorithm = 0;
 };
 
-struct ElementHeader {
-	GUID objectType;
-	uint8_t baseType = 0;
-	int objectId = 0;
-};
-
 struct DataElement {
 	// length in bytes of the Element
 	// invalid when length is 0.
+	// includes everything except the 4 byte element length.
 	int elementLength = 0;
-	ElementHeader elementHeader;
+	GUID objectType;
+	uint8_t baseType = 0;
+	int objectId = 0;
 	std::vector<uint8_t> data;
 };
 
@@ -149,6 +146,13 @@ CompressionHeader ParseCompressionHeader(const DataSegment& seg) {
 	h.compressedLen = int(ToUint32(seg.data.data() + 4));
 	h.compressionAlgorithm = seg.data[8];
 	return h;
+}
+
+// split data segment into elements for each object.
+// after splitting the data segment's data can be deleted to save RAM.
+// seg must be decompressed already.
+std::vector<DataElement> ParseElements(const DataSegment & seg) {
+
 }
 
 // check for compression. 
