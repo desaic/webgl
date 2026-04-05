@@ -2,9 +2,9 @@
 #include <fstream>
 #include <vector>
 #include <array>
-#include <cstddef>
 #include <map>
 #include "JT_defs.h"
+#include "lzma_wrapper.h"
 
 struct GUID {
 	std::array<uint8_t, 16> bytes = {};
@@ -72,6 +72,12 @@ struct DataSegment {
 	std::vector<uint8_t> data;
 };
 
+struct CompressionHeader {
+	uint32_t compressionFlag = 0;
+	int compressedLen = 0;
+	uint8_t compressionAlgorithm = 0;
+};
+
 struct ElementHeader {
 	GUID objectType;
 	uint8_t baseType = 0;
@@ -79,10 +85,8 @@ struct ElementHeader {
 };
 
 struct DataElement {
-	uint32_t compressionFlag = 0;
-	int compressedLen = 0;
-	uint8_t compressionAlgorithm = 0;
-	//length in bytes of the Element
+	// length in bytes of the Element
+	// invalid when length is 0.
 	int elementLength = 0;
 	ElementHeader elementHeader;
 	std::vector<uint8_t> data;
@@ -128,23 +132,60 @@ DataSegment LoadDataSegment(std::istream& in, const TOCEntry& entry) {
 	return seg;
 }
 
-void UncompressElement(const DataSegment& data, DataElement & ele) {
-
+static uint32_t ToUint32(const uint8_t* bytes) {
+	// Little Endian
+	return static_cast<uint32_t>(bytes[0]) |
+		(static_cast<uint32_t>(bytes[1]) << 8) |
+		(static_cast<uint32_t>(bytes[2]) << 16) |
+		(static_cast<uint32_t>(bytes[3]) << 24);
 }
 
-// Makes a copy of the buffer inside data.
-// After parsing, data can be discarded.
-DataElement ParseElement(const DataSegment&data){
-	bool compressionSupported = IsCompressionSupported(data.type);
-	DataElement element;
+CompressionHeader ParseCompressionHeader(const DataSegment& seg) {
+	CompressionHeader h;
+	if (seg.data.size() < 9) {
+		return h;
+	}
+	h.compressionFlag = ToUint32(seg.data.data());
+	h.compressedLen = int(ToUint32(seg.data.data() + 4));
+	h.compressionAlgorithm = seg.data[8];
+	return h;
+}
 
+// check for compression. 
+// if compression is used, uncompress.
+int Decompress(DataSegment&seg){
+	bool compressionSupported = IsCompressionSupported(seg.type);
+	CompressionHeader h;
+	bool compressionUsed = false;
+	
 	if (compressionSupported) {
-		UncompressElement(data, element);
+		if (seg.data.size() < 9) {
+			//corrupted.
+			return -1;
+		}
+		h = ParseCompressionHeader(seg);
+		compressionUsed = h.compressionFlag == 3 && h.compressionAlgorithm == 3;
+	}
+	if (compressionUsed) {
+		if (h.compressedLen + 9 > seg.data.size()) {
+			// unexpected. compressed data larger than segment size.
+			return -2;
+		}
+		const unsigned payloadOffset = 9;
+		size_t len = size_t(h.compressedLen);
+		std::vector<uint8_t> decomp;
+		int ret = DecompressLZMA(seg.data.data() + payloadOffset, len, decomp);
+		if (ret == 0) {
+			seg.data = decomp;
+		}
+		else {
+			return ret;
+		}
 	}
 	
-	
-	return element;
+	return 0;
 }
+
 
 int main(int argc, char * argv[]){
 	//if (argc <= 1) {
@@ -183,9 +224,9 @@ int main(int argc, char * argv[]){
 		std::cout << "wrong type for scene root.\n";
 		return -3;
 	}
+
 	auto sceneData = LoadDataSegment(inFile, sceneRoot);
-	auto sceneElement = ParseElement(sceneData);
-	sceneData = {};
+	Decompress(sceneData);	
 
 	return 0;
 }

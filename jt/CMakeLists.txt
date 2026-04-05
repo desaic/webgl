@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 20)
 include_directories(".")
 
 #LZMA
-set(LZMA_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/lzma-5.2.2-vc14-64")
+set(LZMA_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/liblzma")
 
 add_executable(${BIN} ${EXE_SRC})
 
@@ -14,4 +14,4 @@ add_executable(${BIN} ${EXE_SRC})
 target_include_directories(${BIN} PRIVATE "${LZMA_ROOT}/include")
 target_link_directories(${BIN} PRIVATE "${LZMA_ROOT}/lib")
 
-target_link_libraries(${BIN} PRIVATE liblzma)
+target_link_libraries(${BIN} PRIVATE lzma)
