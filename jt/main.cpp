@@ -3,22 +3,18 @@
 #include <vector>
 #include <array>
 #include <map>
+#include <iomanip>
+
 #include "JT_defs.h"
 #include "lzma_wrapper.h"
 
-struct GUID {
-	std::array<uint8_t, 16> bytes = {};
-	
-	bool operator<(const GUID& other) const {
-		return bytes < other.bytes;
-	}
-};
+using namespace JT;
 
 // cannot read as hole because JT file design 
 // did not consider data alignment requirements
 struct JTHeader {
 	static const unsigned VERSION_LEN = 80;
-	char version[VERSION_LEN];
+	std::array<char, VERSION_LEN> version = {};
 	// only 0 little endian is handled.
 	uint8_t byteOrder = 0;
 	int32_t emptyField = 0;
@@ -35,7 +31,7 @@ struct MbString {
 
 JTHeader ReadHeader(std::istream& in) {
 	JTHeader header;
-	in.read(header.version, JTHeader::VERSION_LEN);	
+	in.read(header.version.data(), JTHeader::VERSION_LEN);	
 	in.read((char*)(&header.byteOrder), 1);
 	in.read((char*)(&header.emptyField), sizeof(header.emptyField));
 	in.read((char*)(&header.TOCOffset), sizeof(header.TOCOffset));
@@ -68,7 +64,7 @@ TOCEntry ReadTOCEntry(std::istream& in) {
 struct DataSegment {
 	GUID segId;
 	uint32_t type= 0;
-	uint32_t len;
+	uint32_t len = 0;
 	std::vector<uint8_t> data;
 };
 
@@ -120,7 +116,7 @@ DataSegment LoadDataSegment(std::istream& in, const TOCEntry& entry) {
 	in.read((char*)(&seg.segId), sizeof(seg.segId));
 	in.read((char*)(&seg.type), sizeof(seg.type));
 	in.read((char*)(&seg.len), sizeof(seg.len));
-	if (seg.len > DATA_SEGMENT_SIZE_LIMIT) {
+	if (seg.len > JT::DATA_SEGMENT_SIZE_LIMIT) {
 		// invalid segment with empty data
 		return seg;
 	}
@@ -137,28 +133,71 @@ static uint32_t ToUint32(const uint8_t* bytes) {
 		(static_cast<uint32_t>(bytes[3]) << 24);
 }
 
+static int32_t ToInt32(const uint8_t* bytes) {
+	// Little Endian
+	return static_cast<int32_t>(bytes[0]) |
+		(static_cast<int32_t>(bytes[1]) << 8) |
+		(static_cast<int32_t>(bytes[2]) << 16) |
+		(static_cast<int32_t>(bytes[3]) << 24);
+}
+
+static void ReadGUID(const uint8_t* buf, GUID& guid) {
+	std::memcpy(guid.bytes.data(), buf, guid.bytes.size());
+}
+
 CompressionHeader ParseCompressionHeader(const DataSegment& seg) {
 	CompressionHeader h;
 	if (seg.data.size() < 9) {
 		return h;
 	}
 	h.compressionFlag = ToUint32(seg.data.data());
-	h.compressedLen = int(ToUint32(seg.data.data() + 4));
+	h.compressedLen = ToInt32(seg.data.data() + 4);
 	h.compressionAlgorithm = seg.data[8];
 	return h;
+}
+
+// LSG
+struct SceneGraph
+{
+	std::vector<DataElement> nodes;
+};
+
+void ParseElementHeader(const uint8_t* buf, DataElement& ele) {
+	ele.elementLength = ToInt32(buf);
+	ReadGUID(buf + 4 , ele.objectType);
+	ele.baseType = buf[20];
+	ele.objectId = ToInt32(buf + 21);
+
 }
 
 // split data segment into elements for each object.
 // after splitting the data segment's data can be deleted to save RAM.
 // seg must be decompressed already.
 std::vector<DataElement> ParseElements(const DataSegment & seg) {
+	std::vector<DataElement> elements;
+	size_t bufOffset = 0;
+	const uint8_t* buf = seg.data.data();
+	while (bufOffset < seg.data.size()) {
+		size_t elementOffset = bufOffset;
+		DataElement ele;
+		ParseElementHeader(buf + bufOffset, ele);
+		// 4 bytes of size + actual length
+		bufOffset += 4 + ele.elementLength;
+		JT::ObjectType objType = JT::GetObjectType(ele.objectType);
+		std::cout << JT::ObjectTypeToString(objType) << "\n";
+		if (ele.elementLength == 0) {
+		  //corrupted.
+			break;
+		}
 
+	}
+	return elements;
 }
 
 // check for compression. 
 // if compression is used, uncompress.
 int Decompress(DataSegment&seg){
-	bool compressionSupported = IsCompressionSupported(seg.type);
+	bool compressionSupported = JT::IsCompressionSupported(seg.type);
 	CompressionHeader h;
 	bool compressionUsed = false;
 	
@@ -224,13 +263,13 @@ int main(int argc, char * argv[]){
 		std::cout << "Error: cannot find data for scene graph root.\n";
 		return -2;
 	}
-	if (SegmentType(sceneRoot.type) != SegmentType::LogicalSceneGraph) {
+	if (JT::SegmentType(sceneRoot.type) != JT::SegmentType::LogicalSceneGraph) {
 		std::cout << "wrong type for scene root.\n";
 		return -3;
 	}
 
 	auto sceneData = LoadDataSegment(inFile, sceneRoot);
 	Decompress(sceneData);	
-
+	std::vector<DataElement> elements = ParseElements(sceneData);
 	return 0;
 }
