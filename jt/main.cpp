@@ -8,6 +8,7 @@
 
 #include "JT_defs.h"
 #include "lzma_wrapper.h"
+#include <cstring>
 
 using namespace JT;
 
@@ -270,7 +271,8 @@ int main(int argc, char * argv[]){
 	//	return -1;
 	//}
 	//std::string input = argv[1];
-	std::string input = "I:/foundation/b/S.jt";
+	// std::string input = "I:/foundation/b/S.jt";
+	std::string input = "/media/desaic/ssd2/data/b/S.jt";
 	std::string outputDir = "./";
 	if (argc > 2) {
 		outputDir = argv[2];
@@ -306,7 +308,9 @@ int main(int argc, char * argv[]){
 	auto sceneData = LoadDataSegment(inFile, sceneRoot);
 	Decompress(sceneData);
 	unsigned endOffset = 0;
-	int ret = MapElements(sceneData, sceneData.objectMap, endOffset);	
+	const uint8_t * buf = sceneData.data.data();
+	unsigned bufLen = sceneData.data.size();
+	int ret = MapElements(buf, bufLen, sceneData.nodesMap, endOffset);	
 	DataElement ele;
 	ParseElementHeader(sceneData.data.data() + endOffset, ele);
 	auto type = GetObjectType(ele.objectType);
