@@ -4,6 +4,7 @@
 #include <array>
 #include <map>
 #include <iomanip>
+#include <unordered_map>
 
 #include "JT_defs.h"
 #include "lzma_wrapper.h"
@@ -66,6 +67,14 @@ struct DataSegment {
 	uint32_t type= 0;
 	uint32_t len = 0;
 	std::vector<uint8_t> data;
+
+	// map from object id to data offset.
+	std::unordered_map<int, unsigned> nodesMap;
+	std::unordered_map<int, unsigned> propertyAtomMap;
+	
+	// offset for "endOfElement" element.
+	// there could be stuff after end of elements.
+	unsigned endOfElementOffset = 0;;
 };
 
 struct CompressionHeader {
@@ -165,33 +174,59 @@ struct SceneGraph
 void ParseElementHeader(const uint8_t* buf, DataElement& ele) {
 	ele.elementLength = ToInt32(buf);
 	ReadGUID(buf + 4 , ele.objectType);
-	ele.baseType = buf[20];
-	ele.objectId = ToInt32(buf + 21);
+	if (ele.elementLength >= 21) {
+		// endOfElements do not have object id or base type .
+		ele.baseType = buf[20];
+		ele.objectId = ToInt32(buf + 21);
+	}
 
 }
 
 // split data segment into elements for each object.
-// after splitting the data segment's data can be deleted to save RAM.
+// stops 
 // seg must be decompressed already.
-std::vector<DataElement> ParseElements(const DataSegment & seg) {
-	std::vector<DataElement> elements;
-	size_t bufOffset = 0;
-	const uint8_t* buf = seg.data.data();
-	while (bufOffset < seg.data.size()) {
+// elements: output map from object id to byte offset in segment
+// endMarkerStart: offset to EndOfElements element
+// in segment. there could be other data after elements section.
+int MapElements(const uint8_t * buf, size_t bufLen, std::unordered_map<int, unsigned> & elements, unsigned & endMarkerOffset) {
+	//later combined to a map from objectId to offset into this segment's decompressed buffer.
+	std::vector<std::pair<int, unsigned> > elementOffsets;
+	size_t bufOffset = 0;	
+	int ret = 0;
+	while (bufOffset < bufLen) {
 		size_t elementOffset = bufOffset;
 		DataElement ele;
+		// @TODO: no need to store data elements in a list.
 		ParseElementHeader(buf + bufOffset, ele);
-		// 4 bytes of size + actual length
-		bufOffset += 4 + ele.elementLength;
-		JT::ObjectType objType = JT::GetObjectType(ele.objectType);
-		std::cout << JT::ObjectTypeToString(objType) << "\n";
-		if (ele.elementLength == 0) {
-		  //corrupted.
+		size_t remainingBytes = bufLen - bufOffset;
+		if (ele.elementLength > remainingBytes) {
+			// went past end of elements
+			ret = -1;
 			break;
 		}
-
+		if (ele.elementLength == 0) {
+		  //corrupted.
+			ret = -2;
+			break;
+		}
+		JT::ObjectType objType = JT::GetObjectType(ele.objectType);
+		if (objType == JT::ObjectType::EndOfElements) {
+			endMarkerOffset = bufOffset;
+			// end marker is not added to object map
+			break;
+		}
+		if (objType != JT::ObjectType::Unknown) {
+			elementOffsets.push_back({ ele.objectId, bufOffset });
+		}
+		// 4 bytes of size + actual length
+		bufOffset += 4 + ele.elementLength;
 	}
-	return elements;
+	elements = std::unordered_map<int, unsigned>();
+	elements.reserve(elementOffsets.size());
+	for (const auto& [key, value] : elementOffsets) {
+		elements.emplace(key, value);
+	}
+	return ret;
 }
 
 // check for compression. 
@@ -269,7 +304,21 @@ int main(int argc, char * argv[]){
 	}
 
 	auto sceneData = LoadDataSegment(inFile, sceneRoot);
-	Decompress(sceneData);	
-	std::vector<DataElement> elements = ParseElements(sceneData);
+	Decompress(sceneData);
+	unsigned endOffset = 0;
+	int ret = MapElements(sceneData, sceneData.objectMap, endOffset);	
+	DataElement ele;
+	ParseElementHeader(sceneData.data.data() + endOffset, ele);
+	auto type = GetObjectType(ele.objectType);
+	std::cout << "final ele type " << ObjectTypeToString(type)<<"\n";
+	sceneData.endOfElementOffset = endOffset + 4 + ele.elementLength;
+	std::vector<uint8_t> lastEle;
+	lastEle.insert(lastEle.begin(), sceneData.data.begin() + endOffset, sceneData.data.begin() + endOffset + 8 + ele.elementLength);
+	std::vector<uint8_t> remainder;
+	remainder.insert(remainder.begin(), sceneData.data.begin() + sceneData.endOfElementOffset,
+		sceneData.data.begin() + sceneData.endOfElementOffset + 128);
+	DataElement nextEle;
+	ParseElementHeader(remainder.data(), nextEle);
+	std::cout << ObjectTypeToString(GetObjectType(nextEle.objectType)) <<"\n";	
 	return 0;
 }
