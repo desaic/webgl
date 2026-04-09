@@ -35,7 +35,20 @@ GridConf ReadConfig(const std::string &filename) {
     std::cout << "can not open json config file " << filename << "\n";
     return conf;
   }
-
+  std::string content((std::istreambuf_iterator<char>(configFile)),
+    std::istreambuf_iterator<char>());
+  auto [status, json] = jt::Json::parse(content);
+  if (status != jt::Json::success) {
+    std::cout << filename << " is not a valid json.\n";
+    return conf;
+  }
+  if (!json.isObject()) {
+    std::cout << filename << " is not a json object.\n";
+    return conf;
+  }
+  conf.boundMesh = json["boundMesh"].getString();
+  conf.backgroundVal = json["backgroundVal"].getFloat();
+  return conf;
 }
 
 int main(int argc, char** argv) {
