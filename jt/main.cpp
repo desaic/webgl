@@ -68,14 +68,6 @@ struct DataSegment {
 	uint32_t type= 0;
 	uint32_t len = 0;
 	std::vector<uint8_t> data;
-
-	// map from object id to data offset.
-	std::unordered_map<int, unsigned> nodesMap;
-	std::unordered_map<int, unsigned> propertyAtomMap;
-	
-	// offset for "endOfElement" element.
-	// there could be stuff after end of elements.
-	unsigned endOfElementOffset = 0;;
 };
 
 struct CompressionHeader {
@@ -137,18 +129,17 @@ DataSegment LoadDataSegment(std::istream& in, const TOCEntry& entry) {
 
 static uint32_t ToUint32(const uint8_t* bytes) {
 	// Little Endian
-	return static_cast<uint32_t>(bytes[0]) |
-		(static_cast<uint32_t>(bytes[1]) << 8) |
-		(static_cast<uint32_t>(bytes[2]) << 16) |
-		(static_cast<uint32_t>(bytes[3]) << 24);
+	return *((uint32_t*)bytes);
 }
 
 static int32_t ToInt32(const uint8_t* bytes) {
 	// Little Endian
-	return static_cast<int32_t>(bytes[0]) |
-		(static_cast<int32_t>(bytes[1]) << 8) |
-		(static_cast<int32_t>(bytes[2]) << 16) |
-		(static_cast<int32_t>(bytes[3]) << 24);
+	return *((int32_t*)bytes);
+}
+
+static int16_t ToInt16(const uint8_t* bytes) {
+	// Little Endian
+	return *((int16_t*)bytes);
 }
 
 static void ReadGUID(const uint8_t* buf, GUID& guid) {
@@ -166,10 +157,27 @@ CompressionHeader ParseCompressionHeader(const DataSegment& seg) {
 	return h;
 }
 
+struct PropertyTable {
+	short version = 0;
+	// int because spec says so.
+	int size = 0;
+	using ElementProperties = std::vector<std::pair<int, int> >;
+	std::unordered_map<int, ElementProperties> table;
+};
+
 // LSG
-struct SceneGraph
+class SceneGraph
 {
-	std::vector<DataElement> nodes;
+public:
+	void PrintHierarchy(std::ostream& out);
+	// map from object id to data offset.
+	std::unordered_map<int, unsigned> nodesMap;
+	std::unordered_map<int, unsigned> propertyAtomMap;
+	PropertyTable propertyTable;
+	// offset for "endOfElement" element.
+	// there could be stuff after end of elements.
+	unsigned endOfElementOffset = 0;
+	unsigned endOfPropertiesOffset = 0;
 };
 
 void ParseElementHeader(const uint8_t* buf, DataElement& ele) {
@@ -183,16 +191,24 @@ void ParseElementHeader(const uint8_t* buf, DataElement& ele) {
 
 }
 
+void SceneGraph::PrintHierarchy(std::ostream& out) {
+
+}
+
 // split data segment into elements for each object.
 // stops 
 // seg must be decompressed already.
 // elements: output map from object id to byte offset in segment
-// endMarkerStart: offset to EndOfElements element
+// endMarkerOffset: offset to EndOfElements element
 // in segment. there could be other data after elements section.
-int MapElements(const uint8_t * buf, size_t bufLen, std::unordered_map<int, unsigned> & elements, unsigned & endMarkerOffset) {
+
+/// @TODO switch back to data segment for first arg, use a starting offset for 2nd arg.
+int MapElements(const DataSegment & seg, size_t startOffset, std::unordered_map<int, unsigned> & elements, unsigned & endMarkerOffset) {
 	//later combined to a map from objectId to offset into this segment's decompressed buffer.
 	std::vector<std::pair<int, unsigned> > elementOffsets;
-	size_t bufOffset = 0;	
+	size_t bufOffset = startOffset;	
+	size_t bufLen = seg.data.size();
+	const uint8_t* buf = seg.data.data();
 	int ret = 0;
 	while (bufOffset < bufLen) {
 		size_t elementOffset = bufOffset;
@@ -232,47 +248,124 @@ int MapElements(const uint8_t * buf, size_t bufLen, std::unordered_map<int, unsi
 
 // check for compression. 
 // if compression is used, uncompress.
-int Decompress(DataSegment&seg){
-	bool compressionSupported = JT::IsCompressionSupported(seg.type);
-	CompressionHeader h;
-	bool compressionUsed = false;
-	
-	if (compressionSupported) {
-		if (seg.data.size() < 9) {
-			//corrupted.
-			return -1;
-		}
-		h = ParseCompressionHeader(seg);
-		compressionUsed = h.compressionFlag == 3 && h.compressionAlgorithm == 3;
-	}
-	if (compressionUsed) {
-		if (h.compressedLen + 9 > seg.data.size()) {
-			// unexpected. compressed data larger than segment size.
-			return -2;
-		}
-		const unsigned payloadOffset = 9;
-		size_t len = size_t(h.compressedLen);
-		std::vector<uint8_t> decomp;
-		int ret = DecompressLZMA(seg.data.data() + payloadOffset, len, decomp);
-		if (ret == 0) {
-			seg.data = decomp;
-		}
-		else {
-			return ret;
-		}
-	}
-	
-	return 0;
+int Decompress(DataSegment& seg) {
+  bool compressionSupported = JT::IsCompressionSupported(seg.type);
+  CompressionHeader h;
+  bool compressionUsed = false;
+
+  if (compressionSupported) {
+    if (seg.data.size() < 9) {
+      //corrupted.
+      return -1;
+    }
+    h = ParseCompressionHeader(seg);
+    compressionUsed = h.compressionFlag == 3 && h.compressionAlgorithm == 3;
+  }
+  if (compressionUsed) {
+    if (h.compressedLen + 9 > seg.data.size()) {
+      // unexpected. compressed data larger than segment size.
+      return -2;
+    }
+    const unsigned payloadOffset = 9;
+    size_t len = size_t(h.compressedLen);
+    std::vector<uint8_t> decomp;
+    int ret = DecompressLZMA(seg.data.data() + payloadOffset, len, decomp);
+    if (ret == 0) {
+      seg.data = decomp;
+    }
+    else {
+      return ret;
+    }
+  }
+
+  return 0;
 }
 
 
+int ParsePropertyTable(const DataSegment& seg, unsigned startByte, PropertyTable & tab) {
+	const uint8_t* buf = seg.data.data() + startByte;
+	size_t localOffset = 0;
+	tab.version = ToInt16(buf);
+	tab.size = ToInt32(buf + 2);
+	localOffset += 6;
+	size_t tableLen = seg.data.size() - startByte;
+
+	for (size_t i = 0; i < tab.size; i++) {
+		int elementId = ToInt32(buf + localOffset);
+		localOffset += 4;
+		int keyId = ToInt32(buf + localOffset);
+		if (keyId == 0) {
+			localOffset += 4;
+			continue;
+		}
+		PropertyTable::ElementProperties properties;
+		while (keyId != 0) {
+			keyId = ToInt32(buf + localOffset);
+			localOffset += 4;
+			if (keyId == 0) {
+				break;
+			}
+			int valueId = ToInt32(buf + localOffset);
+			properties.push_back({ keyId, valueId });
+			localOffset += 4;
+		}
+		tab.table[elementId] = properties;
+	}
+	return 0;
+}
+
+int ParseScene(const DataSegment& seg, SceneGraph& scene) {
+
+	unsigned endOffset = 0;
+	unsigned bufLen = seg.data.size();
+	int ret = MapElements(seg, 0, scene.nodesMap, endOffset);
+	DataElement ele;
+	ParseElementHeader(seg.data.data() + endOffset, ele);
+	auto type = GetObjectType(ele.objectType);
+	std::cout << "final ele type " << ObjectTypeToString(type) << "\n";
+	scene.endOfElementOffset = endOffset + 4 + ele.elementLength;	
+	unsigned propertyEnd = 0;
+	ret = MapElements(seg, scene.endOfElementOffset, scene.propertyAtomMap, propertyEnd);
+
+	ParseElementHeader(seg.data.data() + propertyEnd, ele);
+	scene.endOfPropertiesOffset = propertyEnd + ele.elementLength + 4;
+	ParsePropertyTable(seg, scene.endOfPropertiesOffset, scene.propertyTable);
+	return 0;
+}
+
+// debugging helper
+void LoadSegmentFromDisk(const std::string &segBinFile, DataSegment & seg) {
+	std::ifstream file(segBinFile, std::ios::binary | std::ios::ate);
+	std::streamsize size = file.tellg();
+	file.seekg(0, std::ios::beg);
+
+	// 2. Pre-allocate the vector to avoid reallocations
+	seg.data.resize(size);
+
+	// 3. Read the entire file into the vector's underlying data
+	file.read(reinterpret_cast<char*>(seg.data.data()), size);
+}
+
+void DebugLSGLoading() {
+	DataSegment seg;
+	LoadSegmentFromDisk("I:/foundation/b/seg.bin", seg);
+	SceneGraph scene;
+	ParseScene(seg, scene);
+	
+	std::ofstream debugOut("I:/foundation/b/hier.txt");
+	scene.PrintHierarchy(debugOut);
+
+}
+
 int main(int argc, char * argv[]){
+	DebugLSGLoading();
+	return 0;
 	//if (argc <= 1) {
 	//	return -1;
 	//}
 	//std::string input = argv[1];
-	// std::string input = "I:/foundation/b/S.jt";
-	std::string input = "/media/desaic/ssd2/data/b/S.jt";
+	 std::string input = "I:/foundation/b/S.jt";
+	//std::string input = "/media/desaic/ssd2/data/b/S.jt";
 	std::string outputDir = "./";
 	if (argc > 2) {
 		outputDir = argv[2];
@@ -306,23 +399,21 @@ int main(int argc, char * argv[]){
 	}
 
 	auto sceneData = LoadDataSegment(inFile, sceneRoot);
+	SceneGraph scene;
+	// debugging
 	Decompress(sceneData);
-	unsigned endOffset = 0;
-	const uint8_t * buf = sceneData.data.data();
+	unsigned endOffset = 0;	
 	unsigned bufLen = sceneData.data.size();
-	int ret = MapElements(buf, bufLen, sceneData.nodesMap, endOffset);	
+	int ret = MapElements(sceneData, 0, scene.nodesMap, endOffset);
 	DataElement ele;
 	ParseElementHeader(sceneData.data.data() + endOffset, ele);
 	auto type = GetObjectType(ele.objectType);
 	std::cout << "final ele type " << ObjectTypeToString(type)<<"\n";
-	sceneData.endOfElementOffset = endOffset + 4 + ele.elementLength;
-	std::vector<uint8_t> lastEle;
-	lastEle.insert(lastEle.begin(), sceneData.data.begin() + endOffset, sceneData.data.begin() + endOffset + 8 + ele.elementLength);
-	std::vector<uint8_t> remainder;
-	remainder.insert(remainder.begin(), sceneData.data.begin() + sceneData.endOfElementOffset,
-		sceneData.data.begin() + sceneData.endOfElementOffset + 128);
-	DataElement nextEle;
-	ParseElementHeader(remainder.data(), nextEle);
-	std::cout << ObjectTypeToString(GetObjectType(nextEle.objectType)) <<"\n";	
+	scene.endOfElementOffset = endOffset + 4 + ele.elementLength;
+	unsigned remainingSize = bufLen - scene.endOfElementOffset;
+	unsigned propertyEnd = 0;
+	ret = MapElements(sceneData, remainingSize, scene.propertyAtomMap, propertyEnd);
+
+	std::cout << propertyEnd << " total " << bufLen << "\n";
 	return 0;
 }
