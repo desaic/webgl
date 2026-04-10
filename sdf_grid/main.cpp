@@ -17,6 +17,7 @@
 #include "AdapSDF.h"
 #include "FastSweep.h"
 #include "VoxIO.h"
+#include "ImageIO.h"
 
 namespace fs = std::filesystem;
 
@@ -172,6 +173,39 @@ void LoadMesh(TrigMesh& mesh, const std::string& name) {
   }
 }
 
+Array2D8u GetImageSlice(std::shared_ptr<AdapSDF> & sdf, unsigned z, float valScale, float valOffset) {
+  Vec3u size = sdf->dist.GetSize();
+  z = std::clamp(z, 0u, unsigned(size[2] - 1));
+  Array2D8u slice(size[0], size[1]);
+  for (unsigned y = 0; y < size[1]; y++) {
+    for (unsigned x = 0; x < size[0]; x++) {
+      short sd = sdf->dist(x, y, z);
+      float d = (sd * sdf->distUnit * valScale) + valOffset;
+      if (d < -100) {
+        d = -100;
+      }
+      slice(x, y) = d + 100;
+    }
+  }
+  return slice;
+}
+
+Array2D8u GetImageSlice(Array3Df& grid, unsigned z, float valScale, float valOffset) {
+  Vec3u size = grid.GetSize();
+  z = std::clamp(z, 0u, unsigned(size[2] - 1));
+  Array2D8u slice(size[0], size[1]);
+  for (unsigned y = 0; y < size[1]; y++) {
+    for (unsigned x = 0; x < size[0]; x++) {      
+      float d = (grid(x, y, z) * valScale) + valOffset;
+      if (d < -100) {
+        d = -100;
+      }
+      slice(x, y) = d + 100;
+    }
+  }
+  return slice;
+}
+
 void MakeGrid(const GridConf & conf) {
   TrigMesh boxMesh;
   LoadMesh(boxMesh, conf.dir + "/" + conf.boundMesh);
@@ -206,7 +240,10 @@ void MakeGrid(const GridConf & conf) {
         d = -d;
       }
     }
-    
+    Array2D8u slice = GetImageSlice(sdf, gridSize[2] / 2, 1, 0);
+    std::string debugImage = conf.dir + "/sdf_" + meshConf.name + ".png";
+    SavePngGrey(debugImage, slice);
+
     for (unsigned z = 0; z < gridSize[2]; z++) {
       for (unsigned y = 0; y < gridSize[1]; y++) {
         for (unsigned x = 0; x < gridSize[0]; x++) {
@@ -224,6 +261,20 @@ void MakeGrid(const GridConf & conf) {
         }
       }
     }
+  }
+  float maxVal = 0.001f;
+  for (auto f : grid.GetData()) {
+    maxVal = std::max(maxVal, f);
+  }
+  float debugScale = 100 / maxVal;
+  std::vector<unsigned> zSamples(3);
+  zSamples[0] = gridSize[2] / 20;
+  zSamples[1] = gridSize[2] / 2;
+  zSamples[2] = gridSize[2] - std::min(gridSize[2], gridSize[2] / 20);
+  for (unsigned z : zSamples) {
+    Array2D8u slice = GetImageSlice(grid, z, debugScale, 0);
+    std::string debugSlicePath = conf.dir + "/debug_slice_" + std::to_string(z) + ".png";
+    SavePngGrey(debugSlicePath, slice);
   }
   std::string outFile = conf.dir + "/" + conf.output;
   SaveVoxTxt(grid, Vec3f(dx), outFile, origin);
