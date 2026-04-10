@@ -16,13 +16,10 @@
 // limitations under the License.
 
 #include "json.h"
-#include "jtckdint.h"
 
-#include <cassert>
 #include <cctype>
 #include <climits>
 #include <cstdint>
-#include <cstdlib>
 #include <stdexcept>
 
 #include "double-conversion/double-to-string.h"
@@ -946,10 +943,7 @@ Json::parse(Json& json, const char*& p, const char* e, int context, int depth)
                 for (x = (c - '0') * d; p < e; ++p) {
                     c = *p & 255;
                     if (isdigit(c)) {
-                        if (ckd_mul(&x, x, 10) ||
-                            ckd_add(&x, x, (c - '0') * d)) {
-                            goto UseDubble;
-                        }
+                      x = x * 10 + (c - '0') * d;
                     } else if (c == '.') {
                         if (p + 1 == e || !isdigit(p[1]))
                             return bad_double;
