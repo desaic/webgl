@@ -28,6 +28,7 @@ struct MeshConf{
   float maxVal = 1;
   float minDist = -1000;
   float maxDist = 2;
+  
   std::string toString()const {
     std::ostringstream oss;
     oss << "name = " << name<<"\n";
@@ -48,7 +49,7 @@ struct GridConf{
   float dx = 1.0f;
   // inferred from file name
   std::string dir;
-
+  std::string output = "grid.txt";
   std::vector<MeshConf> meshConfs;
 
   std::string toString()const;
@@ -92,6 +93,9 @@ GridConf ReadConfig(const std::string &filename) {
   conf.backgroundVal = float(json["backgroundVal"].getNumber());
   if (json.contains("dx")) {
     conf.dx = json["dx"].getNumber();
+  }
+  if (json.contains("output")) {
+    conf.output = json["output"].getString();
   }
   if (!json["meshes"].isArray()) {
     std::cout<< "config missing meshes array\n";
@@ -221,7 +225,8 @@ void MakeGrid(const GridConf & conf) {
       }
     }
   }
-  SaveVoxTxt(grid, Vec3f(dx), "F:/meshes/tes/back_t.txt", origin);
+  std::string outFile = conf.dir + "/" + conf.output;
+  SaveVoxTxt(grid, Vec3f(dx), outFile, origin);
 }
 
 int main(int argc, char** argv) {
