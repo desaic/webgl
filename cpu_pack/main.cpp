@@ -579,7 +579,9 @@ std::shared_ptr<AdapSDF> ComputeSDF(float distUnit, float h, TrigMesh &mesh) {
   sdf->ComputeCoarseDist();
   CloseExterior(sdf->dist, sdf->MAX_DIST);
   Array3D8u frozen;
-  sdf->FastSweepCoarse(frozen);
+  //sdf->FastSweepCoarse(frozen);
+  int band = 1000;
+  FastSweepPar(sdf->dist, sdf->voxSize, distUnit, band, frozen);
   return sdf;
 }
 
@@ -589,21 +591,21 @@ void MakeInnerMesh() {
   float dx = 1.0f;
   float distUnit = 0.01f;
   std::shared_ptr<AdapSDF> sdf = ComputeSDF(distUnit, dx, container);
-  auto outside = FloodOutside(sdf->dist, 0);
+  //auto outside = FloodOutside(sdf->dist, 0);
   Box3f box = ComputeBBox(container.v);
   Vec3f boxSize = box.vmax - box.vmin;
   float maxLen = boxSize.norm() * 2;
-  for (size_t i = 0; i < outside.GetData().size(); i++) {
-    short &d = sdf->dist.GetData()[i];
-    if (!outside.GetData()[i] && d > 0) {
-      d = -d;
-    }
-    float len = d * distUnit;
-    if (len < -maxLen) {
-      len = -maxLen;
-      d = std::round(len / distUnit);
-    }    
-  }
+  //for (size_t i = 0; i < outside.GetData().size(); i++) {
+  //  short &d = sdf->dist.GetData()[i];
+  //  if (!outside.GetData()[i] && d > 0) {
+  //    d = -d;
+  //  }
+  //  float len = d * distUnit;
+  //  if (len < -maxLen) {
+  //    len = -maxLen;
+  //    d = std::round(len / distUnit);
+  //  }    
+  //}
   TrigMesh surf;
   MarchingCubes(sdf->dist, -5, sdf->distUnit, sdf->voxSize, sdf->origin, &surf);
   surf.SaveObj("F:/meshes/fruit_hand/hand2m_inner.obj");
