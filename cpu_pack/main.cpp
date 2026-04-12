@@ -369,7 +369,35 @@ void Union(MeshConvo &bg, Vec3i offset, const MeshConvo &fg) {
         if (dstx < 0 || dstx >= int(bgSize[0])) {
           continue;
         }
-        bg.vox(dstx, dsty, dstz) = 1;
+        if (fg.vox(x, y, z) > 0) {
+          bg.vox(dstx, dsty, dstz) = 1;
+        }
+      }
+    }
+  }
+}
+
+void UnionReversed(MeshConvo &bg, Vec3i offset, const MeshConvo &fg) {
+  Vec3u size = fg.GridSize();
+  Vec3u bgSize = bg.GridSize();
+  for (unsigned z = 0; z < size[2]; z++) {
+    int dstz = int(z) + offset[2];
+    if (dstz < 0 || dstz >= int(bgSize[2])) {
+      continue;
+    }
+    for (unsigned y = 0; y < size[1]; y++) {
+      int dsty = int(y) + offset[1];
+      if (dsty < 0 || dsty >= int(bgSize[1])) {
+        continue;
+      }
+      for (unsigned x = 0; x < size[0]; x++) {
+        int dstx = int(x) + offset[0];
+        if (dstx < 0 || dstx >= int(bgSize[0])) {
+          continue;
+        }
+        if (fg.vox(size[0] - x - 1, size[1] - y - 1, size[2]- z- 1) > 0) {
+          bg.vox(dstx, dsty, dstz) = 1;
+        }
       }
     }
   }
@@ -395,6 +423,8 @@ bool Add(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot) {
   Vec3u gridSize = PadSizes(totalSize, FFT_ALIGNMENT);
 
   bg.FFT(gridSize);
+  Reverse(fg.vox);
+  fg.gridReversed = true;
   fg.FFT(gridSize);
   Dot(bg.fft, fg.fft);
   Array3Df conv = IFFT(fg.fft);
@@ -435,7 +465,11 @@ bool Add(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot) {
     Vec3i offset = bestPos.cast<int>();
     Vec3i fgSizeInt = fgSize.cast<int>();
     offset = offset - fgSizeInt + Vec3i(1);
-    Union(bg, offset, fg);
+    if (fg.gridReversed) {
+      UnionReversed(bg, offset, fg);
+    } else {
+      Union(bg, offset, fg);
+    }
   }
   return found;
 }
@@ -487,6 +521,8 @@ void TestPack() {
   }
   std::ofstream out(outputFolder + "/pack.txt");
   bool debugging = true;
+  Vec3f voxRes(bg.dx);
+  Vec3f origin = bg.GetOrigin();
   for (size_t i = 0; i < numFruits; i++) {
     unsigned numTrials = 0;
     for (size_t j = 0; j < NUM_COPIES; j++) {
@@ -498,6 +534,7 @@ void TestPack() {
           break;
         }
       }
+     
       out << fruitFiles[i] << " " << pos[0] << " " << pos[1] << " " << pos[2] << " " << rot[0] << " " << rot[1] << " "
           << rot[2] << "\n";
       if (debugging) {
@@ -507,6 +544,8 @@ void TestPack() {
         out.translate(pos[0], pos[1], pos[2]);
         std::string debugMesh = outputFolder + "/" + fruitFiles[i] + std::to_string(j) + ".obj";
         out.SaveObj(debugMesh);
+        std::string debugVol = outputFolder + "/vol_" + std::to_string(i) + "_" + std::to_string(j) + ".obj";
+        SaveVolAsObjMesh(debugVol, bg.vox, (float *)(&voxRes), (float *)(&origin), 1);
       }
     }
   }
@@ -515,5 +554,6 @@ void TestPack() {
 
 int main(int argc, char * argv[]){
   std::cout<<"cpu_pack\n";
+  TestPack();
   return 0;
 }
