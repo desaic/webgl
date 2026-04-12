@@ -34,9 +34,14 @@ void VoxelizeMesh(const TrigMesh &m, Array3D8u &grid, VoxConf conf) {
   cpu_voxelize_grid(conf, &m, grid);
 }
 
-std::array<unsigned, 3> ComputeGridSize(const Box3f &box, float dx) {
+std::array<unsigned, 3> ComputeGridSize(const Box3f &box, float dx, unsigned alignment) {
   Vec3f boxSize = box.vmax - box.vmin;
-  return {unsigned(boxSize[0] / dx) + 1, unsigned(boxSize[1] / dx) + 1, unsigned(boxSize[2] / dx) + 1};
+  std::array<unsigned,3> size;
+  for (unsigned d = 0; d < 3; d++) {
+    size[d] = unsigned(boxSize[d] / dx) + 2;
+    size[d] = PadSize(size[d], alignment);
+  }
+  return size;
 }
 
 std::array<float, 3> ToArray(const Vec3f &v) {
@@ -105,11 +110,14 @@ class MeshConvo {
       }
       dx = voxelSize;
       box = ComputeBBox(mesh->v);
+      box.vmin = box.vmin - Vec3f(dx);
       box.vmin = AlignOriginToGrid(box.vmin, dx);
       VoxConf conf;
       conf.origin = ToArray(box.vmin);
       conf.unit = {dx, dx, dx};
-      conf.gridSize = ComputeGridSize(box, dx);
+
+      const unsigned FFT_ALIGNMENT = 8;
+      conf.gridSize = ComputeGridSize(box, dx, FFT_ALIGNMENT);
       VoxelizeMesh(*mesh, vox, conf);
       FloodOutside8u(vox, 1);
     }
@@ -499,7 +507,6 @@ void TestPack() {
   MeshConvo bg;
   bg.SetMeshPtr(&bgMesh);
   bg.Voxelize(dx);
-  const unsigned FFT_ALIGNMENT = 8;
 
   FloodOutside8u(bg.vox, 1);
   Invert01(bg.vox);
@@ -525,6 +532,7 @@ void TestPack() {
   Vec3f origin = bg.GetOrigin();
   for (size_t i = 0; i < numFruits; i++) {
     unsigned numTrials = 0;
+    size_t placedCount = 0;
     for (size_t j = 0; j < NUM_COPIES; j++) {
       Vec3f pos, rot = randAngles[j % randAngles.size()];
       bool success = Add(bg, fruits[i], pos, rot);
@@ -532,7 +540,8 @@ void TestPack() {
         numTrials++;
         if (numTrials > 10) {
           break;
-        }
+        }        
+        continue;
       }
      
       out << fruitFiles[i] << " " << pos[0] << " " << pos[1] << " " << pos[2] << " " << rot[0] << " " << rot[1] << " "
@@ -542,11 +551,14 @@ void TestPack() {
         Matrix3f rotMat = RotationMatrixRad(rot[0], rot[1], rot[2]);
         TransformVerts(fruits[i].v, out.v, rotMat);
         out.translate(pos[0], pos[1], pos[2]);
-        std::string debugMesh = outputFolder + "/" + fruitFiles[i] + std::to_string(j) + ".obj";
+        std::string debugMesh = outputFolder + "/" + fruitFiles[i] + std::to_string(placedCount) + ".obj";
         out.SaveObj(debugMesh);
-        std::string debugVol = outputFolder + "/vol_" + std::to_string(i) + "_" + std::to_string(j) + ".obj";
-        SaveVolAsObjMesh(debugVol, bg.vox, (float *)(&voxRes), (float *)(&origin), 1);
+        if (i == 1) {
+          std::string debugVol = outputFolder + "/vol_" + std::to_string(i) + "_" + std::to_string(j) + ".obj";
+          SaveVolAsObjMesh(debugVol, bg.vox, (float *)(&voxRes), (float *)(&origin), 1);
+        }
       }
+      placedCount++;
     }
   }
   out.close();
