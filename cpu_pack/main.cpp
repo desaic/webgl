@@ -10,9 +10,13 @@
 
 #include "Stopwatch.h"
 #include "meshutil.h"
+#include "AdapSDF.h"
+#include "AdapUDF.h"
+#include "SDFMesh.h"
+#include "MarchingCubes.h"
+#include "FastSweep.h"
 
 #include <deque>
-
 #include <cstring>
 #include <random>
 #include <thread>
@@ -564,7 +568,51 @@ void TestPack() {
   out.close();
 }
 
+std::shared_ptr<AdapSDF> ComputeSDF(float distUnit, float h, TrigMesh &mesh) {
+  std::shared_ptr<AdapSDF> sdf = std::make_shared<AdapSDF>();
+  sdf->voxSize = h;
+  sdf->band = 16;
+  sdf->distUnit = distUnit;
+  sdf->BuildTrigList(&mesh);
+  sdf->Compress();
+  mesh.ComputePseudoNormals();
+  sdf->ComputeCoarseDist();
+  CloseExterior(sdf->dist, sdf->MAX_DIST);
+  Array3D8u frozen;
+  sdf->FastSweepCoarse(frozen);
+  return sdf;
+}
+
+void MakeInnerMesh() {
+  TrigMesh container;
+  container.LoadStl("F:/meshes/fruit_hand/hands/hand2m.stl");
+  float dx = 1.0f;
+  float distUnit = 0.01f;
+  std::shared_ptr<AdapSDF> sdf = ComputeSDF(distUnit, dx, container);
+  auto outside = FloodOutside(sdf->dist, 0);
+  Box3f box = ComputeBBox(container.v);
+  Vec3f boxSize = box.vmax - box.vmin;
+  float maxLen = boxSize.norm() * 2;
+  for (size_t i = 0; i < outside.GetData().size(); i++) {
+    short &d = sdf->dist.GetData()[i];
+    if (!outside.GetData()[i] && d > 0) {
+      d = -d;
+    }
+    float len = d * distUnit;
+    if (len < -maxLen) {
+      len = -maxLen;
+      d = std::round(len / distUnit);
+    }    
+  }
+  TrigMesh surf;
+  MarchingCubes(sdf->dist, -5, sdf->distUnit, sdf->voxSize, sdf->origin, &surf);
+  surf.SaveObj("F:/meshes/fruit_hand/hand2m_inner.obj");
+}
+
 int main(int argc, char * argv[]){
+  std::cout << "make inner mesh\n";
+  MakeInnerMesh();
+
   std::cout<<"cpu_pack\n";
   TestPack();
   return 0;
