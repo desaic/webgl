@@ -587,9 +587,9 @@ std::shared_ptr<AdapSDF> ComputeSDF(float distUnit, float h, TrigMesh &mesh) {
 
 void MakeInnerMesh() {
   TrigMesh container;
-  container.LoadStl("F:/meshes/fruit_hand/hands/hand2m.stl");
-  float dx = 1.0f;
-  float distUnit = 0.01f;
+  container.LoadStl("F:/meshes/fruit_hand/hands/hand4.5m.stl");
+  float dx = 2.0f;
+  float distUnit = 0.01f * dx;
   std::shared_ptr<AdapSDF> sdf = ComputeSDF(distUnit, dx, container);
   //auto outside = FloodOutside(sdf->dist, 0);
   Box3f box = ComputeBBox(container.v);
@@ -607,8 +607,8 @@ void MakeInnerMesh() {
   //  }    
   //}
   TrigMesh surf;
-  MarchingCubes(sdf->dist, -5, sdf->distUnit, sdf->voxSize, sdf->origin, &surf);
-  surf.SaveObj("F:/meshes/fruit_hand/hand2m_inner.obj");
+  MarchingCubes(sdf->dist, -32, sdf->distUnit, sdf->voxSize, sdf->origin, &surf);
+  surf.SaveObj("F:/meshes/fruit_hand/hand4.5m_inner.obj");
 }
 
 int main(int argc, char * argv[]){
