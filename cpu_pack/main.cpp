@@ -16,11 +16,16 @@
 #include "MarchingCubes.h"
 #include "FastSweep.h"
 
+#include <algorithm>
+#include <numeric>
 #include <deque>
+#include <cctype>
 #include <cstring>
 #include <random>
 #include <thread>
+#include <filesystem>
 #include "ImageIO.h"
+namespace fs = std::filesystem;
 
 unsigned PadSize(unsigned s, unsigned alignment) {
   if ((s > 0) && (s % alignment == 0)) {
@@ -90,6 +95,20 @@ Array3Df IFFT(const Array3D<std::complex<float>> &coeff) {
   float scale = 1.0f / (float(size[0]) * size[1] * realSize[2]);
   Scale(outf, scale);
   return outf;
+}
+
+static int LoadMesh(TrigMesh &m, const fs::path & p) {
+  std::string ext = p.extension().string();
+  std::transform(ext.begin(), ext.end(),ext.begin(), [](unsigned char c) { return std::tolower(c); });
+  int ret = -1;
+  if (ext == ".stl") {
+    ret = m.LoadStl(p.string());
+  } else if (ext == ".obj") {
+    ret = m.LoadObj(p.string());
+  } else {
+    return -1;
+  }
+  return ret;
 }
 
 // data for computing convolution for a mesh.
@@ -611,11 +630,288 @@ void MakeInnerMesh() {
   surf.SaveObj("F:/meshes/fruit_hand/hand4.5m_inner.obj");
 }
 
-int main(int argc, char * argv[]){
-  std::cout << "make inner mesh\n";
-  MakeInnerMesh();
+void CenterMeshes(const std::string & inDir, const std::string & outDir) {
+  
+  fs::path inPath(inDir);
 
-  std::cout<<"cpu_pack\n";
-  TestPack();
+  if (!fs::exists(inPath) || !fs::is_directory(inPath)) {
+    std::cout << inPath.string() << " not a valid directory\n";
+    return;
+  }
+  for (const auto &entry : fs::directory_iterator(inPath)) {
+    if (!entry.is_regular_file()) {
+      continue;
+    }
+    std::cout << entry.path().filename() << "\n";
+    fs::path p = entry.path();
+    std::cout << "Full Filename: " << p.filename() << "\n";  
+    std::cout << "Stem (Name):   " << p.stem() << "\n";     
+    std::cout << "Extension:     " << p.extension() << "\n"; 
+      
+    std::string stem = p.stem().string();
+    if (stem.ends_with("_m")) {
+      //skip mirrored meshes.
+      continue;
+    }
+    TrigMesh mesh;
+    int ret = LoadMesh(mesh, p);
+    if (ret != 0) {
+      std::cout << " error " << ret << " loading " << p.filename().string() << "\n";
+      continue;
+    }
+    Box3f box = ComputeBBox(mesh.v);
+    Vec3f c = 0.5f * (box.vmax + box.vmin);
+    mesh.translate(-c[0], -c[1], -c[2]);
+    fs::path outPath = fs::path(outDir) / p.filename();
+    mesh.SaveObj(outPath.string());
+  }
+  
+}
+
+class MeshInfo {
+public:
+  Box3f box;
+  std::string name;
+  TrigMesh mesh;
+  float BoxDiagonal() const {
+    return (box.vmax - box.vmin).norm();
+  }
+};
+
+int LoadMeshInfo(MeshInfo &info, const fs::path &p) {
+  int ret = LoadMesh(info.mesh, p);
+  if (ret != 0) {
+    return ret;
+  }
+  info.name = p.stem().string();
+  info.box = ComputeBBox(info.mesh.v);  
+  return ret;
+}
+
+static std::vector<MeshInfo> LoadAllMeshInfo(const std::string &meshDir) {
+  std::vector<MeshInfo> fruits;
+  fs::path inPath(meshDir);
+
+  if (!fs::exists(inPath) || !fs::is_directory(inPath)) {
+    std::cout << inPath.string() << " not a valid directory\n";
+    return fruits;
+  }
+  for (const auto &entry : fs::directory_iterator(inPath)) {
+    if (!entry.is_regular_file()) {
+      continue;
+    }
+    std::cout << entry.path().filename() << "\n";
+    fs::path p = entry.path();
+    std::cout << "Full Filename: " << p.filename() << "\n";
+    std::cout << "Stem (Name):   " << p.stem() << "\n";
+    std::cout << "Extension:     " << p.extension() << "\n";
+
+    std::string stem = p.stem().string();
+    if (stem.ends_with("_m")) {
+      // skip mirrored meshes.
+      continue;
+    }
+    MeshInfo info;    
+    int ret = LoadMeshInfo(info, p);
+    if (ret != 0) {
+      std::cout << " error " << ret << " loading " << p.filename().string() << "\n";
+      continue;
+    }
+    fruits.push_back(info);
+  }
+
+  return fruits;
+}
+
+class PackingScene {
+  public:
+    MeshInfo container;
+    std::vector<MeshInfo> items;
+    std::vector<int> sortedBySize;
+    std::shared_ptr<AdapSDF> sdf;
+    std::string outputFolder;
+};
+
+std::vector<int> SortBySize(const std::vector<MeshInfo> &items) {
+  std::vector<int> indices(items.size());
+  std::iota(indices.begin(), indices.end(), 0);
+  std::sort(indices.begin(), indices.end(),
+            [&](int i, int j) { return items[i].BoxDiagonal() > items[j].BoxDiagonal(); });
+  return indices;
+}
+
+bool AddUsingSDF(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot, 
+  std::shared_ptr<AdapSDF> sdf, float factor = 1.0f) {
+  Matrix3f rotMat = RotationMatrixRad(rot[0], rot[1], rot[2]);
+  TrigMesh rotated = part;
+  TransformVerts(part.v, rotated.v, rotMat);
+  float dx = bg.dx;
+
+  MeshConvo fg;
+  fg.SetMeshPtr(&rotated);
+  fg.Voxelize(dx);
+  const unsigned FFT_ALIGNMENT = 8;
+  FloodOutside8u(fg.vox, 1);
+  Vec3u bgSize = bg.GridSize();
+  Vec3u fgSize = fg.GridSize();
+  // use circular fft/ntt. no need to pad with fg size.
+  Vec3u totalSize = bgSize;
+  //+fgSize;
+  std::cout << "total grid size " << totalSize[0] << " " << totalSize[1] << " " << totalSize[2] << "\n";
+  Vec3u gridSize = PadSizes(totalSize, FFT_ALIGNMENT);
+
+  bg.FFT(gridSize);
+  Reverse(fg.vox);
+  fg.gridReversed = true;
+  fg.FFT(gridSize);
+  Dot(bg.fft, fg.fft);
+  Array3Df conv = IFFT(fg.fft);
+  Array3D8u collision = Quantize(conv);
+  const float score0 = -1e6f;
+  
+  float highScore = score0;
+  Vec3u bestPos(0);
+
+  Vec3f center = (gridSize.cast<float>() + fgSize.cast<float>());
+  center = 0.5f * center - Vec3f(1);
+  float maxDist = gridSize.cast<float>().norm();
+  // index from 0 to fgSize-2 are outside of the container.
+  // fgSize -1 is inside the container.
+  
+  //assuming item is centered at origin
+  Vec3f o = fg.box.vmin;
+  Vec3i centerOffset( int(-o[0] / fg.dx), int(-o[1]/fg.dx), int(-o[2]/fg.dx) );
+
+  for (unsigned z = fgSize[2] - 1; z < gridSize[2]; z++) {
+    for (unsigned y = fgSize[1] - 1; y < gridSize[1]; y++) {
+      for (unsigned x = fgSize[0] - 1; x < gridSize[0]; x++) {
+        if (collision(x, y, z) > 0) {
+          continue;
+        }
+        Vec3f coord = bg.GetOrigin() + fg.dx * Vec3f(float((x-centerOffset[0])+0.5f), 
+          float(y-centerOffset[1]+0.5f), 
+          float(z-centerOffset[2]+0.5f));
+        
+        float dist = sdf->GetCoarseDist(coord);
+
+        if (dist >= 32766) {
+          dist = -dist;
+        }
+        float score = factor * dist;
+        if (score > highScore) {
+          highScore = score;
+          bestPos = Vec3u(x, y, z);
+        }
+      }
+    }
+  }
+  std::cout << "high score " << highScore << "\n" ;
+  bool found = (highScore > score0);
+  if (found) {
+    Vec3f dxVec(dx);
+    Vec3f s = fg.GridSize().cast<float>() - Vec3f(1.0f);
+    Vec3f origin = bg.GetOrigin() - fg.GetOrigin() - dxVec * s;
+    pos = dx * bestPos.cast<float>() + origin;
+    Vec3i offset = bestPos.cast<int>();
+    Vec3i fgSizeInt = fgSize.cast<int>();
+    offset = offset - fgSizeInt + Vec3i(1);
+    if (fg.gridReversed) {
+      UnionReversed(bg, offset, fg);
+    } else {
+      Union(bg, offset, fg);
+    }
+  }
+  return found;
+}
+
+void PackScene(PackingScene & scene) {  
+  const float dx = 0.3;
+  MeshConvo bg;
+  bg.SetMeshPtr(&scene.container.mesh);
+  bg.Voxelize(dx);
+
+  FloodOutside8u(bg.vox, 1);
+  Invert01(bg.vox);
+
+  Vec3f dxVec(dx);  
+  const unsigned NUM_COPIES = 100;
+  const unsigned ANGLE_TRIALS = 5;
+  std::vector<Vec3f> randAngles(100);
+  unsigned int seed = 123;
+  std::mt19937 engine(seed);
+  std::uniform_real_distribution<float> dist(0.0f, 6.2831853);
+
+  for (size_t i = 0; i < randAngles.size(); i++) {
+    randAngles[i][0] = dist(engine);
+    randAngles[i][1] = dist(engine);
+    randAngles[i][2] = dist(engine);
+  }
+  std::ofstream out(scene.outputFolder + "/pack.txt");
+  bool debugging = true;
+  Vec3f voxRes(bg.dx);
+  Vec3f origin = bg.GetOrigin();
+
+  // small medium large
+  int itemSizeGroup = 3;
+  unsigned groupSize = scene.items.size() / 3;
+
+  for(unsigned sizei = 0;sizei<scene.sortedBySize.size();sizei++){
+    unsigned i = scene.sortedBySize[sizei];
+    unsigned numTrials = 0;
+    size_t placedCount = 0;
+    itemSizeGroup = 3 - std::min(3u, sizei / groupSize);
+    float factor = 1.0f;
+    if (itemSizeGroup < 1) {
+      factor = -1.0f;
+    }
+    std::cout << "factor " << factor << "\n";
+    for (size_t j = 0; j < NUM_COPIES; j++) {
+      Vec3f pos, rot = randAngles[j % randAngles.size()];
+      bool success = AddUsingSDF(bg, scene.items[i].mesh, pos, rot, scene.sdf, factor);
+      if (!success) {
+        numTrials++;
+        if (numTrials > 10) {
+          break;
+        }
+        continue;
+      }
+
+      out << scene.items[i].name << " " << pos[0] << " " << pos[1] << " " << pos[2] << " " << rot[0] << " " << rot[1]
+          << " "
+          << rot[2] << "\n";
+      if (debugging) {
+        TrigMesh out = scene.items[i].mesh;
+        Matrix3f rotMat = RotationMatrixRad(rot[0], rot[1], rot[2]);
+        TransformVerts(scene.items[i].mesh.v, out.v, rotMat);
+        out.translate(pos[0], pos[1], pos[2]);
+        std::string debugMesh = scene.outputFolder + "/" + scene.items[i].name + std::to_string(placedCount) + ".obj";
+        out.SaveObj(debugMesh);
+        if (i == 1) {
+          std::string debugVol = scene.outputFolder + "/vol_" + std::to_string(i) + "_" + std::to_string(j) + ".obj";
+          SaveVolAsObjMesh(debugVol, bg.vox, (float *)(&voxRes), (float *)(&origin), 1);
+        }
+      }
+      placedCount++;
+    }
+  }
+  out.close();
+}
+
+int main(int argc, char * argv[]){  
+  std::string meshDir = "F:/meshes/fruit_hand/fruits/";
+  PackingScene scene;
+  std::vector<MeshInfo> fruits = LoadAllMeshInfo(meshDir);
+  scene.items = fruits;
+  scene.container;
+  fs::path containerFile("F:/meshes/fruit_hand/hands/hand4.5m_finger.stl");
+  LoadMeshInfo(scene.container, containerFile);
+  scene.sortedBySize = SortBySize(scene.items);
+  float sdfDx = 1.0f;
+  float distUnit = 0.001f * sdfDx;
+  std::cout << "computing container sdf \n";
+  scene.sdf = ComputeSDF(distUnit, sdfDx, scene.container.mesh);
+  std::cout << "computing container sdf done \n";
+  scene.outputFolder = "F:/meshes/fruit_hand/out/";
+  PackScene(scene);
   return 0;
 }
