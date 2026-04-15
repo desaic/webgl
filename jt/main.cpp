@@ -5,6 +5,7 @@
 #include <map>
 #include <iomanip>
 #include <unordered_map>
+#include <functional>
 
 #include "JT_defs.h"
 #include "lzma_wrapper.h"
@@ -26,10 +27,66 @@ struct JTHeader {
 	GUID LSGSegId;
 };
 
-struct MbString {
-	int size= 0;
-	std::vector<uint16_t> chars;
-};
+static uint32_t ToUint32(const uint8_t* bytes) {
+	// Little Endian
+	return *((uint32_t*)bytes);
+}
+
+static int32_t ToInt32(const uint8_t* bytes) {
+	// Little Endian
+	return *((int32_t*)bytes);
+}
+
+static int16_t ToInt16(const uint8_t* bytes) {
+	// Little Endian
+	return *((int16_t*)bytes);
+}
+
+static void ReadGUID(const uint8_t* buf, GUID& guid) {
+	std::memcpy(guid.bytes.data(), buf, guid.bytes.size());
+}
+
+// Compare std::u16string with ASCII string
+bool CompareU16StringToAscii(const std::u16string& u16str, const std::string& ascii) {
+	if (u16str.length() != ascii.length()) return false;
+	for (size_t i = 0; i < ascii.length(); i++) {
+		if (u16str[i] != static_cast<char16_t>(ascii[i])) {
+			return false;
+		}
+	}
+	return true;
+}
+
+// Parse MbString from buffer and convert to std::u16string
+// Offset starts at beginning of mb string.
+std::u16string ParseMbString(const uint8_t* buf, unsigned& offset, unsigned maxLen) {
+	std::u16string result;
+	if (offset + 4 > maxLen) return result;
+
+	int32_t size = ToInt32(buf + offset);
+	offset += 4;
+
+	if (size < 0 || size > 10000 || offset + size * 2 > maxLen) return result;
+
+	result.reserve(size);
+	for (int i = 0; i < size; i++) {
+		char16_t wchar = static_cast<char16_t>(ToInt16(buf + offset));
+		offset += 2;
+		result.push_back(wchar);
+	}
+	return result;
+}
+
+// Parse StringPropertyAtom and return the std::u16string value
+// bytes start at element header.
+std::u16string ParseStringPropertyAtom(const uint8_t* buf, unsigned offset, unsigned bufLen) {
+	// Skip element header (25 bytes)
+	unsigned localOffset = offset + 25;
+	if (localOffset >= bufLen) return std::u16string();
+	// base property version + state flags U32 + string prop version U8.
+	localOffset += 6;
+	return ParseMbString(buf, localOffset, bufLen);
+}
 
 JTHeader ReadHeader(std::istream& in) {
 	JTHeader header;
@@ -87,6 +144,16 @@ struct DataElement {
 	std::vector<uint8_t> data;
 };
 
+struct NodeInfo {
+	uint8_t baseVersion = 0;
+	uint32_t nodeFlags = 0;
+	int32_t attributeCount = 0;
+	std::vector<int> attributeIds;
+	std::vector<int> childIds;
+	std::u16string name;
+	std::u16string jtPropName;
+};
+
 struct JTFile {
 	JTHeader header;
 	std::vector<TOCEntry> TOCs;
@@ -127,24 +194,6 @@ DataSegment LoadDataSegment(std::istream& in, const TOCEntry& entry) {
 	return seg;
 }
 
-static uint32_t ToUint32(const uint8_t* bytes) {
-	// Little Endian
-	return *((uint32_t*)bytes);
-}
-
-static int32_t ToInt32(const uint8_t* bytes) {
-	// Little Endian
-	return *((int32_t*)bytes);
-}
-
-static int16_t ToInt16(const uint8_t* bytes) {
-	// Little Endian
-	return *((int16_t*)bytes);
-}
-
-static void ReadGUID(const uint8_t* buf, GUID& guid) {
-	std::memcpy(guid.bytes.data(), buf, guid.bytes.size());
-}
 
 CompressionHeader ParseCompressionHeader(const DataSegment& seg) {
 	CompressionHeader h;
@@ -178,6 +227,10 @@ public:
 	// there could be stuff after end of elements.
 	unsigned endOfElementOffset = 0;
 	unsigned endOfPropertiesOffset = 0;
+	// Store reference to decompressed segment data for hierarchy traversal
+	// NOTE: The DataSegment must remain valid for the lifetime of SceneGraph
+	// or at least until PrintHierarchy is called
+	const DataSegment* segmentData = nullptr;
 };
 
 void ParseElementHeader(const uint8_t* buf, DataElement& ele) {
@@ -188,11 +241,188 @@ void ParseElementHeader(const uint8_t* buf, DataElement& ele) {
 		ele.baseType = buf[20];
 		ele.objectId = ToInt32(buf + 21);
 	}
+}
 
+// Parse node data after element header. Returns false if parsing fails.
+bool ParseNodeInfo(const uint8_t* buf, unsigned offset, unsigned dataLen, JT::ObjectType nodeType, NodeInfo& info) {
+	if (!JT::NodeTypeHasChildren(nodeType) && nodeType != JT::ObjectType::BaseNode) {
+		return true; // Not a node type, but not an error
+	}
+
+	if (offset + 25 > dataLen) return false;
+
+	const uint8_t* nodeData = buf + offset;
+	unsigned localOffset = 25; // Skip element header
+
+	// Base Node Data: Version + Node Flags + Attribute Count + Attribute IDs
+	if (offset + localOffset + 9 > dataLen) return false;
+
+	info.baseVersion = nodeData[localOffset];
+	localOffset += 1;
+
+	info.nodeFlags = ToUint32(nodeData + localOffset);
+	localOffset += 4;
+
+	info.attributeCount = ToInt32(nodeData + localOffset);
+	localOffset += 4;
+
+	if (info.attributeCount < 0 || info.attributeCount > 10000) return false;
+
+	// Read attribute IDs
+	info.attributeIds.resize(info.attributeCount);
+	for (int i = 0; i < info.attributeCount; i++) {
+		if (offset + localOffset + 4 > dataLen) return false;
+		info.attributeIds[i] = ToInt32(nodeData + localOffset);
+		localOffset += 4;
+	}
+
+	// Parse children based on node type
+	if (nodeType == JT::ObjectType::InstanceNode) {
+		// Instance Node: Version + Single Child ID
+		if (offset + localOffset + 5 > dataLen) return false;
+		localOffset += 1; // Skip instance version
+		int32_t childId = ToInt32(nodeData + localOffset);
+		info.childIds.push_back(childId);
+		return true;
+	}
+
+	if (NodeTypeHasChildren(nodeType) && nodeType != JT::ObjectType::InstanceNode) {
+		// Group Node Data: Version + Child Count + Child IDs
+		if (offset + localOffset + 5 > dataLen) return false;
+		localOffset += 1; // Skip group version
+
+		int32_t childCount = ToInt32(nodeData + localOffset);
+		localOffset += 4;
+
+		if (childCount < 0 || childCount > 100000) return false;
+
+		info.childIds.resize(childCount);
+		for (int i = 0; i < childCount; i++) {
+			if (offset + localOffset + 4 > dataLen) return false;
+			info.childIds[i] = ToInt32(nodeData + localOffset);
+			localOffset += 4;
+		}
+	}
+
+	return true;
 }
 
 void SceneGraph::PrintHierarchy(std::ostream& out) {
+	// Per JT 10.0 spec section 6: "The first Graph Element in a LSG Segment
+	// should always be a Partition Node" - this is the root
+	if (nodesMap.empty()) {
+		out << "Empty scene graph\n";
+		return;
+	}
 
+	if (segmentData == nullptr) {
+		out << "Error: No segment data available\n";
+		return;
+	}
+
+	const uint8_t* buf = segmentData->data.data();
+	unsigned bufLen = segmentData->data.size();
+
+	// Find root node - the first element at offset 0 (should be Partition Node)
+	if (bufLen < 25) {
+		out << "Error: Segment data too small\n";
+		return;
+	}
+
+	DataElement rootEle;
+	ParseElementHeader(buf, rootEle);
+	int rootId = rootEle.objectId;
+
+	JT::ObjectType rootType = JT::GetObjectType(rootEle.objectType);
+
+	out << "Scene Graph Hierarchy\n";
+	out << "===========================================\n";
+	out << "Root Node ID: " << rootId << ", Type: " << JT::ObjectTypeToString(rootType);
+
+	// Verify it's a Partition Node as spec requires
+	if (rootType != JT::ObjectType::PartitionNode) {
+		out << " [WARNING: Expected PartitionNode]";
+	}
+	out << "\n\n";
+
+	// Traverse hierarchy starting from root
+	std::function<void(int, int, const std::string&)> printNode;
+	printNode = [&](int nodeId, int depth, const std::string& indent) {
+		auto it = nodesMap.find(nodeId);
+		if (it == nodesMap.end()) {
+			out << indent << "[Missing node " << nodeId << "]\n";
+			return;
+		}
+
+		unsigned offset = it->second;
+		DataElement ele;
+		ParseElementHeader(buf + offset, ele);
+		JT::ObjectType objType = JT::GetObjectType(ele.objectType);
+
+		// Parse node data and children
+		NodeInfo nodeInfo;
+		ParseNodeInfo(buf, offset, bufLen, objType, nodeInfo);
+		// Look up node properties from property table
+		auto propIt = propertyTable.table.find(nodeId);
+		if (propIt != propertyTable.table.end()) {
+			// Search for CAD_PART_NAME and JT_PROP_NAME properties
+			for (const auto& [keyId, valueId] : propIt->second) {
+				auto keyAtomIt = propertyAtomMap.find(keyId);
+				if (keyAtomIt == propertyAtomMap.end()) {
+				  continue;
+				}
+				std::u16string keyName = ParseStringPropertyAtom(buf, keyAtomIt->second, bufLen);
+
+				if (CompareU16StringToAscii(keyName, "CAD_PART_NAME")) {
+					auto valueAtomIt = propertyAtomMap.find(valueId);
+					if (valueAtomIt != propertyAtomMap.end()) {
+						nodeInfo.name = ParseStringPropertyAtom(buf, valueAtomIt->second, bufLen);
+					}
+				} else if (CompareU16StringToAscii(keyName, "JT_PROP_NAME")) {
+					auto valueAtomIt = propertyAtomMap.find(valueId);
+					if (valueAtomIt != propertyAtomMap.end()) {
+						nodeInfo.jtPropName = ParseStringPropertyAtom(buf, valueAtomIt->second, bufLen);
+					}
+				}
+			}
+		}
+
+
+		out << indent << "Node ID: " << nodeId
+			<< ", Type: " << JT::ObjectTypeToString(objType);
+		if (!nodeInfo.name.empty()) {
+			out << ", CAD_PART_NAME: \"";
+			// Convert to ASCII for display
+			for (char16_t wchar : nodeInfo.name) {
+				if (wchar < 128) {
+					out << static_cast<char>(wchar);
+				} else {
+					out << '?';  // Non-ASCII placeholder
+				}
+			}
+			out << "\"";
+		}
+		if (!nodeInfo.jtPropName.empty()) {
+			out << ", JT_PROP_NAME: \"";
+			// Convert to ASCII for display
+			for (char16_t wchar : nodeInfo.jtPropName) {
+				if (wchar < 128) {
+					out << static_cast<char>(wchar);
+				} else {
+					out << '?';  // Non-ASCII placeholder
+				}
+			}
+			out << "\"";
+		}
+		out << "\n";
+
+		// Traverse children
+		for (int childId : nodeInfo.childIds) {
+			printNode(childId, depth + 1, indent + "  ");
+		}
+	};
+
+	printNode(rootId, 0, "");
 }
 
 // split data segment into elements for each object.
@@ -233,7 +463,7 @@ int MapElements(const DataSegment & seg, size_t startOffset, std::unordered_map<
 			break;
 		}
 		if (objType != JT::ObjectType::Unknown) {
-			elementOffsets.push_back({ ele.objectId, bufOffset });
+			elementOffsets.push_back({ ele.objectId, unsigned(bufOffset) });
 		}
 		// 4 bytes of size + actual length
 		bufOffset += 4 + ele.elementLength;
@@ -315,6 +545,8 @@ int ParsePropertyTable(const DataSegment& seg, unsigned startByte, PropertyTable
 }
 
 int ParseScene(const DataSegment& seg, SceneGraph& scene) {
+	// Store reference to segment data for hierarchy traversal
+	scene.segmentData = &seg;
 
 	unsigned endOffset = 0;
 	unsigned bufLen = seg.data.size();
@@ -323,7 +555,7 @@ int ParseScene(const DataSegment& seg, SceneGraph& scene) {
 	ParseElementHeader(seg.data.data() + endOffset, ele);
 	auto type = GetObjectType(ele.objectType);
 	std::cout << "final ele type " << ObjectTypeToString(type) << "\n";
-	scene.endOfElementOffset = endOffset + 4 + ele.elementLength;	
+	scene.endOfElementOffset = endOffset + 4 + ele.elementLength;
 	unsigned propertyEnd = 0;
 	ret = MapElements(seg, scene.endOfElementOffset, scene.propertyAtomMap, propertyEnd);
 

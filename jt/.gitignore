@@ -1,2 +1,4 @@
 *.pdf
 *.jt
+JT10Spec/
+build/

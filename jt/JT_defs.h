@@ -310,4 +310,22 @@ namespace JT {
     default:                                        return "UNKNOWN_OBJECT_TYPE";
     }
   }
+
+  // Helper to determine if a node type can have children
+  bool NodeTypeHasChildren(JT::ObjectType type) {
+    switch (type) {
+    case JT::ObjectType::GroupNode:
+    case JT::ObjectType::PartitionNode:
+    case JT::ObjectType::MetaDataNode:
+    case JT::ObjectType::LODNode:
+    case JT::ObjectType::RangeLODNode:
+    case JT::ObjectType::SwitchNode:
+    case JT::ObjectType::PartNode:
+    case JT::ObjectType::InstanceNode: // Special case: single child
+      return true;
+    default:
+      return false;
+    }
+  }
+
 }
