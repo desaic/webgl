@@ -18,20 +18,6 @@
 
 using namespace JT;
 
-// cannot read as hole because JT file design
-// did not consider data alignment requirements
-struct JTHeader {
-    static const unsigned VERSION_LEN = 80;
-    std::array<char, VERSION_LEN> version = {};
-    // only 0 little endian is handled.
-    uint8_t byteOrder = 0;
-    int32_t emptyField = 0;
-    // byte offset from the top of the file to the start of the TOC Segment
-    uint64_t TOCOffset = 0;
-    // data segment ID for logical scene graph, i.e. root.
-    GUID LSGSegId;
-};
-
 static uint32_t ToUint32(const uint8_t *bytes) {
   // Little Endian
   return *((uint32_t *)bytes);
@@ -107,18 +93,6 @@ JTHeader ReadHeader(std::istream &in) {
   return header;
 }
 
-struct TOCEntry {
-    GUID segId;
-    uint64_t segOffset = 0;
-    uint32_t len = 0;
-    uint32_t attr = 0;
-    uint32_t type = 0;
-    // bits 24-31 of attr.
-    uint32_t GetType() const {
-      return attr >> 24;
-    }
-};
-
 TOCEntry ReadTOCEntry(std::istream &in) {
   TOCEntry entry;
   in.read((char *)(&entry.segId), sizeof(entry.segId));
@@ -127,90 +101,6 @@ TOCEntry ReadTOCEntry(std::istream &in) {
   in.read((char *)(&entry.attr), sizeof(entry.attr));
   entry.type = entry.GetType();
   return entry;
-}
-
-struct DataSegment {
-    GUID segId;
-    uint32_t type = 0;
-    uint32_t len = 0;
-    std::vector<uint8_t> data;
-};
-
-struct CompressionHeader {
-    uint32_t compressionFlag = 0;
-    int compressedLen = 0;
-    uint8_t compressionAlgorithm = 0;
-};
-
-struct DataElement {
-    // length in bytes of the Element
-    // invalid when length is 0.
-    // includes everything except the 4 byte element length.
-    int elementLength = 0;
-    GUID objectType;
-    uint8_t baseType = 0;
-    int objectId = 0;
-    std::vector<uint8_t> data;
-};
-
-struct RangeI32 {
-    int min = 0;
-    int max = 0;
-};
-
-struct BaseNodeData {
-    uint8_t version = 0;
-    uint32_t flags = 0;
-    int32_t attributeCount = 0;
-    std::vector<int> attributeIds;
-};
-
-struct GroupNodeData {
-    BaseNodeData base;
-    uint8_t version = 0;
-    int32_t childCount = 0;
-    std::vector<int> childIds;
-};
-
-struct NodeInfo {
-    GroupNodeData group;
-    std::u16string name;
-    std::u16string jtPropName;
-    std::vector<GUID> shapeLODSegmentRefs; // References to Shape LOD segments
-};
-
-struct PartitionNode {
-    GroupNodeData group;
-    int partitionFlags = 0;
-    std::u16string fileName;
-    Box3f transformedBox;
-    float area = 0.0f;
-    RangeI32 vertexCount;
-    RangeI32 polyCount;
-    Box3f untransformedBox;
-};
-
-struct JTFile {
-    JTHeader header;
-    std::vector<TOCEntry> TOCs;
-    // from GUID to TOC entry index into TOCs list.
-    std::map<GUID, size_t> TOCMap;
-    void BuildTOCMap();
-    TOCEntry GetEntry(const GUID &guid) const {
-      auto it = TOCMap.find(guid);
-      if (it != TOCMap.end()) {
-        return TOCs[it->second];
-      } else {
-        // invalid entry with 0 length
-        return TOCEntry();
-      }
-    }
-};
-
-void JTFile::BuildTOCMap() {
-  for (size_t i = 0; i < TOCs.size(); i++) {
-    TOCMap[TOCs[i].segId] = i;
-  }
 }
 
 DataSegment LoadDataSegment(std::istream &in, const TOCEntry &entry) {
@@ -273,23 +163,6 @@ void ParseElementHeader(const uint8_t *buf, DataElement &ele) {
     // endOfElements do not have object id or base type .
     ele.baseType = buf[20];
     ele.objectId = ToInt32(buf + 21);
-  }
-}
-
-// Check if a node type is a Shape Node
-bool IsShapeNodeType(JT::ObjectType type) {
-  switch (type) {
-  case JT::ObjectType::BaseShapeNode:
-  case JT::ObjectType::VertexShapeNode:
-  case JT::ObjectType::TriStripSetShapeNode:
-  case JT::ObjectType::PolylineSetShapeNode:
-  case JT::ObjectType::PointSetShapeNode:
-  case JT::ObjectType::PolygonSetShapeNode:
-  case JT::ObjectType::PrimitiveSetShapeNode:
-  case JT::ObjectType::NullShapeNode:
-    return true;
-  default:
-    return false;
   }
 }
 
@@ -479,7 +352,7 @@ void SceneGraph::PrintHierarchy(std::ostream &out) {
     NodeInfo nodeInfo;
     ParseNodeInfo(buf, offset, bufLen, objType, nodeInfo);
 
-    // Parse shape LOD references from attributes (Late Loaded Property Atoms)
+    // attributes are material lighting texture
     for (int attrId : nodeInfo.group.base.attributeIds) {
       // attributes are lumped into nodes map for the file we are given.
       auto attrIt = nodesMap.find(attrId);
@@ -747,16 +620,142 @@ void DebugLSGLoading() {
   scene.PrintHierarchy(debugOut);
 }
 
+// Walk through scene graph and identify all Tri-Strip Set Shape Nodes
+// Write information about mesh location to output file
+void IdentifyShapes(const SceneGraph &scene,
+                    const std::map<GUID, size_t> &guidToSegmentIndex,
+                    const std::string &outputFile) {
+  if (scene.segmentData == nullptr) {
+    std::cout << "Error: No segment data available\n";
+    return;
+  }
+
+  const uint8_t *buf = scene.segmentData->data.data();
+  unsigned bufLen = scene.segmentData->data.size();
+
+  std::ofstream out(outputFile);
+  if (!out.is_open()) {
+    std::cout << "Error: Could not open output file " << outputFile << "\n";
+    return;
+  }
+
+  out << "=== Tri-Strip Set Shape Nodes ===\n\n";
+  out << "Per JT 10 spec: TriStripSetShapeNode references Tri-Strip Set Shape LOD Elements\n";
+  out << "via Late Loaded Property Atom Elements which contain Segment IDs (GUIDs).\n\n";
+
+  // Traverse all nodes in the scene graph
+  std::function<void(int, int)> visitNode;
+  visitNode = [&](int nodeId, int depth) {
+    auto it = scene.nodesMap.find(nodeId);
+    if (it == scene.nodesMap.end()) {
+      return;
+    }
+
+    unsigned offset = it->second;
+    DataElement ele;
+    ParseElementHeader(buf + offset, ele);
+    JT::ObjectType objType = JT::GetObjectType(ele.objectType);
+
+    // Check if this is a TriStripSetShapeNode
+    if (objType == JT::ObjectType::TriStripSetShapeNode
+	|| objType == JT::ObjectType::PartNode) {
+      out << "Found TriStripSetShapeNode:\n";
+      out << "  Object ID: " << nodeId << "\n";
+
+      // Look up node name and LOD references from property table
+      auto propIt = scene.propertyTable.table.find(nodeId);
+      if (propIt != scene.propertyTable.table.end()) {
+        for (const auto &[keyId, valueId] : propIt->second) {
+          auto keyAtomIt = scene.propertyAtomMap.find(keyId);
+          if (keyAtomIt == scene.propertyAtomMap.end()) {
+            continue;
+          }
+          unsigned keyOffset = keyAtomIt->second;
+          DataElement keyEle;
+          ParseElementHeader(buf + keyOffset, keyEle);
+          JT::ObjectType keyType = JT::GetObjectType(keyEle.objectType);
+
+          if (keyType != JT::ObjectType::StringPropertyAtom) {
+            continue;
+          }
+          std::u16string keyName = ParseStringPropertyAtom(buf, keyOffset, bufLen);
+          auto valueAtomIt = scene.propertyAtomMap.find(valueId);
+          if (valueAtomIt == scene.propertyAtomMap.end()) {
+            continue;
+          }
+          DataElement valEle;
+          ParseElementHeader(buf + valueAtomIt->second, valEle);
+          JT::ObjectType valType = JT::GetObjectType(valEle.objectType);
+          if (valType == JT::ObjectType::StringPropertyAtom) {
+            std::u16string valueStr = ParseStringPropertyAtom(buf, valueAtomIt->second, bufLen);
+            out << to_utf8(keyName) << ": " << to_utf8(valueStr) << "\n";
+          } else if (valType == JT::ObjectType::LateLoadedPropertyAtom) {
+            // Parse Late Loaded Property Atom to get Segment ID
+            unsigned atomOffset = valueAtomIt->second + 25; // Skip element header
+            if (atomOffset + 6 > bufLen) {
+              continue;
+            }
+            atomOffset += 6;
+            if (atomOffset + 28 > bufLen) {
+              continue;
+            }
+
+            GUID segmentGUID;
+            ReadGUID(buf + atomOffset, segmentGUID);
+            atomOffset += 16;
+
+            int32_t segmentType = ToInt32(buf + atomOffset);
+            atomOffset += 4;
+
+            int32_t payloadObjectId = ToInt32(buf + atomOffset);
+            atomOffset += 4;
+
+            out << "  Late Loaded Property (LOD Reference):\n";
+            out << "    Segment Type: " << JT::SegmentTypeToString(JT::SegmentType(segmentType)) << "\n";
+            out << "    Payload Object ID: " << payloadObjectId << "\n";
+
+            // Look up segment in GUID map
+            auto segIt = guidToSegmentIndex.find(segmentGUID);
+            if (segIt != guidToSegmentIndex.end()) {
+              out << "    Segment Index: " << segIt->second << "\n";
+            } else {
+              out << "    WARNING: Segment GUID not found in TOC!\n";
+            }
+          }
+        }
+        out << "\n";
+      }
+	}
+      // Recursively visit children
+      NodeInfo nodeInfo;
+      if (ParseNodeInfo(buf, offset, bufLen, objType, nodeInfo)) {
+        for (int childId : nodeInfo.group.childIds) {
+          visitNode(childId, depth + 1);
+        }
+      }
+    };
+
+  // Start traversal from the root (first element)
+  if (bufLen >= 25) {
+    DataElement rootEle;
+    ParseElementHeader(buf, rootEle);
+    visitNode(rootEle.objectId, 0);
+  }
+
+  out.close();
+  std::cout << "Shape information written to " << outputFile << "\n";
+}
+
 int main(int argc, char *argv[]) {
-  DebugLSGLoading();
-  return 0;
+//   DebugLSGLoading();
+//   return 0;
   // if (argc <= 1) {
   //	return -1;
   // }
   // std::string input = argv[1];
   std::string input = "I:/foundation/b/S.jt";
   // std::string input = "/media/desaic/ssd2/data/b/S.jt";
-  std::string outputDir = "./";
+  std::string outputDir = "I:/foundation/b/out/";
   if (argc > 2) {
     outputDir = argv[2];
   }
@@ -788,22 +787,19 @@ int main(int argc, char *argv[]) {
     return -3;
   }
 
-  auto sceneData = LoadDataSegment(inFile, sceneRoot);
+  DataSegment sceneData;
   SceneGraph scene;
-  // debugging
-  Decompress(sceneData);
-  unsigned endOffset = 0;
-  unsigned bufLen = sceneData.data.size();
-  int ret = MapElements(sceneData, 0, scene.nodesMap, endOffset);
-  DataElement ele;
-  ParseElementHeader(sceneData.data.data() + endOffset, ele);
-  auto type = GetObjectType(ele.objectType);
-  std::cout << "final ele type " << ObjectTypeToString(type) << "\n";
-  scene.endOfElementOffset = endOffset + 4 + ele.elementLength;
-  unsigned remainingSize = bufLen - scene.endOfElementOffset;
-  unsigned propertyEnd = 0;
-  ret = MapElements(sceneData, remainingSize, scene.propertyAtomMap, propertyEnd);
+  bool debugging = true;
+  if(debugging){
+  	LoadSegmentFromDisk("I:/foundation/b/seg.bin", sceneData);
+  }else{
+	sceneData = LoadDataSegment(inFile, sceneRoot);
+	Decompress(sceneData);
+  }
+  ParseScene(sceneData, scene);
 
-  std::cout << propertyEnd << " total " << bufLen << "\n";
+  // Identify all shapes and write mesh location info
+  IdentifyShapes(scene, jtFile.TOCMap, outputDir + "shapes.txt");
+
   return 0;
 }
