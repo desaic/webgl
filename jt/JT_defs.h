@@ -199,6 +199,7 @@ namespace JT {
       GUID objectType;
       uint8_t baseType = 0;
       int objectId = 0;
+      const static unsigned BYTES = 25;
       std::vector<uint8_t> data;
   };
 
@@ -238,6 +239,19 @@ namespace JT {
       Box3f untransformedBox;
   };
 
+  struct BasePropertyAtomData{
+      uint8_t version = 0;
+      uint32_t flags = 0;
+      const static unsigned BYTES = 5;
+  };
+  struct LateLoadedPropertyAtom{
+     BasePropertyAtomData base;
+     uint8_t version = 0;
+     GUID segId;
+     int segType = 0;
+     int payloadId = 0;
+     int reserved = 0;
+  };
   struct JTFile {
       JTHeader header;
       std::vector<TOCEntry> TOCs;

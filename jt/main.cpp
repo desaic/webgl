@@ -75,7 +75,7 @@ std::u16string ParseMbString(const uint8_t *buf, unsigned &offset, unsigned maxL
 // bytes start at element header.
 std::u16string ParseStringPropertyAtom(const uint8_t *buf, unsigned offset, unsigned bufLen) {
   // Skip element header (25 bytes)
-  unsigned localOffset = offset + 25;
+  unsigned localOffset = offset + DataElement::BYTES;
   if (localOffset >= bufLen)
     return std::u16string();
   // base property version + state flags U32 + string prop version U8.
@@ -166,6 +166,26 @@ void ParseElementHeader(const uint8_t *buf, DataElement &ele) {
   }
 }
 
+bool ParseLateLoadedPropertyAtom(const uint8_t *buf, unsigned offset, unsigned bufLen, JT::LateLoadedPropertyAtom &atom) {
+  unsigned atomOffset = offset + DataElement::BYTES;
+  if (atomOffset + 6 > bufLen) {
+    return false;
+  }
+  atomOffset += 6;
+  if (atomOffset + 28 > bufLen) {
+    return false;
+  }
+
+  ReadGUID(buf + atomOffset, atom.segId);
+  atomOffset += 16;
+
+  atom.segType = ToInt32(buf + atomOffset);
+  atomOffset += 4;
+
+  atom.payloadId = ToInt32(buf + atomOffset);
+  return true;
+}
+
 // Parse node data after element header. Returns false if parsing fails.
 bool ParseNodeInfo(const uint8_t *buf, unsigned offset, unsigned dataLen, JT::ObjectType nodeType, NodeInfo &info) {
   // @TODO not quite right.
@@ -173,11 +193,12 @@ bool ParseNodeInfo(const uint8_t *buf, unsigned offset, unsigned dataLen, JT::Ob
     return true; // Not a node type, but not an error
   }
 
-  if (offset + 25 > dataLen)
+  if (offset + DataElement::BYTES > dataLen) {
     return false;
+  }
 
   const uint8_t *nodeData = buf + offset;
-  unsigned localOffset = 25; // Skip element header
+  unsigned localOffset = DataElement::BYTES; // Skip element header
 
   // Base Node Data: Version + Node Flags + Attribute Count + Attribute IDs
   if (offset + localOffset + 9 > dataLen)
@@ -324,7 +345,7 @@ void SceneGraph::PrintHierarchy(std::ostream &out) {
   unsigned bufLen = segmentData->data.size();
 
   // Find root node - the first element at offset 0 (should be Partition Node)
-  if (bufLen < 25) {
+  if (bufLen < DataElement::BYTES) {
     out << "Error: Segment data too small\n";
     return;
   }
@@ -620,36 +641,15 @@ void DebugLSGLoading() {
   scene.PrintHierarchy(debugOut);
 }
 
-// Walk through scene graph and identify all Tri-Strip Set Shape Nodes
-// Write information about mesh location to output file
-void IdentifyShapes(const SceneGraph &scene,
-                    const std::map<GUID, size_t> &guidToSegmentIndex,
-                    const std::string &outputFile) {
-  if (scene.segmentData == nullptr) {
-    std::cout << "Error: No segment data available\n";
-    return;
-  }
-
-  const uint8_t *buf = scene.segmentData->data.data();
-  unsigned bufLen = scene.segmentData->data.size();
-
-  std::ofstream out(outputFile);
-  if (!out.is_open()) {
-    std::cout << "Error: Could not open output file " << outputFile << "\n";
-    return;
-  }
-
-  out << "=== Tri-Strip Set Shape Nodes ===\n\n";
-  out << "Per JT 10 spec: TriStripSetShapeNode references Tri-Strip Set Shape LOD Elements\n";
-  out << "via Late Loaded Property Atom Elements which contain Segment IDs (GUIDs).\n\n";
-
-  // Traverse all nodes in the scene graph
-  std::function<void(int, int)> visitNode;
-  visitNode = [&](int nodeId, int depth) {
+void visitShapeNodes(const SceneGraph& scene, int nodeId, int depth,  const std::map<GUID, size_t> &guidToSegmentIndex,
+	std::ostream & out) {
     auto it = scene.nodesMap.find(nodeId);
     if (it == scene.nodesMap.end()) {
       return;
     }
+
+	const uint8_t *buf = scene.segmentData->data.data();
+	unsigned bufLen = scene.segmentData->data.size();
 
     unsigned offset = it->second;
     DataElement ele;
@@ -690,32 +690,17 @@ void IdentifyShapes(const SceneGraph &scene,
             std::u16string valueStr = ParseStringPropertyAtom(buf, valueAtomIt->second, bufLen);
             out << to_utf8(keyName) << ": " << to_utf8(valueStr) << "\n";
           } else if (valType == JT::ObjectType::LateLoadedPropertyAtom) {
-            // Parse Late Loaded Property Atom to get Segment ID
-            unsigned atomOffset = valueAtomIt->second + 25; // Skip element header
-            if (atomOffset + 6 > bufLen) {
-              continue;
-            }
-            atomOffset += 6;
-            if (atomOffset + 28 > bufLen) {
+            JT::LateLoadedPropertyAtom atom;
+            if (!ParseLateLoadedPropertyAtom(buf, valueAtomIt->second, bufLen, atom)) {
               continue;
             }
 
-            GUID segmentGUID;
-            ReadGUID(buf + atomOffset, segmentGUID);
-            atomOffset += 16;
-
-            int32_t segmentType = ToInt32(buf + atomOffset);
-            atomOffset += 4;
-
-            int32_t payloadObjectId = ToInt32(buf + atomOffset);
-            atomOffset += 4;
-
-            out << "  Late Loaded Property (LOD Reference):\n";
-            out << "    Segment Type: " << JT::SegmentTypeToString(JT::SegmentType(segmentType)) << "\n";
-            out << "    Payload Object ID: " << payloadObjectId << "\n";
+            out << "  Late Loaded Property:\n";
+            out << "    Segment Type: " << JT::SegmentTypeToString(JT::SegmentType(atom.segType)) << "\n";
+            out << "    Payload Object ID: " << atom.payloadId << "\n";
 
             // Look up segment in GUID map
-            auto segIt = guidToSegmentIndex.find(segmentGUID);
+            auto segIt = guidToSegmentIndex.find(atom.segId);
             if (segIt != guidToSegmentIndex.end()) {
               out << "    Segment Index: " << segIt->second << "\n";
             } else {
@@ -730,16 +715,36 @@ void IdentifyShapes(const SceneGraph &scene,
       NodeInfo nodeInfo;
       if (ParseNodeInfo(buf, offset, bufLen, objType, nodeInfo)) {
         for (int childId : nodeInfo.group.childIds) {
-          visitNode(childId, depth + 1);
+          visitShapeNodes(scene, childId, depth + 1, guidToSegmentIndex, out);
         }
       }
-    };
+    }
 
+
+// Walk through scene graph and identify all Tri-Strip Set Shape Nodes
+// Write information about mesh location to output file
+void IdentifyShapes(const SceneGraph &scene,
+                    const std::map<GUID, size_t> &guidToSegmentIndex,
+                    const std::string &outputFile) {
+  if (scene.segmentData == nullptr) {
+    std::cout << "Error: No segment data available\n";
+    return;
+  }
+
+  const uint8_t *buf = scene.segmentData->data.data();
+  unsigned bufLen = scene.segmentData->data.size();
+
+  std::ofstream out(outputFile);
+  if (!out.is_open()) {
+    std::cout << "Error: Could not open output file " << outputFile << "\n";
+    return;
+  }
+  
   // Start traversal from the root (first element)
-  if (bufLen >= 25) {
+  if (bufLen >= DataElement::BYTES) {
     DataElement rootEle;
     ParseElementHeader(buf, rootEle);
-    visitNode(rootEle.objectId, 0);
+    visitShapeNodes(scene, rootEle.objectId, 0, guidToSegmentIndex, out);
   }
 
   out.close();
@@ -756,6 +761,7 @@ int main(int argc, char *argv[]) {
   std::string input = "I:/foundation/b/S.jt";
   // std::string input = "/media/desaic/ssd2/data/b/S.jt";
   std::string outputDir = "I:/foundation/b/out/";
+  // std::string outputDir = "/media/desaic/ssd2/data/b/out/";
   if (argc > 2) {
     outputDir = argv[2];
   }
