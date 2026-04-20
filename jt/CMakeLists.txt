@@ -25,11 +25,19 @@ target_compile_definitions(${BIN} PRIVATE
 
 #LZMA
 target_include_directories(${BIN} PRIVATE "${LZMA_ROOT}/include")
-target_link_directories(${BIN} PRIVATE "${LZMA_ROOT}/lib")
-
-target_link_libraries(${BIN} PRIVATE 
-    $<$<CONFIG:Debug>:lzma_d> 
-    $<$<CONFIG:Release>:lzma>
-    Mesh 
-    MathLib
-)
+if(WIN32)
+    target_link_directories(${BIN} PRIVATE "${LZMA_ROOT}/lib_win")
+    target_link_libraries(${BIN} PRIVATE
+        $<$<CONFIG:Debug>:lzma_d>
+        $<$<CONFIG:Release>:lzma>
+        Mesh
+        MathLib
+    )
+else()
+    target_link_directories(${BIN} PRIVATE "${LZMA_ROOT}/lib")
+    target_link_libraries(${BIN} PRIVATE
+        liblzma.a
+        Mesh
+        MathLib
+    )
+endif()

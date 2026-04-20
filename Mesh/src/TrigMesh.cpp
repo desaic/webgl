@@ -1,6 +1,7 @@
 #include "TrigMesh.h"
 
 #include "stl_reader.h"
+#include <cstring>
 #include <fstream>
 #include <iomanip>
 #include <iostream>

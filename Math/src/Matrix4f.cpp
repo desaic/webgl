@@ -1,6 +1,7 @@
 #include "Matrix4f.h"
 
 #include <cmath>
+#include <cstring>
 
 #include "Matrix3f.h"
 #include "Quat4f.h"

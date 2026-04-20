@@ -1,4 +1,5 @@
 #include "Array3DUtils.h"
+#include <cstdint>
 #include <deque> 
 
 float TrilinearInterp(const Array3Df& dist, const Vec3f& x, const Vec3f& voxSize) {

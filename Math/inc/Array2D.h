@@ -1,6 +1,7 @@
 #ifndef ARRAY_2D_H
 #define ARRAY_2D_H
 
+#include <cstdint>
 #include <string>
 #include <vector>
 

@@ -1,5 +1,6 @@
 #include "Array2D.h"
 #include <algorithm>
+#include <cstring>
 
 void flipY(Slice& slice) {
   Vec2u size = slice.GetSize();

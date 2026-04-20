@@ -758,10 +758,11 @@ int main(int argc, char *argv[]) {
   //	return -1;
   // }
   // std::string input = argv[1];
-  std::string input = "I:/foundation/b/S.jt";
-  // std::string input = "/media/desaic/ssd2/data/b/S.jt";
-  std::string outputDir = "I:/foundation/b/out/";
-  // std::string outputDir = "/media/desaic/ssd2/data/b/out/";
+  // std::string input = "I:/foundation/b/S.jt";
+  std::string input = "/media/desaic/ssd2/data/b/S.jt";
+  // std::string outputDir = "I:/foundation/b/out/";
+  std::string outputDir = "/media/desaic/ssd2/data/b/out/";
+  std::string sceneCache = "/media/desaic/ssd2/data/b/scene_seg.bin";
   if (argc > 2) {
     outputDir = argv[2];
   }
@@ -797,10 +798,16 @@ int main(int argc, char *argv[]) {
   SceneGraph scene;
   bool debugging = true;
   if(debugging){
-  	LoadSegmentFromDisk("I:/foundation/b/seg.bin", sceneData);
+  	LoadSegmentFromDisk(sceneCache, sceneData);
   }else{
-	sceneData = LoadDataSegment(inFile, sceneRoot);
-	Decompress(sceneData);
+    sceneData = LoadDataSegment(inFile, sceneRoot);
+    Decompress(sceneData);
+    bool cacheSceneGraph = false;
+    if(cacheSceneGraph){
+      std::ofstream sceneOut;
+      sceneOut.open(sceneCache, std::ofstream::binary);
+      sceneOut.write((const char *)sceneData.data.data(), sceneData.data.size());
+    }
   }
   ParseScene(sceneData, scene);
 

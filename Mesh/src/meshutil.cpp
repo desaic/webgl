@@ -1,4 +1,4 @@
-#include "MeshUtil.h"
+#include "meshutil.h"
 
 #include "Array3D.h"
 #include "TrigMesh.h"
@@ -472,7 +472,7 @@ class Vec3fKey {
 };
 struct Vec3fHash {
   size_t operator()(const Vec3fKey& k) const {
-    return size_t((92821 * 92831) * int64_t(k._x / MergeEps) + 92831 * int64_t(k._y / MergeEps) +
+    return size_t((17123 * 17911) * int64_t(k._x / MergeEps) + 17123 * int64_t(k._y / MergeEps) +
                   int64_t(k._z / MergeEps));
   }
 };
