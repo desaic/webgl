@@ -182,7 +182,9 @@ namespace JT {
       GUID segId;
       uint32_t type = 0;
       uint32_t len = 0;
+      static const unsigned BYTES = 24;
       std::vector<uint8_t> data;
+      
   };
 
   struct CompressionHeader {
@@ -244,6 +246,7 @@ namespace JT {
       uint32_t flags = 0;
       const static unsigned BYTES = 5;
   };
+
   struct LateLoadedPropertyAtom{
      BasePropertyAtomData base;
      uint8_t version = 0;
@@ -252,6 +255,45 @@ namespace JT {
      int payloadId = 0;
      int reserved = 0;
   };
+
+  struct BaseShapeData{
+    DataElement element;
+    uint8_t version = 0;
+    Box3f untransformedBox;
+    float area = 0.0f;
+    RangeI32 vertexCountRange;
+    RangeI32 nodeCountRange;
+    RangeI32 polyCountRange;
+    uint32_t size = 0;
+    float compressionLevel = 1.0f;
+  };
+
+  struct VertexShapeData{
+    BaseNodeData base;
+    uint8_t version = 0;
+    uint64_t binding = 0;
+  };
+  struct BaseShapeLODData{
+    uint8_t version = 0;
+  };
+  struct VertexShapeLODData{
+    BaseShapeLODData base;
+    uint8_t version = 0;
+    uint64_t bindings = 0;
+
+  };
+
+  struct ShapeLODSegment{
+    DataSegment header;
+    DataElement element;
+  };
+
+  struct TriStripSetShapeLOD{
+    DataElement element;
+    VertexShapeLODData vertices;
+    uint8_t version = 0;
+  };
+
   struct JTFile {
       JTHeader header;
       std::vector<TOCEntry> TOCs;
