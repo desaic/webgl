@@ -1,6 +1,8 @@
 #include "JT_defs.h"
 #include <cstdint>
+#include <iomanip>
 #include <map>
+#include <sstream>
 
 namespace JT {
 
@@ -21,6 +23,41 @@ namespace JT {
                  static_cast<uint8_t>(d2 & 0xFF), static_cast<uint8_t>((d2 >> 8) & 0xFF),
                  static_cast<uint8_t>(d3 & 0xFF), static_cast<uint8_t>((d3 >> 8) & 0xFF), b1, b2, b3, b4, b5, b6, b7,
                  b8}};
+  }
+
+  // Convert GUID to hex string format
+  std::string GUIDToString(const GUID &guid) {
+    const auto &b = guid.bytes;
+    std::ostringstream oss;
+    oss << std::hex << std::setfill('0');
+
+    // d1 (4 bytes, little-endian)
+    oss << std::setw(2) << static_cast<int>(b[3])
+        << std::setw(2) << static_cast<int>(b[2])
+        << std::setw(2) << static_cast<int>(b[1])
+        << std::setw(2) << static_cast<int>(b[0]) << '-';
+
+    // d2 (2 bytes, little-endian)
+    oss << std::setw(2) << static_cast<int>(b[5])
+        << std::setw(2) << static_cast<int>(b[4]) << '-';
+
+    // d3 (2 bytes, little-endian)
+    oss << std::setw(2) << static_cast<int>(b[7])
+        << std::setw(2) << static_cast<int>(b[6]) << '-';
+
+    // b1-b2 (2 bytes, big-endian)
+    oss << std::setw(2) << static_cast<int>(b[8])
+        << std::setw(2) << static_cast<int>(b[9]) << '-';
+
+    // b3-b8 (6 bytes, big-endian)
+    oss << std::setw(2) << static_cast<int>(b[10])
+        << std::setw(2) << static_cast<int>(b[11])
+        << std::setw(2) << static_cast<int>(b[12])
+        << std::setw(2) << static_cast<int>(b[13])
+        << std::setw(2) << static_cast<int>(b[14])
+        << std::setw(2) << static_cast<int>(b[15]);
+
+    return oss.str();
   }
 
   // Core LSG Nodes needed to find meshes [cite: 1121]

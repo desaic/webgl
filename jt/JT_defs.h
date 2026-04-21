@@ -88,6 +88,9 @@ namespace JT {
                   uint8_t b7,
                   uint8_t b8);
 
+  // Convert GUID to hex string format
+  std::string GUIDToString(const GUID &guid);
+
   enum class ObjectType {
     Unknown = 0,
     EndOfElements,
@@ -285,6 +288,7 @@ namespace JT {
       BaseShapeLODData base;
       uint8_t version = 0;
       uint64_t bindings = 0;
+      static const unsigned BYTES = 10;
   };
 
   struct ShapeLODSegment {
@@ -347,6 +351,19 @@ namespace JT {
       // NOTE: The DataSegment must remain valid for the lifetime of SceneGraph
       // or at least until PrintHierarchy is called
       const DataSegment *segmentData = nullptr;
+  };
+
+  struct TopoMeshLODData{
+    uint8_t version = 0;
+    //U32: Vertex Records Object ID
+    uint32_t objectId = 0;
+  };
+
+  // TopoMesh Topologically Compressed LOD Data
+  struct TopoMeshTopological{
+    TopoMeshLODData topoLOD;
+    uint8_t version = 0;
+    
   };
 
   // Check if a node type is a Shape Node

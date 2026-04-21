@@ -28,6 +28,14 @@ static int32_t ToInt32(const uint8_t *bytes) {
   return *((int32_t *)bytes);
 }
 
+static int64_t ToInt64(const uint8_t *bytes) {
+  return *((int64_t *)bytes);
+}
+
+static uint64_t ToUint64(const uint8_t *bytes) {
+  return *((uint64_t *)bytes);
+}
+
 static int16_t ToInt16(const uint8_t *bytes) {
   // Little Endian
   return *((int16_t *)bytes);
@@ -619,15 +627,35 @@ void DebugLSGLoading() {
   scene.PrintHierarchy(debugOut);
 }
 
+void ParseVertexShapeLODHeader(VertexShapeLODData & vData, const uint8_t * buf){
+  vData.base.version = buf[0];
+  vData.version = buf[1];
+  vData.bindings = ToUint64(buf + 2);
+}
+
 // debugging function
 void ExportShapeSegment(const JTFile & jtFile, TOCEntry & entry){
   std::string outDir = "/media/desaic/ssd2/data/b/out/";
   DataSegment seg = LoadDataSegment(jtFile.file, entry);
   std::cout << seg.len <<"\n";
-  if(seg.type <7 || seg.type > 12){
+  if(!IsShapeSegType(seg.type)){
     //not a shape lod
     return;
   }
+  DataElement ele;
+  const uint8_t * buf = seg.data.data();
+  ParseElementHeader(buf, ele);
+  JT::ObjectType eleType = JT::GetObjectType(ele.objectType);
+  std::cout<<JT::ObjectTypeToString(eleType)<<"\n";
+  size_t bufOffset = DataElement::BYTES;
+  VertexShapeLODData vShape;
+  ParseVertexShapeLODHeader(vShape, buf + bufOffset);
+  bufOffset += VertexShapeLODData::BYTES;
+  DataElement vertEle;
+  ParseElementHeader(buf + bufOffset, vertEle);
+  eleType = JT::GetObjectType(vertEle.objectType);
+  std::cout <<JT::GUIDToString(vertEle.objectType)<<"\n";
+  std::cout<<"vert ele type "<<JT::ObjectTypeToString(eleType)<<"\n";
   
 }
 
