@@ -1,9 +1,12 @@
 #pragma once
-#include <cstdint>
 #include <array>
-#include <vector>
-#include <string>
+#include <cstdint>
 #include <map>
+#include <string>
+#include <unordered_map>
+#include <vector>
+#include <iostream>
+#include <fstream>
 
 #include "BBox.h"
 
@@ -37,7 +40,7 @@ namespace JT {
     StepBRep = 33
   };
 
-    constexpr bool IsCompressionSupported(uint32_t typeVal) {
+  constexpr bool IsCompressionSupported(uint32_t typeVal) {
     SegmentType type = SegmentType(typeVal);
     switch (type) {
     case SegmentType::LogicalSceneGraph:
@@ -176,6 +179,9 @@ namespace JT {
       uint32_t GetType() const {
         return attr >> 24;
       }
+      bool valid()const{
+        return len > 0;
+      }
   };
 
   struct DataSegment {
@@ -184,7 +190,6 @@ namespace JT {
       uint32_t len = 0;
       static const unsigned BYTES = 24;
       std::vector<uint8_t> data;
-      
   };
 
   struct CompressionHeader {
@@ -241,64 +246,66 @@ namespace JT {
       Box3f untransformedBox;
   };
 
-  struct BasePropertyAtomData{
+  struct BasePropertyAtomData {
       uint8_t version = 0;
       uint32_t flags = 0;
       const static unsigned BYTES = 5;
   };
 
-  struct LateLoadedPropertyAtom{
-     BasePropertyAtomData base;
-     uint8_t version = 0;
-     GUID segId;
-     int segType = 0;
-     int payloadId = 0;
-     int reserved = 0;
+  struct LateLoadedPropertyAtom {
+      BasePropertyAtomData base;
+      uint8_t version = 0;
+      GUID segId;
+      int segType = 0;
+      int payloadId = 0;
+      int reserved = 0;
   };
 
-  struct BaseShapeData{
-    DataElement element;
-    uint8_t version = 0;
-    Box3f untransformedBox;
-    float area = 0.0f;
-    RangeI32 vertexCountRange;
-    RangeI32 nodeCountRange;
-    RangeI32 polyCountRange;
-    uint32_t size = 0;
-    float compressionLevel = 1.0f;
+  struct BaseShapeData {
+      DataElement element;
+      uint8_t version = 0;
+      Box3f untransformedBox;
+      float area = 0.0f;
+      RangeI32 vertexCountRange;
+      RangeI32 nodeCountRange;
+      RangeI32 polyCountRange;
+      uint32_t size = 0;
+      float compressionLevel = 1.0f;
   };
 
-  struct VertexShapeData{
-    BaseNodeData base;
-    uint8_t version = 0;
-    uint64_t binding = 0;
+  struct VertexShapeData {
+      BaseNodeData base;
+      uint8_t version = 0;
+      uint64_t binding = 0;
   };
-  struct BaseShapeLODData{
-    uint8_t version = 0;
+  struct BaseShapeLODData {
+      uint8_t version = 0;
   };
-  struct VertexShapeLODData{
-    BaseShapeLODData base;
-    uint8_t version = 0;
-    uint64_t bindings = 0;
-
-  };
-
-  struct ShapeLODSegment{
-    DataSegment header;
-    DataElement element;
+  struct VertexShapeLODData {
+      BaseShapeLODData base;
+      uint8_t version = 0;
+      uint64_t bindings = 0;
   };
 
-  struct TriStripSetShapeLOD{
-    DataElement element;
-    VertexShapeLODData vertices;
-    uint8_t version = 0;
+  struct ShapeLODSegment {
+      DataSegment header;
+      DataElement element;
   };
 
-  struct JTFile {
+  struct TriStripSetShapeLOD {
+      DataElement element;
+      VertexShapeLODData vertices;
+      uint8_t version = 0;
+  };
+
+  class JTFile {
+    public:
+    JTFile(std::ifstream & fileIn):file(fileIn){}
       JTHeader header;
       std::vector<TOCEntry> TOCs;
       // from GUID to TOC entry index into TOCs list.
       std::map<GUID, size_t> TOCMap;
+      std::ifstream &file;
       void BuildTOCMap() {
         for (size_t i = 0; i < TOCs.size(); i++) {
           TOCMap[TOCs[i].segId] = i;
@@ -315,9 +322,38 @@ namespace JT {
       }
   };
 
+  struct PropertyTable {
+      short version = 0;
+      // int because spec says so.
+      int size = 0;
+      using ElementProperties = std::vector<std::pair<int, int>>;
+      std::unordered_map<int, ElementProperties> table;
+  };
+
+  // LSG
+  class SceneGraph {
+    public:
+    SceneGraph(){}
+      void PrintHierarchy(std::ostream &out);
+      // map from object id to data offset.
+      std::unordered_map<int, unsigned> nodesMap;
+      std::unordered_map<int, unsigned> propertyAtomMap;
+      PropertyTable propertyTable;
+      // offset for "endOfElement" element.
+      // there could be stuff after end of elements.
+      unsigned endOfElementOffset = 0;
+      unsigned endOfPropertiesOffset = 0;
+      // Store reference to decompressed segment data for hierarchy traversal
+      // NOTE: The DataSegment must remain valid for the lifetime of SceneGraph
+      // or at least until PrintHierarchy is called
+      const DataSegment *segmentData = nullptr;
+  };
+
   // Check if a node type is a Shape Node
   bool IsShapeNodeType(JT::ObjectType type);
 
+  bool IsShapeSegType(unsigned type);
+  
   ObjectType GetObjectType(const GUID &guid);
 
   const char *ObjectTypeToString(ObjectType type);

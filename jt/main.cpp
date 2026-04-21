@@ -130,31 +130,6 @@ CompressionHeader ParseCompressionHeader(const DataSegment &seg) {
   return h;
 }
 
-struct PropertyTable {
-    short version = 0;
-    // int because spec says so.
-    int size = 0;
-    using ElementProperties = std::vector<std::pair<int, int>>;
-    std::unordered_map<int, ElementProperties> table;
-};
-
-// LSG
-class SceneGraph {
-  public:
-    void PrintHierarchy(std::ostream &out);
-    // map from object id to data offset.
-    std::unordered_map<int, unsigned> nodesMap;
-    std::unordered_map<int, unsigned> propertyAtomMap;
-    PropertyTable propertyTable;
-    // offset for "endOfElement" element.
-    // there could be stuff after end of elements.
-    unsigned endOfElementOffset = 0;
-    unsigned endOfPropertiesOffset = 0;
-    // Store reference to decompressed segment data for hierarchy traversal
-    // NOTE: The DataSegment must remain valid for the lifetime of SceneGraph
-    // or at least until PrintHierarchy is called
-    const DataSegment *segmentData = nullptr;
-};
 
 void ParseElementHeader(const uint8_t *buf, DataElement &ele) {
   ele.elementLength = ToInt32(buf);
@@ -166,7 +141,10 @@ void ParseElementHeader(const uint8_t *buf, DataElement &ele) {
   }
 }
 
-bool ParseLateLoadedPropertyAtom(const uint8_t *buf, unsigned offset, unsigned bufLen, JT::LateLoadedPropertyAtom &atom) {
+bool ParseLateLoadedPropertyAtom(const uint8_t *buf,
+                                 unsigned offset,
+                                 unsigned bufLen,
+                                 JT::LateLoadedPropertyAtom &atom) {
   unsigned atomOffset = offset + DataElement::BYTES;
   if (atomOffset + 6 > bufLen) {
     return false;
@@ -641,90 +619,103 @@ void DebugLSGLoading() {
   scene.PrintHierarchy(debugOut);
 }
 
-void visitShapeNodes(const SceneGraph& scene, int nodeId, int depth,  const std::map<GUID, size_t> &guidToSegmentIndex,
-	std::ostream & out) {
-    auto it = scene.nodesMap.find(nodeId);
-    if (it == scene.nodesMap.end()) {
-      return;
-    }
+// debugging function
+void ExportShapeSegment(const JTFile & jtFile, TOCEntry & entry){
+  std::string outDir = "/media/desaic/ssd2/data/b/out/";
+  DataSegment seg = LoadDataSegment(jtFile.file, entry);
+  std::cout << seg.len <<"\n";
+  if(seg.type <7 || seg.type > 12){
+    //not a shape lod
+    return;
+  }
+  
+}
 
-	const uint8_t *buf = scene.segmentData->data.data();
-	unsigned bufLen = scene.segmentData->data.size();
+void visitShapeNodes(const SceneGraph &scene,
+                     int nodeId,
+                     int depth,
+                     const JTFile &jtFile,
+                     std::ostream &out) {
+  auto it = scene.nodesMap.find(nodeId);
+  if (it == scene.nodesMap.end()) {
+    return;
+  }
 
-    unsigned offset = it->second;
-    DataElement ele;
-    ParseElementHeader(buf + offset, ele);
-    JT::ObjectType objType = JT::GetObjectType(ele.objectType);
+  const uint8_t *buf = scene.segmentData->data.data();
+  unsigned bufLen = scene.segmentData->data.size();
 
-    // Check if this is a TriStripSetShapeNode
-    if (objType == JT::ObjectType::TriStripSetShapeNode
-	|| objType == JT::ObjectType::PartNode) {
-      out << "Found TriStripSetShapeNode:\n";
-      out << "  Object ID: " << nodeId << "\n";
+  unsigned offset = it->second;
+  DataElement ele;
+  ParseElementHeader(buf + offset, ele);
+  JT::ObjectType objType = JT::GetObjectType(ele.objectType);
 
-      // Look up node name and LOD references from property table
-      auto propIt = scene.propertyTable.table.find(nodeId);
-      if (propIt != scene.propertyTable.table.end()) {
-        for (const auto &[keyId, valueId] : propIt->second) {
-          auto keyAtomIt = scene.propertyAtomMap.find(keyId);
-          if (keyAtomIt == scene.propertyAtomMap.end()) {
+  // Check if this is a TriStripSetShapeNode
+  if (objType == JT::ObjectType::TriStripSetShapeNode || objType == JT::ObjectType::PartNode) {
+    out << "Found TriStripSetShapeNode:\n";
+    out << "  Object ID: " << nodeId << "\n";
+
+    // Look up node name and LOD references from property table
+    auto propIt = scene.propertyTable.table.find(nodeId);
+    if (propIt != scene.propertyTable.table.end()) {
+      for (const auto &[keyId, valueId] : propIt->second) {
+        auto keyAtomIt = scene.propertyAtomMap.find(keyId);
+        if (keyAtomIt == scene.propertyAtomMap.end()) {
+          continue;
+        }
+        unsigned keyOffset = keyAtomIt->second;
+        DataElement keyEle;
+        ParseElementHeader(buf + keyOffset, keyEle);
+        JT::ObjectType keyType = JT::GetObjectType(keyEle.objectType);
+
+        if (keyType != JT::ObjectType::StringPropertyAtom) {
+          continue;
+        }
+        std::u16string keyName = ParseStringPropertyAtom(buf, keyOffset, bufLen);
+        auto valueAtomIt = scene.propertyAtomMap.find(valueId);
+        if (valueAtomIt == scene.propertyAtomMap.end()) {
+          continue;
+        }
+        DataElement valEle;
+        ParseElementHeader(buf + valueAtomIt->second, valEle);
+        JT::ObjectType valType = JT::GetObjectType(valEle.objectType);
+        if (valType == JT::ObjectType::StringPropertyAtom) {
+          std::u16string valueStr = ParseStringPropertyAtom(buf, valueAtomIt->second, bufLen);
+          out << to_utf8(keyName) << ": " << to_utf8(valueStr) << "\n";
+        } else if (valType == JT::ObjectType::LateLoadedPropertyAtom) {
+          JT::LateLoadedPropertyAtom atom;
+          if (!ParseLateLoadedPropertyAtom(buf, valueAtomIt->second, bufLen, atom)) {
             continue;
           }
-          unsigned keyOffset = keyAtomIt->second;
-          DataElement keyEle;
-          ParseElementHeader(buf + keyOffset, keyEle);
-          JT::ObjectType keyType = JT::GetObjectType(keyEle.objectType);
 
-          if (keyType != JT::ObjectType::StringPropertyAtom) {
-            continue;
-          }
-          std::u16string keyName = ParseStringPropertyAtom(buf, keyOffset, bufLen);
-          auto valueAtomIt = scene.propertyAtomMap.find(valueId);
-          if (valueAtomIt == scene.propertyAtomMap.end()) {
-            continue;
-          }
-          DataElement valEle;
-          ParseElementHeader(buf + valueAtomIt->second, valEle);
-          JT::ObjectType valType = JT::GetObjectType(valEle.objectType);
-          if (valType == JT::ObjectType::StringPropertyAtom) {
-            std::u16string valueStr = ParseStringPropertyAtom(buf, valueAtomIt->second, bufLen);
-            out << to_utf8(keyName) << ": " << to_utf8(valueStr) << "\n";
-          } else if (valType == JT::ObjectType::LateLoadedPropertyAtom) {
-            JT::LateLoadedPropertyAtom atom;
-            if (!ParseLateLoadedPropertyAtom(buf, valueAtomIt->second, bufLen, atom)) {
-              continue;
-            }
+          out << "  Late Loaded Property:\n";
+          out << "    Segment Type: " << JT::SegmentTypeToString(JT::SegmentType(atom.segType)) << "\n";
+          out << "    Payload Object ID: " << atom.payloadId << "\n";
 
-            out << "  Late Loaded Property:\n";
-            out << "    Segment Type: " << JT::SegmentTypeToString(JT::SegmentType(atom.segType)) << "\n";
-            out << "    Payload Object ID: " << atom.payloadId << "\n";
-
-            // Look up segment in GUID map
-            auto segIt = guidToSegmentIndex.find(atom.segId);
-            if (segIt != guidToSegmentIndex.end()) {
-              out << "    Segment Index: " << segIt->second << "\n";
-            } else {
-              out << "    WARNING: Segment GUID not found in TOC!\n";
-            }
+          // Look up segment in GUID map
+          auto entry = jtFile.GetEntry(atom.segId);
+          if (entry.valid()) {
+            ExportShapeSegment(jtFile, entry);
+          } else {
+            out << "    WARNING: Segment GUID not found in TOC!\n";
           }
         }
-        out << "\n";
       }
-	}
-      // Recursively visit children
-      NodeInfo nodeInfo;
-      if (ParseNodeInfo(buf, offset, bufLen, objType, nodeInfo)) {
-        for (int childId : nodeInfo.group.childIds) {
-          visitShapeNodes(scene, childId, depth + 1, guidToSegmentIndex, out);
-        }
-      }
+      out << "\n";
     }
-
+  }
+  // Recursively visit children
+  NodeInfo nodeInfo;
+  if (ParseNodeInfo(buf, offset, bufLen, objType, nodeInfo)) {
+    for (int childId : nodeInfo.group.childIds) {
+      visitShapeNodes(scene, childId, depth + 1, jtFile, out);
+    }
+  }
+}
 
 // Walk through scene graph and identify all Tri-Strip Set Shape Nodes
 // Write information about mesh location to output file
 void IdentifyShapes(const SceneGraph &scene,
-                    const std::map<GUID, size_t> &guidToSegmentIndex,
+                    const JTFile & jtFile,
                     const std::string &outputFile) {
   if (scene.segmentData == nullptr) {
     std::cout << "Error: No segment data available\n";
@@ -739,12 +730,12 @@ void IdentifyShapes(const SceneGraph &scene,
     std::cout << "Error: Could not open output file " << outputFile << "\n";
     return;
   }
-  
+
   // Start traversal from the root (first element)
   if (bufLen >= DataElement::BYTES) {
     DataElement rootEle;
     ParseElementHeader(buf, rootEle);
-    visitShapeNodes(scene, rootEle.objectId, 0, guidToSegmentIndex, out);
+    visitShapeNodes(scene, rootEle.objectId, 0, jtFile, out);
   }
 
   out.close();
@@ -752,8 +743,8 @@ void IdentifyShapes(const SceneGraph &scene,
 }
 
 int main(int argc, char *argv[]) {
-//   DebugLSGLoading();
-//   return 0;
+  //   DebugLSGLoading();
+  //   return 0;
   // if (argc <= 1) {
   //	return -1;
   // }
@@ -768,7 +759,7 @@ int main(int argc, char *argv[]) {
   }
 
   std::ifstream inFile(input, std::ifstream::binary);
-  JTFile jtFile;
+  JTFile jtFile(inFile);
   jtFile.header = ReadHeader(inFile);
   uint32_t TOCCount = 0;
 
@@ -797,22 +788,21 @@ int main(int argc, char *argv[]) {
   DataSegment sceneData;
   SceneGraph scene;
   bool debugging = true;
-  if(debugging){
-  	LoadSegmentFromDisk(sceneCache, sceneData);
-  }else{
+  if (debugging) {
+    LoadSegmentFromDisk(sceneCache, sceneData);
+  } else {
     sceneData = LoadDataSegment(inFile, sceneRoot);
     Decompress(sceneData);
     bool cacheSceneGraph = false;
-    if(cacheSceneGraph){
+    if (cacheSceneGraph) {
       std::ofstream sceneOut;
       sceneOut.open(sceneCache, std::ofstream::binary);
       sceneOut.write((const char *)sceneData.data.data(), sceneData.data.size());
     }
   }
   ParseScene(sceneData, scene);
-
   // Identify all shapes and write mesh location info
-  IdentifyShapes(scene, jtFile.TOCMap, outputDir + "shapes.txt");
+  IdentifyShapes(scene, jtFile, outputDir + "shapes.txt");
 
   return 0;
 }

@@ -386,4 +386,23 @@ namespace JT {
         }
     }
 
-  }
+    bool IsShapeSegType(unsigned type) {
+      JT::SegmentType casted = JT::SegmentType(type);
+      switch (casted) {
+      case JT::SegmentType::ShapeLOD0:
+      case JT::SegmentType::ShapeLOD1:
+      case JT::SegmentType::ShapeLOD2:
+      case JT::SegmentType::ShapeLOD3:
+      case JT::SegmentType::ShapeLOD4:
+      case JT::SegmentType::ShapeLOD5:
+      case JT::SegmentType::ShapeLOD6:
+      case JT::SegmentType::ShapeLOD7:
+      case JT::SegmentType::ShapeLOD8:
+      case JT::SegmentType::ShapeLOD9:
+        return true;
+      default:
+        return false;
+      }
+    }
+
+} // namespace JT
