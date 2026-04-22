@@ -1,7 +1,7 @@
 #include "SDFVoxCb.h"
 #include <iostream>
 
-void TrigListVoxCb::operator()(unsigned x, unsigned y, unsigned z, size_t trigIdx) {
+void TrigListVoxCb::operator()(unsigned x, unsigned y, unsigned z, unsigned long long trigIdx) {
   Vec3u gridIdx(x, y, z);
   unsigned cellIdx = df->AddDenseCell(gridIdx);
   std::vector<std::vector<size_t> >& trigList = df->trigList;

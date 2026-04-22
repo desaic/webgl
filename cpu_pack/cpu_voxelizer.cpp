@@ -186,7 +186,7 @@ void cpu_voxelize_grid(VoxConf conf, const TrigMesh *mesh, Array3D8u &grid) {
   // Common variables used in the voxelization process
   size_t n_triangles = mesh->t.size() / 3;
   float eps = 1e-3f;
-  Vec3f delta_p = conf.unit + Vec3f(eps);
+  Vec3f delta_p = (1.0f+eps) * conf.unit;
   Vec3f grid_max(conf.gridSize[0] - 1, conf.gridSize[1] - 1,
                  conf.gridSize[2] - 1); // grid max (grid runs from 0 to gridsize-1)
 

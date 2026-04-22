@@ -1,4 +1,6 @@
 #include "FastSweep.h"
+#include <cstddef>
+#include <deque>
 #include <iostream>
 #include <execution>
 #include "meshutil.h"

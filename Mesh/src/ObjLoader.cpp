@@ -91,75 +91,73 @@ int LoadOBJFile(std::string filename, std::vector<uint32_t>& t,
   t.clear();
   v.clear();
   uv.clear();
-  // vertex list in uv plane.
-  std::vector<Vec2f> uv_verts;
-  // uv vertex index for each triangle
-  std::vector<int> uv_t;
+
+  // Pre-allocate to reduce reallocations
+  t.reserve(100000);
+  v.reserve(30000);
+
   std::string curline;
+  std::vector<unsigned> indices;
+  indices.reserve(16);
 
   while (std::getline(file, curline)) {
-    auto iss = std::istringstream(curline);
-    std::string first_token;
-    iss >> first_token;
-    if (first_token == "v") {
-      for (int i = 0; i < 3; i++) {
-        float vf;
-        iss >> vf;
-        v.push_back(vf);
-      }
-    } else if (first_token == "f") {
-      std::vector<unsigned> indices;
-      std::vector<unsigned> uvi;
-      std::string idxs;
-      while (iss >> idxs) {
-        std::istringstream idxss(idxs);
+    if (curline.empty()) continue;
 
-        std::string idx;
-        std::getline(idxss, idx, '/');
-        indices.push_back(std::stoi(idx) - 1);
+    const char* ptr = curline.c_str();
 
-        // uv indices
-        idx.clear();
-        std::getline(idxss, idx, '/');
-        if (!idx.empty()) {
-          uvi.push_back(std::stoi(idx) - 1);
+    // Skip leading whitespace
+    while (*ptr == ' ' || *ptr == '\t') ++ptr;
+
+    if (*ptr == 'v' && (ptr[1] == ' ' || ptr[1] == '\t')) {
+      // Vertex line
+      ptr += 2;
+      float x, y, z;
+      x = strtof(ptr, (char**)&ptr);
+      y = strtof(ptr, (char**)&ptr);
+      z = strtof(ptr, (char**)&ptr);
+      v.push_back(x);
+      v.push_back(y);
+      v.push_back(z);
+
+    } else if (*ptr == 'f' && (ptr[1] == ' ' || ptr[1] == '\t')) {
+      // Face line
+      ptr += 2;
+      indices.clear();
+
+      while (*ptr) {
+        // Skip whitespace
+        while (*ptr == ' ' || *ptr == '\t') ++ptr;
+        if (*ptr == '\0') break;
+
+        // Parse vertex index (ignore uv/normal indices)
+        long idx = strtol(ptr, (char**)&ptr, 10);
+        if (idx > 0) {
+          indices.push_back(idx - 1);
         }
+
+        // Skip to next space or end (ignore /uv/normal)
+        while (*ptr && *ptr != ' ' && *ptr != '\t') ++ptr;
       }
+
       if (indices.size() < 3) {
         continue;
       }
+
       if (indices.size() == 3) {
-        t.insert(t.end(), indices.begin(), indices.end());
-        uv_t.insert(uv_t.end(), uvi.begin(), uvi.end());
-      }
-      else {
+        t.push_back(indices[0]);
+        t.push_back(indices[1]);
+        t.push_back(indices[2]);
+      } else {
+        // Non-triangle polygon - triangulate
         std::vector<Vec3f> vCopy = CopyVertices(v, indices);
-        std::vector<unsigned>localIndices = SplitIntoTriangles(vCopy);
-        std::vector<unsigned> newIndices(localIndices.size());
+        std::vector<unsigned> localIndices = SplitIntoTriangles(vCopy);
         for (size_t i = 0; i < localIndices.size(); i++) {
-          newIndices[i] = indices[localIndices[i]];
-        }
-        t.insert(t.end(), newIndices.begin(), newIndices.end());
-
-        if (!uvi.empty()) {
-          std::vector<unsigned> uvCopy;
-          for (size_t i = 0; i < localIndices.size(); i++) {
-            uvCopy.push_back(uvi[localIndices[i]]);
-          }
-          uv_t.insert(uv_t.end(), uvCopy.begin(), uvCopy.end());
+          t.push_back(indices[localIndices[i]]);
         }
       }
-
-    } else if (first_token == "vt") {
-      Vec2f vt;
-      iss >> vt[0] >> vt[1];
-      uv_verts.push_back(vt);
     }
+    // Skip all other lines (vt, vn, materials, etc.)
   }
 
-  // order uvs properly
-  for (int uv_idx : uv_t) {
-    uv.push_back(uv_verts[uv_idx]);
-  }
   return 0;
 }

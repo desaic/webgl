@@ -83,13 +83,13 @@ class AdapDF {
   virtual float MinDist(const std::vector<size_t>& trigs, const std::vector<TrigFrame>& trigFrames,
                         const Vec3f& query, const TrigMesh* mesh) = 0;
   /// 2 bils.
-  static const size_t MAX_NUM_VOX = 1u << 31;
+  static constexpr size_t MAX_NUM_VOX = 1u << 31;
 
   /// band causes furthur expansion of the grid.
-  static const unsigned MAX_BAND = 16;
+  static constexpr unsigned MAX_BAND = 16;
 
   // max positive value of short int
-  static const short MAX_DIST = 0x7fff;
+  static constexpr short MAX_DIST = 0x7fff;
 
   // distance values are stored on grid vertices.
   // vertex grid size is voxel grid size +1.

@@ -1,6 +1,7 @@
 #include "MarchingCubes.h"
 
 #include "TrigMesh.h"
+#include <cstdint>
 
 // http://paulbourke.net/geometry/polygonise/
 

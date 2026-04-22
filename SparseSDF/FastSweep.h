@@ -2,6 +2,7 @@
 #define FAST_SWEEP_H
 #include "Array3D.h"
 #include "FixedGrid3D.h"
+#include <cstdint>
 
 void CloseExterior(Array3D<short>& dist, short far);
 void CloseExteriorAndFillInterior(Array3D<short>& dist, short far);

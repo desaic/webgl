@@ -897,8 +897,8 @@ void PackScene(PackingScene & scene) {
   out.close();
 }
 
-int main(int argc, char * argv[]){  
-  std::string meshDir = "F:/meshes/fruit_hand/fruits/";
+void PackFruits(){
+    std::string meshDir = "F:/meshes/fruit_hand/fruits/";
   PackingScene scene;
   std::vector<MeshInfo> fruits = LoadAllMeshInfo(meshDir);
   scene.items = fruits;
@@ -913,5 +913,37 @@ int main(int argc, char * argv[]){
   std::cout << "computing container sdf done \n";
   scene.outputFolder = "F:/meshes/fruit_hand/out/";
   PackScene(scene);
+}
+
+void TestVox(){
+  TrigMesh mesh;
+  std::string dataDir = "/media/desaic/ssd2/data/";
+  mesh.LoadObj(dataDir + "/cat.obj");
+  Utils::Stopwatch timer;
+  
+  Box3f box = ComputeBBox(mesh.v);
+  float dx = 0.02;
+  std::cout<<box.vmin[0]<<" "<<box.vmin[1]<<" "<<box.vmin[2]<<"\n";
+  Vec3f boxSize = box.vmax - box.vmin;
+  std::cout<<boxSize[0]<<" "<<boxSize[1]<<" "<<boxSize[2]<<"\n";
+
+  VoxConf conf;
+  conf.origin = ToArray(box.vmin);
+  conf.unit = {dx, dx, dx};
+  const unsigned FFT_ALIGNMENT = 8;
+  conf.gridSize = ComputeGridSize(box, dx, FFT_ALIGNMENT);
+  std::cout<<conf.gridSize[0]<<" "<<conf.gridSize[1]<<" "<<conf.gridSize[2]<<"\n";
+
+  Array3D8u grid;
+  grid.Allocate(conf.gridSize, 0);
+  timer.Start();
+  cpu_voxelize_grid(conf, &mesh, grid);
+  float elapsedMs = timer.ElapsedMS();
+  std::cout<<"vox time ms "<< elapsedMs<<"\n";
+  SaveVolAsObjMesh(dataDir + "/out/vox.obj", grid, (float*)(&conf.unit), (float*)(&conf.origin),1);
+}
+
+int main(int argc, char * argv[]){  
+   TestVox();
   return 0;
 }

@@ -6,7 +6,7 @@
 #include "FastSweep.h"
 #include "ImageIO.h"
 #include "MarchingCubes.h"
-#include "Array2d.h"
+#include "Array2D.h"
 #include "SDFVoxCb.h"
 #include "ThreadPool.h"
 #include "TrigMesh.h"

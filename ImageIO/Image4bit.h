@@ -8,6 +8,7 @@
 #include <fstream>
 #include <iostream>
 #include <vector>
+#include <cmath>
 
 /// Image is automatically padded to multiple of 8 bytes at allocation.
 class Image4bit {
