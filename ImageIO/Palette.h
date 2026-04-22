@@ -1,7 +1,7 @@
 #pragma once
 
 #include <array>
-
+#include <cstdint>
 struct Color_t {
   uint8_t red = 0u;
   uint8_t green = 0u;

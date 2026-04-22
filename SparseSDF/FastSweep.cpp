@@ -1,7 +1,7 @@
 #include "FastSweep.h"
 #include <iostream>
 #include <execution>
-#include "MeshUtil.h"
+#include "meshutil.h"
 #include "ImageIO.h"
 
 #define SWAP(fa, fb) \
