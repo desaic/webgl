@@ -48,8 +48,7 @@ std::vector<Vec3f> SamplePoints(const Box3f & box){
   std::vector<Vec3f> samples;
   samples.reserve(numSamples);
 
-  std::random_device rd;
-  std::mt19937 gen(rd());
+  std::mt19937 gen(321);
   std::uniform_real_distribution<float> distX(box.vmin[0], box.vmax[0]);
   std::uniform_real_distribution<float> distY(box.vmin[1], box.vmax[1]);
   std::uniform_real_distribution<float> distZ(box.vmin[2], box.vmax[2]);
@@ -123,9 +122,7 @@ class TrigGrid {
       conf.origin = ToArray(box.vmin);
       conf.unit = {voxelSize, voxelSize, voxelSize};
       conf.gridSize = ComputeGridSize(box, voxelSize);
-      std::cout << conf.gridSize[0] << " " << conf.gridSize[1] << " " << conf.gridSize[2] << "\n";
-
-      origin = Vec3f(conf.origin[0], conf.origin[1], conf.origin[2]);
+      origin = box.vmin;
 
       grid.Allocate(conf.gridSize, 0);
       // tLists[0] is reserved for empty voxels
@@ -257,7 +254,8 @@ void TestVox(){
   }
 }
 
-int main(int argc, char * argv[]){  
-  TestVox();
+int main(int argc, char * argv[]){
+
+  
   return 0;
 }

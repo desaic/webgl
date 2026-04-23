@@ -5,6 +5,7 @@
 #include "Matrix3f.h"
 #include "cpu_voxelizer.h"
 #include "pocketfft_3df.h"
+#include "TrigGrid.h"
 #include <iostream>
 #include <fstream>
 
@@ -16,6 +17,7 @@
 #include "MarchingCubes.h"
 #include "FastSweep.h"
 #include "PointTrigDist.h"
+#include "BBox.h"
 
 #include <algorithm>
 #include <numeric>
@@ -56,7 +58,7 @@ std::array<unsigned, 3> ComputeGridSize(const Box3f &box, float dx, unsigned ali
   return size;
 }
 
-std::array<float, 3> ToArray(const Vec3f &v) {
+static std::array<float, 3> ToArray(const Vec3f &v) {
   return {v[0], v[1], v[2]};
 }
 
@@ -900,8 +902,8 @@ void PackScene(PackingScene & scene) {
   out.close();
 }
 
-void PackFruits(){
-    std::string meshDir = "F:/meshes/fruit_hand/fruits/";
+void PackFruits() {
+  std::string meshDir = "F:/meshes/fruit_hand/fruits/";
   PackingScene scene;
   std::vector<MeshInfo> fruits = LoadAllMeshInfo(meshDir);
   scene.items = fruits;
@@ -916,35 +918,6 @@ void PackFruits(){
   std::cout << "computing container sdf done \n";
   scene.outputFolder = "F:/meshes/fruit_hand/out/";
   PackScene(scene);
-}
-
-float PointTriangleDist(const Vec3f& point, const Vec3f trig[3]) {
-  // Compute triangle normal
-  Vec3f e1 = trig[1] - trig[0];
-  Vec3f e2 = trig[2] - trig[0];
-  Vec3f normal = e1.cross(e2);
-  float norm = normal.norm();
-  if (norm > 0) {
-    normal = (1.0f / norm) * normal;
-  }
-
-  // Get triangle frame
-  TrigFrame frame;
-  ComputeTrigFrame((const float*)trig, normal, frame);
-
-  // Transform point to triangle's local 2D coordinate system
-  Vec3f localPoint = point - trig[0];
-  float px = localPoint.dot(frame.x);
-  float py = localPoint.dot(frame.y);
-  float pz = localPoint.dot(frame.z);
-
-  // Compute 2D distance in the triangle's plane
-  TrigDistInfo distInfo = PointTrigDist2D(px, py, frame.v1x, frame.v2x, frame.v2y);
-
-  // Add the out-of-plane distance component
-  float sqrDist = distInfo.sqrDist + pz * pz;
-
-  return std::sqrt(sqrDist);
 }
 
 std::vector<Vec3f> SamplePoints(const Box3f & box){
@@ -964,156 +937,6 @@ std::vector<Vec3f> SamplePoints(const Box3f & box){
   }
   return samples;
 }
-
-float dot(const Vec3f & a, const Vec3f & b){
-  return a.dot(b);
-}
-
-Vec3f closestPointTriangle(const Vec3f & p, const Vec3f & a, const Vec3f & b, const Vec3f & c)
-{
-  const Vec3f ab = b - a;
-  const Vec3f ac = c - a;
-  const Vec3f ap = p - a;
-
-  const float d1 = dot(ab, ap);
-  const float d2 = dot(ac, ap);
-  if (d1 <= 0.f && d2 <= 0.f) return a; //#1
-
-  const Vec3f bp = p - b;
-  const float d3 = dot(ab, bp);
-  const float d4 = dot(ac, bp);
-  if (d3 >= 0.f && d4 <= d3) return b; //#2
-
-  const Vec3f cp = p - c;
-  const float d5 = dot(ab, cp);
-  const float d6 = dot(ac, cp);
-  if (d6 >= 0.f && d5 <= d6) return c; //#3
-
-  const float vc = d1 * d4 - d3 * d2;
-  if (vc <= 0.f && d1 >= 0.f && d3 <= 0.f)
-  {
-      const float v = d1 / (d1 - d3);
-      return a + v * ab; //#4
-  }
-    
-  const float vb = d5 * d2 - d1 * d6;
-  if (vb <= 0.f && d2 >= 0.f && d6 <= 0.f)
-  {
-      const float v = d2 / (d2 - d6);
-      return a + v * ac; //#5
-  }
-    
-  const float va = d3 * d6 - d5 * d4;
-  if (va <= 0.f && (d4 - d3) >= 0.f && (d5 - d6) >= 0.f)
-  {
-      const float v = (d4 - d3) / ((d4 - d3) + (d5 - d6));
-      return b + v * (c - b); //#6
-  }
-
-  const float denom = 1.f / (va + vb + vc);
-  const float v = vb * denom;
-  const float w = vc * denom;
-  return a + v * ab + w * ac; //#0
-}
-
-class TrigGrid {
-  public:
-    void Build(const TrigMesh &m, float voxSize) {
-      mesh = &m;
-      voxelSize = voxSize;
-      box = ComputeBBox(mesh->v);
-      Vec3f boxSize = box.vmax - box.vmin;
-
-      VoxConf conf;
-      conf.origin = ToArray(box.vmin);
-      conf.unit = {voxelSize, voxelSize, voxelSize};
-      const unsigned FFT_ALIGNMENT = 8;
-      conf.gridSize = ComputeGridSize(box, voxelSize, FFT_ALIGNMENT);
-      std::cout << conf.gridSize[0] << " " << conf.gridSize[1] << " " << conf.gridSize[2] << "\n";
-
-      origin = Vec3f(conf.origin[0], conf.origin[1], conf.origin[2]);
-
-      grid.Allocate(conf.gridSize, 0);
-      // tLists[0] is reserved for empty voxels
-      tLists.push_back({});
-      Utils::Stopwatch timer;
-      timer.Start();
-      cpu_voxelize_mesh_cb(conf, mesh, [&](unsigned int x, unsigned int y, unsigned int z, unsigned int tIdx) {
-        uint32_t &gridVal = grid(x, y, z);
-        if (gridVal == 0) {
-          // First triangle for this voxel - create new list
-          tLists.push_back({tIdx});
-          gridVal = tLists.size() - 1;
-        } else {
-          // Voxel already has triangles - append to existing list
-          tLists[gridVal].push_back(tIdx);
-        }
-      });
-      float elapsedMs = timer.ElapsedMS();
-      std::cout << "vox time ms " << elapsedMs << "\n";
-    }
-
-    float NearestTriangle(const Vec3f& point, float maxDist) const {
-      // Convert point to grid coordinates
-      Vec3f gridCoord = (point - origin) * (1.0f / voxelSize);
-      Vec3i gridIdx = Vec3i(int(gridCoord[0]), int(gridCoord[1]), int(gridCoord[2]));
-
-      float minDist = maxDist;
-      Vec3u gridSize = grid.GetSize();
-      // Search 3x3x3 neighborhood
-      for (int dz = -1; dz <= 1; dz++) {
-        int gz = gridIdx[2] + dz;
-        if (gz < 0 || gz >= int(gridSize[2])) continue;
-
-        for (int dy = -1; dy <= 1; dy++) {
-          int gy = gridIdx[1] + dy;
-          if (gy < 0 || gy >= int(gridSize[1])) continue;
-
-          for (int dx_iter = -1; dx_iter <= 1; dx_iter++) {
-            int gx = gridIdx[0] + dx_iter;
-            if (gx < 0 || gx >= int(gridSize[0])) continue;
-
-            uint32_t listIdx = grid(gx, gy, gz);
-            if (listIdx == 0) continue; // Empty voxel
-
-            const std::vector<unsigned>& trigList = tLists[listIdx];
-
-            // Check distance to each triangle in this voxel
-            for (unsigned tIdx : trigList) {
-              Vec3f a, b, c;
-              size_t vIdx0 = mesh->t[3 * tIdx];
-              size_t vIdx1 = mesh->t[3 * tIdx + 1];
-              size_t vIdx2 = mesh->t[3 * tIdx + 2];
-              a = Vec3f(mesh->v[3 * vIdx0], mesh->v[3 * vIdx0 + 1], mesh->v[3 * vIdx0 + 2]);
-              b = Vec3f(mesh->v[3 * vIdx1], mesh->v[3 * vIdx1 + 1], mesh->v[3 * vIdx1 + 2]);
-              c = Vec3f(mesh->v[3 * vIdx2], mesh->v[3 * vIdx2 + 1], mesh->v[3 * vIdx2 + 2]);
-
-              Vec3f closestPt = closestPointTriangle(point, a, b, c);
-              float dist = (point - closestPt).norm();
-              if (dist < minDist) {
-                minDist = dist;
-              }
-            }
-          }
-        }
-      }
-
-      return minDist;
-    }
-
-    //dx will be reduced if grid is too large
-    static const int MAX_GRID_SIZE = 1000;
-
-  private:
-    Array3D<uint32_t> grid;
-    // tlists can be compressed to remove std::vector overhead 24bytes/cell
-    std::vector<std::vector<unsigned>> tLists;
-    Box3f box;
-    Vec3f origin;
-    float voxelSize = 1e-2;
-    // does not own pointer, set during Build()
-    const TrigMesh* mesh = nullptr;
-};
 
 void TestVox(){
   TrigMesh mesh;
@@ -1164,5 +987,6 @@ void TestVox(){
 }
 
 int main(int argc, char * argv[]){
+  TestVox();
   return 0;
 }
