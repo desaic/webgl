@@ -85,7 +85,7 @@ void TrigGrid::Build(const TrigMesh &m, float voxSize) {
   });
 }
 
-float TrigGrid::NearestTriangle(const Vec3f &point, float maxDist) const {
+float TrigGrid::NearestTriangle(const Vec3f &point, float maxDist, Vec3f& normal) const {
   // Convert point to grid coordinates
   Vec3f gridCoord = (point - origin) * (1.0f / voxelSize);
   Vec3i gridIdx = Vec3i(int(gridCoord[0]), int(gridCoord[1]), int(gridCoord[2]));
@@ -128,6 +128,14 @@ float TrigGrid::NearestTriangle(const Vec3f &point, float maxDist) const {
           float dist = (point - closestPt).norm();
           if (dist < minDist) {
             minDist = dist;
+            // Compute triangle normal
+            Vec3f ab = b - a;
+            Vec3f ac = c - a;
+            normal = ab.cross(ac);
+            float normLen = normal.norm();
+            if (normLen > 0.0f) {
+              normal = normal * (1.0f / normLen);
+            }
           }
         }
       }
