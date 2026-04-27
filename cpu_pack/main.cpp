@@ -120,7 +120,10 @@ static int LoadMesh(TrigMesh &m, const fs::path & p) {
 class MeshConvo {
   public:
     // can be bigger than actual mesh box
+    // box of the grid in world space.
     Box3f box;
+    // original boundingbox for the mesh
+    Box3f meshBox;
     Array3D8u vox;
     Array3D<std::complex<float>> fft;
     float dx = 1e-3;
@@ -137,7 +140,8 @@ class MeshConvo {
         return;
       }
       dx = voxelSize;
-      box = ComputeBBox(mesh->v);
+      meshBox = ComputeBBox(mesh->v);
+      box = meshBox;
       box.vmin = box.vmin - Vec3f(dx);
       box.vmin = AlignOriginToGrid(box.vmin, dx);
       VoxConf conf;
@@ -782,11 +786,16 @@ bool AddUsingSDF(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &r
   float maxDist = gridSize.cast<float>().norm();
   // index from 0 to fgSize-2 are outside of the container.
   // fgSize -1 is inside the container.
-  
-  //assuming item is centered at origin
-  Vec3f o = fg.box.vmin;
+    
+  Vec3f vmin = fg.meshBox.vmin;
+  Vec3f vmax = fg.meshBox.vmax;
+  Vec3f o = 0.5f * (vmin + vmax) - fg.GetOrigin();
   Vec3i centerOffset( int(-o[0] / fg.dx), int(-o[1]/fg.dx), int(-o[2]/fg.dx) );
 
+  std::cout<<"fg grid size "<<fg.GridSize()[0]<<" "<<fg.GridSize()[1]<<" "<<fg.GridSize()[2]<<"\n";
+  std::cout<<"fg center coord "<<o[0]<<" "<<o[1]<<" "<<o[2]<<"\n";
+  std::cout<<"fg origin " <<fg.GetOrigin()[0]<<" "<<fg.GetOrigin()[1] <<" "<<fg.GetOrigin()[2] <<"\n";
+  std::cout <<"fg center offset "<< centerOffset[0] <<" "<<centerOffset[0] <<" " <<centerOffset[2]<<"\n";
   for (unsigned z = fgSize[2] - 1; z < gridSize[2]; z++) {
     for (unsigned y = fgSize[1] - 1; y < gridSize[1]; y++) {
       for (unsigned x = fgSize[0] - 1; x < gridSize[0]; x++) {
@@ -839,7 +848,8 @@ void PackScene(PackingScene & scene) {
   Invert01(bg.vox);
 
   Vec3f dxVec(dx);  
-  const unsigned NUM_COPIES = 100;
+  const unsigned NUM_COPIES = 1000;
+  const float outputScale = 1.05f;
   const unsigned ANGLE_TRIALS = 5;
   std::vector<Vec3f> randAngles(100);
   unsigned int seed = 123;
@@ -860,6 +870,13 @@ void PackScene(PackingScene & scene) {
   int itemSizeGroup = 3;
   unsigned groupSize = scene.items.size() / 3;
 
+  // Structure to store transformation data
+  struct TransformData {
+    Vec3f position;
+    Vec3f rotation;
+    float scale;
+  };
+
   for(unsigned sizei = 0;sizei<scene.sortedBySize.size();sizei++){
     unsigned i = scene.sortedBySize[sizei];
     unsigned numTrials = 0;
@@ -870,6 +887,11 @@ void PackScene(PackingScene & scene) {
       factor = -1.0f;
     }
     std::cout << "factor " << factor << "\n";
+
+    // Accumulate merged mesh and transformations for this item type
+    TrigMesh mergedMesh;
+    std::vector<TransformData> transforms;
+
     for (size_t j = 0; j < NUM_COPIES; j++) {
       Vec3f pos, rot = randAngles[j % randAngles.size()];
       bool success = AddUsingSDF(bg, scene.items[i].mesh, pos, rot, scene.sdf, factor);
@@ -884,19 +906,49 @@ void PackScene(PackingScene & scene) {
       out << scene.items[i].name << " " << pos[0] << " " << pos[1] << " " << pos[2] << " " << rot[0] << " " << rot[1]
           << " "
           << rot[2] << "\n";
+
       if (debugging) {
-        TrigMesh out = scene.items[i].mesh;
+        // Store transformation data
+        TransformData transform;
+        transform.position = pos;
+        transform.rotation = rot;
+        transform.scale = outputScale;
+        transforms.push_back(transform);
+
+        // Create transformed mesh
+        TrigMesh transformedMesh = scene.items[i].mesh;
+        transformedMesh.scale(outputScale);
         Matrix3f rotMat = RotationMatrixRad(rot[0], rot[1], rot[2]);
-        TransformVerts(scene.items[i].mesh.v, out.v, rotMat);
-        out.translate(pos[0], pos[1], pos[2]);
-        std::string debugMesh = scene.outputFolder + "/" + scene.items[i].name + std::to_string(placedCount) + ".obj";
-        out.SaveObj(debugMesh);
+        TransformVerts(scene.items[i].mesh.v, transformedMesh.v, rotMat);
+        transformedMesh.translate(pos[0], pos[1], pos[2]);
+
+        // Append to merged mesh for this item type
+        mergedMesh.append(transformedMesh);
+
         if (i == 1) {
           std::string debugVol = scene.outputFolder + "/vol_" + std::to_string(i) + "_" + std::to_string(j) + ".obj";
           SaveVolAsObjMesh(debugVol, bg.vox, (float *)(&voxRes), (float *)(&origin), 1);
         }
       }
       placedCount++;
+    }
+
+    // Save merged mesh for this item type after packing all copies
+    if (debugging && !transforms.empty()) {
+      std::string mergedMeshFile = scene.outputFolder + "/" + scene.items[i].name + "_merged.obj";
+      mergedMesh.SaveObj(mergedMeshFile);
+      std::cout << "Saved merged mesh for " << scene.items[i].name << " with " << transforms.size() << " instances\n";
+
+      // Save transformation data to a text file
+      std::string transformFile = scene.outputFolder + "/" + scene.items[i].name + "_transforms.txt";
+      std::ofstream transformOut(transformFile);
+      for (const auto& t : transforms) {
+        transformOut << t.position[0] << " " << t.position[1] << " " << t.position[2] << " "
+                     << t.rotation[0] << " " << t.rotation[1] << " " << t.rotation[2] << " "
+                     << t.scale << "\n";
+      }
+      transformOut.close();
+      std::cout << "Saved transformations for " << scene.items[i].name << " to " << transformFile << "\n";
     }
   }
   out.close();
@@ -920,6 +972,7 @@ void PackFruits() {
   PackScene(scene);
 }
 
+<<<<<<< HEAD
 std::vector<Vec3f> SamplePoints(const Box3f & box){
   // Sample 1 million random points within the bounding box
   const size_t numSamples = 1000000;
@@ -988,6 +1041,6 @@ void TestVox(){
 }
 
 int main(int argc, char * argv[]){
-  TestVox();
+  PackFruits();
   return 0;
 }
