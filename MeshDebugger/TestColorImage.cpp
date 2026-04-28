@@ -1,4 +1,4 @@
-#include "MedianBlur.h"
+//#include "MedianBlur.h"
 #include "ImageIO.h"
 #include "TrigMesh.h"
 #include "cpu_voxelizer.h"
@@ -45,20 +45,20 @@ Vec3b rgb2hsl(Vec3b color) {
     switch (maxIdx) {
       case 0:
         segment = (g - b) / c;
-        shift = 0 / 60;      // R° / (360° / hex sides)
+        shift = 0 / 60;      // R?/ (360?/ hex sides)
         if (segment < 0) {   // hue > 180, full rotation
-          shift = 360 / 60;  // R° / (360° / hex sides)
+          shift = 360 / 60;  // R?/ (360?/ hex sides)
         }
         hue = segment + shift;
         break;
       case 1:
         segment = (b - r) / c;
-        shift = 120 / 60;  // G° / (360° / hex sides)
+        shift = 120 / 60;  // G?/ (360?/ hex sides)
         hue = segment + shift;
         break;
       case 2:
         segment = (r - g) / c;
-        shift = 240 / 60;  // B° / (360° / hex sides)
+        shift = 240 / 60;  // B?/ (360?/ hex sides)
         hue = segment + shift;
         break;
     }
@@ -116,26 +116,26 @@ void SplitLeftRightImage(const Array2D8u& grayIn, Array2D8u& left,
   }
 }
 
-void MapColorToGrayScale() {
-  std::string prefix = "F:/meshes/shoe/walking_gif/frame_";
-  std::string leftPrefix = "F:/meshes/shoe/walk_left/";
-  std::string rightPrefix = "F:/meshes/shoe/walk_right/";
-  int startIdx = 1;
-  int endIdx = 1514;
-  for (int i = startIdx; i <= endIdx; i++) {
-    std::string pngFile = prefix + std::to_string(i) + ".png";
-    Array2D8u image;
-    LoadPngColor(pngFile, image);
-    Array2D8u gray = MapColorToGray(image);
-    MedianBlur(gray, gray, 2);
-    Array2D8u leftImg, rightImg;
-    SplitLeftRightImage(gray, leftImg, rightImg);
-    std::string leftFile = leftPrefix + std::to_string(i) + ".png";
-    std::string rightFile = rightPrefix + std::to_string(i) + ".png";
-    SavePngGrey(leftFile, leftImg);
-    SavePngGrey(rightFile, rightImg);
-  }
-}
+//void MapColorToGrayScale() {
+//  std::string prefix = "F:/meshes/shoe/walking_gif/frame_";
+//  std::string leftPrefix = "F:/meshes/shoe/walk_left/";
+//  std::string rightPrefix = "F:/meshes/shoe/walk_right/";
+//  int startIdx = 1;
+//  int endIdx = 1514;
+//  for (int i = startIdx; i <= endIdx; i++) {
+//    std::string pngFile = prefix + std::to_string(i) + ".png";
+//    Array2D8u image;
+//    LoadPngColor(pngFile, image);
+//    Array2D8u gray = MapColorToGray(image);
+//    MedianBlur(gray, gray, 2);
+//    Array2D8u leftImg, rightImg;
+//    SplitLeftRightImage(gray, leftImg, rightImg);
+//    std::string leftFile = leftPrefix + std::to_string(i) + ".png";
+//    std::string rightFile = rightPrefix + std::to_string(i) + ".png";
+//    SavePngGrey(leftFile, leftImg);
+//    SavePngGrey(rightFile, rightImg);
+//  }
+//}
 
 void MaxValPerPix() {
   std::string leftPrefix = "F:/meshes/shoe/walk_right/";

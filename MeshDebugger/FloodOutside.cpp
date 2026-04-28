@@ -6,18 +6,18 @@ static bool InBound(int ix, int iy, int iz, const Vec3u &size) {
   return (ix >= 0) && (iy >= 0) && (iz >= 0) && ix < int(size[0]) && iy < int(size[1]) && iz < int(size[2]);
 }
 
-size_t LinearIdx(unsigned x, unsigned y, unsigned z, const Vec3u& size) {
+static size_t LinearIdx(unsigned x, unsigned y, unsigned z, const Vec3u& size) {
   return x + y * size_t(size[0]) + z * size_t(size[0] * size[1]);
 }
 
-Vec3u GridIdx(size_t l, const Vec3u& size) {
+static Vec3u GridIdx(size_t l, const Vec3u& size) {
   unsigned x = l % size[0];
   unsigned y = (l % (size[0] * size[1])) / size[0];
   unsigned z = l / (size[0] * size[1]);
   return Vec3u(x, y, z);
 }
 
-void FloodOutsideSeed(Vec3u seed, const Array3D<short>& dist, float distThresh, Array3D8u& label) {
+void FloodOutsideSeed16i(Vec3u seed, const Array3D<short>& dist, float distThresh, Array3D8u& label) {
   Vec3u size = dist.GetSize();
   size_t linearSeed = LinearIdx(seed[0], seed[1], seed[2], size);
   std::deque<size_t> q(1, linearSeed);
@@ -52,7 +52,7 @@ void FloodOutsideSeed(Vec3u seed, const Array3D<short>& dist, float distThresh, 
 /// <param name="dist">distance grid. at least 1 voxel of padding is assumed.</param>
 /// <param name="distThresh">stop flooding if distance is less than this</param>
 /// <returns>voxel labels. 1 for outside.</returns>
-Array3D8u FloodOutside(const Array3D<short>& dist, float distThresh) {
+Array3D8u FloodOutside16i(const Array3D<short>& dist, float distThresh) {
   Array3D8u label;
   Vec3u size = dist.GetSize();
   label.Allocate(size[0], size[1], size[2]);
@@ -144,7 +144,7 @@ Array3D8u FloodOutside(const Array3D<short>& dist, float distThresh) {
           if (nbrLabel == 0) {
             uint16_t nbrDist = dist(ux, uy, uz);
             if (nbrDist >= distThresh) {
-              FloodOutsideSeed(Vec3u(x, y, z), dist, distThresh, label);
+              FloodOutsideSeed16i(Vec3u(x, y, z), dist, distThresh, label);
             }
           }
         }
