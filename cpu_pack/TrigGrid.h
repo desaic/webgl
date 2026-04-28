@@ -11,7 +11,7 @@ class TrigMesh;
 class TrigGrid {
   public:
     void Build(const TrigMesh &m, float voxSize);
-    float NearestTriangle(const Vec3f& point, float maxDist) const;
+    float NearestTriangle(const Vec3f& point, float maxDist, Vec3f& normal) const;
     //dx will be reduced if grid is too large
     static const int MAX_GRID_SIZE = 1000;
 
