@@ -10,6 +10,7 @@
 #include "BBox.h"
 #include "JT_defs.h"
 #include "lzma_wrapper.h"
+#include "Int32CDP.h"
 #include <codecvt>
 #include <cstring>
 #include <locale>
@@ -627,12 +628,74 @@ void DebugLSGLoading() {
   scene.PrintHierarchy(debugOut);
 }
 
+// Parse Topologically Compressed Rep Data (Figure 92)
+// Returns false on error
+bool ParseTopologicallyCompressedRepData(const uint8_t* buf, unsigned& offset, unsigned bufLen,
+                                          JT::TopologicallyCompressedRepData& repData) {
+  std::cout << "Parsing Topologically Compressed Rep Data at offset " << offset << "\n";
+
+  // Parse Face Degrees - VecI32{Int32CDP} x8 (8 context groups)
+  // According to spec, face degrees are emitted per context group
+  std::cout << "Decoding Face Degrees (8 context groups)...\n";
+  for (int i = 0; i < 8; i++) {
+    JT::Int32CDP::DecodeResult result = JT::Int32CDP::Decode(buf, offset, bufLen);
+    if (!result.success) {
+      std::cerr << "Failed to decode Face Degrees for context group " << i << "\n";
+      return false;
+    }
+    repData.faceDegrees[i] = std::move(result.values);
+    std::cout << "  Context group " << i << ": " << repData.faceDegrees[i].size() << " face degrees\n";
+  }
+
+  // Parse Vertex Valences - VecI32{Int32CDP}
+  std::cout << "Decoding Vertex Valences...\n";
+  {
+    JT::Int32CDP::DecodeResult result = JT::Int32CDP::Decode(buf, offset, bufLen);
+    if (!result.success) {
+      std::cerr << "Failed to decode Vertex Valences\n";
+      return false;
+    }
+    repData.vertexValences = std::move(result.values);
+    std::cout << "  " << repData.vertexValences.size() << " vertex valences\n";
+  }
+
+  // Parse Vertex Groups - VecI32{Int32CDP}
+  std::cout << "Decoding Vertex Groups...\n";
+  {
+    JT::Int32CDP::DecodeResult result = JT::Int32CDP::Decode(buf, offset, bufLen);
+    if (!result.success) {
+      std::cerr << "Failed to decode Vertex Groups\n";
+      return false;
+    }
+    repData.vertexGroups = std::move(result.values);
+    std::cout << "  " << repData.vertexGroups.size() << " vertex groups\n";
+  }
+
+  // Parse Vertex Flags - VecI32{Int32CDP, Lag1}
+  std::cout << "Decoding Vertex Flags...\n";
+  {
+    JT::Int32CDP::DecodeResult result = JT::Int32CDP::Decode(buf, offset, bufLen);
+    if (!result.success) {
+      std::cerr << "Failed to decode Vertex Flags\n";
+      return false;
+    }
+    repData.vertexFlags = std::move(result.values);
+    std::cout << "  " << repData.vertexFlags.size() << " vertex flags\n";
+  }
+
+  std::cout << "Successfully parsed first 4 topological fields\n";
+  return true;
+}
+
 void ParseVertexShapeLODHeader(VertexShapeLODData & vData, const uint8_t * buf){
   vData.base.version = buf[0];
   vData.version = buf[1];
   vData.bindings = ToUint64(buf + 2);
 }
-
+void ParseTopoMeshLODData(TopoMeshLODData & topo, const uint8_t * buf){
+  topo.version = buf[0];
+  topo.objectId = ToUint32(buf + 1);
+}
 // debugging function
 void ExportShapeSegment(const JTFile & jtFile, TOCEntry & entry){
   std::string outDir = "/media/desaic/ssd2/data/b/out/";
@@ -646,6 +709,7 @@ void ExportShapeSegment(const JTFile & jtFile, TOCEntry & entry){
   const uint8_t * buf = seg.data.data();
   ParseElementHeader(buf, ele);
   JT::ObjectType eleType = JT::GetObjectType(ele.objectType);
+  // expect TriStripSetShapeLOD
   std::cout<<JT::ObjectTypeToString(eleType)<<"\n";
   size_t bufOffset = DataElement::BYTES;
   VertexShapeLODData vShape;
@@ -657,6 +721,15 @@ void ExportShapeSegment(const JTFile & jtFile, TOCEntry & entry){
   std::cout <<JT::GUIDToString(vertEle.objectType)<<"\n";
   std::cout<<"vert ele type "<<JT::ObjectTypeToString(eleType)<<"\n";
   
+  //TopoMesh Topologically Compressed LOD Data for tri strip set shape
+  TopoMeshLODData topoMeshHeader;
+  bufOffset += DataElement::BYTES;
+  ParseTopoMeshLODData(topoMeshHeader, buf + bufOffset);
+  // 1 more version number before going into rep data.
+  bufOffset += TopoMeshLODData::BYTES + 1;
+  unsigned offset = bufOffset;
+  TopologicallyCompressedRepData repData;
+  ParseTopologicallyCompressedRepData(buf, offset, seg.data.size(), repData);
 }
 
 void visitShapeNodes(const SceneGraph &scene,
@@ -770,18 +843,25 @@ void IdentifyShapes(const SceneGraph &scene,
   std::cout << "Shape information written to " << outputFile << "\n";
 }
 
+extern int RunBitReaderTests();
+
 int main(int argc, char *argv[]) {
+  RunBitReaderTests();
   //   DebugLSGLoading();
   //   return 0;
   // if (argc <= 1) {
   //	return -1;
   // }
   // std::string input = argv[1];
-  // std::string input = "I:/foundation/b/S.jt";
-  std::string input = "/media/desaic/ssd2/data/b/S.jt";
-  // std::string outputDir = "I:/foundation/b/out/";
-  std::string outputDir = "/media/desaic/ssd2/data/b/out/";
-  std::string sceneCache = "/media/desaic/ssd2/data/b/scene_seg.bin";
+
+  std::string input = "I:/foundation/b/S.jt";
+  std::string outputDir = "I:/foundation/b/out/";
+  std::string sceneCache = "I:/foundation/b/seg.bin";
+
+  // linux
+  // std::string input = "/media/desaic/ssd2/data/b/S.jt";
+  // std::string outputDir = "/media/desaic/ssd2/data/b/out/";
+  // std::string sceneCache = "/media/desaic/ssd2/data/b/scene_seg.bin";
   if (argc > 2) {
     outputDir = argv[2];
   }

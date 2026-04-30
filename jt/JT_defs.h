@@ -9,6 +9,7 @@
 #include <fstream>
 
 #include "BBox.h"
+#include "Vec3.h"
 
 namespace JT {
 
@@ -288,8 +289,88 @@ namespace JT {
       BaseShapeLODData base;
       uint8_t version = 0;
       uint64_t bindings = 0;
+      // size of base + version + bindings
       static const unsigned BYTES = 10;
   };
+
+  // Vertex Shape LOD Bindings bit flags (Table 48 in JT spec)
+  namespace VertexBindings {
+    // Vertex Coordinate Bindings (Bits 1-3)
+    constexpr uint64_t VERTEX_COORD_2_COMPONENT = 0x0001ULL; // Bit 1
+    constexpr uint64_t VERTEX_COORD_3_COMPONENT = 0x0002ULL; // Bit 2
+    constexpr uint64_t VERTEX_COORD_4_COMPONENT = 0x0004ULL; // Bit 3
+    constexpr uint64_t VERTEX_COORD_MASK = 0x0007ULL;
+
+    // Normal Binding (Bit 4)
+    constexpr uint64_t NORMAL_BINDING = 0x0008ULL; // Bit 4
+
+    // Colour Bindings (Bits 5-6)
+    constexpr uint64_t COLOUR_3_COMPONENT = 0x0010ULL; // Bit 5
+    constexpr uint64_t COLOUR_4_COMPONENT = 0x0020ULL; // Bit 6
+    constexpr uint64_t COLOUR_MASK = 0x0030ULL;
+
+    // Vertex Flag Binding (Bit 7)
+    constexpr uint64_t VERTEX_FLAG_BINDING = 0x0040ULL; // Bit 7
+
+    // Texture Coordinate 0 Bindings (Bits 9-12)
+    constexpr uint64_t TEX_COORD_0_1_COMPONENT = 0x0100ULL; // Bit 9
+    constexpr uint64_t TEX_COORD_0_2_COMPONENT = 0x0200ULL; // Bit 10
+    constexpr uint64_t TEX_COORD_0_3_COMPONENT = 0x0400ULL; // Bit 11
+    constexpr uint64_t TEX_COORD_0_4_COMPONENT = 0x0800ULL; // Bit 12
+    constexpr uint64_t TEX_COORD_0_MASK = 0x0F00ULL;
+
+    // Texture Coordinate 1 Bindings (Bits 13-16)
+    constexpr uint64_t TEX_COORD_1_1_COMPONENT = 0x1000ULL; // Bit 13
+    constexpr uint64_t TEX_COORD_1_2_COMPONENT = 0x2000ULL; // Bit 14
+    constexpr uint64_t TEX_COORD_1_3_COMPONENT = 0x4000ULL; // Bit 15
+    constexpr uint64_t TEX_COORD_1_4_COMPONENT = 0x8000ULL; // Bit 16
+    constexpr uint64_t TEX_COORD_1_MASK = 0xF000ULL;
+
+    // Texture Coordinate 2 Bindings (Bits 17-20)
+    constexpr uint64_t TEX_COORD_2_1_COMPONENT = 0x10000ULL; // Bit 17
+    constexpr uint64_t TEX_COORD_2_2_COMPONENT = 0x20000ULL; // Bit 18
+    constexpr uint64_t TEX_COORD_2_3_COMPONENT = 0x40000ULL; // Bit 19
+    constexpr uint64_t TEX_COORD_2_4_COMPONENT = 0x80000ULL; // Bit 20
+    constexpr uint64_t TEX_COORD_2_MASK = 0xF0000ULL;
+
+    // Texture Coordinate 3 Bindings (Bits 21-24)
+    constexpr uint64_t TEX_COORD_3_1_COMPONENT = 0x100000ULL; // Bit 21
+    constexpr uint64_t TEX_COORD_3_2_COMPONENT = 0x200000ULL; // Bit 22
+    constexpr uint64_t TEX_COORD_3_3_COMPONENT = 0x400000ULL; // Bit 23
+    constexpr uint64_t TEX_COORD_3_4_COMPONENT = 0x800000ULL; // Bit 24
+    constexpr uint64_t TEX_COORD_3_MASK = 0xF00000ULL;
+
+    // Texture Coordinate 4 Bindings (Bits 25-28)
+    constexpr uint64_t TEX_COORD_4_1_COMPONENT = 0x1000000ULL; // Bit 25
+    constexpr uint64_t TEX_COORD_4_2_COMPONENT = 0x2000000ULL; // Bit 26
+    constexpr uint64_t TEX_COORD_4_3_COMPONENT = 0x4000000ULL; // Bit 27
+    constexpr uint64_t TEX_COORD_4_4_COMPONENT = 0x8000000ULL; // Bit 28
+    constexpr uint64_t TEX_COORD_4_MASK = 0xF000000ULL;
+
+    // Texture Coordinate 5 Bindings (Bits 29-32)
+    constexpr uint64_t TEX_COORD_5_1_COMPONENT = 0x10000000ULL; // Bit 29
+    constexpr uint64_t TEX_COORD_5_2_COMPONENT = 0x20000000ULL; // Bit 30
+    constexpr uint64_t TEX_COORD_5_3_COMPONENT = 0x40000000ULL; // Bit 31
+    constexpr uint64_t TEX_COORD_5_4_COMPONENT = 0x80000000ULL; // Bit 32
+    constexpr uint64_t TEX_COORD_5_MASK = 0xF0000000ULL;
+
+    // Texture Coordinate 6 Bindings (Bits 33-36)
+    constexpr uint64_t TEX_COORD_6_1_COMPONENT = 0x100000000ULL; // Bit 33
+    constexpr uint64_t TEX_COORD_6_2_COMPONENT = 0x200000000ULL; // Bit 34
+    constexpr uint64_t TEX_COORD_6_3_COMPONENT = 0x400000000ULL; // Bit 35
+    constexpr uint64_t TEX_COORD_6_4_COMPONENT = 0x800000000ULL; // Bit 36
+    constexpr uint64_t TEX_COORD_6_MASK = 0xF00000000ULL;
+
+    // Texture Coordinate 7 Bindings (Bits 37-40)
+    constexpr uint64_t TEX_COORD_7_1_COMPONENT = 0x1000000000ULL; // Bit 37
+    constexpr uint64_t TEX_COORD_7_2_COMPONENT = 0x2000000000ULL; // Bit 38
+    constexpr uint64_t TEX_COORD_7_3_COMPONENT = 0x4000000000ULL; // Bit 39
+    constexpr uint64_t TEX_COORD_7_4_COMPONENT = 0x8000000000ULL; // Bit 40
+    constexpr uint64_t TEX_COORD_7_MASK = 0xF000000000ULL;
+
+    // Auxiliary Vertex Field Binding (Bit 63)
+    constexpr uint64_t AUXILIARY_VERTEX_FIELD = 0x4000000000000000ULL; // Bit 63
+  }
 
   struct ShapeLODSegment {
       DataSegment header;
@@ -357,13 +438,75 @@ namespace JT {
     uint8_t version = 0;
     //U32: Vertex Records Object ID
     uint32_t objectId = 0;
+    static const unsigned BYTES = 5;
   };
 
-  // TopoMesh Topologically Compressed LOD Data
-  struct TopoMeshTopological{
+  // Topologically Compressed Rep Data (Figure 92 in JT spec)
+  struct TopologicallyCompressedRepData {
+    // Topological information (22 fields)
+    std::vector<int32_t> faceDegrees[8];           // VecI32{Int32CDP} x8: degrees of faces (per context group)
+    std::vector<int32_t> vertexValences;        // VecI32{Int32CDP}: valences of vertices
+    std::vector<int32_t> vertexGroups;          // VecI32{Int32CDP}: face group number for each dual vertex
+    std::vector<int32_t> vertexFlags;           // VecI32{Int32CDP, Lag1}: 0=original, 1=cover face
+    std::vector<int32_t> faceAttributeMasks[8]; // VecI32{Int32CDP} x8: face attribute bit vectors (32 LSBs for all, 32 MSBs for group 8)
+    std::vector<uint32_t> highDegreeFaceAttributeMasks; // VecU32: remaining face attribute bit vectors
+    std::vector<int32_t> splitFaceSyms;         // VecI32{Int32CDP, Lag1}: split face symbols
+    std::vector<int32_t> splitFacePositions;    // VecI32{Int32CDP}: split face positions
+    uint32_t compositeHash = 0;                 // U32: hash of topological data
+
+    // Vertex Records (Figure 93)
+    uint64_t vertexBindings = 0;                // U64: binding information (if coordinate bindings present)
+    // Quantization Parameters would go here
+    int32_t numTopologicalVertices = 0;         // I32: number of unique vertex coordinates
+    int32_t numVertexAttributes = 0;            // I32: number of vertex attribute records (if numTopoVts > 0)
+
+    // Compressed arrays (actual formats defined in compression section)
+    std::vector<uint8_t> compressedVertexCoords;      // if Coordinate Bindings
+    std::vector<uint8_t> compressedVertexNormals;     // if Normal Bindings
+    std::vector<uint8_t> compressedVertexColors;      // if Colour Bindings
+    std::vector<uint8_t> compressedTexCoords[8];      // if Tex Coord n Bindings (n=0..7)
+    std::vector<uint8_t> compressedVertexFlagArray;   // if vertex flag Bindings
+    std::vector<uint8_t> compressedAuxiliaryFields;   // if AuxField Bindings
+  };
+
+  // Topologically Compressed Vertex Records (Figure 93 in JT spec)
+  // Simplified storage of decompressed vertex data
+  struct TopologicallyCompressedVertexRecords {
+    uint64_t vertexBindings = 0;                // U64: binding flags from VertexBindings namespace
+    int32_t numTopologicalVertices = 0;         // Number of unique vertex coordinates
+    int32_t numVertexAttributes = 0;            // Number of vertex attribute records
+
+    // Decompressed vertex data (simplified storage)
+    std::vector<Vec3f> vertexCoords;            // Decompressed vertex coordinates (if Coordinate Bindings)
+    std::vector<Vec3f> vertexNormals;           // Decompressed vertex normals (if Normal Bindings)
+    std::vector<Vec3f> vertexColors;            // Decompressed vertex colors (if Colour Bindings) - RGB or RGBA as Vec3f
+    // Texture coordinates ignored for now
+    std::vector<uint8_t> vertexFlags;           // Decompressed vertex flags (if vertex flag Bindings)
+    // Auxiliary fields ignored for now
+
+    // Check if specific binding is present
+    bool hasCoordinates() const {
+      return (vertexBindings & (VertexBindings::VERTEX_COORD_2_COMPONENT |
+                                VertexBindings::VERTEX_COORD_3_COMPONENT |
+                                VertexBindings::VERTEX_COORD_4_COMPONENT)) != 0;
+    }
+    bool hasNormals() const {
+      return (vertexBindings & VertexBindings::NORMAL_BINDING) != 0;
+    }
+    bool hasColors() const {
+      return (vertexBindings & VertexBindings::COLOUR_MASK) != 0;
+    }
+    bool hasFlags() const {
+      return (vertexBindings & VertexBindings::VERTEX_FLAG_BINDING) != 0;
+    }
+  };
+
+  // TopoMesh Topologically Compressed LOD Data (Figure 91)
+  struct TopologicallyCompressed{
     TopoMeshLODData topoLOD;
     uint8_t version = 0;
-    
+    TopologicallyCompressedRepData repData;
+    TopologicallyCompressedVertexRecords vertices;
   };
 
   // Check if a node type is a Shape Node
