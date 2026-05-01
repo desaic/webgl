@@ -13,6 +13,10 @@ static uint32_t ToUint32(const uint8_t* bytes) {
   return *((uint32_t*)bytes);
 }
 
+static uint32_t ToUint16(const uint8_t* bytes) {
+  return *((uint32_t*)bytes);
+}
+
 Int32CDP::DecodeResult Int32CDP::Decode(const uint8_t* buf, unsigned& offset, unsigned bufLen) {
   DecodeResult result;
   unsigned startOffset = offset;
@@ -121,15 +125,6 @@ bool Int32CDP::DecodeBitlength(const uint8_t* buf, unsigned& offset, unsigned bu
     return false;
   }
 
-  std::cerr << "DecodeBitlength: valueCount=" << valueCount
-            << " codeTextLength=" << codeTextLength << " bits"
-            << " (" << codeTextU32Count << " U32 words)\n";
-  std::cerr << "CodeText bytes: ";
-  for (int i = 0; i < codeTextU32Count * 4 && i < 16; i++) {
-    std::cerr << std::hex << (int)buf[offset + i] << " ";
-  }
-  std::cerr << std::dec << "\n";
-
   // Create bit reader for the codetext
   BitReader reader(buf + offset, codeTextU32Count * 4);
   offset += codeTextU32Count * 4;
@@ -138,9 +133,6 @@ bool Int32CDP::DecodeBitlength(const uint8_t* buf, unsigned& offset, unsigned bu
 
   // Check the first bit to determine variable-width vs fixed-width encoding
   uint32_t encodingBit = reader.ReadBit();
-  std::cerr << "First bit (encoding type): " << encodingBit
-            << (encodingBit ? " (variable-width)" : " (fixed-width)") << "\n";
-
   if (encodingBit) {
     // Variable-width encoding
     return DecodeBitlengthVariable(reader, valueCount, output);
@@ -175,11 +167,7 @@ bool Int32CDP::DecodeBitlengthFixed(BitReader& reader, int32_t valueCount,
   int32_t maxVal = static_cast<int32_t>(ReadNibbler(reader));
   int32_t range = maxVal - minVal;
 
-  std::cerr << "Fixed-width: minVal=" << minVal << " maxVal=" << maxVal << " range=" << range << "\n";
-
   if (range <= 0) {
-    // All values are the same
-    std::cerr << "All " << valueCount << " values are " << minVal << "\n";
     for (int32_t i = 0; i < valueCount; i++) {
       output[i] = minVal;
     }
@@ -193,15 +181,8 @@ bool Int32CDP::DecodeBitlengthFixed(BitReader& reader, int32_t valueCount,
     fieldWidth++;
   }
 
-  std::cerr << "Decoding " << valueCount << " values with fieldWidth=" << fieldWidth << ":\n";
   for (int32_t i = 0; i < valueCount; i++) {
     output[i] = reader.ReadU32(fieldWidth) + minVal;
-    if (i < 15) {
-      std::cerr << "  [" << i << "] = " << output[i] << "\n";
-    }
-  }
-  if (valueCount > 15) {
-    std::cerr << "  ... (" << (valueCount - 15) << " more values)\n";
   }
 
   return true;
@@ -248,12 +229,92 @@ bool Int32CDP::DecodeBitlengthVariable(BitReader& reader, int32_t valueCount,
   return true;
 }
 
+// Probability Context Table Entry structure
+struct ProbContextEntry {
+  bool isEscapeSymbol = false;
+  uint32_t occurrenceCount = 0;
+  int32_t associatedValue = 0;
+};
+
+// Probability Context structure (Figure 133)
+struct ProbabilityContext {
+  uint32_t entryCount = 0;
+  uint32_t numOccurrenceCountBits = 0;
+  uint32_t numValueBits = 0;
+  int32_t minValue = 0;
+  std::vector<ProbContextEntry> entries;
+  uint32_t totalCount = 0; // Sum of all occurrence counts
+};
+
 bool Int32CDP::DecodeArithmetic(const uint8_t* buf, unsigned& offset, unsigned bufLen,
                                  int32_t valueCount, int32_t codeTextLength,
                                  std::vector<int32_t>& output) {
-  // TODO: Implement Arithmetic codec decoder
-  // This requires probability context parsing and arithmetic decoding
-  std::cerr << "DecodeArithmetic: Not yet implemented\n";
+  int32_t codeTextU32Count = (codeTextLength + 31) / 32;
+  BitReader probReader(buf + offset, codeTextU32Count);
+
+  offset += sizeof(uint32_t) * codeTextU32Count;
+  ProbabilityContext probCtx;
+
+  // Read probability context header (Figure 133)
+  probCtx.entryCount = probReader.ReadU32(16); // U32{16}: Entry Count
+  probCtx.numOccurrenceCountBits = probReader.ReadU32(6); // U32{6}
+  probCtx.numValueBits = probReader.ReadU32(7); // U32{7}
+  probCtx.minValue = probReader.ReadI32(32); // U32{32}: Min Value
+
+  std::cerr << "Probability Context: entryCount=" << probCtx.entryCount
+            << " occBits=" << probCtx.numOccurrenceCountBits
+            << " valBits=" << probCtx.numValueBits
+            << " minValue=" << probCtx.minValue << "\n";
+
+  if (probCtx.entryCount > 10000) {
+    std::cerr << "DecodeArithmetic: Unreasonable entry count\n";
+    return false;
+  }
+
+  // Read probability context table entries (Figure 134)
+  probCtx.entries.resize(probCtx.entryCount);
+  probCtx.totalCount = 0;
+
+  for (uint32_t i = 0; i < probCtx.entryCount; i++) {
+    auto& entry = probCtx.entries[i];
+
+    entry.isEscapeSymbol = probReader.ReadBit(); // U32{1}
+    entry.occurrenceCount = probReader.ReadU32(probCtx.numOccurrenceCountBits);
+    entry.associatedValue = probReader.ReadI32(probCtx.numValueBits);
+
+    probCtx.totalCount += entry.occurrenceCount;
+
+    if (i < 5) {
+      std::cerr << "  Entry[" << i << "]: escape=" << entry.isEscapeSymbol
+                << " count=" << entry.occurrenceCount
+                << " value=" << entry.associatedValue << "\n";
+    }
+  }
+
+  if (probCtx.entryCount > 5) {
+    std::cerr << "  ... (" << (probCtx.entryCount - 5) << " more entries)\n";
+  }
+
+  std::cerr << "Total occurrence count: " << probCtx.totalCount << "\n";
+
+  // Skip alignment bits to next byte boundary
+  size_t bitPos = probReader.GetBitPosition();
+  size_t alignmentBits = (8 - (bitPos % 8)) % 8;
+  if (alignmentBits > 0) {
+    probReader.ReadU32(alignmentBits);
+    std::cerr << "Skipped " << alignmentBits << " alignment bits\n";
+  }
+
+  // Update offset to account for probability context data consumed
+  size_t probContextBytes = (probReader.GetBitPosition() + 7) / 8;
+  offset += probContextBytes;
+
+  std::cerr << "Probability context consumed " << probContextBytes << " bytes\n";
+
+  // TODO: Read CodeText and perform arithmetic decoding
+  // TODO: Read Out-of-Band values if present
+
+  std::cerr << "DecodeArithmetic: Arithmetic decoding not yet implemented\n";
   return false;
 }
 
