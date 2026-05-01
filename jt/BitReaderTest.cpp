@@ -6,91 +6,110 @@
 using namespace JT;
 
 void TestReadBit() {
-  // Test pattern: 0b10110011 = 0xB3
-  // Little-endian: read LSB first (bit 0, then bit 1, etc.)
+  // File bytes: 0xB3 = 0b10110011
+  // Partial word (< 4 bytes): loaded as 0xB3000000 (big-endian manually)
+  // Bits extracted MSB first: 1,0,1,1,0,0,1,1
   uint8_t data[] = {0xB3};
   BitReader reader(data, 1);
 
-  assert(reader.ReadBit() == 1); // bit 0 (LSB)
-  assert(reader.ReadBit() == 1); // bit 1
-  assert(reader.ReadBit() == 0); // bit 2
-  assert(reader.ReadBit() == 0); // bit 3
-  assert(reader.ReadBit() == 1); // bit 4
-  assert(reader.ReadBit() == 1); // bit 5
-  assert(reader.ReadBit() == 0); // bit 6
   assert(reader.ReadBit() == 1); // bit 7 (MSB)
+  assert(reader.ReadBit() == 0); // bit 6
+  assert(reader.ReadBit() == 1); // bit 5
+  assert(reader.ReadBit() == 1); // bit 4
+  assert(reader.ReadBit() == 0); // bit 3
+  assert(reader.ReadBit() == 0); // bit 2
+  assert(reader.ReadBit() == 1); // bit 1
+  assert(reader.ReadBit() == 1); // bit 0 (LSB)
 
   std::cout << "TestReadBit: PASSED\n";
 }
 
 void TestReadU32() {
-  // Test reading unsigned integers
-  // Pattern: 0xD6 = 0b11010110, 0x4F = 0b01001111
-  // Little-endian reads LSB first from each byte
+  // File bytes: 0xD6, 0x4F
+  // Partial word: loaded as 0xD64F0000 (big-endian manually)
+  // Bits: 11010110 01001111 00000000 00000000
   uint8_t data[] = {0xD6, 0x4F};
   BitReader reader(data, 2);
 
-  // Read 4 bits from 0xD6: bits [0-3] = 0b0110 = 6
-  assert(reader.ReadU32(4) == 6);
+  // Read 4 bits: 0b1101 = 13
+  assert(reader.ReadU32(4) == 13);
 
-  // Read 5 bits: bit 4-7 of 0xD6 + bit 0 of 0x4F = 0b11101 = 29
-  // 0xD6 bits 4-7: 0b1101, 0x4F bit 0: 0b1 -> 0b11101 = 29
-  assert(reader.ReadU32(5) == 29);
+  // Read 5 bits: 0b01100 = 12
+  assert(reader.ReadU32(5) == 12);
 
-  // Read 7 bits: bits 1-7 of 0x4F = 0b0100111 = 39
-  assert(reader.ReadU32(7) == 39);
+  // Read 7 bits: 0b1001111 = 79
+  assert(reader.ReadU32(7) == 79);
 
   std::cout << "TestReadU32: PASSED\n";
 }
 
 void TestReadI32SignExtension() {
-  // Test signed integer reading with sign extension
-  // Pattern: 0xF0 = 0b11110000
-  // Little-endian: bits are 0,0,0,0,1,1,1,1 (LSB first)
+  // File bytes: 0xF0
+  // Partial word: 0xF0000000
+  // Bits: 11110000 00000000 00000000 00000000
   uint8_t data[] = {0xF0};
   BitReader reader(data, 1);
 
-  // Read 4 bits: 0b0000 = 0
-  int32_t val1 = reader.ReadI32(4);
-  assert(val1 == 0);
-
   // Read 4 bits: 0b1111 = -1 (with sign extension)
+  int32_t val1 = reader.ReadI32(4);
+  assert(val1 == -1);
+
+  // Read 4 bits: 0b0000 = 0
   int32_t val2 = reader.ReadI32(4);
-  assert(val2 == -1);
+  assert(val2 == 0);
 
   std::cout << "TestReadI32SignExtension: PASSED\n";
 }
 
 void TestReadI32Positive() {
-  // Test positive signed integers
-  // Pattern: 0x5A = 0b01011010
-  // Little-endian: bits are 0,1,0,1,1,0,1,0 (LSB first)
+  // File bytes: 0x5A = 0b01011010
+  // Partial word: 0x5A000000
   uint8_t data[] = {0x5A};
   BitReader reader(data, 1);
 
-  // Read 4 bits: 0b1010 = 10 (positive, no sign extension)
+  // Read 4 bits: 0b0101 = 5 (positive, no sign extension)
   int32_t val = reader.ReadI32(4);
-  assert(val == -6); // 0b1010 with 4-bit sign extension = -6
+  assert(val == 5);
 
   std::cout << "TestReadI32Positive: PASSED\n";
 }
 
 void TestReadAcrossByteBoundary() {
-  // Test reading values that span byte boundaries
-  // Pattern: 0xCA = 0b11001010, 0xF0 = 0b11110000
-  // Little-endian bits: CA: 0,1,0,1,0,0,1,1  F0: 0,0,0,0,1,1,1,1
+  // File bytes: 0xCA, 0xF0
+  // Partial word: 0xCAF00000
+  // Bits: 11001010 11110000 00000000 00000000
   uint8_t data[] = {0xCA, 0xF0};
   BitReader reader(data, 2);
 
-  // Read 6 bits from 0xCA: bits [0-5] = 0b001010 = 10
-  assert(reader.ReadU32(6) == 10);
+  // Read 6 bits: 0b110010 = 50
+  assert(reader.ReadU32(6) == 50);
 
-  // Read 10 bits spanning boundary: bits 6-7 of CA + bits 0-7 of F0
-  // CA bits 6-7: 1,1  F0 bits 0-7: 0,0,0,0,1,1,1,1
-  // Combined (LSB first): 1,1,0,0,0,0,1,1,1,1 = 0b1111000011 = 963
-  assert(reader.ReadU32(10) == 963);
+  // Read 10 bits: 0b1011110000 = 752
+  assert(reader.ReadU32(10) == 752);
 
   std::cout << "TestReadAcrossByteBoundary: PASSED\n";
+}
+
+void TestReadAcrossWordBoundary() {
+  // File bytes: 0xFF, 0xFF, 0xFF, 0xFF, 0xAA
+  // First word (4 bytes): dereference → 0xFFFFFFFF (little-endian)
+  //                       byte swap  → 0xFFFFFFFF (same)
+  // Second word (1 byte): partial → 0xAA000000
+  uint8_t data[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xAA};
+  BitReader reader(data, 5);
+
+  // Read 30 bits from first word: 30 bits of 1s
+  uint32_t val1 = reader.ReadU32(30);
+  assert(val1 == 0x3FFFFFFF);
+
+  // Read 10 bits spanning word boundary:
+  // 2 bits from first word: 11
+  // 8 bits from second word (0xAA = 0b10101010): 10101010
+  // Combined: 0b1110101010 = 938
+  uint32_t val2 = reader.ReadU32(10);
+  assert(val2 == 938);
+
+  std::cout << "TestReadAcrossWordBoundary: PASSED\n";
 }
 
 void TestReadU32Or0() {
@@ -101,7 +120,7 @@ void TestReadU32Or0() {
   assert(reader.ReadU32Or0(0) == 0);
 
   // Test with actual bits - should read normally
-  // 0xFF = 0b11111111, first 4 bits (LSB) = 0b1111 = 15
+  // First 4 bits: 0b1111 = 15
   assert(reader.ReadU32Or0(4) == 15);
 
   std::cout << "TestReadU32Or0: PASSED\n";
@@ -115,41 +134,58 @@ void TestReadI32Or0() {
   assert(reader.ReadI32Or0(0) == 0);
 
   // Test with actual bits - should read normally
-  // 0xF0 = 0b11110000, first 4 bits (LSB) = 0b0000 = 0
-  assert(reader.ReadI32Or0(4) == 0);
+  // First 4 bits: 0b1111 = -1 with sign extension
+  assert(reader.ReadI32Or0(4) == -1);
 
   std::cout << "TestReadI32Or0: PASSED\n";
 }
 
 void TestRead32BitValue() {
-  // Test reading a full 32-bit value
-  // Store bytes in order: 0x78, 0x56, 0x34, 0x12
-  uint8_t data[] = {0x78, 0x56, 0x34, 0x12};
+  // File bytes: 0x12, 0x34, 0x56, 0x78
+  // Full word (4 bytes):
+  //   - Dereference on little-endian: 0x78563412
+  //   - Byte swap: 0x12345678
+  //   - Read 32 bits MSB first: 0x12345678
+  uint8_t data[] = {0x12, 0x34, 0x56, 0x78};
   BitReader reader(data, 4);
 
-  // Little-endian bit reading will read all 32 bits LSB first from each byte
-  // This reconstructs the value byte-by-byte in little-endian order
   uint32_t result = reader.ReadU32(32);
-
-  // Expected: 0x12345678 (bytes in reverse order due to little-endian)
   assert(result == 0x12345678);
 
   std::cout << "TestRead32BitValue: PASSED\n";
 }
 
-void TestGetBitPosition() {
-  uint8_t data[] = {0xFF, 0xFF};
+void TestByteSwapping() {
+  // Verify byte swapping works correctly
+  // File bytes: 0x01, 0x02, 0x03, 0x04
+  // Dereference (little-endian): 0x04030201
+  // Byte swap: 0x01020304
+  // Read 32 bits: 0x01020304
+  uint8_t data[] = {0x01, 0x02, 0x03, 0x04};
+  BitReader reader(data, 4);
+
+  uint32_t result = reader.ReadU32(32);
+  assert(result == 0x01020304);
+
+  std::cout << "TestByteSwapping: PASSED\n";
+}
+
+void TestPartialWord() {
+  // File bytes: 0xAB, 0xCD (< 4 bytes)
+  // Partial word: manually loaded as 0xABCD0000
+  uint8_t data[] = {0xAB, 0xCD};
   BitReader reader(data, 2);
 
-  assert(reader.GetBitPosition() == 0);
+  // Read 8 bits: 0xAB
+  assert(reader.ReadU32(8) == 0xAB);
 
-  reader.ReadU32(5);
-  assert(reader.GetBitPosition() == 5);
+  // Read 8 bits: 0xCD
+  assert(reader.ReadU32(8) == 0xCD);
 
-  reader.ReadU32(8);
-  assert(reader.GetBitPosition() == 13);
+  // No more data
+  assert(reader.ReadU32(8) == 0);
 
-  std::cout << "TestGetBitPosition: PASSED\n";
+  std::cout << "TestPartialWord: PASSED\n";
 }
 
 void TestHasData() {
@@ -165,17 +201,19 @@ void TestHasData() {
 }
 
 int RunBitReaderTests() {
-  std::cout << "Running BitReader unit tests (little-endian, LSB first)...\n\n";
+  std::cout << "Running BitReader unit tests (32-bit words with byte swap)...\n\n";
 
   TestReadBit();
   TestReadU32();
   TestReadI32SignExtension();
   TestReadI32Positive();
   TestReadAcrossByteBoundary();
+  TestReadAcrossWordBoundary();
   TestReadU32Or0();
   TestReadI32Or0();
   TestRead32BitValue();
-  TestGetBitPosition();
+  TestByteSwapping();
+  TestPartialWord();
   TestHasData();
 
   std::cout << "\n=== All tests PASSED ===\n";

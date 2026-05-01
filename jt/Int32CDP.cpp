@@ -121,6 +121,15 @@ bool Int32CDP::DecodeBitlength(const uint8_t* buf, unsigned& offset, unsigned bu
     return false;
   }
 
+  std::cerr << "DecodeBitlength: valueCount=" << valueCount
+            << " codeTextLength=" << codeTextLength << " bits"
+            << " (" << codeTextU32Count << " U32 words)\n";
+  std::cerr << "CodeText bytes: ";
+  for (int i = 0; i < codeTextU32Count * 4 && i < 16; i++) {
+    std::cerr << std::hex << (int)buf[offset + i] << " ";
+  }
+  std::cerr << std::dec << "\n";
+
   // Create bit reader for the codetext
   BitReader reader(buf + offset, codeTextU32Count * 4);
   offset += codeTextU32Count * 4;
@@ -128,7 +137,11 @@ bool Int32CDP::DecodeBitlength(const uint8_t* buf, unsigned& offset, unsigned bu
   output.resize(valueCount);
 
   // Check the first bit to determine variable-width vs fixed-width encoding
-  if (reader.ReadBit()) {
+  uint32_t encodingBit = reader.ReadBit();
+  std::cerr << "First bit (encoding type): " << encodingBit
+            << (encodingBit ? " (variable-width)" : " (fixed-width)") << "\n";
+
+  if (encodingBit) {
     // Variable-width encoding
     return DecodeBitlengthVariable(reader, valueCount, output);
   } else {
@@ -137,20 +150,36 @@ bool Int32CDP::DecodeBitlength(const uint8_t* buf, unsigned& offset, unsigned bu
   }
 }
 
+// Helper: Read variable-length nibble-encoded value (spec line 11732)
+static uint32_t ReadNibbler(BitReader& reader) {
+  uint32_t result = 0;
+  uint32_t numNibbles = 0;
+  const unsigned nibbleWidth = 4;
+
+  uint32_t moreBits;
+  do {
+    uint32_t nibble = reader.ReadU32(nibbleWidth);
+    nibble <<= (numNibbles * nibbleWidth);
+    result |= nibble;
+    moreBits = reader.ReadBit();
+    numNibbles++;
+  } while (moreBits);
+
+  return result;
+}
+
 bool Int32CDP::DecodeBitlengthFixed(BitReader& reader, int32_t valueCount,
                                      std::vector<int32_t>& output) {
-  // Read min and max bit counts (6 bits each)
-  unsigned minBits = reader.ReadU32(6);
-  unsigned maxBits = reader.ReadU32(6);
-
-  // Read min and max values
-  int32_t minVal = reader.ReadI32Or0(minBits);
-  int32_t maxVal = reader.ReadI32Or0(maxBits);
-
+  // Read min and max VALUES directly using nibbler encoding (spec line 12271)
+  int32_t minVal = static_cast<int32_t>(ReadNibbler(reader));
+  int32_t maxVal = static_cast<int32_t>(ReadNibbler(reader));
   int32_t range = maxVal - minVal;
+
+  std::cerr << "Fixed-width: minVal=" << minVal << " maxVal=" << maxVal << " range=" << range << "\n";
 
   if (range <= 0) {
     // All values are the same
+    std::cerr << "All " << valueCount << " values are " << minVal << "\n";
     for (int32_t i = 0; i < valueCount; i++) {
       output[i] = minVal;
     }
@@ -164,9 +193,15 @@ bool Int32CDP::DecodeBitlengthFixed(BitReader& reader, int32_t valueCount,
     fieldWidth++;
   }
 
-  // Read each value
+  std::cerr << "Decoding " << valueCount << " values with fieldWidth=" << fieldWidth << ":\n";
   for (int32_t i = 0; i < valueCount; i++) {
     output[i] = reader.ReadU32(fieldWidth) + minVal;
+    if (i < 15) {
+      std::cerr << "  [" << i << "] = " << output[i] << "\n";
+    }
+  }
+  if (valueCount > 15) {
+    std::cerr << "  ... (" << (valueCount - 15) << " more values)\n";
   }
 
   return true;

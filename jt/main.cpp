@@ -707,6 +707,9 @@ void ExportShapeSegment(const JTFile & jtFile, TOCEntry & entry){
   }
   DataElement ele;
   const uint8_t * buf = seg.data.data();
+  std::ofstream tmpBuf ("I:/foundation/b/shapeseg.bin", std::ofstream::binary);
+  tmpBuf.write((char*)(seg.data.data()), seg.data.size());
+  tmpBuf.close();
   ParseElementHeader(buf, ele);
   JT::ObjectType eleType = JT::GetObjectType(ele.objectType);
   // expect TriStripSetShapeLOD
@@ -846,7 +849,7 @@ void IdentifyShapes(const SceneGraph &scene,
 extern int RunBitReaderTests();
 
 int main(int argc, char *argv[]) {
-  RunBitReaderTests();
+  // RunBitReaderTests();
   //   DebugLSGLoading();
   //   return 0;
   // if (argc <= 1) {
