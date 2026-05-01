@@ -315,6 +315,17 @@ std::string to_utf8(const std::u16string &u16) {
   return convert.to_bytes(u16);
 }
 
+// Helper to sanitize strings by replacing tabs, newlines, and control chars with spaces
+std::string sanitize_string(const std::string &str) {
+  std::string result = str;
+  for (char &c : result) {
+    if (c == '\\' || c =='\"' || c == '\t' || c == '\n' || c == '\r' || (c >= 0 && c < 32)) {
+      c = ' ';
+    }
+  }
+  return result;
+}
+
 void SceneGraph::PrintHierarchy(std::ostream &out) {
   // Per JT 10.0 spec section 6: "The first Graph Element in a LSG Segment
   // should always be a Partition Node" - this is the root
@@ -429,7 +440,10 @@ void SceneGraph::PrintHierarchy(std::ostream &out) {
                                          "LODLabel1::",
                                          "LODLabel2::",
                                          "SegLength",
-                                         "_nTrisLODs"};
+                                         "_nTrisLODs","REFSET001",
+                                        "REFSET002",
+                                      "REFSET003",
+                                    "REFSET004"};
     for (auto const &[key, val] : props) {
       if (excludeKeys.contains(key)) {
         continue;
@@ -438,13 +452,13 @@ void SceneGraph::PrintHierarchy(std::ostream &out) {
         out << ",\n";
       }
       first = false;
-      out << indent << "\"" << key << "\": \"" << val << "\"";
+      out << indent << "\"" << key << "\": \"" << sanitize_string(val) << "\"";
     }
 
-    if (!first) {
-      out << ",\n";
-    }
     if (nodeInfo.group.childIds.size() > 0) {
+      if (!first) {
+        out << ",\n";
+      }
       out << indent << "\"children\":[\n";
       bool firstChild = true;
       // Traverse children
@@ -857,14 +871,20 @@ int main(int argc, char *argv[]) {
   // }
   // std::string input = argv[1];
 
-  std::string input = "I:/foundation/b/S.jt";
-  std::string outputDir = "I:/foundation/b/out/";
-  std::string sceneCache = "I:/foundation/b/seg.bin";
+  // std::string input = "I:/foundation/b/S.jt";
+  // std::string outputDir = "I:/foundation/b/out/";
+  // std::string sceneCache = "I:/foundation/b/seg.bin";
 
   // linux
+  std::string dataDir = "/media/desaic/ssd2/b/";
   // std::string input = "/media/desaic/ssd2/data/b/S.jt";
-  // std::string outputDir = "/media/desaic/ssd2/data/b/out/";
-  // std::string sceneCache = "/media/desaic/ssd2/data/b/scene_seg.bin";
+  std::string input = dataDir + "G20.jt";
+  std::string outputDir = dataDir + "/out/";
+  std::string sceneCache = dataDir + "scene_seg.bin";
+
+  // set true to load separate segment bin data .
+  bool debugging = false;
+
   if (argc > 2) {
     outputDir = argv[2];
   }
@@ -897,8 +917,7 @@ int main(int argc, char *argv[]) {
   }
 
   DataSegment sceneData;
-  SceneGraph scene;
-  bool debugging = true;
+  SceneGraph scene;  
   if (debugging) {
     LoadSegmentFromDisk(sceneCache, sceneData);
   } else {
@@ -912,8 +931,11 @@ int main(int argc, char *argv[]) {
     }
   }
   ParseScene(sceneData, scene);
+
+  std::ofstream out(dataDir + "G20_hier1.json");
+  scene.PrintHierarchy(out);
   // Identify all shapes and write mesh location info
-  IdentifyShapes(scene, jtFile, outputDir + "shapes.txt");
+  // IdentifyShapes(scene, jtFile, outputDir + "shapes.txt");
 
   return 0;
 }
