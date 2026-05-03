@@ -8,6 +8,8 @@
 #include "TrigGrid.h"
 #include <iostream>
 #include <fstream>
+#include <sstream>
+#include <iomanip>
 
 #include "Stopwatch.h"
 #include "meshutil.h"
@@ -391,8 +393,8 @@ void TransformVerts(const std::vector<float> &verts, std::vector<float> &dst, co
   }
 }
 
-void Union(MeshConvo &bg, Vec3i offset, const MeshConvo &fg) {
-  Vec3u size = fg.GridSize();
+void Union(MeshConvo &bg, Vec3i offset, const Array3D8u &fg) {
+  Vec3u size = fg.GetSize();
   Vec3u bgSize = bg.GridSize();
   for (unsigned z = 0; z < size[2]; z++) {
     int dstz = int(z) + offset[2];
@@ -409,7 +411,7 @@ void Union(MeshConvo &bg, Vec3i offset, const MeshConvo &fg) {
         if (dstx < 0 || dstx >= int(bgSize[0])) {
           continue;
         }
-        if (fg.vox(x, y, z) > 0) {
+        if (fg(x, y, z) > 0) {
           bg.vox(dstx, dsty, dstz) = 1;
         }
       }
@@ -508,7 +510,7 @@ bool Add(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot) {
     if (fg.gridReversed) {
       UnionReversed(bg, offset, fg);
     } else {
-      Union(bg, offset, fg);
+      Union(bg, offset, fg.vox);
     }
   }
   return found;
@@ -682,6 +684,7 @@ public:
   Box3f box;
   std::string name;
   TrigMesh mesh;
+  bool noMoreFit = false;
   float BoxDiagonal() const {
     return (box.vmax - box.vmin).norm();
   }
@@ -732,13 +735,33 @@ static std::vector<MeshInfo> LoadAllMeshInfo(const std::string &meshDir) {
   return fruits;
 }
 
+// Structure to store transformation data
+struct Transformation {
+    Vec3f position;
+    Vec3f rotation;
+    float scale = 1.0f;
+    std::string toString() const {
+        std::ostringstream oss;
+        oss << std::setprecision(6);
+        oss << "pos " << position[0] << " " << position[1] << " " << position[2]
+            << " rot " << rotation[0] << " " << rotation[1] << " " << rotation[2]
+            << " scale " << scale;
+        return oss.str();
+    }
+};
+
 class PackingScene {
   public:
     MeshInfo container;
+    MeshInfo containerInner;
     std::vector<MeshInfo> items;
+    // for each item, list of transformations
+    std::vector<std::vector<Transformation> > placed;
     std::vector<int> sortedBySize;
     std::shared_ptr<AdapSDF> sdf;
     std::string outputFolder;
+    float dx = 1.0f;
+    MeshConvo bg;
 };
 
 std::vector<int> SortBySize(const std::vector<MeshInfo> &items) {
@@ -832,22 +855,57 @@ bool AddUsingSDF(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &r
     if (fg.gridReversed) {
       UnionReversed(bg, offset, fg);
     } else {
-      Union(bg, offset, fg);
+      Union(bg, offset, fg.vox);
     }
   }
   return found;
 }
 
+TrigMesh MakeTransformedMesh(const TrigMesh & mesh, const Transformation & tran){
+  TrigMesh transformedMesh = mesh;
+  transformedMesh.scale(tran.scale);
+  const auto & rot = tran.rotation;
+  Matrix3f rotMat = RotationMatrixRad(rot[0], rot[1], rot[2]);
+  TransformVerts(mesh.v, transformedMesh.v, rotMat);
+  const auto & pos = tran.position;
+  transformedMesh.translate(pos[0], pos[1], pos[2]);
+  // Append to merged mesh for this item type
+  return transformedMesh;
+}
+
+TrigMesh MakeMergedMesh(const TrigMesh & item, const std::vector<Transformation> & trans){
+  TrigMesh merged;
+  for(const auto tran: trans){
+    TrigMesh inst = MakeTransformedMesh(item, tran);
+    merged.append(inst);
+  }
+  return merged;
+}
+
+void AddInnerContainer(PackingScene & scene){
+  float dx =scene.dx;
+  Box3f box = scene.container.box;
+  VoxConf conf;
+  conf.origin = ToArray(box.vmin);
+  conf.unit = {dx, dx, dx};
+
+  conf.gridSize = ComputeGridSize(box, dx, 1);
+  Array3D8u vox;
+  vox.Allocate(conf.gridSize, 0);
+  VoxelizeMesh(scene.containerInner.mesh, vox, conf);
+  FloodOutside8u(vox, 1);
+  Union(scene.bg, Vec3i(0), vox);
+}
+
 void PackScene(PackingScene & scene) {  
-  const float dx = 0.3;
-  MeshConvo bg;
-  bg.SetMeshPtr(&scene.container.mesh);
-  bg.Voxelize(dx);
+  scene.dx = 0.3;
+  scene.bg.SetMeshPtr(&scene.container.mesh);
+  scene.bg.Voxelize(scene.dx);
 
-  FloodOutside8u(bg.vox, 1);
-  Invert01(bg.vox);
+  FloodOutside8u( scene.bg.vox, 1);
+  Invert01( scene.bg.vox);
 
-  Vec3f dxVec(dx);  
+  Vec3f dxVec(scene.dx);  
   const unsigned NUM_COPIES = 1000;
   const float outputScale = 1.05f;
   const unsigned ANGLE_TRIALS = 5;
@@ -855,7 +913,7 @@ void PackScene(PackingScene & scene) {
   unsigned int seed = 123;
   std::mt19937 engine(seed);
   std::uniform_real_distribution<float> dist(0.0f, 6.2831853);
-
+  std::uniform_int_distribution<int> intDistri(0);
   for (size_t i = 0; i < randAngles.size(); i++) {
     randAngles[i][0] = dist(engine);
     randAngles[i][1] = dist(engine);
@@ -863,95 +921,90 @@ void PackScene(PackingScene & scene) {
   }
   std::ofstream out(scene.outputFolder + "/pack.txt");
   bool debugging = true;
-  Vec3f voxRes(bg.dx);
-  Vec3f origin = bg.GetOrigin();
+  Vec3f voxRes(scene.dx);
+  Vec3f origin = scene.bg.GetOrigin();
+  scene.placed.resize(scene.items.size());
+  size_t maxCount = 10000;
+  //large medium small - divide items into 3 groups, last group smallest
+  const unsigned NUM_GROUPS = 3;
+  std::vector<unsigned> itemGroups[NUM_GROUPS];
+  size_t totalItems = scene.sortedBySize.size();
+  unsigned groupSize = totalItems / NUM_GROUPS + (totalItems%3>0);
 
-  // small medium large
-  int itemSizeGroup = 3;
-  unsigned groupSize = scene.items.size() / 3;
+  // Divide items into groups: 0=large, 1=medium, 2=small
+  for (unsigned i = 0; i < scene.sortedBySize.size(); i++) {
+    unsigned groupIndex = i / groupSize;
+    groupIndex = std::min(2u, groupIndex);
+    itemGroups[groupIndex].push_back(scene.sortedBySize[i]);
+  }
 
-  // Structure to store transformation data
-  struct TransformData {
-    Vec3f position;
-    Vec3f rotation;
-    float scale;
-  };
+  unsigned angleIndex = 0;
+  const unsigned MAX_TRIAL_COUNT = 10;
 
-  for(unsigned sizei = 0;sizei<scene.sortedBySize.size();sizei++){
-    unsigned i = scene.sortedBySize[sizei];
-    unsigned numTrials = 0;
-    size_t placedCount = 0;
-    itemSizeGroup = 3 - std::min(3u, sizei / groupSize);
-    float factor = 1.0f;
-    if (itemSizeGroup < 1) {
-      factor = -1.0f;
+  for(unsigned g = 0; g<NUM_GROUPS; g++){
+    float sdfFactor = 1.0f;
+    if (g == 2) {
+      // do not need small fruits inside.
+      AddInnerContainer(scene);
     }
-    std::cout << "factor " << factor << "\n";
-
-    // Accumulate merged mesh and transformations for this item type
-    TrigMesh mergedMesh;
-    std::vector<TransformData> transforms;
-
-    for (size_t j = 0; j < NUM_COPIES; j++) {
-      Vec3f pos, rot = randAngles[j % randAngles.size()];
-      bool success = AddUsingSDF(bg, scene.items[i].mesh, pos, rot, scene.sdf, factor);
-      if (!success) {
-        numTrials++;
-        if (numTrials > 10) {
-          break;
+    if(g>=2){
+      sdfFactor = -1.0f;
+    }
+    const auto & group = itemGroups[g];
+    //redundant lol who cares.
+    bool tryMore = true;
+    while(tryMore){
+      bool canPlace = false;
+      //round robin
+      for(unsigned i = 0;i < group.size(); i++){        
+        unsigned itemIndex = group[i];
+        if(scene.items[itemIndex].noMoreFit){
+          continue;
         }
-        continue;
-      }
-
-      out << scene.items[i].name << " " << pos[0] << " " << pos[1] << " " << pos[2] << " " << rot[0] << " " << rot[1]
-          << " "
-          << rot[2] << "\n";
-
-      if (debugging) {
-        // Store transformation data
-        TransformData transform;
-        transform.position = pos;
-        transform.rotation = rot;
-        transform.scale = outputScale;
-        transforms.push_back(transform);
-
-        // Create transformed mesh
-        TrigMesh transformedMesh = scene.items[i].mesh;
-        transformedMesh.scale(outputScale);
-        Matrix3f rotMat = RotationMatrixRad(rot[0], rot[1], rot[2]);
-        TransformVerts(scene.items[i].mesh.v, transformedMesh.v, rotMat);
-        transformedMesh.translate(pos[0], pos[1], pos[2]);
-
-        // Append to merged mesh for this item type
-        mergedMesh.append(transformedMesh);
-
-        if (i == 1) {
-          std::string debugVol = scene.outputFolder + "/vol_" + std::to_string(i) + "_" + std::to_string(j) + ".obj";
-          SaveVolAsObjMesh(debugVol, bg.vox, (float *)(&voxRes), (float *)(&origin), 1);
+        bool itemPlaced = false;
+        for(unsigned trial = 0; trial<MAX_TRIAL_COUNT; trial++){
+          Vec3f pos;
+          Vec3f rot = randAngles[angleIndex];
+          angleIndex ++;                
+          if(angleIndex >= randAngles.size()){
+            angleIndex = 0;
+          }
+          bool success = AddUsingSDF( scene.bg, scene.items[itemIndex].mesh, pos, rot, scene.sdf, sdfFactor);
+          if(success){
+            canPlace = true;
+            itemPlaced =true;
+            Transformation tran;
+            tran.position = pos;
+            tran.rotation = rot;
+            scene.placed[itemIndex].push_back(tran);
+            std::string name = scene.items[itemIndex].name;
+            std::string line = name + " " + tran.toString();
+            out << line <<"\n";
+            std::cout << line <<"\n";
+            break;
+          }
+        }
+        if (!itemPlaced) {
+          scene.items[itemIndex].noMoreFit = true;
         }
       }
-      placedCount++;
+      if(!canPlace){
+        tryMore = false;
+        break;
+      }
     }
 
-    // Save merged mesh for this item type after packing all copies
-    if (debugging && !transforms.empty()) {
-      std::string mergedMeshFile = scene.outputFolder + "/" + scene.items[i].name + "_merged.obj";
-      mergedMesh.SaveObj(mergedMeshFile);
-      std::cout << "Saved merged mesh for " << scene.items[i].name << " with " << transforms.size() << " instances\n";
-
-      // Save transformation data to a text file
-      std::string transformFile = scene.outputFolder + "/" + scene.items[i].name + "_transforms.txt";
-      std::ofstream transformOut(transformFile);
-      for (const auto& t : transforms) {
-        transformOut << t.position[0] << " " << t.position[1] << " " << t.position[2] << " "
-                     << t.rotation[0] << " " << t.rotation[1] << " " << t.rotation[2] << " "
-                     << t.scale << "\n";
+    for(unsigned i = 0;i < group.size(); i++){        
+      unsigned itemIndex = group[i];
+      for(auto & t:scene.placed[itemIndex]){
+        t.scale = outputScale;
       }
-      transformOut.close();
-      std::cout << "Saved transformations for " << scene.items[i].name << " to " << transformFile << "\n";
+      std::string name = scene.items[itemIndex].name;
+      TrigMesh m = MakeMergedMesh(scene.items[itemIndex].mesh, scene.placed[itemIndex]);
+      std::string outMeshName = scene.outputFolder + name + "_merge.obj";
+      m.SaveObj(outMeshName);
     }
   }
-  out.close();
 }
 
 void PackFruits() {
@@ -961,7 +1014,9 @@ void PackFruits() {
   scene.items = fruits;
   scene.container;
   fs::path containerFile("F:/meshes/fruit_hand/hands/hand4.5m_finger.stl");
+  fs::path innerContainerFile("F:/meshes/fruit_hand/hands/finger_inner.stl");
   LoadMeshInfo(scene.container, containerFile);
+  LoadMeshInfo(scene.containerInner, innerContainerFile);
   scene.sortedBySize = SortBySize(scene.items);
   float sdfDx = 1.0f;
   float distUnit = 0.001f * sdfDx;

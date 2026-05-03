@@ -48,7 +48,8 @@ void TestVox(){
 
   timer.Start();
   for (size_t si = 0; si < samples.size(); si++) {
-    distances[si] = trigGrid.NearestTriangle(samples[si], MAX_DIST);
+    Vec3f n;
+    distances[si] = trigGrid.NearestTriangle(samples[si], MAX_DIST, n);
   }
 
   float elapsedMs = timer.ElapsedMS();
