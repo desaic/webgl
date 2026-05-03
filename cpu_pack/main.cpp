@@ -772,6 +772,15 @@ std::vector<int> SortBySize(const std::vector<MeshInfo> &items) {
   return indices;
 }
 
+// from x y z index in convolved image to translation for fg mesh.
+Vec3f GetDisplacement(Vec3u gridIdx, float dx, Vec3u fgSize, Vec3f fgOrigin, Vec3f bgOrigin) {
+  Vec3f dxVec(dx);
+  Vec3f s = fgSize.cast<float>() - Vec3f(1.0f);
+  Vec3f origin = bgOrigin - fgOrigin - dxVec * s;
+  Vec3f disp = dx * gridIdx.cast<float>() + origin;
+  return disp;
+}
+
 bool AddUsingSDF(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot, 
   std::shared_ptr<AdapSDF> sdf, float factor = 1.0f) {
   Matrix3f rotMat = RotationMatrixRad(rot[0], rot[1], rot[2]);
@@ -844,14 +853,11 @@ bool AddUsingSDF(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &r
   }
   std::cout << "high score " << highScore << "\n" ;
   bool found = (highScore > score0);
-  if (found) {
-    Vec3f dxVec(dx);
-    Vec3f s = fg.GridSize().cast<float>() - Vec3f(1.0f);
-    Vec3f origin = bg.GetOrigin() - fg.GetOrigin() - dxVec * s;
-    pos = dx * bestPos.cast<float>() + origin;
-    Vec3i offset = bestPos.cast<int>();
-    Vec3i fgSizeInt = fgSize.cast<int>();
-    offset = offset - fgSizeInt + Vec3i(1);
+  if (found) {    
+    pos = GetDisplacement(bestPos, dx, fg.vox.GetSize(), fg.GetOrigin(), bg.GetOrigin());
+    // offset of fg grid to be unioned into bg grid. 
+    // e.g. if fg grid size is 1, then offset is just bestPos.
+    Vec3i offset = bestPos.cast<int>() - fgSize.cast<int>() + Vec3i(1);
     if (fg.gridReversed) {
       UnionReversed(bg, offset, fg);
     } else {
@@ -894,7 +900,18 @@ void AddInnerContainer(PackingScene & scene){
   vox.Allocate(conf.gridSize, 0);
   VoxelizeMesh(scene.containerInner.mesh, vox, conf);
   FloodOutside8u(vox, 1);
+  // SaveVolAsObjMesh("F:/meshes/fruit_hand/inner_vox.obj", vox, (float*)(&conf.unit),(float*)(& conf.origin),1);
+
   Union(scene.bg, Vec3i(0), vox);
+}
+
+void SavePackedMesh(const PackingScene &scene, unsigned i) {
+  std::string name = scene.items[i].name;
+  TrigMesh m = MakeMergedMesh(scene.items[i].mesh, scene.placed[i]);
+  if (!m.v.empty()) {
+    std::string outMeshName = scene.outputFolder + name + "_merge.obj";
+    m.SaveObj(outMeshName);
+  }
 }
 
 void PackScene(PackingScene & scene) {  
@@ -941,7 +958,7 @@ void PackScene(PackingScene & scene) {
   unsigned angleIndex = 0;
   const unsigned MAX_TRIAL_COUNT = 10;
 
-  for(unsigned g = 0; g<NUM_GROUPS; g++){
+  for(unsigned g = 2; g<NUM_GROUPS; g++){
     float sdfFactor = 1.0f;
     if (g == 2) {
       // do not need small fruits inside.
@@ -996,25 +1013,71 @@ void PackScene(PackingScene & scene) {
 
     for(unsigned i = 0;i < group.size(); i++){        
       unsigned itemIndex = group[i];
-      for(auto & t:scene.placed[itemIndex]){
+      SavePackedMesh(scene, itemIndex);      
+      for(auto & t:scene.placed[i]){
         t.scale = outputScale;
       }
-      std::string name = scene.items[itemIndex].name;
-      TrigMesh m = MakeMergedMesh(scene.items[itemIndex].mesh, scene.placed[itemIndex]);
-      std::string outMeshName = scene.outputFolder + name + "_merge.obj";
-      m.SaveObj(outMeshName);
+    }
+  }
+}
+
+void LoadPack(PackingScene & scene, const std::string & packFile){
+  std::ifstream in (packFile);
+  if (!in.good()) {
+    return;
+  }
+
+  // Initialize placed vector with empty vectors for each item
+  scene.placed.resize(scene.items.size());
+
+  std::string line;
+  while (std::getline(in, line)) {
+    std::istringstream iss(line);
+    std::string itemName, posLabel, rotLabel, scaleLabel;
+    Transformation trans;
+
+    // Parse: ItemName pos x y z rot x y z scale s
+    if (iss >> itemName >> posLabel
+        >> trans.position[0] >> trans.position[1] >> trans.position[2]
+        >> rotLabel
+        >> trans.rotation[0] >> trans.rotation[1] >> trans.rotation[2]
+        >> scaleLabel >> trans.scale) {
+
+      // Find which item index this corresponds to
+      int itemIndex = -1;
+      for (size_t i = 0; i < scene.items.size(); i++) {
+        if (scene.items[i].name == itemName) {
+          itemIndex = i;
+          break;
+        }
+      }
+
+      if (itemIndex >= 0) {
+        scene.placed[itemIndex].push_back(trans);
+      } else {
+        std::cout << "Warning: item " << itemName << " not found in scene\n";
+      }
+    }
+  }
+
+  // Print summary
+  for (size_t i = 0; i < scene.items.size(); i++) {
+    if (!scene.placed[i].empty()) {
+      std::cout << "Loaded " << scene.placed[i].size() << " placements for "
+                << scene.items[i].name << "\n";
     }
   }
 }
 
 void PackFruits() {
-  std::string meshDir = "F:/meshes/fruit_hand/fruits/";
+  std::string dataDir = "F:/meshes/fruit_hand/";
+  std::string meshDir = dataDir + "fruits/";
   PackingScene scene;
   std::vector<MeshInfo> fruits = LoadAllMeshInfo(meshDir);
   scene.items = fruits;
   scene.container;
-  fs::path containerFile("F:/meshes/fruit_hand/hands/hand4.5m_finger.stl");
-  fs::path innerContainerFile("F:/meshes/fruit_hand/hands/finger_inner.stl");
+  fs::path containerFile(dataDir + "hands/hand4.5m_finger.stl");
+  fs::path innerContainerFile(dataDir + "hands/finger_inner.stl");
   LoadMeshInfo(scene.container, containerFile);
   LoadMeshInfo(scene.containerInner, innerContainerFile);
   scene.sortedBySize = SortBySize(scene.items);
@@ -1023,7 +1086,12 @@ void PackFruits() {
   std::cout << "computing container sdf \n";
   scene.sdf = ComputeSDF(distUnit, sdfDx, scene.container.mesh);
   std::cout << "computing container sdf done \n";
-  scene.outputFolder = "F:/meshes/fruit_hand/out/";
+  scene.outputFolder = dataDir + "/out/";
+  std::string packedFile = dataDir + "pack0.txt";
+  LoadPack(scene, packedFile);
+  for(unsigned i = 0;i<scene.items.size();i++){
+    SavePackedMesh(scene, i);
+  }
   PackScene(scene);
 }
 
