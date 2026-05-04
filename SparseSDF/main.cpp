@@ -879,7 +879,7 @@ void MakeFluoriteLattice() {
   std::string objFile = "fl_smooth.obj";
   Vec3f voxRes(1, 1, 1);
   Vec3f origin(0,0,0);
-  SaveVolAsObjMesh(objFile, s, (float*)(&voxRes), (float*)(&origin), 2);
+  SaveVolAsObjMesh(objFile, s, voxRes, origin, 2);
 }
 
 float gyroid(float x, float y, float z) {
@@ -910,7 +910,7 @@ void MakeGyroidCell() {
   std::string objFile = "gyroidCell.obj";
   Vec3f voxRes(1, 1, 1);
   Vec3f origin(0, 0, 0);
-  SaveVolAsObjMesh(objFile, dist, (float*)(&voxRes), (float*)(&origin), 2);
+  SaveVolAsObjMesh(objFile, dist, voxRes, origin, 2);
 }
 
 int main(int argc, char* argv[]) {
@@ -925,8 +925,8 @@ int main(int argc, char* argv[]) {
   int maxIndex = 760;
   LoadImageSequence(imageDir, maxIndex, eyeVol);
   for (int id = 1; id < 4; id++) {
-    float voxRes[3] = {0.064, 0.0635, 0.05};
-    float origin[3] = {.0f,.0f,.0f};
+    Vec3f voxRes(0.064, 0.0635, 0.05);
+    Vec3f origin(.0f, .0f, .0f);
     SaveVolAsObjMesh("eye_" + std::to_string(id) + ".obj", eyeVol, voxRes,
                      origin, id);
   }

@@ -19,8 +19,8 @@ void savePointsObj(const std::string& fileName, const std::vector<Vec3f>& points
 
 void SaveVolAsObjMesh(std::string outfile, const Array3D8u& vol, float* voxRes, int mat);
 
-void SaveVolAsObjMesh(std::string outfile, const Array3D8u& vol, float* voxRes,
-                      float* origin, int mat);
+void SaveVolAsObjMesh(std::string outfile, const Array3D8u& vol, const Vec3f& voxRes,
+                      const Vec3f & origin, int mat);
 
 void SamplePointsOneTrig(unsigned tIdx, const TrigMesh& m,
                          std::vector<SurfacePoint>& points, float spacing);

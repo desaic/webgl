@@ -166,6 +166,12 @@ class MeshConvo {
       return box.vmin;
     }
 
+    // original center of mesh bounding box
+    // before padding the grid
+    Vec3f GetMeshCenter()const{
+      return 0.5f *(meshBox.vmin + meshBox.vmax);
+    }
+
     Vec3u GridSize() const {
       return vox.GetSize();
     }
@@ -516,88 +522,6 @@ bool Add(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot) {
   return found;
 }
 
-void TestPack() {
-  std::string dataFolder = "F:/meshes/fruit_hand/";
-  std::string outputFolder = "F:/meshes/fruit_hand/output/";
-  std::string bgFile = dataFolder + "/hands/hand_120cm.obj";
-  std::string fruitFiles[] = {"pineapple.obj", "canteloupe1.obj", "strawberries1.obj", "blueberries1.obj"};
-  size_t numFruits = std::size(fruitFiles);
-  TrigMesh bgMesh;
-  std::vector<TrigMesh> fruits(numFruits);
-  std::vector<Vec2f> uv;
-  bgMesh.LoadObj(bgFile);
-  for (size_t i = 0; i < numFruits; i++) {
-    fruits[i].LoadObj(dataFolder + "/fruits_scale/" + fruitFiles[i]);
-  }
-  if (bgMesh.GetNumTrigs() == 0) {
-    std::cout << "empty base mesh\n";
-    return;
-  }
-  if (fruits[0].GetNumTrigs() == 0) {
-    std::cout << "empty component mesh\n";
-    return;
-  }
-  const float dx = 0.3;
-  MeshConvo bg;
-  bg.SetMeshPtr(&bgMesh);
-  bg.Voxelize(dx);
-
-  FloodOutside8u(bg.vox, 1);
-  Invert01(bg.vox);
-  // BFSBorderDist(bg);
-
-  Vec3f dxVec(dx);
-  // SaveVoxMesh(outputFolder + "hand_vox.obj", bg.vox, dxVec, bg.GetOrigin(), 1);
-  const unsigned NUM_COPIES = 100;
-  const unsigned ANGLE_TRIALS = 5;
-  std::vector<Vec3f> randAngles(100);
-  unsigned int seed = 123;
-  std::mt19937 engine(seed);
-  std::uniform_real_distribution<float> dist(0.0f, 6.2831853);
-
-  for (size_t i = 0; i < randAngles.size(); i++) {
-    randAngles[i][0] = dist(engine);
-    randAngles[i][1] = dist(engine);
-    randAngles[i][2] = dist(engine);
-  }
-  std::ofstream out(outputFolder + "/pack.txt");
-  bool debugging = true;
-  Vec3f voxRes(bg.dx);
-  Vec3f origin = bg.GetOrigin();
-  for (size_t i = 0; i < numFruits; i++) {
-    unsigned numTrials = 0;
-    size_t placedCount = 0;
-    for (size_t j = 0; j < NUM_COPIES; j++) {
-      Vec3f pos, rot = randAngles[j % randAngles.size()];
-      bool success = Add(bg, fruits[i], pos, rot);
-      if (!success) {
-        numTrials++;
-        if (numTrials > 10) {
-          break;
-        }        
-        continue;
-      }
-     
-      out << fruitFiles[i] << " " << pos[0] << " " << pos[1] << " " << pos[2] << " " << rot[0] << " " << rot[1] << " "
-          << rot[2] << "\n";
-      if (debugging) {
-        TrigMesh out = fruits[i];
-        Matrix3f rotMat = RotationMatrixRad(rot[0], rot[1], rot[2]);
-        TransformVerts(fruits[i].v, out.v, rotMat);
-        out.translate(pos[0], pos[1], pos[2]);
-        std::string debugMesh = outputFolder + "/" + fruitFiles[i] + std::to_string(placedCount) + ".obj";
-        out.SaveObj(debugMesh);
-        if (i == 1) {
-          std::string debugVol = outputFolder + "/vol_" + std::to_string(i) + "_" + std::to_string(j) + ".obj";
-          SaveVolAsObjMesh(debugVol, bg.vox, (float *)(&voxRes), (float *)(&origin), 1);
-        }
-      }
-      placedCount++;
-    }
-  }
-  out.close();
-}
-
 std::shared_ptr<AdapSDF> ComputeSDF(float distUnit, float h, TrigMesh &mesh) {
   std::shared_ptr<AdapSDF> sdf = std::make_shared<AdapSDF>();
   sdf->voxSize = h;
@@ -820,30 +744,40 @@ bool AddUsingSDF(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &r
   // fgSize -1 is inside the container.
     
   Vec3f vmin = fg.meshBox.vmin;
-  Vec3f vmax = fg.meshBox.vmax;
-  Vec3f o = 0.5f * (vmin + vmax) - fg.GetOrigin();
-  Vec3i centerOffset( int(-o[0] / fg.dx), int(-o[1]/fg.dx), int(-o[2]/fg.dx) );
-
+  Vec3f vmax = fg.meshBox.vmax;  
+  Vec3f meshCenter = fg.GetMeshCenter();
   std::cout<<"fg grid size "<<fg.GridSize()[0]<<" "<<fg.GridSize()[1]<<" "<<fg.GridSize()[2]<<"\n";
-  std::cout<<"fg center coord "<<o[0]<<" "<<o[1]<<" "<<o[2]<<"\n";
   std::cout<<"fg origin " <<fg.GetOrigin()[0]<<" "<<fg.GetOrigin()[1] <<" "<<fg.GetOrigin()[2] <<"\n";
-  std::cout <<"fg center offset "<< centerOffset[0] <<" "<<centerOffset[0] <<" " <<centerOffset[2]<<"\n";
+
+  Array2D8u debugSlice (gridSize[0], gridSize[1]);
+  debugSlice.Fill(0);
+  Array2D8u collSlice (gridSize[0], gridSize[1]);
+
+  // add a little attraction towards bottom left.
+  // using normalized x y z coordinate .
+  float positionWeight = -1.0f;
   for (unsigned z = fgSize[2] - 1; z < gridSize[2]; z++) {
     for (unsigned y = fgSize[1] - 1; y < gridSize[1]; y++) {
       for (unsigned x = fgSize[0] - 1; x < gridSize[0]; x++) {
+        if(z == gridSize[2]/2){
+          collSlice(x,y) = collision(x,y,z);
+        }
         if (collision(x, y, z) > 0) {
           continue;
         }
-        Vec3f coord = bg.GetOrigin() + fg.dx * Vec3f(float((x-centerOffset[0])+0.5f), 
-          float(y-centerOffset[1]+0.5f), 
-          float(z-centerOffset[2]+0.5f));
-        
-        float dist = sdf->GetCoarseDist(coord);
+        Vec3f disp = GetDisplacement(Vec3u(x,y,z), dx, fgSize, fg.GetOrigin(), bg.GetOrigin());
+        Vec3f coord = disp + meshCenter;
 
+        
+
+        float dist = sdf->GetCoarseDist(coord);
         if (dist >= 32766) {
           dist = -dist;
         }
-        float score = factor * dist;
+        float score = factor * dist + positionWeight * (std::abs(coord[0])+ std::abs(coord[1])+ std::abs(coord[2]));
+        if(z == gridSize[2]/2){
+          debugSlice(x,y) = score * 10;
+        }
         if (score > highScore) {
           highScore = score;
           bestPos = Vec3u(x, y, z);
@@ -851,6 +785,10 @@ bool AddUsingSDF(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &r
       }
     }
   }
+
+  float voxRes[3]={dx,dx,dx};
+  // SavePngGrey("F:/meshes/fruit_hand/colli_slice.png", collSlice);
+  // SavePngGrey("F:/meshes/fruit_hand/score_slice.png", debugSlice);
   std::cout << "high score " << highScore << "\n" ;
   bool found = (highScore > score0);
   if (found) {    
@@ -944,14 +882,19 @@ void PackScene(PackingScene & scene) {
   size_t maxCount = 10000;
   //large medium small - divide items into 3 groups, last group smallest
   const unsigned NUM_GROUPS = 3;
+  const unsigned SMALL_KINDS=4;
   std::vector<unsigned> itemGroups[NUM_GROUPS];
   size_t totalItems = scene.sortedBySize.size();
-  unsigned groupSize = totalItems / NUM_GROUPS + (totalItems%3>0);
+  unsigned groupSize = (totalItems - SMALL_KINDS) / (NUM_GROUPS - 1);
 
   // Divide items into groups: 0=large, 1=medium, 2=small
   for (unsigned i = 0; i < scene.sortedBySize.size(); i++) {
     unsigned groupIndex = i / groupSize;
     groupIndex = std::min(2u, groupIndex);
+    if(groupIndex == 2 && i < scene.sortedBySize.size() - SMALL_KINDS){
+      // make sure the small group only has SMALL_KINDS fruits.
+      groupIndex = 1;
+    }
     itemGroups[groupIndex].push_back(scene.sortedBySize[i]);
   }
 
@@ -1021,6 +964,85 @@ void PackScene(PackingScene & scene) {
   }
 }
 
+void PackDebugScene(PackingScene &scene) {
+  scene.dx = 0.3;
+  scene.bg.SetMeshPtr(&scene.container.mesh);
+  scene.bg.Voxelize(scene.dx);
+
+  FloodOutside8u(scene.bg.vox, 1);
+  Invert01(scene.bg.vox);
+
+  Vec3f dxVec(scene.dx);
+  Vec3f origin = scene.bg.GetOrigin();
+  SaveVolAsObjMesh(scene.outputFolder + "/box_vox.obj", scene.bg.vox, dxVec, origin, 1);
+  const unsigned NUM_COPIES = 1000;
+  const float outputScale = 1.05f;
+  const unsigned ANGLE_TRIALS = 5;
+  std::vector<Vec3f> randAngles(100);
+  unsigned int seed = 123;
+  std::mt19937 engine(seed);
+  std::uniform_real_distribution<float> dist(0.0f, 6.2831853);
+  std::uniform_int_distribution<int> intDistri(0);
+  for (size_t i = 0; i < randAngles.size(); i++) {
+    randAngles[i][0] = dist(engine);
+    randAngles[i][1] = dist(engine);
+    randAngles[i][2] = dist(engine);
+  }
+  std::ofstream out(scene.outputFolder + "/pack_debug.txt");
+  bool debugging = true;
+  Vec3f voxRes(scene.dx);
+  scene.placed.resize(scene.items.size());
+
+  unsigned angleIndex = 0;
+  const unsigned MAX_TRIAL_COUNT = 10;
+  float sdfFactor = -1.0f;
+  // redundant lol who cares.
+  bool tryMore = true;
+  while (tryMore) {
+    bool canPlace = false;
+    unsigned itemIndex = 0;
+    if (scene.items[itemIndex].noMoreFit) {
+      continue;
+    }
+    bool itemPlaced = false;
+    for (unsigned trial = 0; trial < MAX_TRIAL_COUNT; trial++) {
+      Vec3f pos;
+      Vec3f rot = randAngles[angleIndex];
+      angleIndex++;
+      if (angleIndex >= randAngles.size()) {
+        angleIndex = 0;
+      }
+      bool success = AddUsingSDF(scene.bg, scene.items[itemIndex].mesh, pos, rot, scene.sdf, sdfFactor);
+      if (success) {
+        canPlace = true;
+        itemPlaced = true;
+        Transformation tran;
+        tran.position = pos;
+        tran.rotation = rot;
+        scene.placed[itemIndex].push_back(tran);
+        std::string name = scene.items[itemIndex].name;
+        std::string line = name + " " + tran.toString();
+        out << line << "\n";
+        std::cout << line << "\n";
+        break;
+      }
+    }
+    if (!itemPlaced) {
+      scene.items[itemIndex].noMoreFit = true;
+    }
+    if (!canPlace) {
+      tryMore = false;
+      break;
+    }
+  }
+
+  unsigned itemIndex = 0;
+  SavePackedMesh(scene, itemIndex);
+  for (auto &t : scene.placed[itemIndex]) {
+    t.scale = outputScale;
+  }
+}
+
 void LoadPack(PackingScene & scene, const std::string & packFile){
   std::ifstream in (packFile);
   if (!in.good()) {
@@ -1071,12 +1093,15 @@ void LoadPack(PackingScene & scene, const std::string & packFile){
 
 void PackFruits() {
   std::string dataDir = "F:/meshes/fruit_hand/";
-  std::string meshDir = dataDir + "fruits/";
+  // std::string meshDir = dataDir + "fruits/";
+  //debug
+  std::string meshDir = dataDir + "fruit0/";
   PackingScene scene;
   std::vector<MeshInfo> fruits = LoadAllMeshInfo(meshDir);
   scene.items = fruits;
   scene.container;
-  fs::path containerFile(dataDir + "hands/hand4.5m_finger.stl");
+  // fs::path containerFile(dataDir + "hands/hand4.5m_finger.stl");
+  fs::path containerFile(dataDir + "box5cm.obj");
   fs::path innerContainerFile(dataDir + "hands/finger_inner.stl");
   LoadMeshInfo(scene.container, containerFile);
   LoadMeshInfo(scene.containerInner, innerContainerFile);
@@ -1088,11 +1113,13 @@ void PackFruits() {
   std::cout << "computing container sdf done \n";
   scene.outputFolder = dataDir + "/out/";
   std::string packedFile = dataDir + "pack0.txt";
-  LoadPack(scene, packedFile);
-  for(unsigned i = 0;i<scene.items.size();i++){
-    SavePackedMesh(scene, i);
-  }
-  PackScene(scene);
+  //LoadPack(scene, packedFile);
+  //for(unsigned i = 0;i<scene.items.size();i++){
+    //SavePackedMesh(scene, i);
+  //}
+  // PackScene(scene);
+
+  PackDebugScene(scene);
 }
 
 int main(int argc, char * argv[]){
