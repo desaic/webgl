@@ -183,11 +183,11 @@ void FloodOutsideSeed8u(Vec3u seed, Array3D8u &vox, uint8_t outsideVal) {
   }
 }
 
-void FloodOutside8u(Array3D8u &vox, uint8_t insideVal) {
+void FloodOutside8u(Array3D8u &vox,uint8_t boundaryVal, uint8_t interiorVal) {
   Vec3u size = vox.GetSize();
   // temporary outside value.
   // in the end outside are set to 0.
-  uint8_t outsideVal = insideVal + 1;
+  uint8_t outsideVal = boundaryVal + 1;
   if (outsideVal == 0) {
     outsideVal++;
   }
@@ -276,8 +276,9 @@ void FloodOutside8u(Array3D8u &vox, uint8_t insideVal) {
   for (auto &val : vox.GetData()) {
     if (val == outsideVal) {
       val = 0;
-    } else {
-      val = insideVal;
+    } else if(val == 0) {
+      //distinguish wall boundary value vs internal value
+      val = interiorVal;
     }
   }
 }

@@ -153,7 +153,7 @@ class MeshConvo {
       const unsigned FFT_ALIGNMENT = 8;
       conf.gridSize = ComputeGridSize(box, dx, FFT_ALIGNMENT);
       VoxelizeMesh(*mesh, vox, conf);
-      FloodOutside8u(vox, 1);
+      FloodOutside8u(vox, 1, 2);
     }
     void SetMeshPtr(TrigMesh *m) {
       mesh = m;
@@ -227,6 +227,16 @@ Array3D8u Thresh(const Array3Df &f, float thresh) {
     binVec[i] = fVec[i] > thresh;
   }
   return binArray;
+}
+
+void ThreshInPlace(Array3D8u &arr , uint8_t thresh) {
+  for (uint8_t & val: arr.GetData()) {
+    if(val >= thresh){
+      val = 1;
+    }else{
+      val = 0;
+    }
+  }  
 }
 
 // quantize and clamps to 0 to 255
@@ -374,9 +384,14 @@ void SaveSlice(const std::string &filename, const Array3D8u &arr, unsigned z, fl
   SavePngGrey(filename, image);
 }
 
-void Invert01(Array3D8u &vox) {
+// boundary value is kept so that no item touches the boundary.
+void InvertContainer(Array3D8u &vox, uint8_t boundaryVal) {
   for (auto &val : vox.GetData()) {
-    val = val > 0 ? 0 : 1;
+    if(val > 0 && val != boundaryVal){
+      val = 0;
+    }else{
+      val = 1;
+    }
   }
 }
 
@@ -460,8 +475,9 @@ bool Add(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot) {
   MeshConvo fg;
   fg.SetMeshPtr(&rotated);
   fg.Voxelize(dx);
+  // optional. makes values in convolution smaller.
+  ThreshInPlace(fg.vox, 1);
   const unsigned FFT_ALIGNMENT = 8;
-  FloodOutside8u(fg.vox, 1);
   Vec3u bgSize = bg.GridSize();
   Vec3u fgSize = fg.GridSize();
   // use circular fft/ntt. no need to pad with fg size.
@@ -715,8 +731,9 @@ bool AddUsingSDF(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &r
   MeshConvo fg;
   fg.SetMeshPtr(&rotated);
   fg.Voxelize(dx);
+  // makes values in convo smaller.
+  ThreshInPlace(fg.vox, 1);
   const unsigned FFT_ALIGNMENT = 8;
-  FloodOutside8u(fg.vox, 1);
   Vec3u bgSize = bg.GridSize();
   Vec3u fgSize = fg.GridSize();
   // use circular fft/ntt. no need to pad with fg size.
@@ -837,7 +854,8 @@ void AddInnerContainer(PackingScene & scene){
   Array3D8u vox;
   vox.Allocate(conf.gridSize, 0);
   VoxelizeMesh(scene.containerInner.mesh, vox, conf);
-  FloodOutside8u(vox, 1);
+  FloodOutside8u(vox, 1, 2);
+  ThreshInPlace(vox, 1);
   // SaveVolAsObjMesh("F:/meshes/fruit_hand/inner_vox.obj", vox, (float*)(&conf.unit),(float*)(& conf.origin),1);
 
   Union(scene.bg, Vec3i(0), vox);
@@ -855,10 +873,8 @@ void SavePackedMesh(const PackingScene &scene, unsigned i) {
 void PackScene(PackingScene & scene) {  
   scene.dx = 0.3;
   scene.bg.SetMeshPtr(&scene.container.mesh);
-  scene.bg.Voxelize(scene.dx);
-
-  FloodOutside8u( scene.bg.vox, 1);
-  Invert01( scene.bg.vox);
+  scene.bg.Voxelize(scene.dx);  
+  InvertContainer( scene.bg.vox, 1);
 
   Vec3f dxVec(scene.dx);  
   const unsigned NUM_COPIES = 1000;
@@ -969,12 +985,12 @@ void PackDebugScene(PackingScene &scene) {
   scene.bg.SetMeshPtr(&scene.container.mesh);
   scene.bg.Voxelize(scene.dx);
 
-  FloodOutside8u(scene.bg.vox, 1);
-  Invert01(scene.bg.vox);
-
   Vec3f dxVec(scene.dx);
   Vec3f origin = scene.bg.GetOrigin();
-  SaveVolAsObjMesh(scene.outputFolder + "/box_vox.obj", scene.bg.vox, dxVec, origin, 1);
+
+  SaveVolAsObjMesh(scene.outputFolder + "/box_vox_flood.obj", scene.bg.vox, dxVec, origin, 2);
+  InvertContainer( scene.bg.vox, 1);
+  SaveVolAsObjMesh(scene.outputFolder + "/box_vox_invert.obj", scene.bg.vox, dxVec, origin, 1);
   const unsigned NUM_COPIES = 1000;
   const float outputScale = 1.05f;
   const unsigned ANGLE_TRIALS = 5;
@@ -1041,6 +1057,7 @@ void PackDebugScene(PackingScene &scene) {
   for (auto &t : scene.placed[itemIndex]) {
     t.scale = outputScale;
   }
+  SaveVolAsObjMesh("F:/meshes/fruit_hand/pack_vox.obj", scene.bg.vox, dxVec, origin, 1);
 }
 
 void LoadPack(PackingScene & scene, const std::string & packFile){
@@ -1081,7 +1098,7 @@ void LoadPack(PackingScene & scene, const std::string & packFile){
       }
     }
   }
-
+  
   // Print summary
   for (size_t i = 0; i < scene.items.size(); i++) {
     if (!scene.placed[i].empty()) {
