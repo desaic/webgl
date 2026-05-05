@@ -917,7 +917,7 @@ void PackScene(PackingScene & scene) {
   unsigned angleIndex = 0;
   const unsigned MAX_TRIAL_COUNT = 10;
 
-  for(unsigned g = 2; g<NUM_GROUPS; g++){
+  for(unsigned g = 0; g<NUM_GROUPS; g++){
     float sdfFactor = 1.0f;
     if (g == 2) {
       // do not need small fruits inside.
@@ -1110,15 +1110,15 @@ void LoadPack(PackingScene & scene, const std::string & packFile){
 
 void PackFruits() {
   std::string dataDir = "F:/meshes/fruit_hand/";
-  // std::string meshDir = dataDir + "fruits/";
+  std::string meshDir = dataDir + "fruits/";
   //debug
-  std::string meshDir = dataDir + "fruit0/";
+  // std::string meshDir = dataDir + "fruit0/";
   PackingScene scene;
   std::vector<MeshInfo> fruits = LoadAllMeshInfo(meshDir);
   scene.items = fruits;
   scene.container;
-  // fs::path containerFile(dataDir + "hands/hand4.5m_finger.stl");
-  fs::path containerFile(dataDir + "box5cm.obj");
+  fs::path containerFile(dataDir + "hands/hand4.5m_finger.stl");
+  // fs::path containerFile(dataDir + "box5cm.obj");
   fs::path innerContainerFile(dataDir + "hands/finger_inner.stl");
   LoadMeshInfo(scene.container, containerFile);
   LoadMeshInfo(scene.containerInner, innerContainerFile);
@@ -1134,9 +1134,9 @@ void PackFruits() {
   //for(unsigned i = 0;i<scene.items.size();i++){
     //SavePackedMesh(scene, i);
   //}
-  // PackScene(scene);
+  PackScene(scene);
 
-  PackDebugScene(scene);
+  // PackDebugScene(scene);
 }
 
 int main(int argc, char * argv[]){
