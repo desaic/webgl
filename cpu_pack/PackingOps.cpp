@@ -78,7 +78,6 @@ bool AddUsingSDF(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &r
         }
         Vec3f disp = GetDisplacement(Vec3u(x,y,z), dx, fgSize, fg.GetOrigin(), bg.GetOrigin());
         Vec3f coord = disp + meshCenter;
-
     
         float dist = sdf->GetCoarseDist(coord);
         if (dist >= 32766) {

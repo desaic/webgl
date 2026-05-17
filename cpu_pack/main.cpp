@@ -8,7 +8,6 @@
 #include "GridUtils.h"
 #include "ImageIO.h"
 #include "MarchingCubes.h"
-#include "Matrix3f.h"
 #include "MeshConvo.h"
 #include "MeshOps.h"
 #include "PackingScene.h"
