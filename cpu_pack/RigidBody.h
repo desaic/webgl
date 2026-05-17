@@ -20,3 +20,14 @@ class RigidBody {
 
     TrigMesh GetOriginalPose() const;
 };
+
+
+static void TestInertiaFrame(){
+  const std::string fruitFile = "F:/meshes/fruit_hand/papaya_debug.obj";
+  TrigMesh mesh;
+  mesh.LoadObj(fruitFile);
+  RigidBody rb(mesh);
+  rb.mesh.SaveObj("F:/meshes/fruit_hand/debug_inertia_papaya.obj");
+  TrigMesh roundTrip = rb.GetOriginalPose();
+  roundTrip.SaveObj("F:/meshes/fruit_hand/debug_around_papaya.obj");
+}
