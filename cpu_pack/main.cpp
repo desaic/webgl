@@ -30,6 +30,8 @@
 #include <thread>
 #include <filesystem>
 #include "ImageIO.h"
+#include "RigidBody.h"
+
 namespace fs = std::filesystem;
 
 Vec3f closestPointTriangle(const Vec3f & p, const Vec3f & a, const Vec3f & b, const Vec3f & c);
@@ -1108,6 +1110,14 @@ void LoadPack(PackingScene & scene, const std::string & packFile){
   }
 }
 
+void TestInertiaFrame(){
+  const std::string fruitFile = "F:/meshes/fruit_hand/papaya_debug.obj";
+  TrigMesh mesh;
+  mesh.LoadObj(fruitFile);
+  RigidBody rb(mesh);
+  rb.mesh.SaveObj("F:/meshes/fruit_hand/debug_inertia_papaya.obj");
+}
+
 void PackFruits() {
   std::string dataDir = "F:/meshes/fruit_hand/";
   std::string meshDir = dataDir + "fruits/";
@@ -1140,6 +1150,7 @@ void PackFruits() {
 }
 
 int main(int argc, char * argv[]){
-  PackFruits();
+  // PackFruits();
+  TestInertiaFrame();
   return 0;
 }

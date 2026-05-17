@@ -106,10 +106,14 @@ class Vec3 {
   }
 
   bool operator==(const Vec3<T>& v1) const { return v[0] == v1[0] && v[1] == v1[1] && v[2] == v1[2]; }
+  bool operator!=(const Vec3<T>& v1) const { return v[0] != v1[0] || v[1] != v1[1] || v[2] != v1[2]; }
+
   T dot(const Vec3<T>& b) const {
     T prod = v[0] * b[0] + v[1] * b[1] + v[2] * b[2];
     return prod;
   }
+
+
   Vec3<T> operator-() const { return Vec3<T>(-v[0], -v[1], -v[2]); }
 
   Vec3<T> cross(const Vec3<T>& b) const {

@@ -39,6 +39,18 @@ class TrigMesh {
   // texture coordinates
   std::vector<Vec2f> uv;
 
+  const Vec3f & Vert(unsigned i) const{
+    return *((Vec3f*)(&v[3*i]));
+  }
+
+  Vec3f & Vert(unsigned i) {
+    return *((Vec3f*)(&v[3*i]));
+  }
+
+  Vec3u Trig (unsigned i)const{
+    return Vec3u(t[3 * i], t[3 * i + 1], t[3 * i + 2]);
+  }
+
   // delete and free all data.
   void Clear();
   size_t GetNumTrigs() const { return t.size() / 3; }

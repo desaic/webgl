@@ -1,0 +1,33 @@
+{
+	"folders": [
+		{
+			"name": "cpu_pack",
+			"path": "."
+		},
+		{
+			"name": "Math",
+			"path": "../Math"
+		},
+		{
+			"name": "Mesh",
+			"path": "../Mesh"
+		},
+		{
+			"name": "ImageIO",
+			"path": "../ImageIO"
+		},
+		{
+			"name": "Util",
+			"path": "../Util"
+		}
+	],
+	"settings": {
+		"C_Cpp.default.includePath": [
+			"${workspaceFolder:cpu_pack}/**",
+			"${workspaceFolder:Math}/inc",
+			"${workspaceFolder:Mesh}/inc",
+			"${workspaceFolder:ImageIO}",
+			"${workspaceFolder:Util}"
+		]
+	}
+}
