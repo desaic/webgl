@@ -16,5 +16,7 @@ class RigidBody {
 
     TrigMesh mesh;
 
-    RigidBody(TrigMesh &input) ;
+    RigidBody(TrigMesh &input);
+
+    TrigMesh GetOriginalPose() const;
 };
