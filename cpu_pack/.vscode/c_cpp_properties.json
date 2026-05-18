@@ -1,0 +1,28 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/../Math/inc",
+                "${workspaceFolder}/../Mesh/inc",
+                "${workspaceFolder}/../ImageIO",
+                "${workspaceFolder}/../Util",
+                "${workspaceFolder}/../SparseSDF",
+                "${workspaceFolder}/../UILib/inc",
+                "${workspaceFolder}/../ZRayCast"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "windowsSdkVersion": "10.0.19041.0",
+            "compilerPath": "C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/cl.exe",
+            "cStandard": "c17",
+            "cppStandard": "c++20",
+            "intelliSenseMode": "windows-msvc-x64"
+        }
+    ],
+    "version": 4
+}

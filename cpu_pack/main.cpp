@@ -111,7 +111,9 @@ void PackScene(PackingScene & scene) {
       // make sure the small group only has SMALL_KINDS fruits.
       groupIndex = 1;
     }
-    itemGroups[groupIndex].push_back(scene.sortedBySize[i]);
+    unsigned itemIndex = scene.sortedBySize[i];
+    itemGroups[groupIndex].push_back(itemIndex);
+    scene.items[itemIndex].groupId = groupIndex;
   }
 
   unsigned angleIndex = 0;
@@ -156,7 +158,8 @@ void PackScene(PackingScene & scene) {
             std::string line = name + " " + tran.toString();
             out << line <<"\n";
             std::cout << line <<"\n";
-
+            Vec3f pushDir = scene.ForceDirection(itemIndex, tran);
+            Transformation newTran = scene.Nudge(itemIndex,tran,pushDir);
             scene.Put(itemIndex, tran);
             break;
           }
@@ -191,8 +194,11 @@ void PackFruits() {
   fs::path containerFile(dataDir + "hands/hand4.5m_finger.stl");
   // fs::path containerFile(dataDir + "box5cm.obj");
   fs::path innerContainerFile(dataDir + "hands/finger_inner.stl");
-  LoadMeshInfo(scene.container, containerFile);
+  LoadMeshInfo(scene.container, containerFile);  
   LoadMeshInfo(scene.containerInner, innerContainerFile);
+  float broadPhaseDx = 2.0f;
+  Box3f containerBox = scene.container.box;
+  scene.broadPhase.Init(containerBox ,broadPhaseDx);
   scene.sortedBySize = SortBySize(scene.items);
   float sdfDx = 1.0f;
   float distUnit = 0.001f * sdfDx;

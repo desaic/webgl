@@ -10,6 +10,8 @@ class MeshInfo {
     Box3f box;
     std::string name;
     TrigMesh mesh;
+    // large medium small.
+    unsigned groupId=0;
     bool noMoreFit = false;
     float BoxDiagonal() const {
       return (box.vmax - box.vmin).norm();

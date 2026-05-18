@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BBox.h"
+#include "BroadPhase.h"
 #include "TrigMesh.h"
 #include "MeshConvo.h"
 #include "MeshInfo.h"
@@ -21,10 +22,18 @@ class PackingScene {
     /// @param tran 
     void Put(unsigned itemIdx, const Transformation &tran);
 
+    /// heuristic force direction
+    Vec3f ForceDirection(unsigned itemIdx, const Transformation & tran);
+    /// @brief compute tighter packing location by moving in a given direction.
+    /// @param itemIdx 
+    /// @param tran 
+    /// @return 
+    Transformation Nudge(unsigned itemIdx, const Transformation & tran, const Vec3f & dir);
+
     Vec3f WorldOrigin()const{
       return bg.GetOrigin();
     }
-    
+
     MeshInfo container;
     MeshInfo containerInner;
     std::vector<MeshInfo> items;
@@ -35,6 +44,8 @@ class PackingScene {
     std::string outputFolder;
     float dx = 1.0f;
     MeshConvo bg;
+    
+    BroadPhaseGrid broadPhase;
 };
 
 

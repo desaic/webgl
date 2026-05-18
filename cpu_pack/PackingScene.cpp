@@ -16,9 +16,10 @@ Vec3i roundf(const Vec3f & fvec){
 }
 
 void PackingScene::Put(unsigned itemIdx, const Transformation &tran){
-  placed[itemIdx].push_back(tran);
   TrigMesh inst = MakeTransformedMesh(items[itemIdx].mesh, tran);
   Box3f bbox = ComputeBBox(inst.v);
+  // saved for broad phase.
+  Box3f meshBox = bbox;
   bbox.vmin = AlignOriginToGrid(bbox.vmin, dx);
     
   VoxConf conf;
@@ -34,6 +35,27 @@ void PackingScene::Put(unsigned itemIdx, const Transformation &tran){
   // e.g. if item origin is same as world origin, then offset is 0.
   Vec3i offset = roundf((1.0f / dx) * (conf.origin - WorldOrigin()));
   Union(bg, offset, vox);
+
+  unsigned instId = placed.size();
+  placed[itemIdx].push_back(tran);  
+  /// @TODO: add item to broarphase grid
+  broadPhase.Add(meshBox , instId);
+}
+
+Vec3f PackingScene::ForceDirection(unsigned itemIdx, const Transformation & tran)
+{
+  Vec3f dir (-1,-1, -1);
+
+  // push away or towards center depending on item size group.
+  Vec3f center = bg.GetMeshCenter();
+
+  return dir;
+}
+
+Transformation PackingScene::Nudge(unsigned itemIdx, const Transformation & tran, const Vec3f & dir){
+  Transformation tOut = tran;
+
+  return tOut;
 }
 
 void LoadPack(PackingScene & scene, const std::string & packFile){
