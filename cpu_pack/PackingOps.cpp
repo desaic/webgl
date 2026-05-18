@@ -16,7 +16,7 @@ Vec3f GetDisplacement(Vec3u gridIdx, float dx, Vec3u fgSize, Vec3f fgOrigin, Vec
   return disp;
 }
 
-bool AddUsingSDF(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot, 
+bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot, 
   std::shared_ptr<AdapSDF> sdf, float factor) {
   Matrix3f rotMat = RotationMatrixRad(rot[0], rot[1], rot[2]);
   TrigMesh rotated = part;
@@ -65,13 +65,14 @@ bool AddUsingSDF(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &r
   debugSlice.Fill(0);
   Array2D8u collSlice (gridSize[0], gridSize[1]);
 
+  unsigned debugZ = (fgSize[2] + gridSize[2] - 1)/2;
   // add a little attraction towards bottom left.
   // using normalized x y z coordinate .
   float positionWeight = -1.0f;
   for (unsigned z = fgSize[2] - 1; z < gridSize[2]; z++) {
     for (unsigned y = fgSize[1] - 1; y < gridSize[1]; y++) {
       for (unsigned x = fgSize[0] - 1; x < gridSize[0]; x++) {
-        if(z == gridSize[2]/2){
+        if(z == debugZ){
           collSlice(x,y) = collision(x,y,z);
         }
         if (collision(x, y, z) > 0) {
@@ -85,8 +86,8 @@ bool AddUsingSDF(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &r
           dist = -dist;
         }
         float score = factor * dist + positionWeight * (std::abs(coord[0])+ std::abs(coord[1])+ std::abs(coord[2]));
-        if(z == gridSize[2]/2){
-          debugSlice(x,y) = score * 10;
+        if(z == debugZ){
+          debugSlice(x,y) = uint8_t(score * 10);
         }
         if (score > highScore) {
           highScore = score;
@@ -103,14 +104,6 @@ bool AddUsingSDF(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &r
   bool found = (highScore > score0);
   if (found) {    
     pos = GetDisplacement(bestPos, dx, fg.vox.GetSize(), fg.GetOrigin(), bg.GetOrigin());
-    // offset of fg grid to be unioned into bg grid. 
-    // e.g. if fg grid size is 1, then offset is just bestPos.
-    Vec3i offset = bestPos.cast<int>() - fgSize.cast<int>() + Vec3i(1);
-    if (fg.gridReversed) {
-      UnionReversed(bg, offset, fg);
-    } else {
-      Union(bg, offset, fg.vox);
-    }
   }
   return found;
 }

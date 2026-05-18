@@ -59,7 +59,7 @@ void PackDebugScene(PackingScene &scene) {
       if (angleIndex >= randAngles.size()) {
         angleIndex = 0;
       }
-      bool success = AddUsingSDF(scene.bg, scene.items[itemIndex].mesh, pos, rot, scene.sdf, sdfFactor);
+      bool success = FindSpot(scene.bg, scene.items[itemIndex].mesh, pos, rot, scene.sdf, sdfFactor);
       if (success) {
         canPlace = true;
         itemPlaced = true;

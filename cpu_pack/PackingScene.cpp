@@ -11,6 +11,31 @@
 
 namespace fs = std::filesystem;
 
+Vec3i roundf(const Vec3f & fvec){
+  return Vec3i(std::round(fvec[0]),std::round(fvec[1]),std::round(fvec[2]));
+}
+
+void PackingScene::Put(unsigned itemIdx, const Transformation &tran){
+  placed[itemIdx].push_back(tran);
+  TrigMesh inst = MakeTransformedMesh(items[itemIdx].mesh, tran);
+  Box3f bbox = ComputeBBox(inst.v);
+  bbox.vmin = AlignOriginToGrid(bbox.vmin, dx);
+    
+  VoxConf conf;
+  conf.origin = ToArray(bbox.vmin);
+  conf.unit = {dx, dx, dx};  
+  conf.gridSize = ComputeGridSize(bbox, dx, 1);
+
+  Array3D8u vox;
+  vox.Allocate(conf.gridSize, 0);
+  VoxelizeMesh(inst, vox, conf);
+  FloodOutside8u(vox, 1, 2);
+
+  // e.g. if item origin is same as world origin, then offset is 0.
+  Vec3i offset = roundf((1.0f / dx) * (conf.origin - WorldOrigin()));
+  Union(bg, offset, vox);
+}
+
 void LoadPack(PackingScene & scene, const std::string & packFile){
   std::ifstream in (packFile);
   if (!in.good()) {

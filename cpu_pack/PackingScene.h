@@ -14,6 +14,17 @@ class AdapSDF;
 
 class PackingScene {
   public:
+
+    /// @brief put a copy of itemIdx at the given transformation
+    /// revoxelizes because it's not a bottleneck.
+    /// @param itemIdx 
+    /// @param tran 
+    void Put(unsigned itemIdx, const Transformation &tran);
+
+    Vec3f WorldOrigin()const{
+      return bg.GetOrigin();
+    }
+    
     MeshInfo container;
     MeshInfo containerInner;
     std::vector<MeshInfo> items;

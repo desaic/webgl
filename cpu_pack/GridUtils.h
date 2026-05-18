@@ -4,6 +4,8 @@
 #include <complex>
 // similar to array utils lol.
 
+Vec3f AlignOriginToGrid(const Vec3f &o, float dx) ;
+
 std::array<float, 3> ToArray(const Vec3f &v);
 
 Array3D8u Thresh(const Array3Df &f, float thresh);

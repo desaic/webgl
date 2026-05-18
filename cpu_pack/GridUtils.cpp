@@ -4,6 +4,17 @@
 #include "pocketfft_3df.h"
 
 #include <thread>
+
+
+Vec3f AlignOriginToGrid(const Vec3f &o, float dx) {
+  Vec3f aligned;
+  for (unsigned d = 0; d < 3; d++) {
+    aligned[d] = std::floor(o[d] / dx) * dx;
+  }
+  return aligned;
+}
+
+
 std::array<float, 3> ToArray(const Vec3f &v) {
   return {v[0], v[1], v[2]};
 }

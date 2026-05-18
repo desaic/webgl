@@ -145,18 +145,19 @@ void PackScene(PackingScene & scene) {
           if(angleIndex >= randAngles.size()){
             angleIndex = 0;
           }
-          bool success = AddUsingSDF( scene.bg, scene.items[itemIndex].mesh, pos, rot, scene.sdf, sdfFactor);
+          bool success = FindSpot( scene.bg, scene.items[itemIndex].mesh, pos, rot, scene.sdf, sdfFactor);
           if(success){
             canPlace = true;
             itemPlaced =true;
             Transformation tran;
             tran.position = pos;
-            tran.rotation = rot;
-            scene.placed[itemIndex].push_back(tran);
+            tran.rotation = rot;            
             std::string name = scene.items[itemIndex].name;
             std::string line = name + " " + tran.toString();
             out << line <<"\n";
             std::cout << line <<"\n";
+
+            scene.Put(itemIndex, tran);
             break;
           }
         }

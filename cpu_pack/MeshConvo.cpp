@@ -33,14 +33,6 @@ static void VoxelizeMesh(const TrigMesh &m, Array3D8u &grid, VoxConf conf) {
   cpu_voxelize_grid(conf, &m, grid);
 }
 
-Vec3f AlignOriginToGrid(const Vec3f &o, float dx) {
-  Vec3f aligned;
-  for (unsigned d = 0; d < 3; d++) {
-    aligned[d] = std::floor(o[d] / dx) * dx;
-  }
-  return aligned;
-}
-
 void MeshConvo::Voxelize(float voxelSize) {
   if (mesh == nullptr) {
     return;
