@@ -4,6 +4,7 @@
 #include "TrigMesh.h"
 #include "MeshConvo.h"
 #include "MeshInfo.h"
+#include "TrigGrid.h"
 
 #include <string>
 #include <iomanip>

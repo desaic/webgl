@@ -208,9 +208,7 @@ void PackFruits() {
 }
 
 
-
 int main(int argc, char * argv[]){
-  TestSamplePoints();
   std::cout<<argv[0]<<std::endl;
   PackFruits();  
   return 0;
