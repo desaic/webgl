@@ -1,4 +1,5 @@
 #include "BroadPhase.h"
+#include "meshutil.h"
 
 static float clampf(float val, float lb, float ub) {
   if (val < lb)
@@ -68,4 +69,16 @@ std::vector<unsigned> BroadPhaseGrid::GetNearby(const Box3f &queryBox, float max
   nearbyIds.erase(std::unique(nearbyIds.begin(), nearbyIds.end()), nearbyIds.end());
 
   return nearbyIds;
+}
+
+void BroadPhaseGrid::SaveDebugMesh(const std::string &outFile) const {
+  Vec3u size = m_cells.GetSize();
+  Array3D8u occup(size, 0);
+  const auto &cells = m_cells.GetData();
+  auto & out = occup.GetData();
+  for (size_t i = 0; i < cells.size(); i++) {
+    out[i] = cells[i].size() > 0;
+  }
+  Vec3f voxRes(m_dx);
+  SaveVolAsObjMesh(outFile, occup, voxRes, m_box.vmin, 1);
 }

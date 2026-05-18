@@ -65,7 +65,7 @@ void PackDebugScene(PackingScene &scene) {
         itemPlaced = true;
         Transformation tran;
         tran.position = pos;
-        tran.rotation = rot;
+        tran.rotation = RotationMatrixRad(rot[0], rot[1], rot[2]);
         scene.placed[itemIndex].push_back(tran);
         std::string name = scene.items[itemIndex].name;
         std::string line = name + " " + tran.toString();

@@ -4,8 +4,7 @@
 TrigMesh MakeTransformedMesh(const TrigMesh & mesh, const Transformation & tran){
   TrigMesh transformedMesh = mesh;
   transformedMesh.scale(tran.scale);
-  const auto & rot = tran.rotation;
-  Matrix3f rotMat = RotationMatrixRad(rot[0], rot[1], rot[2]);
+  Matrix3f rotMat = tran.rotation;
   TransformVerts(mesh.v, transformedMesh.v, rotMat);
   const auto & pos = tran.position;
   transformedMesh.translate(pos[0], pos[1], pos[2]);

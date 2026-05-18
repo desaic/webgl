@@ -4,6 +4,9 @@
 #include "FloodOutside.h"
 #include "GridUtils.h"
 #include "MeshOps.h"
+#include "PointSample.h"
+#include "TrigGrid.h"
+#include "Quat4f.h"
 
 #include <filesystem>
 #include <fstream>
@@ -36,8 +39,9 @@ void PackingScene::Put(unsigned itemIdx, const Transformation &tran){
   Vec3i offset = roundf((1.0f / dx) * (conf.origin - WorldOrigin()));
   Union(bg, offset, vox);
 
-  unsigned instId = placed.size();
-  placed[itemIdx].push_back(tran);
+  unsigned instId = instances.size();
+  placed[itemIdx].push_back(tran);  
+  instances.push_back(InstanceInfo(itemIdx, tran));
   /// @TODO: add item to broarphase grid
   broadPhase.Add(meshBox , instId);
 }
@@ -49,13 +53,171 @@ Vec3f PackingScene::ForceDirection(unsigned itemIdx, const Transformation & tran
   // push away or towards center depending on item size group.
   Vec3f center = bg.GetMeshCenter();
 
+  Vec3f awayFromCenter = tran.position - center;
+  awayFromCenter.normalize();
+  /// @TODO compute better direction. and use item size.
+  dir = dir + awayFromCenter;
+  dir.normalize();
   return dir;
 }
 
-Transformation PackingScene::Nudge(unsigned itemIdx, const Transformation & tran, const Vec3f & dir){
-  Transformation tOut = tran;
+Transformation PackingScene::Nudge(unsigned itemIdx, const Transformation & tran, const Vec3f & dir) {
+    Transformation tOut = tran;
+    
+    // Configurable parameters matching your scene scaling
+    float ds = 0.5f;             // Maximum linear step distance limit
+    float eps = ds / 2.0f;       // Target contact clearance boundary (epsilon)
+    float activeBuffer = ds;     // Proximity threshold to consider a contact active
+    float linearStepSize = 0.1f; // Linear drive push force factor per frame
+    
+    // 1. Initial Sampling Stage
+    TrigMesh instMesh = MakeTransformedMesh(items[itemIdx].mesh, tran);
+    std::vector<SamplePoint> samples;
+    instMesh.ComputeVertNormals();
+    SamplePoints(instMesh, eps, samples);
+    
+    // Because the rigid body is in its inertia frame, its true world-space 
+    // center of mass is exactly its current transformation position vector!
+    Vec3f trueWorldCOM = tran.position; 
 
-  return tOut;
+    // Store sample points as local vectors relative to the Center of Mass
+    std::vector<Vec3f> localSampleOffsets(samples.size());
+    for (size_t s = 0; s < samples.size(); ++s) {
+        localSampleOffsets[s] = samples[s].x - trueWorldCOM;
+    }
+
+    // 2. Broad Phase Environment Gathering
+    Box3f instBox = ComputeBBox(instMesh.v);
+    std::vector<unsigned> intersectingInstances = broadPhase.GetNearby(instBox, ds);
+    
+    std::vector<TrigGrid> accGrids(intersectingInstances.size() + 1);
+    accGrids[0].Build(container.mesh, dx); // Assuming dx is your global container voxel size
+    for (size_t i = 0; i < intersectingInstances.size(); i++) {
+        InstanceInfo inst = instances[intersectingInstances[i]];
+        TrigMesh neighborMesh = MakeTransformedMesh(items[inst.itemId].mesh, inst.tran);    
+        accGrids[i + 1].Build(neighborMesh, ds);
+    }
+
+    // 3. Initialize State Variables for the 6-DOF Solver
+    Vec3f currentT = tran.position;
+    Matrix3f rotMat = tran.rotation;
+    Quat4f currentQ = Quat4f::fromRotationMatrix(rotMat); // Convert initial pose rotation
+
+    size_t maxOptimizationSteps = 15;
+    struct ActiveContact {
+        Vec3f worldPos;
+        Vec3f normal;
+        float distance;
+    };
+
+    // 4. Main Kinematic Optimization Loop
+    for (size_t step = 0; step < maxOptimizationSteps; step++) {
+        std::vector<ActiveContact> activeContacts;
+        Matrix3f currentRotMat = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
+
+        // Gather all active surface contacts across all neighboring distance grids
+        for (size_t s = 0; s < localSampleOffsets.size(); s++) {
+            Vec3f worldPt = currentRotMat * localSampleOffsets[s] + currentT;
+
+            for (unsigned m = 0; m < accGrids.size(); m++) {
+                Vec3f normal;
+                float dist = accGrids[m].NearestTriangle(worldPt, ds, normal);
+
+                // If the point is close enough to be an obstacle, track it
+                if (dist >= 0.0f && dist < eps + activeBuffer) {
+                    activeContacts.push_back({worldPt, normal, dist});
+                }
+            }
+        }
+
+        // Initialize our ideal target movement delta (push down the packing direction)
+        Vec3f deltaX = linearStepSize * dir;
+        Vec3f deltaTheta(0.0f, 0.0f, 0.0f);
+
+        // Run Sequential Constraint Projection passes (Matrix-free PGS)
+        int pgsPasses = 4;
+        for (int pass = 0; pass < pgsPasses; pass++) {
+            for (const auto& contact : activeContacts) {
+                Vec3f r = contact.worldPos - currentT;
+                Vec3f r_cross_n = r.cross(contact.normal);
+
+                // Evaluate the current velocity projection row matching this contact
+                float j_delta = deltaX.dot(contact.normal) + deltaTheta.dot(r_cross_n);
+                float b = eps - contact.distance; // Penetration error feedback depth
+
+                if (j_delta < b) {
+                    float j_sq_len = 1.0f + r_cross_n.dot(r_cross_n);
+                    if (j_sq_len > 1e-8f) {
+                        float delta_lambda = (b - j_delta) / j_sq_len;
+
+                        // Correct the 6-DOF velocity vectors inline
+                        deltaX     = deltaX     + delta_lambda * contact.normal;
+                        deltaTheta = deltaTheta + r_cross_n * delta_lambda;
+                    }
+                }
+            }
+        }
+
+        // 5. Backtracking Line Search Gatekeeper
+        float scale = 1.0f;
+        bool stepAccepted = false;
+
+        while (scale > 1e-4f) {
+            Vec3f testT = currentT + deltaX * scale;
+            
+            // Build the proposed incremental rotation quaternion from axis-angle deltaTheta
+            Quat4f q_delta = Quat4f::IDENTITY;
+            float angle = std::sqrt(deltaTheta.dot(deltaTheta));
+            if (angle > 1e-6f) {
+                float s = std::sin(angle * scale * 0.5f);
+                Vec3f axis = deltaTheta * (1.0f / angle);
+                q_delta = Quat4f(std::cos(angle * scale * 0.5f), axis[0] * s, axis[1] * s, axis[2] * s);
+            }
+
+            Quat4f testQ = q_delta * currentQ;
+            testQ.normalize();
+            Matrix3f testRotMat = Matrix3f::rotation(testQ.x(), testQ.y(), testQ.z(), testQ.w());
+
+            // Verify if this test step triggers hard penetrations
+            bool localCollision = false;
+            for (size_t s = 0; s < localSampleOffsets.size(); s++) {
+                Vec3f testPt = testRotMat * localSampleOffsets[s] + testT;
+
+                for (unsigned m = 0; m < accGrids.size(); m++) {
+                    Vec3f dummyNormal;
+                    float dist = accGrids[m].NearestTriangle(testPt, ds, dummyNormal);
+                    
+                    // Hard cutoff: if it breaches past epsilon minus a tiny structural tolerance
+                    if (dist >= 0.0f && dist < eps - 0.01f) {
+                        localCollision = true;
+                        break;
+                    }
+                }
+                if (localCollision) break;
+            }
+
+            if (!localCollision) {
+                // Step is safe! Commit updates and progress to the next optimization frame
+                currentT = testT;
+                currentQ = testQ;
+                stepAccepted = true;
+                break;
+            }
+
+            scale *= 0.5f; // Step failed, reduce scale and try again
+        }
+
+        // If the line search was forced to shrink to zero, the item is completely jammed
+        if (!stepAccepted || (deltaX.dot(deltaX) + deltaTheta.dot(deltaTheta)) < 1e-7f) {
+            break; 
+        }
+    }
+
+    // 6. Export the finalized values back into your scene Transformation layout
+    tOut.position = currentT;
+    tOut.rotation = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
+
+    return tOut;
 }
 
 void LoadPack(PackingScene & scene, const std::string & packFile){

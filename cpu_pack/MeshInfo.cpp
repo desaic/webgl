@@ -10,8 +10,10 @@ namespace fs = std::filesystem;
 std::string Transformation::toString() const {
   std::ostringstream oss;
   oss << std::setprecision(6);
-  oss << "pos " << position[0] << " " << position[1] << " " << position[2] << " rot " << rotation[0] << " "
-      << rotation[1] << " " << rotation[2] << " scale " << scale;
+  oss << "pos " << position[0] << " " << position[1] << " " << position[2] << " rot " << rotation(0, 0) << " "
+      << rotation(0, 1) << " " << rotation(0, 2) << " " << rotation(1, 0) << " " << rotation(1, 1) << " "
+      << rotation(1, 2) << " " << rotation(2, 0) << " " << rotation(2, 1) << " " << rotation(2, 2) << " scale "
+      << scale;
   return oss.str();
 }
 

@@ -13,6 +13,12 @@
 
 class AdapSDF;
 
+struct InstanceInfo{
+  unsigned itemId = 0;
+  Transformation tran;
+  InstanceInfo(unsigned i, const Transformation & t):itemId(i), tran(t){}
+};
+
 class PackingScene {
   public:
 
@@ -39,6 +45,8 @@ class PackingScene {
     std::vector<MeshInfo> items;
     // for each item, list of transformations
     std::vector<std::vector<Transformation> > placed;
+    // duplicated with placed.
+    std::vector<InstanceInfo>instances;
     std::vector<int> sortedBySize;
     std::shared_ptr<AdapSDF> sdf;
     std::string outputFolder;

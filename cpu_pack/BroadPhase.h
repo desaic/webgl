@@ -50,4 +50,6 @@ class BroadPhaseGrid {
         cell.clear();
       }
     }
+
+    void SaveDebugMesh(const std::string & outFile) const;
 };

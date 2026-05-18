@@ -1,7 +1,7 @@
 #pragma once
 #include "BBox.h"
 #include "TrigMesh.h"
-
+#include "Matrix3f.h"
 #include <filesystem>
 #include <string>
 
@@ -21,8 +21,10 @@ class MeshInfo {
 // Structure to store transformation data
 struct Transformation {
     Vec3f position;
-    Vec3f rotation;
+    Matrix3f rotation;
     float scale = 1.0f;
+    /// @brief 
+    /// @return rotation matrix is printed in row major order. even though internally stored in column major order.
     std::string toString() const;
 };
 

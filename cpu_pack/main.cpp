@@ -80,6 +80,7 @@ void PackScene(PackingScene & scene) {
   const unsigned NUM_COPIES = 1000;
   const float outputScale = 1.05f;
   const unsigned ANGLE_TRIALS = 5;
+  //euler angles in radians.
   std::vector<Vec3f> randAngles(100);
   unsigned int seed = 123;
   std::mt19937 engine(seed);
@@ -119,6 +120,8 @@ void PackScene(PackingScene & scene) {
   unsigned angleIndex = 0;
   const unsigned MAX_TRIAL_COUNT = 10;
 
+  unsigned debugCount = 0;
+
   for(unsigned g = 0; g<NUM_GROUPS; g++){
     float sdfFactor = 1.0f;
     if (g == 2) {
@@ -153,7 +156,7 @@ void PackScene(PackingScene & scene) {
             itemPlaced =true;
             Transformation tran;
             tran.position = pos;
-            tran.rotation = rot;            
+            tran.rotation = RotationMatrixRad(rot[0], rot[1], rot[2]);            
             std::string name = scene.items[itemIndex].name;
             std::string line = name + " " + tran.toString();
             out << line <<"\n";
@@ -161,17 +164,24 @@ void PackScene(PackingScene & scene) {
             Vec3f pushDir = scene.ForceDirection(itemIndex, tran);
             Transformation newTran = scene.Nudge(itemIndex,tran,pushDir);
             scene.Put(itemIndex, tran);
+            debugCount ++;
             break;
           }
         }
         if (!itemPlaced) {
           scene.items[itemIndex].noMoreFit = true;
         }
+        if(debugCount >= 10){
+          break;
+        }
       }
       if(!canPlace){
         tryMore = false;
         break;
       }
+      if(debugCount >= 10){
+          break;
+        }
     }
 
     for(unsigned i = 0;i < group.size(); i++){        
