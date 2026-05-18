@@ -37,7 +37,7 @@ void PackingScene::Put(unsigned itemIdx, const Transformation &tran){
   Union(bg, offset, vox);
 
   unsigned instId = placed.size();
-  placed[itemIdx].push_back(tran);  
+  placed[itemIdx].push_back(tran);
   /// @TODO: add item to broarphase grid
   broadPhase.Add(meshBox , instId);
 }
