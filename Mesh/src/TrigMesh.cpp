@@ -234,10 +234,7 @@ void TrigMesh::ComputeVertNormals() {
   }
 
   for (size_t vIdx = 0; vIdx < nv.size(); vIdx++) {
-    // if (weight[vIdx] > eps) {
-    //   nv[vIdx] /= weight[vIdx];
-    nv[vIdx].normalize();
-    //}
+    nv[vIdx].normalize();    
   }
 }
 

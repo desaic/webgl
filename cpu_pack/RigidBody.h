@@ -1,11 +1,12 @@
 #include "Matrix3f.h"
 #include "TrigMesh.h"
-
+#include "Quat4f.h"
 #include "eig3x3.h"
 
 // helpers
 Matrix3f eigVecFromVal(const Matrix3f &A_in, const double *eigenvalues);
 
+// rigid body in reference configuration.
 class RigidBody {
   public:
     Vec3f oldOrigin;
@@ -21,6 +22,12 @@ class RigidBody {
     TrigMesh GetOriginalPose() const;
 };
 
+class RigidInstance{
+public:
+  std::shared_ptr<RigidBody> refBody;
+  Vec3f x;
+  Quat4f r;
+};
 
 static void TestInertiaFrame(){
   const std::string fruitFile = "F:/meshes/fruit_hand/papaya_debug.obj";

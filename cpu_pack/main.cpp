@@ -20,6 +20,7 @@
 #include "cpu_voxelizer.h"
 #include "meshutil.h"
 #include "pocketfft_3df.h"
+#include "PointSample.h"
 
 #include <algorithm>
 #include <cctype>
@@ -206,7 +207,11 @@ void PackFruits() {
   PackScene(scene);
 }
 
+
+
 int main(int argc, char * argv[]){
-  PackFruits();
+  TestSamplePoints();
+  std::cout<<argv[0]<<std::endl;
+  PackFruits();  
   return 0;
 }

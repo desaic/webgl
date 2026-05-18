@@ -3,6 +3,7 @@
 #include "MeshOps.h"
 #include "GridUtils.h"
 #include "Array2D.h"
+#include "ImageIO.h"
 
 #include <iostream>
 
@@ -96,8 +97,8 @@ bool AddUsingSDF(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &r
   }
 
   float voxRes[3]={dx,dx,dx};
-  // SavePngGrey("F:/meshes/fruit_hand/colli_slice.png", collSlice);
-  // SavePngGrey("F:/meshes/fruit_hand/score_slice.png", debugSlice);
+  SavePngGrey("F:/meshes/fruit_hand/colli_slice.png", collSlice);
+  SavePngGrey("F:/meshes/fruit_hand/score_slice.png", debugSlice);
   std::cout << "high score " << highScore << "\n" ;
   bool found = (highScore > score0);
   if (found) {    

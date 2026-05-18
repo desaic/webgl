@@ -17,7 +17,7 @@ const Quat4f Quat4f::IDENTITY = Quat4f( 1, 0, 0, 0 );
 
 Quat4f::Quat4f()
 {
-	m_elements[ 0 ] = 0;
+	m_elements[ 0 ] = 1;
 	m_elements[ 1 ] = 0;
 	m_elements[ 2 ] = 0;
 	m_elements[ 3 ] = 0;
@@ -229,29 +229,35 @@ Quat4f Quat4f::exp() const
 
 Vec3f Quat4f::getAxisAngle( float* radiansOut )
 {
-	float theta = acos( w() ) * 2;
-	float vectorNorm = sqrt( x() * x() + y() * y() + z() * z() );
-	float reciprocalVectorNorm = 1.f / vectorNorm;
-
-	*radiansOut = theta;
-  return Vec3f
-	(
-		x() * reciprocalVectorNorm,
-		y() * reciprocalVectorNorm,
-		z() * reciprocalVectorNorm
-	);
+    float vectorNorm = sqrt( x() * x() + y() * y() + z() * z() );
+    if (vectorNorm < 1e-6f) {
+        *radiansOut = 0.0f;
+        return Vec3f(1.0f, 0.0f, 0.0f); // Return a default unit axis
+    }
+    
+    *radiansOut = acos( w() ) * 2;
+    float reciprocalVectorNorm = 1.f / vectorNorm;
+    return Vec3f(x() * reciprocalVectorNorm, y() * reciprocalVectorNorm, z() * reciprocalVectorNorm);
 }
 
-void Quat4f::setAxisAngle(float radians, const Vec3f& axis) {
-	m_elements[ 0 ] = cos( radians / 2 );
+void Quat4f::setAxisAngle(float radians, const Vec3f &axis)
+{
+	m_elements[0] = cos(radians / 2);
 
-	float sinHalfTheta = sin( radians / 2 );
+	float sinHalfTheta = sin(radians / 2);
 	float vectorNorm = axis.norm();
+	if (vectorNorm < 1e-6f)
+	{
+		m_elements[0] = 1;
+		m_elements[1] = 0;
+		m_elements[2] = 0;
+		m_elements[3] = 0;
+	}
 	float reciprocalVectorNorm = 1.f / vectorNorm;
 
-	m_elements[ 1 ] = axis[0] * sinHalfTheta * reciprocalVectorNorm;
-	m_elements[ 2 ] = axis[1] * sinHalfTheta * reciprocalVectorNorm;
-	m_elements[ 3 ] = axis[2] * sinHalfTheta * reciprocalVectorNorm;
+	m_elements[1] = axis[0] * sinHalfTheta * reciprocalVectorNorm;
+	m_elements[2] = axis[1] * sinHalfTheta * reciprocalVectorNorm;
+	m_elements[3] = axis[2] * sinHalfTheta * reciprocalVectorNorm;
 }
 
 // static
@@ -380,7 +386,7 @@ Quat4f Quat4f::fromRotationMatrix( const Matrix3f& m )
 	else
 	{
 		// Computation depends on major diagonal term
-		if( ( m( 0, 0 ) > m( 1, 1 ) ) & ( m( 0, 0 ) > m( 2, 2 ) ) )
+		if( ( m( 0, 0 ) > m( 1, 1 ) ) && ( m( 0, 0 ) > m( 2, 2 ) ) )
 		{
 			float s = sqrt( 1.0f + m( 0, 0 ) - m( 1, 1 ) - m( 2, 2 ) ) * 2.0f;
 			x = 0.25f * s;

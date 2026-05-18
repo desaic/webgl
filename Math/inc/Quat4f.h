@@ -95,6 +95,7 @@ public:
 
 private:
 
+	/// @brief wxyz
 	float m_elements[ 4 ];
 
 };
