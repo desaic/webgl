@@ -1,17 +1,65 @@
-
+#include "PackDebugScene.h"
+#include "AdapSDF.h"
 #include "PackingScene.h"
 #include "meshutil.h"
 #include "MeshOps.h"
 #include "GridUtils.h"
 #include "PackingOps.h"
-
+#include "FastSweep.h"
 #include <iostream>
 #include <fstream>
 #include <random>
 
+namespace fs = std::filesystem;
+
+static std::shared_ptr<AdapSDF> ComputeSDF(float distUnit, float h, TrigMesh &mesh) {
+  std::shared_ptr<AdapSDF> sdf = std::make_shared<AdapSDF>();
+  sdf->voxSize = h;
+  sdf->band = 16;
+  sdf->distUnit = distUnit;
+  sdf->BuildTrigList(&mesh);
+  sdf->Compress();
+  mesh.ComputePseudoNormals();
+  sdf->ComputeCoarseDist();
+  CloseExterior(sdf->dist, sdf->MAX_DIST);
+  Array3D8u frozen;
+  //sdf->FastSweepCoarse(frozen);
+  int band = 1000;
+  FastSweepPar(sdf->dist, sdf->voxSize, distUnit, band, frozen);
+  return sdf;
+}
+
+void PackDebug() {
+  std::string dataDir = "F:/meshes/fruit_hand/";
+  std::string meshDir = dataDir + "fruit0/";
+  PackingScene scene;
+  std::vector<MeshInfo> fruits = LoadAllMeshInfo(meshDir);
+  scene.items = fruits;
+  scene.container;
+  //fs::path containerFile(dataDir + "hands/hand4.5m_finger.stl");
+  fs::path containerFile(dataDir + "box60cm.obj");
+  fs::path innerContainerFile(dataDir + "hands/finger_inner.stl");
+  LoadMeshInfo(scene.container, containerFile);  
+  LoadMeshInfo(scene.containerInner, innerContainerFile);
+  float broadPhaseDx = 2.0f;
+  Box3f containerBox = scene.container.box;
+  scene.broadPhase.Init(containerBox ,broadPhaseDx);
+  scene.sortedBySize = SortBySize(scene.items);
+  float sdfDx = 1.0f;
+  float distUnit = 0.001f * sdfDx;
+  std::cout << "computing container sdf \n";
+  scene.sdf = ComputeSDF(distUnit, sdfDx, scene.container.mesh);
+  std::cout << "computing container sdf done \n";
+  scene.outputFolder = dataDir + "/out/";
+  std::string packedFile = dataDir + "pack0.txt";
+  //LoadPack(scene, packedFile);
+  //for(unsigned i = 0;i<scene.items.size();i++){
+    //SavePackedMesh(scene, i);
+  //}
+  PackDebugScene(scene);
+}
+
 void PackDebugScene(PackingScene &scene) {
-    //debug
-  // std::string meshDir = dataDir + "fruit0/";
   scene.dx = 0.3;
   scene.bg.SetMeshPtr(&scene.container.mesh);
   scene.bg.Voxelize(scene.dx);
@@ -40,6 +88,11 @@ void PackDebugScene(PackingScene &scene) {
   Vec3f voxRes(scene.dx);
   scene.placed.resize(scene.items.size());
 
+  float broadPhaseDx = 2.0f;
+  Box3f containerBox = scene.container.box;
+  scene.broadPhase.Init(containerBox ,broadPhaseDx);
+  scene.sortedBySize = SortBySize(scene.items);
+
   unsigned angleIndex = 0;
   const unsigned MAX_TRIAL_COUNT = 10;
   float sdfFactor = -1.0f;
@@ -47,7 +100,7 @@ void PackDebugScene(PackingScene &scene) {
   bool tryMore = true;
   while (tryMore) {
     bool canPlace = false;
-    unsigned itemIndex = 0;
+    unsigned itemIndex = 1;
     if (scene.items[itemIndex].noMoreFit) {
       continue;
     }
@@ -59,18 +112,20 @@ void PackDebugScene(PackingScene &scene) {
       if (angleIndex >= randAngles.size()) {
         angleIndex = 0;
       }
-      bool success = FindSpot(scene.bg, scene.items[itemIndex].mesh, pos, rot, scene.sdf, sdfFactor);
-      if (success) {
+      bool success = FindSpot( scene.bg, scene.items[itemIndex].mesh, pos, rot, scene.sdf, sdfFactor);
+      if(success){
         canPlace = true;
-        itemPlaced = true;
+        itemPlaced =true;
         Transformation tran;
         tran.position = pos;
-        tran.rotation = RotationMatrixRad(rot[0], rot[1], rot[2]);
-        scene.placed[itemIndex].push_back(tran);
+        tran.rotation = RotationMatrixRad(rot[0], rot[1], rot[2]);            
         std::string name = scene.items[itemIndex].name;
         std::string line = name + " " + tran.toString();
-        out << line << "\n";
-        std::cout << line << "\n";
+        out << line <<"\n";
+        std::cout << line <<"\n";
+        Vec3f pushDir = scene.ForceDirection(itemIndex, tran);
+        Transformation newTran = scene.Nudge(itemIndex,tran,pushDir);
+        scene.Put(itemIndex, newTran);        
         break;
       }
     }

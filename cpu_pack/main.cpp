@@ -21,6 +21,7 @@
 #include "meshutil.h"
 #include "pocketfft_3df.h"
 #include "PointSample.h"
+#include "PackDebugScene.h"
 
 #include <algorithm>
 #include <cctype>
@@ -39,7 +40,7 @@ namespace fs = std::filesystem;
 
 Vec3f closestPointTriangle(const Vec3f & p, const Vec3f & a, const Vec3f & b, const Vec3f & c);
 
-std::shared_ptr<AdapSDF> ComputeSDF(float distUnit, float h, TrigMesh &mesh) {
+static std::shared_ptr<AdapSDF> ComputeSDF(float distUnit, float h, TrigMesh &mesh) {
   std::shared_ptr<AdapSDF> sdf = std::make_shared<AdapSDF>();
   sdf->voxSize = h;
   sdf->band = 16;
@@ -163,7 +164,7 @@ void PackScene(PackingScene & scene) {
             std::cout << line <<"\n";
             Vec3f pushDir = scene.ForceDirection(itemIndex, tran);
             Transformation newTran = scene.Nudge(itemIndex,tran,pushDir);
-            scene.Put(itemIndex, tran);
+            scene.Put(itemIndex, newTran);
             debugCount ++;
             break;
           }
@@ -227,6 +228,7 @@ void PackFruits() {
 
 int main(int argc, char * argv[]){
   std::cout<<argv[0]<<std::endl;
-  PackFruits();  
+  // PackFruits();  
+  PackDebug();
   return 0;
 }

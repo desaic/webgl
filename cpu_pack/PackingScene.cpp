@@ -64,26 +64,23 @@ Vec3f PackingScene::ForceDirection(unsigned itemIdx, const Transformation & tran
 Transformation PackingScene::Nudge(unsigned itemIdx, const Transformation & tran, const Vec3f & dir) {
     Transformation tOut = tran;
     
-    // Configurable parameters matching your scene scaling
     float ds = 0.5f;             // Maximum linear step distance limit
-    float eps = ds / 2.0f;       // Target contact clearance boundary (epsilon)
-    float activeBuffer = ds;     // Proximity threshold to consider a contact active
+    float eps = ds * 0.1f;       // Target contact clearance boundary (epsilon)
+    float activeBuffer = ds * 0.1f;     // Proximity threshold to consider a contact active
     float linearStepSize = 0.1f; // Linear drive push force factor per frame
     
-    // 1. Initial Sampling Stage
     TrigMesh instMesh = MakeTransformedMesh(items[itemIdx].mesh, tran);
     std::vector<SamplePoint> samples;
     instMesh.ComputeVertNormals();
-    SamplePoints(instMesh, eps, samples);
+    SamplePoints(instMesh, 0.5f * ds, samples);
     
-    // Because the rigid body is in its inertia frame, its true world-space 
-    // center of mass is exactly its current transformation position vector!
-    Vec3f trueWorldCOM = tran.position; 
+    // assuming item is originally centered around 0
+    Vec3f com = tran.position; 
 
     // Store sample points as local vectors relative to the Center of Mass
     std::vector<Vec3f> localSampleOffsets(samples.size());
     for (size_t s = 0; s < samples.size(); ++s) {
-        localSampleOffsets[s] = samples[s].x - trueWorldCOM;
+        localSampleOffsets[s] = samples[s].x - com;
     }
 
     // 2. Broad Phase Environment Gathering
@@ -91,11 +88,13 @@ Transformation PackingScene::Nudge(unsigned itemIdx, const Transformation & tran
     std::vector<unsigned> intersectingInstances = broadPhase.GetNearby(instBox, ds);
     
     std::vector<TrigGrid> accGrids(intersectingInstances.size() + 1);
+    //holds actual mesh for accGrid's mesh pointer.
+    std::vector<TrigMesh> neighborMeshes(intersectingInstances.size());
     accGrids[0].Build(container.mesh, dx); // Assuming dx is your global container voxel size
     for (size_t i = 0; i < intersectingInstances.size(); i++) {
         InstanceInfo inst = instances[intersectingInstances[i]];
-        TrigMesh neighborMesh = MakeTransformedMesh(items[inst.itemId].mesh, inst.tran);    
-        accGrids[i + 1].Build(neighborMesh, ds);
+        neighborMeshes[i] = MakeTransformedMesh(items[inst.itemId].mesh, inst.tran);
+        accGrids[i + 1].Build(neighborMeshes[i], ds);
     }
 
     // 3. Initialize State Variables for the 6-DOF Solver
