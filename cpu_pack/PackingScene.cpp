@@ -61,48 +61,53 @@ Vec3f PackingScene::ForceDirection(unsigned itemIdx, const Transformation & tran
   return dir;
 }
 
+void PackingScene::InitDataStructures(){
+  InitContainerGrids();
+  for(size_t i = 0;i<items.size();i++){
+    items[i].mesh.ComputeVertNormals();
+  }
+}
+
+void PackingScene::InitContainerGrids(){
+  containerGrid.Build(container.mesh, gridDx);
+  containerInnerGrid.Build(containerInner.mesh, gridDx);
+}
+
 Transformation PackingScene::Nudge(unsigned itemIdx, const Transformation & tran, const Vec3f & dir) {
     Transformation tOut = tran;
     
-    float ds = 0.5f;             // Maximum linear step distance limit
-    float eps = ds * 0.1f;       // Target contact clearance boundary (epsilon)
-    float activeBuffer = ds * 0.1f;     // Proximity threshold to consider a contact active
-    float linearStepSize = 0.1f; // Linear drive push force factor per frame
-    
-    TrigMesh instMesh = MakeTransformedMesh(items[itemIdx].mesh, tran);
-    std::vector<SamplePoint> samples;
-    instMesh.ComputeVertNormals();
-    SamplePoints(instMesh, 0.5f * ds, samples);
-    
-    // assuming item is originally centered around 0
-    Vec3f com = tran.position; 
+    float ds = 0.5f;           // Maximum linear step distance limit
+    float minDist = ds * 0.1f; // Target contact clearance boundary
+    float eps = minDist;       // clearance threshold
+    float activeBuffer = ds * 0.1f; // buffer zone to gather near-contacts    
+    size_t maxOptimizationSteps = 10;
 
-    // Store sample points as local vectors relative to the Center of Mass
-    std::vector<Vec3f> localSampleOffsets(samples.size());
-    for (size_t s = 0; s < samples.size(); ++s) {
-        localSampleOffsets[s] = samples[s].x - com;
-    }
+    float broadPhaseDist = ds * maxOptimizationSteps;
+
+    TrigMesh instMesh = MakeTransformedMesh(items[itemIdx].mesh, tran);
+    // samples are in object frame, so that it move with pos and rot.
+    // If I need their normals, I need to rotate the normals first.
+    std::vector<SamplePoint> samples;    
+    SamplePoints(items[itemIdx].mesh, 0.5f * ds, samples);
 
     // 2. Broad Phase Environment Gathering
     Box3f instBox = ComputeBBox(instMesh.v);
-    std::vector<unsigned> intersectingInstances = broadPhase.GetNearby(instBox, ds);
+    std::vector<unsigned> intersectingInstances = broadPhase.GetNearby(instBox, broadPhaseDist);
     
     std::vector<TrigGrid> accGrids(intersectingInstances.size() + 1);
-    //holds actual mesh for accGrid's mesh pointer.
     std::vector<TrigMesh> neighborMeshes(intersectingInstances.size());
-    accGrids[0].Build(container.mesh, dx); // Assuming dx is your global container voxel size
+    accGrids[0] = containerGrid;
     for (size_t i = 0; i < intersectingInstances.size(); i++) {
         InstanceInfo inst = instances[intersectingInstances[i]];
         neighborMeshes[i] = MakeTransformedMesh(items[inst.itemId].mesh, inst.tran);
-        accGrids[i + 1].Build(neighborMeshes[i], ds);
+        accGrids[i + 1].Build(neighborMeshes[i], gridDx);
     }
 
     // 3. Initialize State Variables for the 6-DOF Solver
     Vec3f currentT = tran.position;
     Matrix3f rotMat = tran.rotation;
-    Quat4f currentQ = Quat4f::fromRotationMatrix(rotMat); // Convert initial pose rotation
+    Quat4f currentQ = Quat4f::fromRotationMatrix(rotMat); 
 
-    size_t maxOptimizationSteps = 15;
     struct ActiveContact {
         Vec3f worldPos;
         Vec3f normal;
@@ -115,8 +120,8 @@ Transformation PackingScene::Nudge(unsigned itemIdx, const Transformation & tran
         Matrix3f currentRotMat = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
 
         // Gather all active surface contacts across all neighboring distance grids
-        for (size_t s = 0; s < localSampleOffsets.size(); s++) {
-            Vec3f worldPt = currentRotMat * localSampleOffsets[s] + currentT;
+        for (size_t s = 0; s < samples.size(); s++) {
+            Vec3f worldPt = currentRotMat * samples[s].x + currentT;
 
             for (unsigned m = 0; m < accGrids.size(); m++) {
                 Vec3f normal;
@@ -130,13 +135,17 @@ Transformation PackingScene::Nudge(unsigned itemIdx, const Transformation & tran
         }
 
         // Initialize our ideal target movement delta (push down the packing direction)
-        Vec3f deltaX = linearStepSize * dir;
+        Vec3f deltaX = ds * dir;
         Vec3f deltaTheta(0.0f, 0.0f, 0.0f);
+
+        // Track accumulated impulses (lambdas) for proper unilateral LCP PGS 
+        std::vector<float> lambdas(activeContacts.size(), 0.0f);
 
         // Run Sequential Constraint Projection passes (Matrix-free PGS)
         int pgsPasses = 4;
         for (int pass = 0; pass < pgsPasses; pass++) {
-            for (const auto& contact : activeContacts) {
+            for (size_t c = 0; c < activeContacts.size(); c++) {
+                const auto& contact = activeContacts[c];
                 Vec3f r = contact.worldPos - currentT;
                 Vec3f r_cross_n = r.cross(contact.normal);
 
@@ -144,15 +153,18 @@ Transformation PackingScene::Nudge(unsigned itemIdx, const Transformation & tran
                 float j_delta = deltaX.dot(contact.normal) + deltaTheta.dot(r_cross_n);
                 float b = eps - contact.distance; // Penetration error feedback depth
 
-                if (j_delta < b) {
-                    float j_sq_len = 1.0f + r_cross_n.dot(r_cross_n);
-                    if (j_sq_len > 1e-8f) {
-                        float delta_lambda = (b - j_delta) / j_sq_len;
+                float j_sq_len = 1.0f + r_cross_n.dot(r_cross_n); // Equivalent to J * M^-1 * J^T
+                if (j_sq_len > 1e-8f) {
+                    float delta_lambda = (b - j_delta) / j_sq_len;
 
-                        // Correct the 6-DOF velocity vectors inline
-                        deltaX     = deltaX     + delta_lambda * contact.normal;
-                        deltaTheta = deltaTheta + r_cross_n * delta_lambda;
-                    }
+                    // Clamp total accumulated lambda to be non-negative (unilateral constraint)
+                    float old_lambda = lambdas[c];
+                    lambdas[c] = std::max(0.0f, old_lambda + delta_lambda);
+                    float actual_delta_lambda = lambdas[c] - old_lambda;
+
+                    // Correct the 6-DOF vectors inline using the clamped lambda delta
+                    deltaX     = deltaX     + actual_delta_lambda * contact.normal;
+                    deltaTheta = deltaTheta + r_cross_n * actual_delta_lambda;
                 }
             }
         }
@@ -179,8 +191,8 @@ Transformation PackingScene::Nudge(unsigned itemIdx, const Transformation & tran
 
             // Verify if this test step triggers hard penetrations
             bool localCollision = false;
-            for (size_t s = 0; s < localSampleOffsets.size(); s++) {
-                Vec3f testPt = testRotMat * localSampleOffsets[s] + testT;
+            for (size_t s = 0; s < samples.size(); s++) {
+                Vec3f testPt = testRotMat * samples[s].x + testT;
 
                 for (unsigned m = 0; m < accGrids.size(); m++) {
                     Vec3f dummyNormal;

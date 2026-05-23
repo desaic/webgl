@@ -222,6 +222,7 @@ void PackFruits() {
   //for(unsigned i = 0;i<scene.items.size();i++){
     //SavePackedMesh(scene, i);
   //}
+  scene.InitDataStructures();
   PackScene(scene);
 }
 

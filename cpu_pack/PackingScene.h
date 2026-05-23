@@ -22,6 +22,10 @@ struct InstanceInfo{
 class PackingScene {
   public:
 
+    /// calls InitContainerGrids, initializes object vertex normals.
+    void InitDataStructures();
+    void InitContainerGrids();
+    
     /// @brief put a copy of itemIdx at the given transformation
     /// revoxelizes because it's not a bottleneck.
     /// @param itemIdx 
@@ -52,8 +56,11 @@ class PackingScene {
     std::string outputFolder;
     float dx = 1.0f;
     MeshConvo bg;
-    
+    float gridDx = 1.0f;
     BroadPhaseGrid broadPhase;
+    // container acceleration grid for collission.
+    TrigGrid containerGrid;
+    TrigGrid containerInnerGrid;
 };
 
 

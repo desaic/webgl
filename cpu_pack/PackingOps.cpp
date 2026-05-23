@@ -85,7 +85,7 @@ bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot,
         if (dist >= 32766) {
           dist = -dist;
         }
-        float score = factor * dist + positionWeight * (std::abs(coord[0])+ std::abs(coord[1])+ std::abs(coord[2]));
+        float score = factor * dist + positionWeight * (coord[0]+ coord[1]+ coord[2]);
         if(z == debugZ){
           debugSlice(x,y) = uint8_t(score * 10);
         }

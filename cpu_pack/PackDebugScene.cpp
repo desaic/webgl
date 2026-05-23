@@ -56,6 +56,7 @@ void PackDebug() {
   //for(unsigned i = 0;i<scene.items.size();i++){
     //SavePackedMesh(scene, i);
   //}
+  scene.InitDataStructures();
   PackDebugScene(scene);
 }
 
@@ -67,9 +68,9 @@ void PackDebugScene(PackingScene &scene) {
   Vec3f dxVec(scene.dx);
   Vec3f origin = scene.bg.GetOrigin();
 
-  SaveVolAsObjMesh(scene.outputFolder + "/box_vox_flood.obj", scene.bg.vox, dxVec, origin, 2);
+  // SaveVolAsObjMesh(scene.outputFolder + "/box_vox_flood.obj", scene.bg.vox, dxVec, origin, 2);
   InvertContainer( scene.bg.vox, 1);
-  SaveVolAsObjMesh(scene.outputFolder + "/box_vox_invert.obj", scene.bg.vox, dxVec, origin, 1);
+  // SaveVolAsObjMesh(scene.outputFolder + "/box_vox_invert.obj", scene.bg.vox, dxVec, origin, 1);
   const unsigned NUM_COPIES = 1000;
   const float outputScale = 1.05f;
   const unsigned ANGLE_TRIALS = 5;
@@ -95,12 +96,14 @@ void PackDebugScene(PackingScene &scene) {
 
   unsigned angleIndex = 0;
   const unsigned MAX_TRIAL_COUNT = 10;
-  float sdfFactor = -1.0f;
+  float sdfFactor = 1.0f;
   // redundant lol who cares.
   bool tryMore = true;
+  unsigned placeCount = 0;
   while (tryMore) {
     bool canPlace = false;
     unsigned itemIndex = 1;
+    std::string itemName = scene.items[itemIndex].name;
     if (scene.items[itemIndex].noMoreFit) {
       continue;
     }
@@ -123,9 +126,17 @@ void PackDebugScene(PackingScene &scene) {
         std::string line = name + " " + tran.toString();
         out << line <<"\n";
         std::cout << line <<"\n";
-        Vec3f pushDir = scene.ForceDirection(itemIndex, tran);
+        Vec3f pushDir(-1,0,0);// scene.ForceDirection(itemIndex, tran);
+        
+        TrigMesh inst0 = MakeTransformedMesh(scene.items[itemIndex].mesh, tran);
+        inst0.SaveObj(scene.outputFolder + "/" + itemName + "_" + std::to_string(placeCount) + "_start.obj");
+
         Transformation newTran = scene.Nudge(itemIndex,tran,pushDir);
-        scene.Put(itemIndex, newTran);        
+        scene.Put(itemIndex, newTran);
+        // debug
+        TrigMesh inst = MakeTransformedMesh(scene.items[itemIndex].mesh, newTran);
+        inst.SaveObj(scene.outputFolder + "/" + itemName + "_" + std::to_string(placeCount) + ".obj");
+        placeCount ++;
         break;
       }
     }
@@ -143,5 +154,4 @@ void PackDebugScene(PackingScene &scene) {
   for (auto &t : scene.placed[itemIndex]) {
     t.scale = outputScale;
   }
-  SaveVolAsObjMesh("F:/meshes/fruit_hand/pack_vox.obj", scene.bg.vox, dxVec, origin, 1);
 }

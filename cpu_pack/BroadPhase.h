@@ -33,6 +33,9 @@ class BroadPhaseGrid {
     Vec3f GetOrigin()const{
       return m_box.vmin;
     }
+    float GetDx()const{
+      return m_dx;
+    }
     // Adds a finalized mesh instance into all grid cells overlapping its AABB bounds
     void Add(const Box3f &box, unsigned instId) ;
 
