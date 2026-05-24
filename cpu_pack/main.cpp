@@ -163,7 +163,8 @@ void PackScene(PackingScene & scene) {
             out << line <<"\n";
             std::cout << line <<"\n";
             Vec3f pushDir = scene.ForceDirection(itemIndex, tran);
-            Transformation newTran = scene.Nudge(itemIndex,tran,pushDir);
+            std::vector<Transformation> trajectory;
+            Transformation newTran = scene.Nudge(itemIndex,tran,pushDir, trajectory);
             scene.Put(itemIndex, newTran);
             debugCount ++;
             break;

@@ -9,6 +9,7 @@ class MeshInfo {
   public:
     Box3f box;
     std::string name;
+    std::string filePath;
     TrigMesh mesh;
     // large medium small.
     unsigned groupId=0;
@@ -21,8 +22,11 @@ class MeshInfo {
 // Structure to store transformation data
 struct Transformation {
     Vec3f position;
-    Matrix3f rotation;
+    Matrix3f rotation;    
     float scale = 1.0f;
+    Transformation():rotation(Matrix3f::identity()){}
+    Transformation(const Vec3f & pos, const Matrix3f & rot):position(pos),
+    rotation(rot){}
     /// @brief 
     /// @return rotation matrix is printed in row major order. even though internally stored in column major order.
     std::string toString() const;

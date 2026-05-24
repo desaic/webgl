@@ -18,7 +18,7 @@ Vec3i roundf(const Vec3f & fvec){
   return Vec3i(std::round(fvec[0]),std::round(fvec[1]),std::round(fvec[2]));
 }
 
-void PackingScene::Put(unsigned itemIdx, const Transformation &tran){
+unsigned PackingScene::Put(unsigned itemIdx, const Transformation &tran){
   TrigMesh inst = MakeTransformedMesh(items[itemIdx].mesh, tran);
   Box3f bbox = ComputeBBox(inst.v);
   // saved for broad phase.
@@ -42,8 +42,8 @@ void PackingScene::Put(unsigned itemIdx, const Transformation &tran){
   unsigned instId = instances.size();
   placed[itemIdx].push_back(tran);  
   instances.push_back(InstanceInfo(itemIdx, tran));
-  /// @TODO: add item to broarphase grid
   broadPhase.Add(meshBox , instId);
+  return instances.size() - 1u;
 }
 
 Vec3f PackingScene::ForceDirection(unsigned itemIdx, const Transformation & tran)
@@ -73,7 +73,8 @@ void PackingScene::InitContainerGrids(){
   containerInnerGrid.Build(containerInner.mesh, gridDx);
 }
 
-Transformation PackingScene::Nudge(unsigned itemIdx, const Transformation & tran, const Vec3f & dir) {
+Transformation PackingScene::Nudge(unsigned itemIdx, const Transformation & tran, const Vec3f & dir,
+std::vector<Transformation> & trajectory) {
     Transformation tOut = tran;
     
     float ds = 0.5f;           // Maximum linear step distance limit
@@ -84,6 +85,7 @@ Transformation PackingScene::Nudge(unsigned itemIdx, const Transformation & tran
 
     float broadPhaseDist = ds * maxOptimizationSteps;
 
+    float MIN_LineSearchStep = 1e-2f;
     TrigMesh instMesh = MakeTransformedMesh(items[itemIdx].mesh, tran);
     // samples are in object frame, so that it move with pos and rot.
     // If I need their normals, I need to rotate the normals first.
@@ -173,7 +175,7 @@ Transformation PackingScene::Nudge(unsigned itemIdx, const Transformation & tran
         float scale = 1.0f;
         bool stepAccepted = false;
 
-        while (scale > 1e-4f) {
+        while (scale > MIN_LineSearchStep) {
             Vec3f testT = currentT + deltaX * scale;
             
             // Build the proposed incremental rotation quaternion from axis-angle deltaTheta
@@ -222,6 +224,8 @@ Transformation PackingScene::Nudge(unsigned itemIdx, const Transformation & tran
         if (!stepAccepted || (deltaX.dot(deltaX) + deltaTheta.dot(deltaTheta)) < 1e-7f) {
             break; 
         }
+        //for debug visualization.
+        trajectory.push_back(Transformation(currentT, Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w())));
     }
 
     // 6. Export the finalized values back into your scene Transformation layout
@@ -281,6 +285,21 @@ void LoadPack(PackingScene & scene, const std::string & packFile){
 
 static std::array<float, 3> ToArray(const Vec3f &v) {
   return {v[0], v[1], v[2]};
+}
+
+void PackingScene::SaveTrajectories(const std::string &filename) const {
+  std::ofstream trajOut(filename);
+  for (size_t i = 0; i < instances.size(); i++) {
+    const InstanceInfo &inst = instances[i];
+    std::string meshFile = items[inst.itemId].filePath;
+    trajOut << "Instance " << i << " Mesh " << meshFile << "\n";
+    trajOut << "Initial " << inst.tran.toString() << "\n";
+    for (size_t j = 0; j < inst.trajectory.size(); j++) {
+      trajOut << "Step " << j << " " << inst.trajectory[j].toString() << "\n";
+    }
+    trajOut << "\n";
+  }
+  trajOut.close();
 }
 
 void AddInnerContainer(PackingScene & scene){

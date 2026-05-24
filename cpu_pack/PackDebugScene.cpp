@@ -130,9 +130,10 @@ void PackDebugScene(PackingScene &scene) {
         
         TrigMesh inst0 = MakeTransformedMesh(scene.items[itemIndex].mesh, tran);
         inst0.SaveObj(scene.outputFolder + "/" + itemName + "_" + std::to_string(placeCount) + "_start.obj");
-
-        Transformation newTran = scene.Nudge(itemIndex,tran,pushDir);
-        scene.Put(itemIndex, newTran);
+        std::vector<Transformation> trajectory;
+        Transformation newTran = scene.Nudge(itemIndex,tran,pushDir, trajectory);
+        unsigned instanceId = scene.Put(itemIndex, newTran);
+        scene.instances[instanceId].trajectory = trajectory;
         // debug
         TrigMesh inst = MakeTransformedMesh(scene.items[itemIndex].mesh, newTran);
         inst.SaveObj(scene.outputFolder + "/" + itemName + "_" + std::to_string(placeCount) + ".obj");
@@ -148,6 +149,8 @@ void PackDebugScene(PackingScene &scene) {
       break;
     }
   }
+
+  scene.SaveTrajectories(scene.outputFolder + "/trajectories.txt");
 
   unsigned itemIndex = 0;
   SavePackedMesh(scene, itemIndex);

@@ -17,6 +17,9 @@ struct InstanceInfo{
   unsigned itemId = 0;
   Transformation tran;
   InstanceInfo(unsigned i, const Transformation & t):itemId(i), tran(t){}
+
+  // for debug visualization.
+  std::vector<Transformation> trajectory;
 };
 
 class PackingScene {
@@ -25,12 +28,13 @@ class PackingScene {
     /// calls InitContainerGrids, initializes object vertex normals.
     void InitDataStructures();
     void InitContainerGrids();
-    
+
     /// @brief put a copy of itemIdx at the given transformation
     /// revoxelizes because it's not a bottleneck.
     /// @param itemIdx 
     /// @param tran 
-    void Put(unsigned itemIdx, const Transformation &tran);
+    /// @return instance index
+    unsigned Put(unsigned itemIdx, const Transformation &tran);
 
     /// heuristic force direction
     Vec3f ForceDirection(unsigned itemIdx, const Transformation & tran);
@@ -38,11 +42,13 @@ class PackingScene {
     /// @param itemIdx 
     /// @param tran 
     /// @return 
-    Transformation Nudge(unsigned itemIdx, const Transformation & tran, const Vec3f & dir);
+    Transformation Nudge(unsigned itemIdx, const Transformation & tran, const Vec3f & dir, std::vector<Transformation> & trajectory);
 
     Vec3f WorldOrigin()const{
       return bg.GetOrigin();
     }
+
+    void SaveTrajectories(const std::string &filename) const;
 
     MeshInfo container;
     MeshInfo containerInner;

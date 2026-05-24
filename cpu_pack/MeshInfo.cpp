@@ -65,11 +65,12 @@ std::vector<MeshInfo> LoadAllMeshInfo(const std::string &meshDir) {
       continue;
     }
     MeshInfo info;    
-    int ret = LoadMeshInfo(info, p);
+    int ret = LoadMeshInfo(info, p);    
     if (ret != 0) {
       std::cout << " error " << ret << " loading " << p.filename().string() << "\n";
       continue;
     }
+    info.filePath = p.string();
     fruits.push_back(info);
   }
 
