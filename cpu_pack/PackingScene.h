@@ -25,10 +25,10 @@ struct InstanceInfo{
 class PackingScene {
   public:
 
-    /// calls InitContainerGrids, initializes object vertex normals.
+    /// calls InitContainerGrids and ComputeSDF, initializes object vertex normals.
     void InitDataStructures();
     void InitContainerGrids();
-
+    void ComputeContainerSDF();
     /// @brief put a copy of itemIdx at the given transformation
     /// revoxelizes because it's not a bottleneck.
     /// @param itemIdx 
@@ -58,6 +58,8 @@ class PackingScene {
     // duplicated with placed.
     std::vector<InstanceInfo>instances;
     std::vector<int> sortedBySize;
+    // 2cm
+    float containerSDFDx = 2.0f;
     std::shared_ptr<AdapSDF> sdf;
     std::string outputFolder;
     float dx = 1.0f;
@@ -80,3 +82,26 @@ void AddInnerContainer(PackingScene & scene);
 void SavePackedMesh(const PackingScene &scene, unsigned i);
 
 int LoadMesh(TrigMesh &m, const std::filesystem::path & p) ;
+
+/// @brief computes dense sdf grid for packing.
+/// @param distUnit
+/// @param h
+/// @param mesh
+/// @return
+std::shared_ptr<AdapSDF> ComputeSDF(float distUnit, float h, TrigMesh &mesh);
+
+/// @brief compute gradient field from sdf using central differences
+/// @param sdf
+/// @param distUnit
+/// @param voxSize
+/// @return
+Array3D<Vec3f> ComputeSDFGradient(const AdapSDF& sdf, float distUnit, float voxSize);
+
+/// @brief save gradient field as line segments to obj file
+/// @param filename
+/// @param gradients
+/// @param sdf
+/// @param voxSize
+/// @param stride subsample stride for visualization
+void SaveGradientObj(const std::string& filename, const Array3D<Vec3f>& gradients,
+                     const AdapSDF& sdf, float voxSize, unsigned stride);

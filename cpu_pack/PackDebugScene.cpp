@@ -36,8 +36,8 @@ void PackDebug() {
   std::vector<MeshInfo> fruits = LoadAllMeshInfo(meshDir);
   scene.items = fruits;
   scene.container;
-  //fs::path containerFile(dataDir + "hands/hand4.5m_finger.stl");
-  fs::path containerFile(dataDir + "box60cm.obj");
+  fs::path containerFile(dataDir + "hands/hand4.5m_finger.stl");
+  // fs::path containerFile(dataDir + "box60cm.obj");
   fs::path innerContainerFile(dataDir + "hands/finger_inner.stl");
   LoadMeshInfo(scene.container, containerFile);  
   LoadMeshInfo(scene.containerInner, innerContainerFile);

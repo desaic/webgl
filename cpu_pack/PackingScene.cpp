@@ -7,6 +7,8 @@
 #include "PointSample.h"
 #include "TrigGrid.h"
 #include "Quat4f.h"
+#include "AdapSDF.h"
+#include "FastSweep.h"
 
 #include <filesystem>
 #include <fstream>
@@ -46,9 +48,13 @@ unsigned PackingScene::Put(unsigned itemIdx, const Transformation &tran){
   return instances.size() - 1u;
 }
 
+
+
 Vec3f PackingScene::ForceDirection(unsigned itemIdx, const Transformation & tran)
 {
   Vec3f dir (-1,-1, -1);
+
+  unsigned itemGroup = items[itemIdx].groupId;
 
   // push away or towards center depending on item size group.
   Vec3f center = bg.GetMeshCenter();
@@ -66,11 +72,102 @@ void PackingScene::InitDataStructures(){
   for(size_t i = 0;i<items.size();i++){
     items[i].mesh.ComputeVertNormals();
   }
+  ComputeContainerSDF();
 }
 
 void PackingScene::InitContainerGrids(){
   containerGrid.Build(container.mesh, gridDx);
-  containerInnerGrid.Build(containerInner.mesh, gridDx);
+  containerInnerGrid.Build(containerInner.mesh, gridDx);  
+}
+
+std::shared_ptr<AdapSDF> ComputeSDF(float distUnit, float h, TrigMesh &mesh) {
+  std::shared_ptr<AdapSDF> sdf = std::make_shared<AdapSDF>();
+  sdf->voxSize = h;
+  sdf->band = 16;
+  sdf->distUnit = distUnit;
+  sdf->BuildTrigList(&mesh);
+  sdf->Compress();
+  mesh.ComputePseudoNormals();
+  sdf->ComputeCoarseDist();
+  CloseExterior(sdf->dist, sdf->MAX_DIST);
+  Array3D8u frozen;
+  //sdf->FastSweepCoarse(frozen);
+  int band = 1000;
+  FastSweepPar(sdf->dist, sdf->voxSize, distUnit, band, frozen);
+  return sdf;
+}
+
+void PackingScene::ComputeContainerSDF(){
+  float distUnit = 0.001f * containerSDFDx;
+  std::cout << "computing container sdf \n";
+  sdf = ComputeSDF(distUnit, containerSDFDx, container.mesh);
+
+  Array3D<Vec3f> gradients = ComputeSDFGradient(*sdf, distUnit, containerSDFDx);
+
+  std::string gradFile = outputFolder + "sdf_gradients.obj";
+  SaveGradientObj(gradFile, gradients, *sdf, containerSDFDx, 4);
+}
+
+Array3D<Vec3f> ComputeSDFGradient(const AdapSDF& sdf, float distUnit, float voxSize){
+  Vec3u gridSize = sdf.dist.GetSize();
+  Array3D<Vec3f> gradients(gridSize, Vec3f(0,0,0));
+
+  std::cout << "computing sdf gradients on grid " << gridSize[0] << " x "
+            << gridSize[1] << " x " << gridSize[2] << "\n";
+
+  for(unsigned z = 1; z < gridSize[2] - 1; z++){
+    for(unsigned y = 1; y < gridSize[1] - 1; y++){
+      for(unsigned x = 1; x < gridSize[0] - 1; x++){
+        float dx_plus = sdf.dist(x+1, y, z) * distUnit;
+        float dx_minus = sdf.dist(x-1, y, z) * distUnit;
+        float dy_plus = sdf.dist(x, y+1, z) * distUnit;
+        float dy_minus = sdf.dist(x, y-1, z) * distUnit;
+        float dz_plus = sdf.dist(x, y, z+1) * distUnit;
+        float dz_minus = sdf.dist(x, y, z-1) * distUnit;
+
+        Vec3f grad;
+        grad[0] = (dx_plus - dx_minus) / (2.0f * voxSize);
+        grad[1] = (dy_plus - dy_minus) / (2.0f * voxSize);
+        grad[2] = (dz_plus - dz_minus) / (2.0f * voxSize);
+
+        gradients(x, y, z) = grad;
+      }
+    }
+  }
+
+  return gradients;
+}
+
+void SaveGradientObj(const std::string& filename, const Array3D<Vec3f>& gradients,
+                     const AdapSDF& sdf, float voxSize, unsigned stride){
+  std::ofstream out(filename);
+  if(!out.good()){
+    std::cout << "could not open " << filename << "\n";
+    return;
+  }
+
+  Vec3u gridSize = gradients.GetSize();
+  unsigned vertIdx = 1;
+
+  for(unsigned z = stride; z < gridSize[2] - stride; z += stride){
+    for(unsigned y = stride; y < gridSize[1] - stride; y += stride){
+      for(unsigned x = stride; x < gridSize[0] - stride; x += stride){
+        Vec3f gridCoord(x, y, z);
+        Vec3f worldPos = sdf.WorldCoord(gridCoord);
+        Vec3f grad = gradients(x, y, z);
+
+        Vec3f endPos = worldPos + grad * voxSize;
+
+        out << "v " << worldPos[0] << " " << worldPos[1] << " " << worldPos[2] << "\n";
+        out << "v " << endPos[0] << " " << endPos[1] << " " << endPos[2] << "\n";
+        out << "l " << vertIdx << " " << (vertIdx + 1) << "\n";
+        vertIdx += 2;
+      }
+    }
+  }
+
+  out.close();
+  std::cout << "saved gradient debug to " << filename << "\n";
 }
 
 Transformation PackingScene::Nudge(unsigned itemIdx, const Transformation & tran, const Vec3f & dir,

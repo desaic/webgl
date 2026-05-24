@@ -40,23 +40,6 @@ namespace fs = std::filesystem;
 
 Vec3f closestPointTriangle(const Vec3f & p, const Vec3f & a, const Vec3f & b, const Vec3f & c);
 
-static std::shared_ptr<AdapSDF> ComputeSDF(float distUnit, float h, TrigMesh &mesh) {
-  std::shared_ptr<AdapSDF> sdf = std::make_shared<AdapSDF>();
-  sdf->voxSize = h;
-  sdf->band = 16;
-  sdf->distUnit = distUnit;
-  sdf->BuildTrigList(&mesh);
-  sdf->Compress();
-  mesh.ComputePseudoNormals();
-  sdf->ComputeCoarseDist();
-  CloseExterior(sdf->dist, sdf->MAX_DIST);
-  Array3D8u frozen;
-  //sdf->FastSweepCoarse(frozen);
-  int band = 1000;
-  FastSweepPar(sdf->dist, sdf->voxSize, distUnit, band, frozen);
-  return sdf;
-}
-
 void MakeInnerMesh() {
   TrigMesh container;
   container.LoadStl("F:/meshes/fruit_hand/hands/hand4.5m.stl");
@@ -212,10 +195,7 @@ void PackFruits() {
   Box3f containerBox = scene.container.box;
   scene.broadPhase.Init(containerBox ,broadPhaseDx);
   scene.sortedBySize = SortBySize(scene.items);
-  float sdfDx = 1.0f;
-  float distUnit = 0.001f * sdfDx;
-  std::cout << "computing container sdf \n";
-  scene.sdf = ComputeSDF(distUnit, sdfDx, scene.container.mesh);
+
   std::cout << "computing container sdf done \n";
   scene.outputFolder = dataDir + "/out/";
   std::string packedFile = dataDir + "pack0.txt";
