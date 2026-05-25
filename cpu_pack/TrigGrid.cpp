@@ -85,11 +85,11 @@ void TrigGrid::Build(const TrigMesh &m, float voxSize) {
   });
 }
 
-float TrigGrid::NearestTriangle(const Vec3f &point, float maxDist, Vec3f& normal) const {
-  // Convert point to grid coordinates
+ContactInfo TrigGrid::NearestTriangle(const Vec3f &point, float maxDist) const{
+// Convert point to grid coordinates
   Vec3f gridCoord = (point - origin) * (1.0f / voxelSize);
   Vec3i gridIdx = Vec3i(int(gridCoord[0]), int(gridCoord[1]), int(gridCoord[2]));
-
+  ContactInfo info;
   float minDist = maxDist;
   Vec3u gridSize = grid.GetSize();
   // Search 3x3x3 neighborhood
@@ -125,22 +125,32 @@ float TrigGrid::NearestTriangle(const Vec3f &point, float maxDist, Vec3f& normal
           c = Vec3f(mesh->v[3 * vIdx2], mesh->v[3 * vIdx2 + 1], mesh->v[3 * vIdx2 + 2]);
 
           Vec3f closestPt = closestPointTriangle(point, a, b, c);
+          info.closestPt = closestPt;
           float dist = (point - closestPt).norm();
           if (dist < minDist) {
             minDist = dist;
             // Compute triangle normal
             Vec3f ab = b - a;
             Vec3f ac = c - a;
-            normal = ab.cross(ac);
+            Vec3f normal = ab.cross(ac);
             float normLen = normal.norm();
             if (normLen > 0.0f) {
               normal = normal * (1.0f / normLen);
             }
+            info.normal = normal;
           }
         }
       }
     }
   }
+  info.dist = minDist;
+  return info;
+}
 
-  return minDist;
+float TrigGrid::NearestTriangle(const Vec3f &point, float maxDist, Vec3f& normal) const {
+  ContactInfo info = NearestTriangle(point, maxDist);
+  if(info.dist < maxDist){
+    normal = info.normal;
+  }
+  return info.dist;
 }

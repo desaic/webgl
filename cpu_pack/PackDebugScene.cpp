@@ -36,9 +36,9 @@ void PackDebug() {
   std::vector<MeshInfo> fruits = LoadAllMeshInfo(meshDir);
   scene.items = fruits;
   scene.container;
-  fs::path containerFile(dataDir + "hands/hand4.5m_finger.stl");
+  fs::path containerFile(dataDir + "hands/finger4.8m.stl");
   // fs::path containerFile(dataDir + "box60cm.obj");
-  fs::path innerContainerFile(dataDir + "hands/finger_inner.stl");
+  fs::path innerContainerFile(dataDir + "hands/finger_inner4.8m.stl");
   LoadMeshInfo(scene.container, containerFile);  
   LoadMeshInfo(scene.containerInner, innerContainerFile);
   float broadPhaseDx = 2.0f;
@@ -95,11 +95,12 @@ void PackDebugScene(PackingScene &scene) {
   scene.sortedBySize = SortBySize(scene.items);
 
   unsigned angleIndex = 0;
-  const unsigned MAX_TRIAL_COUNT = 10;
+  const unsigned MAX_TRIAL_COUNT = 2;
   float sdfFactor = 1.0f;
   // redundant lol who cares.
   bool tryMore = true;
   unsigned placeCount = 0;
+  unsigned MAX_DEBUG_PLACE_COUNT = 2;
   while (tryMore) {
     bool canPlace = false;
     unsigned itemIndex = 1;
@@ -126,10 +127,10 @@ void PackDebugScene(PackingScene &scene) {
         std::string line = name + " " + tran.toString();
         out << line <<"\n";
         std::cout << line <<"\n";
-        Vec3f pushDir(-1,0,0);// scene.ForceDirection(itemIndex, tran);
-        
-        TrigMesh inst0 = MakeTransformedMesh(scene.items[itemIndex].mesh, tran);
-        inst0.SaveObj(scene.outputFolder + "/" + itemName + "_" + std::to_string(placeCount) + "_start.obj");
+        // Vec3f pushDir(-1,0,0);// scene.ForceDirection(itemIndex, tran);
+        Vec3f pushDir = scene.ForceDirection(itemIndex, tran);
+        // TrigMesh inst0 = MakeTransformedMesh(scene.items[itemIndex].mesh, tran);
+        // inst0.SaveObj(scene.outputFolder + "/" + itemName + "_" + std::to_string(placeCount) + "_start.obj");
         std::vector<Transformation> trajectory;
         Transformation newTran = scene.Nudge(itemIndex,tran,pushDir, trajectory);
         unsigned instanceId = scene.Put(itemIndex, newTran);
@@ -146,6 +147,9 @@ void PackDebugScene(PackingScene &scene) {
     }
     if (!canPlace) {
       tryMore = false;
+      break;
+    }
+    if(placeCount >= MAX_DEBUG_PLACE_COUNT){
       break;
     }
   }

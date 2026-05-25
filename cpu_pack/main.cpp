@@ -106,6 +106,8 @@ void PackScene(PackingScene & scene) {
 
   unsigned debugCount = 0;
 
+  std::string ProgressFileName = scene.outputFolder + "/traj_progress";
+
   for(unsigned g = 0; g<NUM_GROUPS; g++){
     float sdfFactor = 1.0f;
     if (g == 2) {
@@ -126,6 +128,7 @@ void PackScene(PackingScene & scene) {
         if(scene.items[itemIndex].noMoreFit){
           continue;
         }
+        std::string itemName = scene.items[itemIndex].name;
         bool itemPlaced = false;
         for(unsigned trial = 0; trial<MAX_TRIAL_COUNT; trial++){
           Vec3f pos;
@@ -145,28 +148,31 @@ void PackScene(PackingScene & scene) {
             std::string line = name + " " + tran.toString();
             out << line <<"\n";
             std::cout << line <<"\n";
+
             Vec3f pushDir = scene.ForceDirection(itemIndex, tran);
             std::vector<Transformation> trajectory;
             Transformation newTran = scene.Nudge(itemIndex,tran,pushDir, trajectory);
-            scene.Put(itemIndex, newTran);
+            unsigned instanceId = scene.Put(itemIndex, newTran);
+            scene.instances[instanceId].trajectory = trajectory;
+            // debug
             debugCount ++;
+            if(debugCount % 10 == 0 && debugCount > 0){
+              std::string debugProgressFile = ProgressFileName + std::to_string(int(debugCount/10) % 10) + ".txt";
+              scene.SaveTrajectories(debugProgressFile);
+            }
             break;
           }
         }
         if (!itemPlaced) {
           scene.items[itemIndex].noMoreFit = true;
         }
-        if(debugCount >= 10){
-          break;
-        }
+
       }
       if(!canPlace){
         tryMore = false;
         break;
       }
-      if(debugCount >= 10){
-          break;
-        }
+
     }
 
     for(unsigned i = 0;i < group.size(); i++){        
@@ -186,9 +192,9 @@ void PackFruits() {
   std::vector<MeshInfo> fruits = LoadAllMeshInfo(meshDir);
   scene.items = fruits;
   scene.container;
-  fs::path containerFile(dataDir + "hands/hand4.5m_finger.stl");
+  fs::path containerFile(dataDir + "hands/finger4.8m.stl");
   // fs::path containerFile(dataDir + "box5cm.obj");
-  fs::path innerContainerFile(dataDir + "hands/finger_inner.stl");
+  fs::path innerContainerFile(dataDir + "hands/finger_inner4.8m.stl");
   LoadMeshInfo(scene.container, containerFile);  
   LoadMeshInfo(scene.containerInner, innerContainerFile);
   float broadPhaseDx = 2.0f;
@@ -210,7 +216,7 @@ void PackFruits() {
 
 int main(int argc, char * argv[]){
   std::cout<<argv[0]<<std::endl;
-  // PackFruits();  
-  PackDebug();
+  PackFruits();  
+  // PackDebug();
   return 0;
 }
