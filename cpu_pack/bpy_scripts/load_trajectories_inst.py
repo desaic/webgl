@@ -52,8 +52,8 @@ def load_trajectories(filepath):
                     'initial': None,
                     'trajectory': []
                 }
-
-            elif line.startswith('Initial'):
+                             
+            elif line.startswith('Initial') or line.startswith('Final'):
                 trans = parse_transformation(line)
                 if trans and current_instance:
                     current_instance['initial'] = trans
@@ -74,19 +74,36 @@ def apply_transformation(obj, pos, rot_matrix, scale):
     obj.rotation_quaternion = rot_matrix.to_quaternion()
     obj.scale = (scale, scale, scale)
 
-def animate_instances(instances, frames_per_step=5, pause_frames=10):
+def animate_instances(instances, frames_per_step=3, pause_frames=5):
     current_frame = 1
+    
+    # Dictionary to cache mesh data blocks: { mesh_path : bpy.types.Mesh }
+    loaded_meshes = {}
+    current_collection = bpy.context.collection
 
     for inst in instances:
         mesh_path = inst['mesh_path']
 
-        bpy.ops.wm.obj_import(filepath=mesh_path)
-        obj = bpy.context.selected_objects[0]
+        if mesh_path not in loaded_meshes:
+            # 1. First time seeing this mesh: Load from disk
+            bpy.ops.wm.obj_import(filepath=mesh_path)
+            obj = bpy.context.selected_objects[0]
+            # Cache the underlying mesh block reference
+            loaded_meshes[mesh_path] = obj.data
+        else:
+            # 2. Mesh already exists: Create an instant data link copy
+            mesh_data = loaded_meshes[mesh_path]
+            obj = bpy.data.objects.new(name=f"Instance_{inst['id']}", object_data=mesh_data)
+            current_collection.objects.link(obj)
+
+        # Ensure the outer object wrapper has the unique instance ID name
         obj.name = f"Instance_{inst['id']}"
 
+        # Apply initial state transforms
         pos, rot_matrix, scale = inst['initial']
         apply_transformation(obj, pos, rot_matrix, scale)
 
+        # Visibility Keyframing Setup
         obj.hide_viewport = True
         obj.hide_render = True
         obj.keyframe_insert(data_path="hide_viewport", frame=current_frame-1)
@@ -103,6 +120,7 @@ def animate_instances(instances, frames_per_step=5, pause_frames=10):
 
         current_frame += pause_frames
 
+        # Step-by-Step Trajectory Animation
         for step_idx, (pos, rot_matrix, scale) in enumerate(inst['trajectory']):
             apply_transformation(obj, pos, rot_matrix, scale)
 
@@ -117,12 +135,12 @@ def animate_instances(instances, frames_per_step=5, pause_frames=10):
     bpy.context.scene.frame_end = current_frame
 
 def main():
-    trajectory_file = "F:/meshes/fruit_hand/out/trajectories.txt"
+    trajectory_file = "F:/meshes/fruit_hand/traj_progress8.txt"
 
     instances = load_trajectories(trajectory_file)
     print(f"Loaded {len(instances)} instances")
 
-    animate_instances(instances, frames_per_step=5, pause_frames=10)
+    animate_instances(instances, frames_per_step=3, pause_frames=5)
 
     print("Animation complete")
 
