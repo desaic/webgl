@@ -70,6 +70,11 @@ class AdapDF {
   /// <returns>distance in mm</returns>
   float GetCoarseDist(const Vec3f& x) const;
   /// <summary>
+  /// Computes gradient from coarse distance grid using trilinear interpolation.
+  /// </summary>
+  /// <returns>gradient vector</returns>
+  Vec3f GetCoarseGrad(const Vec3f& x) const;
+  /// <summary>
   /// taken as the min of the bilinear interpolated distance
   /// and the point sample based distance.
   /// </summary>

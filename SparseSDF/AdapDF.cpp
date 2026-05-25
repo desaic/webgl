@@ -551,6 +551,48 @@ float AdapDF::GetCoarseDist(const Vec3f& x) const {
   float v = c * v0 + (1 - c) * v1;
   return v * distUnit;
 }
+
+Vec3f AdapDF::GetCoarseGrad(const Vec3f& x) const {
+  Vec3f local = x - origin;
+  local = local / voxSize;
+  unsigned ix = unsigned(local[0]);
+  unsigned iy = unsigned(local[1]);
+  unsigned iz = unsigned(local[2]);
+  Vec3u gridSize = dist.GetSize();
+  if (ix >= gridSize[0] - 1 || iy >= gridSize[1] - 1 || iz >= gridSize[2] - 1) {
+    return Vec3f(0, 0, 0);
+  }
+  if (ix == 0 || iy == 0 || iz == 0) {
+    return Vec3f(0, 0, 0);
+  }
+  if (OutsideNarrowBand(dist, ix, iy, iz)) {
+    return Vec3f(0, 0, 0);
+  }
+
+  float a = (ix + 1) - local[0];
+  float b = (iy + 1) - local[1];
+  float c = (iz + 1) - local[2];
+
+  float d000 = dist(ix, iy, iz) * distUnit;
+  float d100 = dist(ix + 1, iy, iz) * distUnit;
+  float d010 = dist(ix, iy + 1, iz) * distUnit;
+  float d110 = dist(ix + 1, iy + 1, iz) * distUnit;
+  float d001 = dist(ix, iy, iz + 1) * distUnit;
+  float d101 = dist(ix + 1, iy, iz + 1) * distUnit;
+  float d011 = dist(ix, iy + 1, iz + 1) * distUnit;
+  float d111 = dist(ix + 1, iy + 1, iz + 1) * distUnit;
+
+  float dx = b * c * (d100 - d000) + (1 - b) * c * (d110 - d010) +
+             b * (1 - c) * (d101 - d001) + (1 - b) * (1 - c) * (d111 - d011);
+
+  float dy = a * c * (d010 - d000) + (1 - a) * c * (d110 - d100) +
+             a * (1 - c) * (d011 - d001) + (1 - a) * (1 - c) * (d111 - d101);
+
+  float dz = a * b * (d001 - d000) + (1 - a) * b * (d101 - d100) +
+             a * (1 - b) * (d011 - d010) + (1 - a) * (1 - b) * (d111 - d110);
+
+  return Vec3f(dx / voxSize, dy / voxSize, dz / voxSize);
+}
 /// <summary>
 /// taken as the min of the bilinear interpolated distance
 /// and the point sample based distance.

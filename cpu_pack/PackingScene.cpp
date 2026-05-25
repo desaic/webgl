@@ -52,8 +52,10 @@ unsigned PackingScene::Put(unsigned itemIdx, const Transformation &tran){
 
 Vec3f PackingScene::ForceDirection(unsigned itemIdx, const Transformation & tran)
 {
-  Vec3f dir (-1,-1, -1);
+  Vec3f dir (-1, 0, 0);
 
+  // assume object is centered at origin in reference space.
+  Vec3f sdfDir = sdf->GetCoarseGrad(tran.position);
   unsigned itemGroup = items[itemIdx].groupId;
 
   // push away or towards center depending on item size group.
@@ -115,22 +117,11 @@ Array3D<Vec3f> ComputeSDFGradient(const AdapSDF& sdf, float distUnit, float voxS
   std::cout << "computing sdf gradients on grid " << gridSize[0] << " x "
             << gridSize[1] << " x " << gridSize[2] << "\n";
 
-  for(unsigned z = 1; z < gridSize[2] - 1; z++){
-    for(unsigned y = 1; y < gridSize[1] - 1; y++){
-      for(unsigned x = 1; x < gridSize[0] - 1; x++){
-        float dx_plus = sdf.dist(x+1, y, z) * distUnit;
-        float dx_minus = sdf.dist(x-1, y, z) * distUnit;
-        float dy_plus = sdf.dist(x, y+1, z) * distUnit;
-        float dy_minus = sdf.dist(x, y-1, z) * distUnit;
-        float dz_plus = sdf.dist(x, y, z+1) * distUnit;
-        float dz_minus = sdf.dist(x, y, z-1) * distUnit;
-
-        Vec3f grad;
-        grad[0] = (dx_plus - dx_minus) / (2.0f * voxSize);
-        grad[1] = (dy_plus - dy_minus) / (2.0f * voxSize);
-        grad[2] = (dz_plus - dz_minus) / (2.0f * voxSize);
-
-        gradients(x, y, z) = grad;
+  for (unsigned z = 1; z < gridSize[2] - 1; z++) {
+    for (unsigned y = 1; y < gridSize[1] - 1; y++) {
+      for (unsigned x = 1; x < gridSize[0] - 1; x++) {
+        Vec3f query = sdf.WorldCoord(Vec3f(x, y, z));
+        gradients(x, y, z) = sdf.GetCoarseGrad(query);
       }
     }
   }
