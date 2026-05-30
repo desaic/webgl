@@ -19,6 +19,7 @@
 #include "TrigGrid.h"
 #include "cpu_voxelizer.h"
 #include "meshutil.h"
+#include "MeshOptimization.h"
 #include "pocketfft_3df.h"
 #include "PointSample.h"
 #include "PackDebugScene.h"
@@ -37,6 +38,15 @@
 #include <thread>
 
 namespace fs = std::filesystem;
+
+struct PackingStep{
+  std::vector<std::string> names;
+  unsigned count = 0;
+  // pack towards inside or outside of container.
+  bool outwards = true;
+  // prevent packing at center of container
+  bool useInnerContainer = false;
+};
 
 Vec3f closestPointTriangle(const Vec3f & p, const Vec3f & a, const Vec3f & b, const Vec3f & c);
 
@@ -158,7 +168,7 @@ void PackScene(PackingScene & scene) {
             debugCount ++;
             if(debugCount % 10 == 0 && debugCount > 0){
               std::string debugProgressFile = ProgressFileName + std::to_string(int(debugCount/10) % 10) + ".txt";
-              scene.SaveTrajectories(debugProgressFile);
+              scene.SaveTrajectories(debugProgressFile);              
             }
             break;
           }
@@ -171,15 +181,6 @@ void PackScene(PackingScene & scene) {
       if(!canPlace){
         tryMore = false;
         break;
-      }
-
-    }
-
-    for(unsigned i = 0;i < group.size(); i++){        
-      unsigned itemIndex = group[i];
-      SavePackedMesh(scene, itemIndex);      
-      for(auto & t:scene.placed[i]){
-        t.scale = outputScale;
       }
     }
   }
@@ -213,10 +214,99 @@ void PackFruits() {
   PackScene(scene);
 }
 
+struct MeshStat{
+
+  std::string type;
+  std::string name;
+
+  Box3f box;
+
+  std::string toString() const{
+    std::ostringstream oss;
+    oss<<name;
+    oss << " box " << box.vmin[0] << " " << box.vmin[1] << " " << box.vmin[2] << " " << box.vmax[0] << " "
+        << box.vmax[1] << " " << box.vmax[2];      
+    Vec3f boxSize = box.vmax - box.vmin;
+    oss << " size " << boxSize[0] <<" "<<boxSize[1]<<" "<< boxSize[2] ;
+    return oss.str();
+  }
+
+  void Parse(std::istream & in) {
+    in >> name;
+    std::string token;
+    in >> token;
+    in >> box.vmin[0] >> box.vmin[1] >> box.vmin[2] >> box.vmax[0] 
+        >> box.vmax[1] >> box.vmax[2];
+    // size can be derived from box, so it's not stored in struct.
+    // it's stored in file for human readability
+    in >> token;
+    Vec3f size;
+    in>>size[0] >>size[1] >> size[2];
+  }
+};
+
+void ComputeMeshStats(const std::string & meshDir){
+  fs::path inPath(meshDir);
+  std::string statsFile = meshDir + "/stats.txt";
+  std::ofstream out (statsFile);
+
+  if (!fs::exists(inPath) || !fs::is_directory(inPath)) {
+    std::cout << inPath.string() << " not a valid directory\n";
+    return;
+  }
+  for (const auto &entry : fs::directory_iterator(inPath)) {
+    if (!entry.is_regular_file()) {
+      continue;
+    }
+    fs::path p = entry.path();
+    std::cout << "Full Filename: " << p.filename() << "\n";
+    std::cout << "Stem (Name):   " << p.stem() << "\n";
+    std::cout << "Extension:     " << p.extension() << "\n";
+
+    std::string ext = p.extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
+        return std::tolower(c);
+    });
+    if(ext != ".obj" && ext != ".stl"){
+      std::cout <<"unknown extension " << ext <<" skip\n";
+      continue;
+    }
+
+    std::string stem = p.stem().string();
+    TrigMesh mesh;
+    int ret = LoadMesh(mesh, p);
+    MeshStat stat;
+    stat.name = p.stem().string();
+    stat.box = ComputeBBox(mesh.v);
+    out << stat.toString() <<"\n";
+  }
+  out.close();
+}
+
+void PlanPackingSteps(const std::string & meshDir){
+  std::vector<MeshStat> stats;
+  std::string line;
+  std::ifstream statsFile (meshDir + "/stats.txt");
+  const unsigned MIN_STAT_LEN = 3;
+  while(std::getline(statsFile, line)){
+    if(line.size()<MIN_STAT_LEN){
+      continue;
+    }
+    MeshStat stat;
+    std::istringstream iss(line);
+    stat.Parse(iss);
+    stats.push_back(stat);
+  }
+  std::cout << "loaded " << stats.size() <<" stats\n";
+  std::cout <<"last one is " << stats.back().name <<"\n";
+}
 
 int main(int argc, char * argv[]){
+  std::string meshDir = "F:/meshes/fruit_hand/fruits_1/";
+  // ComputeMeshStats(meshDir);
+  PlanPackingSteps(meshDir);
   std::cout<<argv[0]<<std::endl;
-  PackFruits();  
+ // PackFruits();  
   // PackDebug();
   return 0;
 }

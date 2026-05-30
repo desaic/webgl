@@ -64,7 +64,15 @@ std::vector<MeshInfo> LoadAllMeshInfo(const std::string &meshDir) {
       // skip mirrored meshes.
       continue;
     }
-    MeshInfo info;    
+    std::string ext = p.extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
+        return std::tolower(c);
+    });
+    if(ext != ".obj" && ext != ".stl"){
+      std::cout <<"unknown extension " << ext <<" skip\n";
+      continue;
+    }
+    MeshInfo info;
     int ret = LoadMeshInfo(info, p);    
     if (ret != 0) {
       std::cout << " error " << ret << " loading " << p.filename().string() << "\n";
