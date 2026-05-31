@@ -39,13 +39,33 @@
 
 namespace fs = std::filesystem;
 
-struct PackingStep{
-  std::vector<std::string> names;
-  unsigned count = 0;
-  // pack towards inside or outside of container.
-  bool outwards = true;
-  // prevent packing at center of container
-  bool useInnerContainer = false;
+struct PackingStep {
+
+    std::vector<std::string> names;
+
+    Vec3f force;
+
+    unsigned count = 0;
+    // pack towards inside or outside of container.
+    bool outwards = true;
+    // prevent packing at center of container
+    bool useInnerContainer = false;
+
+    PackingStep() : force(-1, 0, 0) {}
+
+    std::string toString() const {
+      std::ostringstream oss;
+      oss << "names " << names.size() << " ";
+      for (size_t i = 0; i < names.size(); i++) {
+        oss << names[i] << " ";
+      }
+      oss << " force " << force[0] << " " << force[1] << " " << force[2] << " ";
+      oss << "count " << count;
+      oss << " outwards " << outwards << " useInnerContainer " << useInnerContainer;
+      return oss.str();
+    }
+
+    void Parse(std::istream &in) {}
 };
 
 struct PackingPlan{
@@ -62,6 +82,14 @@ struct PackingPlan{
       }
       out <<"\n";
     }
+    out << "num_steps " << steps.size() << "\n";
+    for(size_t i = 0;i<steps.size();i++){
+      out << steps[i].toString () <<"\n";
+    }
+  }
+
+  void Load(std::istream & in){
+
   }
 };
 
@@ -337,6 +365,13 @@ PackingPlan PlanPackingSteps(const std::string & meshDir){
     unsigned gid = GetGroupIndex(len ,SIZE_THRESH);
     plan.groups[gid].push_back(stats[i].name);
   }
+
+  // put 20 medium fruits towards the left
+  const auto & group = plan.groups[1];
+  PackingStep step;
+  step.names = group;
+  step.count = 20;
+  plan.steps.push_back(step);
   return plan;
 }
 
