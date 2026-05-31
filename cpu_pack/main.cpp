@@ -48,6 +48,23 @@ struct PackingStep{
   bool useInnerContainer = false;
 };
 
+struct PackingPlan{
+  std::vector<PackingStep> steps;
+  // lists of meshes grouped by sizes.
+  std::vector< std::vector<std::string> > groups;
+
+  void Save(std::ostream & out){
+    out << "groups " << groups.size() <<"\n";
+    for(size_t i = 0;i< groups.size();i++){
+      out << groups[i].size() << " ";
+      for(size_t j = 0;j<groups[i].size() ;j++){
+        out << groups[i][j] << " ";
+      }
+      out <<"\n";
+    }
+  }
+};
+
 Vec3f closestPointTriangle(const Vec3f & p, const Vec3f & a, const Vec3f & b, const Vec3f & c);
 
 void MakeInnerMesh() {
@@ -283,7 +300,16 @@ void ComputeMeshStats(const std::string & meshDir){
   out.close();
 }
 
-void PlanPackingSteps(const std::string & meshDir){
+unsigned GetGroupIndex(float len, const std::vector<float> & thresh){
+  for(unsigned i = 0;i<thresh.size();i++){
+    if(len > thresh[i]){
+      return i;
+    }
+  }
+  return unsigned(thresh.size());
+}
+
+PackingPlan PlanPackingSteps(const std::string & meshDir){
   std::vector<MeshStat> stats;
   std::string line;
   std::ifstream statsFile (meshDir + "/stats.txt");
@@ -299,12 +325,29 @@ void PlanPackingSteps(const std::string & meshDir){
   }
   std::cout << "loaded " << stats.size() <<" stats\n";
   std::cout <<"last one is " << stats.back().name <<"\n";
+  // >20 large, medium large, medium small, small
+  std::vector<float> SIZE_THRESH = {20, 10, 5};
+
+  PackingPlan plan;
+
+  plan.groups.resize(SIZE_THRESH.size() + 1);
+  for(size_t i = 0;i<stats.size();i++){
+    Vec3f boxSize = stats[i].box.vmax - stats[i].box.vmin;
+    float len = std::max(std::max(boxSize[0], boxSize[1]), boxSize[2]);
+    unsigned gid = GetGroupIndex(len ,SIZE_THRESH);
+    plan.groups[gid].push_back(stats[i].name);
+  }
+  return plan;
 }
 
 int main(int argc, char * argv[]){
   std::string meshDir = "F:/meshes/fruit_hand/fruits_1/";
-  // ComputeMeshStats(meshDir);
-  PlanPackingSteps(meshDir);
+  ComputeMeshStats(meshDir);
+  auto plan = PlanPackingSteps(meshDir);
+  std::ofstream planOut(meshDir + "plan.txt");
+  plan.Save(planOut);
+  planOut.close();
+
   std::cout<<argv[0]<<std::endl;
  // PackFruits();  
   // PackDebug();
