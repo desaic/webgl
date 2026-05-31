@@ -57,10 +57,7 @@ Vec3f PackingScene::ForceDirection(unsigned itemIdx,
   float dir0Weight = 0.5f;
   // assume object is centered at origin in reference space.
   Vec3f sdfDir = sdf->GetCoarseGrad(tran.position);
-
-  Vec3f dir = dir0;
-  dir = dir0Weight * dir0 + (1 - dir0Weight) * (sdfFactor * sdfDir);
-
+  Vec3f dir = dir0Weight * dir0 + (1 - dir0Weight) * (sdfFactor * sdfDir);
   dir.normalize();
   return dir;
 }
@@ -90,7 +87,9 @@ void PackingScene::InitDataStructures() {
 
 void PackingScene::InitContainerGrids() {
   containerGrid.Build(container.mesh, gridDx);
-  containerInnerGrid.Build(containerInner.mesh, gridDx);
+  if(!containerInner.mesh.v.empty()){
+    containerInnerGrid.Build(containerInner.mesh, gridDx);
+  }
 }
 
 std::shared_ptr<AdapSDF> ComputeSDF(float distUnit, float h, TrigMesh &mesh) {

@@ -109,6 +109,7 @@ void PackStep(PackingScene & scene, const PackingStep & step){
             std::ofstream out(packFile);
             scene.SaveInstances(packFile);
           }
+          count ++;
           break;
         }
       }
@@ -161,11 +162,9 @@ void PackFruits(const PackingPlan & plan) {
   float broadPhaseDx = 2.0f;
   Box3f containerBox = scene.container.box;
   scene.broadPhase.Init(containerBox ,broadPhaseDx);
-  scene.sortedBySize = SortBySize(scene.items);
 
-  std::cout << "computing container sdf done \n";
   scene.outputFolder = dataDir + "/out/";
-  std::string packedFile = dataDir + "pack0.txt";
+  // std::string packedFile = dataDir + "pack0.txt";
   //LoadPack(scene, packedFile);
   //for(unsigned i = 0;i<scene.items.size();i++){
     //SavePackedMesh(scene, i);
@@ -308,6 +307,7 @@ PackingPlan PlanPackingSteps(const std::string & meshDir){
   PackingStep step0;
   step0.names = group;
   step0.count = 20;
+  step0.force = Vec3f(-10,0,0);
   plan.steps.push_back(step0);
 
   // pack as many big then medium fruits as possible towards outside of container.
@@ -336,7 +336,6 @@ int main(int argc, char * argv[]){
   // ComputeMeshStats(meshDir);
   auto plan = PlanPackingSteps(meshDir);
   std::cout<<argv[0]<<std::endl;
-  PackFruits(plan);  
-  // PackDebug();
+  PackFruits(plan);
   return 0;
 }

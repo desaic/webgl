@@ -69,7 +69,7 @@ class PackingScene {
     std::vector<std::vector<Transformation> > placed;
     // duplicated with placed.
     std::vector<InstanceInfo>instances;
-    std::vector<int> sortedBySize;
+    
     // mesh name to index into items vector.
     std::map<std::string, unsigned> nameToIndex;
     // 2cm
