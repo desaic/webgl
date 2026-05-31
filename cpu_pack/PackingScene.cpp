@@ -13,6 +13,8 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <numeric>
+#include <random>
 
 namespace fs = std::filesystem;
 
@@ -48,26 +50,37 @@ unsigned PackingScene::Put(unsigned itemIdx, const Transformation &tran) {
   return instances.size() - 1u;
 }
 
-Vec3f PackingScene::ForceDirection(unsigned itemIdx, const Transformation &tran) {
-  Vec3f dir0(-1, 0, 0);
-
-  float dir0Weight = 0.2f;
+Vec3f PackingScene::ForceDirection(unsigned itemIdx, 
+  const Vec3f & gravity, float sdfFactor, const Transformation &tran) {
+  Vec3f dir0 = gravity;
+  // (0, 1)
+  float dir0Weight = 0.5f;
   // assume object is centered at origin in reference space.
   Vec3f sdfDir = sdf->GetCoarseGrad(tran.position);
-  unsigned itemGroup = items[itemIdx].groupId;
 
   Vec3f dir = dir0;
-  if (itemGroup > 1) {
-    dir = dir0Weight * dir0 + (1 - dir0Weight) * (-sdfDir);
-  } else {
-    dir = dir0Weight * dir0 + (1 - dir0Weight) * (sdfDir);
-  }
+  dir = dir0Weight * dir0 + (1 - dir0Weight) * (sdfFactor * sdfDir);
 
   dir.normalize();
   return dir;
 }
 
 void PackingScene::InitDataStructures() {
+  randAngles.resize(100);
+  unsigned int seed = 123;
+  std::mt19937 engine(seed);
+  std::uniform_real_distribution<float> dist(0.0f, 6.2831853);
+  std::uniform_int_distribution<int> intDistri(0);
+  for (size_t i = 0; i < randAngles.size(); i++) {
+    randAngles[i][0] = dist(engine);
+    randAngles[i][1] = dist(engine);
+    randAngles[i][2] = dist(engine);
+  }
+
+
+  for(unsigned i =0;i<items.size();i++){
+    nameToIndex[items[i].name] = i;
+  }
   InitContainerGrids();
   for (size_t i = 0; i < items.size(); i++) {
     items[i].mesh.ComputeVertNormals();
@@ -174,8 +187,7 @@ Transformation PackingScene::Nudge(unsigned itemIdx,
   float broadPhaseDist = ds * maxOptimizationSteps;
 
   float MIN_LineSearchStep = 1e-2f;
-  TrigMesh instMesh = MakeTransformedMesh(items[itemIdx].mesh, tran);
-  bool isSmall = items[itemIdx].groupId > 1;
+  TrigMesh instMesh = MakeTransformedMesh(items[itemIdx].mesh, tran);  
   // samples are in object frame, so that it move with pos and rot.
   // If I need their normals, I need to rotate the normals first.
   std::vector<SamplePoint> samples;
@@ -194,8 +206,7 @@ Transformation PackingScene::Nudge(unsigned itemIdx,
     accGrids[i + 1].Build(neighborMeshes[i], gridDx);
   }
 
-  // small items need inner mesh to prevent them from going inside.
-  if(isSmall){
+  if(innerContainerEnabled){
     accGrids.push_back(containerInnerGrid);
   }
 
@@ -406,6 +417,15 @@ void PackingScene::SaveTrajectories(const std::string &filename) const {
   trajOut.close();
 }
 
+void PackingScene::SaveInstances(const std::string & packFile)const{
+  std::ofstream out(packFile);
+  out << instances.size() <<"\n";
+  for(size_t i = 0;i<instances.size();i++){
+    std::string name = items[instances[i].itemId].name;
+    out << name <<" "<<instances[i].tran.toString()<<"\n";
+  }
+}
+
 void AddInnerContainer(PackingScene &scene) {
   float dx = scene.dx;
   Box3f box = scene.container.box;
@@ -422,7 +442,7 @@ void AddInnerContainer(PackingScene &scene) {
   FloodOutside8u(vox, 1, 2);
   ThreshInPlace(vox, 1);
   Union(scene.bg, Vec3i(0), vox);
-
+  scene.innerContainerEnabled = true;
 
 }
 

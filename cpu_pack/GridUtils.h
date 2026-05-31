@@ -32,6 +32,9 @@ bool InBound(Vec3u x, Vec3u size);
 
 void SaveSlice(const std::string &filename, const Array3D8u &arr, unsigned z, float scale);
 
+// makes the exterior of the container unavailable for packing. 
+// opposite of packed items.
+// boundary value is kept so that no item touches the boundary.
 void InvertContainer(Array3D8u &vox, uint8_t boundaryVal);
 
 // assumes input size is even.

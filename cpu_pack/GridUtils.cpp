@@ -124,7 +124,6 @@ void SaveSlice(const std::string &filename, const Array3D8u &arr, unsigned z, fl
   SavePngGrey(filename, image);
 }
 
-// boundary value is kept so that no item touches the boundary.
 void InvertContainer(Array3D8u &vox, uint8_t boundaryVal) {
   for (auto &val : vox.GetData()) {
     if(val > 0 && val != boundaryVal){

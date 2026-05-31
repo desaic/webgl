@@ -9,7 +9,9 @@
 
 #include <string>
 #include <iomanip>
+#include <iostream>
 #include <filesystem>
+#include <map>
 
 class AdapSDF;
 
@@ -37,7 +39,7 @@ class PackingScene {
     unsigned Put(unsigned itemIdx, const Transformation &tran);
 
     /// heuristic force direction
-    Vec3f ForceDirection(unsigned itemIdx, const Transformation & tran);
+    Vec3f ForceDirection(unsigned itemIdx, const Vec3f & gravity, float sdfFactor, const Transformation & tran);
     /// @brief compute tighter packing location by moving in a given direction.
     /// @param itemIdx 
     /// @param tran 
@@ -48,16 +50,28 @@ class PackingScene {
       return bg.GetOrigin();
     }
 
+    unsigned GetItemIndex(const std::string & name) const {
+      auto it = nameToIndex.find(name);
+      if(it == nameToIndex.end()){
+        return 0;
+      }
+      return it->second;      
+    }
+
     void SaveTrajectories(const std::string &filename) const;
+    void SaveInstances(const std::string & packFile)const;
 
     MeshInfo container;
     MeshInfo containerInner;
+    bool innerContainerEnabled = false;
     std::vector<MeshInfo> items;
     // for each item, list of transformations
     std::vector<std::vector<Transformation> > placed;
     // duplicated with placed.
     std::vector<InstanceInfo>instances;
     std::vector<int> sortedBySize;
+    // mesh name to index into items vector.
+    std::map<std::string, unsigned> nameToIndex;
     // 2cm
     float containerSDFDx = 2.0f;
     std::shared_ptr<AdapSDF> sdf;
@@ -69,11 +83,18 @@ class PackingScene {
     // container acceleration grid for collission.
     TrigGrid containerGrid;
     TrigGrid containerInnerGrid;
+
+    std::vector<Vec3f> randAngles;
+    // progress saving
+    std::string trajFile;
+    unsigned trajFileIndex = 0;
+    std::string packFile;
 };
 
 
 void LoadPack(PackingScene & scene, const std::string & packFile);
 
+/// @brief once added, irreversible.
 void AddInnerContainer(PackingScene & scene);
 
 /// @brief 
