@@ -44,7 +44,12 @@ unsigned PackingScene::Put(unsigned itemIdx, const Transformation &tran) {
   Union(bg, offset, vox);
 
   unsigned instId = instances.size();
-  placed[itemIdx].push_back(tran);
+  if(placed.size() != items.size()){
+    placed.resize(items.size());
+  }
+  if(itemIdx < placed.size()){
+    placed[itemIdx].push_back(tran);
+  }
   instances.push_back(InstanceInfo(itemIdx, tran));
   broadPhase.Add(meshBox, instId);
   return instances.size() - 1u;
@@ -171,12 +176,172 @@ void SaveGradientObj(
   std::cout << "saved gradient debug to " << filename << "\n";
 }
 
+struct Contact {
+    Vec3f worldPos;
+    Vec3f normal;
+    float distance;
+};
+
+float distSq(const Vec3f &a, const Vec3f &b) {  
+  return (a - b).norm2();
+}
+
+std::vector<Contact> reduceClusterTo4Points(const std::vector<Contact> &cluster) {
+  if (cluster.size() <= 4) {
+    return cluster;
+  }
+
+  std::vector<Contact> result;
+  result.reserve(4);
+
+  // Track which indices from the cluster we've already chosen
+  std::vector<bool> chosen(cluster.size(), false);
+
+  // 1. Find the deepest point (critical for resolving penetration)
+  size_t idx0 = 0;
+  float minDistance = cluster[0].distance;
+  for (size_t i = 1; i < cluster.size(); ++i) {
+    if (cluster[i].distance < minDistance) { // Assuming negative = deeper
+      minDistance = cluster[i].distance;
+      idx0 = i;
+    }
+  }
+  result.push_back(cluster[idx0]);
+  chosen[idx0] = true;
+
+  // 2. Find the point furthest away from the deepest point
+  size_t idx1 = 0;
+  float maxDistSq = -1.0f;
+  Vec3f p0 = result[0].worldPos;
+  for (size_t i = 0; i < cluster.size(); ++i) {
+    if (chosen[i])
+      continue;
+    float dSq = distSq(cluster[i].worldPos, p0);
+    if (dSq > maxDistSq) {
+      maxDistSq = dSq;
+      idx1 = i;
+    }
+  }
+  result.push_back(cluster[idx1]);
+  chosen[idx1] = true;
+
+  // 3. Find the point that maximizes the triangle area with p0 and p1
+  size_t idx2 = 0;
+  float maxAreaSq = -1.0f;
+  Vec3f p1 = result[1].worldPos;
+  Vec3f edge01 = p1 - p0;
+  for (size_t i = 0; i < cluster.size(); ++i) {
+    if (chosen[i])
+      continue;
+    Vec3f edge0i = cluster[i].worldPos - p0;
+    // Cross product magnitude squared is proportional to triangle area squared
+    float areaSq = edge01.cross(edge0i).dot(edge01.cross(edge0i));
+    if (areaSq > maxAreaSq) {
+      maxAreaSq = areaSq;
+      idx2 = i;
+    }
+  }
+  result.push_back(cluster[idx2]);
+  chosen[idx2] = true;
+
+  // 4. Find the point that maximizes the quad space
+  // Heuristic: Maximize the minimum distance to any of the 3 existing points
+  size_t idx3 = 0;
+  float maxMinDistSq = -1.0f;
+  Vec3f p2 = result[2].worldPos;
+  for (size_t i = 0; i < cluster.size(); ++i) {
+    if (chosen[i])
+      continue;
+    float d0 = distSq(cluster[i].worldPos, p0);
+    float d1 = distSq(cluster[i].worldPos, p1);
+    float d2 = distSq(cluster[i].worldPos, p2);
+    float minDistSq = std::min({d0, d1, d2});
+
+    if (minDistSq > maxMinDistSq) {
+      maxMinDistSq = minDistSq;
+      idx3 = i;
+    }
+  }
+  result.push_back(cluster[idx3]);
+
+  return result;
+}
+
+// 4 points per normal cluster.
+std::vector<Contact> reduceContactManifold(const std::vector<Contact> &rawContacts,
+                                           float angleThresholdDegrees = 5.0f) {
+  if (rawContacts.empty())
+    return {};
+
+  float dotThreshold = std::cos(angleThresholdDegrees * 3.14159265f / 180.0f);
+  std::vector<std::vector<Contact>> buckets;
+
+  // Bucket contacts sharing roughly the same face normal
+  for (const auto &contact : rawContacts) {
+    bool bucketFound = false;
+    for (auto &bucket : buckets) {
+      if (contact.normal.dot(bucket[0].normal) > dotThreshold) {
+        bucket.push_back(contact);
+        bucketFound = true;
+        break;
+      }
+    }
+    if (!bucketFound) {
+      buckets.push_back(std::vector<Contact>{contact});
+    }
+  }
+
+  // Process each bucket and compile the final manifold
+  std::vector<Contact> finalManifold;
+  for (const auto &bucket : buckets) {
+    std::vector<Contact> reducedCluster = reduceClusterTo4Points(bucket);
+    finalManifold.insert(finalManifold.end(), reducedCluster.begin(), reducedCluster.end());
+  }
+
+  return finalManifold;
+}
+
+// 1 pt per normal cluster
+std::vector<Contact> reduceContacts(const std::vector<Contact> &rawContacts, float angleThresholdDegrees = 5.0f) {
+  std::vector<Contact> reducedContacts;
+
+  // Convert angle threshold to a dot product limit (e.g., cos(3°) ≈ 0.9986)
+  float dotThreshold = std::cos(angleThresholdDegrees * 3.14159265f / 180.0f);
+
+  for (const auto &newContact : rawContacts) {
+    bool matchFound = false;
+
+    for (auto &existingContact : reducedContacts) {
+      // If the normals are pointing at the same cube face
+      if (newContact.normal.dot(existingContact.normal) > dotThreshold) {
+        matchFound = true;
+
+        // Keep the deepest point.
+        // Assumes smaller/more negative distance = deeper penetration.
+        if (newContact.distance < existingContact.distance) {
+          existingContact.worldPos = newContact.worldPos;
+          existingContact.distance = newContact.distance;
+          existingContact.normal = newContact.normal;
+        }
+        break;
+      }
+    }
+
+    // If it's a unique face normal, track it as a new contact row
+    if (!matchFound) {
+      reducedContacts.push_back(newContact);
+    }
+  }
+
+  return reducedContacts;
+}
+
 Transformation PackingScene::Nudge(unsigned itemIdx,
                                    const Transformation &tran,
                                    const Vec3f &dir0,
                                    std::vector<Transformation> &trajectory) {
   Transformation tOut = tran;
-
+  const float CONTACT_ANGLE_THRESH_DEG = 5.0f;                                    
   float ds = 0.5f;                // Maximum linear step distance limit
   float minDist = ds * 0.1f;      // Target contact clearance boundary
   float eps = minDist;            // clearance threshold
@@ -211,18 +376,12 @@ Transformation PackingScene::Nudge(unsigned itemIdx,
 
   // 3. Initialize State Variables for the 6-DOF Solver
   Vec3f currentT = tran.position;
-  Matrix3f rotMat = tran.rotation;
-  Quat4f currentQ = Quat4f::fromRotationMatrix(rotMat);
-
-  struct ActiveContact {
-      Vec3f worldPos;
-      Vec3f normal;
-      float distance;
-  };
+  Matrix3f rotMat0 = tran.rotation;
+  Quat4f currentQ = Quat4f::fromRotationMatrix(rotMat0);
 
   // 4. Main Kinematic Optimization Loop
   for (size_t step = 0; step < maxOptimizationSteps; step++) {
-    std::vector<ActiveContact> activeContacts;
+    std::vector<Contact> activeContacts;
     Matrix3f currentRotMat = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
     Vec3f jitter(((float)rand() / RAND_MAX * 2.0f) - 1.0f, ((float)rand() / RAND_MAX * 2.0f) - 1.0f,
                  ((float)rand() / RAND_MAX * 2.0f) - 1.0f);
@@ -233,10 +392,11 @@ Transformation PackingScene::Nudge(unsigned itemIdx,
     // Gather all active surface contacts across all neighboring distance grids
     for (size_t s = 0; s < samples.size(); s++) {
       Vec3f worldPt = currentRotMat * samples[s].x + currentT;
+      Vec3f worldPt0 = rotMat0 * samples[s].x + tran.position;
       for (unsigned m = 0; m < accGrids.size(); m++) {
         ContactInfo info = accGrids[m].NearestTriangle(worldPt, ds);
         // "fix" inverted normal. only works if initially not in contact.
-        Vec3f sampleToSurf = info.closestPt - worldPt;
+        Vec3f sampleToSurf = info.closestPt - worldPt0;
         // If the point is close enough to be an obstacle, track it
         if (info.dist >= 0.0f && info.dist < eps + activeBuffer) {
           if (sampleToSurf.dot(info.normal) > 0) {
@@ -247,6 +407,7 @@ Transformation PackingScene::Nudge(unsigned itemIdx,
       }
     }
 
+    std::vector<Contact> contacts = reduceContactManifold(activeContacts, CONTACT_ANGLE_THRESH_DEG);
     // Initialize our ideal target movement delta (push down the packing direction)
     Vec3f deltaX = ds * dir;
     // maximum rotation wiggle per step (e.g., ~3 degrees in radians)
@@ -257,13 +418,13 @@ Transformation PackingScene::Nudge(unsigned itemIdx,
                      ((float)rand() / RAND_MAX * 2.0f - 1.0f) * maxRotJitter,
                      ((float)rand() / RAND_MAX * 2.0f - 1.0f) * maxRotJitter);
     // Track accumulated impulses (lambdas) for proper unilateral LCP PGS
-    std::vector<float> lambdas(activeContacts.size(), 0.0f);
+    std::vector<float> lambdas(contacts.size(), 0.0f);
 
     // Run Sequential Constraint Projection passes (Matrix-free PGS)
-    int pgsPasses = 4;
+    int pgsPasses = 8;
     for (int pass = 0; pass < pgsPasses; pass++) {
-      for (size_t c = 0; c < activeContacts.size(); c++) {
-        const auto &contact = activeContacts[c];
+      for (size_t c = 0; c < contacts.size(); c++) {
+        const auto &contact = contacts[c];
         Vec3f r = contact.worldPos - currentT;
         Vec3f r_cross_n = r.cross(contact.normal);
 

@@ -154,7 +154,6 @@ void PackFruits(const PackingPlan & plan) {
   PackingScene scene;
   std::vector<MeshInfo> fruits = LoadAllMeshInfo(meshDir);
   scene.items = fruits;
-  scene.container;
   fs::path containerFile(dataDir + "hands/finger4.8m.stl");
   fs::path innerContainerFile(dataDir + "hands/finger_inner4.8m.stl");
   LoadMeshInfo(scene.container, containerFile);  
@@ -331,7 +330,37 @@ PackingPlan PlanPackingSteps(const std::string & meshDir){
   return plan;
 }
 
+void DebugNudge(){
+  PackingScene scene;
+  std::string dataDir = "F:/meshes/fruit_hand/";
+  std::string meshDir = dataDir + "fruit0/";
+  std::vector<MeshInfo> fruits = LoadAllMeshInfo(meshDir);
+  scene.items = fruits;
+  scene.container;
+  fs::path containerFile(dataDir + "box5cm.obj");
+  LoadMeshInfo(scene.container, containerFile);  
+  float broadPhaseDx = 2.0f;
+  Box3f containerBox = scene.container.box;
+  scene.broadPhase.Init(containerBox ,broadPhaseDx);
+  scene.outputFolder = dataDir + "/out/";
+  scene.InitDataStructures();
+
+  Transformation tran;
+  tran.position = Vec3f(0,-1.8,-1.8);
+  tran.rotation = RotationMatrixRad(0, 0, 0);
+  Vec3f pushDir = Vec3f(-1,-1,-1);
+  std::vector<Transformation> trajectory;
+  Transformation newTran = scene.Nudge(0,tran,pushDir, trajectory);
+  unsigned instanceId = scene.Put(0, newTran);
+  scene.instances[instanceId].trajectory = trajectory;
+  // debug save trajectory progress
+  std::string trajFile = dataDir + "traj_debug.txt";
+  scene.SaveTrajectories(trajFile);              
+}
+
 int main(int argc, char * argv[]){
+  DebugNudge();
+
   std::string meshDir = "F:/meshes/fruit_hand/fruits_1/";
   // ComputeMeshStats(meshDir);
   auto plan = PlanPackingSteps(meshDir);
