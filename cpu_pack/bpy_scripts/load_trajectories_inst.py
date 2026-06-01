@@ -135,7 +135,7 @@ def animate_instances(instances, frames_per_step=3, pause_frames=5):
     bpy.context.scene.frame_end = current_frame
 
 def main():
-    trajectory_file = "F:/meshes/fruit_hand/traj_debug.txt"
+    trajectory_file = "F:/meshes/fruit_hand/traj6.txt"
 
     instances = load_trajectories(trajectory_file)
     print(f"Loaded {len(instances)} instances")

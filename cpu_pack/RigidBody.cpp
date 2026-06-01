@@ -18,6 +18,7 @@ RigidBody::RigidBody(TrigMesh &input) {
     com += tetCenter * tetVolume;
     totalVolume += tetVolume;
   }
+  vol = totalVolume;
   com /= totalVolume;
   oldOrigin = com;
   // Transform mesh to inertia frame

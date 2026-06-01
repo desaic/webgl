@@ -37,7 +37,9 @@ int LoadMeshInfo(MeshInfo &info, const fs::path &p) {
     return ret;
   }
   info.name = p.stem().string();
-  info.box = ComputeBBox(info.mesh.v);  
+  info.box = ComputeBBox(info.mesh.v);
+  RigidBody rb(info.mesh);
+  info.rb.Set(rb);
   return ret;
 }
 

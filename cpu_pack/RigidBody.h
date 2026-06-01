@@ -1,3 +1,4 @@
+#pragma once
 #include "Matrix3f.h"
 #include "TrigMesh.h"
 #include "Quat4f.h"
@@ -17,10 +18,30 @@ class RigidBody {
 
     TrigMesh mesh;
 
+    float vol = 0.0f;
+
     RigidBody(TrigMesh &input);
 
     TrigMesh GetOriginalPose() const;
 };
+
+struct RigidBodyInfo{
+    Vec3f centerOfMass;
+    // going from inertia frame back to input pose.
+    Matrix3f R0;
+
+    Matrix3f inertia;
+
+    float vol = 0.0f;
+    RigidBodyInfo(){}
+    void Set(const RigidBody &rb) {
+      centerOfMass = rb.oldOrigin;
+      R0 = rb.R0;
+      inertia = rb.inertia;
+      vol = rb.vol;
+    }
+};
+
 
 class RigidInstance{
 public:

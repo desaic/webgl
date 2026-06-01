@@ -1,5 +1,6 @@
 #pragma once
 #include "BBox.h"
+#include "RigidBody.h"
 #include "TrigMesh.h"
 #include "Matrix3f.h"
 #include <filesystem>
@@ -12,6 +13,8 @@ class MeshInfo {
     std::string filePath;
     TrigMesh mesh;
 
+    RigidBodyInfo rb;
+    
     bool noMoreFit = false;
     float BoxDiagonal() const {
       return (box.vmax - box.vmin).norm();

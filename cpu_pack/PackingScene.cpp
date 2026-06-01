@@ -341,6 +341,10 @@ Transformation PackingScene::Nudge(unsigned itemIdx,
                                    const Vec3f &dir0,
                                    std::vector<Transformation> &trajectory) {
   Transformation tOut = tran;
+
+  // from inertia frame to current transform.
+  //RigidBodyInfo rb = items[itemIdx].rb;
+  
   const float CONTACT_ANGLE_THRESH_DEG = 5.0f;                                    
   float ds = 0.5f;                // Maximum linear step distance limit
   float minDist = ds * 0.1f;      // Target contact clearance boundary
@@ -379,14 +383,19 @@ Transformation PackingScene::Nudge(unsigned itemIdx,
   Matrix3f rotMat0 = tran.rotation;
   Quat4f currentQ = Quat4f::fromRotationMatrix(rotMat0);
 
+  // Matrix3f invI_local = Matrix3f::Zero();  
+  // for(unsigned i = 0;i<3;i++){    
+  //   if(rb.inertia(i,i) > 0){
+  //     invI_local(i,i) = 1.0f/rb.inertia(i,i);
+  //   }else{
+  //     invI_local(i,i) = 1.0f;
+  //   }
+  // }
   // 4. Main Kinematic Optimization Loop
   for (size_t step = 0; step < maxOptimizationSteps; step++) {
     std::vector<Contact> activeContacts;
     Matrix3f currentRotMat = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
-    Vec3f jitter(((float)rand() / RAND_MAX * 2.0f) - 1.0f, ((float)rand() / RAND_MAX * 2.0f) - 1.0f,
-                 ((float)rand() / RAND_MAX * 2.0f) - 1.0f);
-    jitter.normalize();
-    Vec3f dir = dir0 + jitter * 0.10f;
+    Vec3f dir = dir0;
     dir.normalize();
 
     // Gather all active surface contacts across all neighboring distance grids
@@ -410,13 +419,9 @@ Transformation PackingScene::Nudge(unsigned itemIdx,
     std::vector<Contact> contacts = reduceContactManifold(activeContacts, CONTACT_ANGLE_THRESH_DEG);
     // Initialize our ideal target movement delta (push down the packing direction)
     Vec3f deltaX = ds * dir;
-    // maximum rotation wiggle per step (e.g., ~3 degrees in radians)
-    float maxRotJitter = 0.05f;
 
     // 2. Generate a random torque/angular velocity vector
-    Vec3f deltaTheta(((float)rand() / RAND_MAX * 2.0f - 1.0f) * maxRotJitter,
-                     ((float)rand() / RAND_MAX * 2.0f - 1.0f) * maxRotJitter,
-                     ((float)rand() / RAND_MAX * 2.0f - 1.0f) * maxRotJitter);
+    Vec3f deltaTheta(0.0f);
     // Track accumulated impulses (lambdas) for proper unilateral LCP PGS
     std::vector<float> lambdas(contacts.size(), 0.0f);
 
@@ -425,7 +430,7 @@ Transformation PackingScene::Nudge(unsigned itemIdx,
     for (int pass = 0; pass < pgsPasses; pass++) {
       for (size_t c = 0; c < contacts.size(); c++) {
         const auto &contact = contacts[c];
-        Vec3f r = contact.worldPos - currentT;
+        Vec3f r = contact.worldPos - (currentT );
         Vec3f r_cross_n = r.cross(contact.normal);
 
         // Evaluate the current velocity projection row matching this contact

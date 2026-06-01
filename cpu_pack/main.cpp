@@ -79,6 +79,7 @@ void PackStep(PackingScene & scene, const PackingStep & step){
       if (item.noMoreFit) {
         continue;
       }
+      bool itemPlaced = false;
       for (unsigned trial = 0; trial < MAX_TRIAL_COUNT; trial++) {
         Vec3f pos;
         Vec3f rot = scene.randAngles[angleIndex];
@@ -86,12 +87,13 @@ void PackStep(PackingScene & scene, const PackingStep & step){
         if (angleIndex >= scene.randAngles.size()) {
           angleIndex = 0;
         }
-        bool success = FindSpot(scene.bg, scene.items[itemIndex].mesh, pos, rot, scene.sdf, sdfFactor);
+        bool success = FindSpot(scene.bg, item.mesh, pos, rot, scene.sdf, sdfFactor);
         if (success) {
           packSuccess = true;
+          itemPlaced = true;
           Transformation tran;
           tran.position = pos;
-          tran.rotation = RotationMatrixRad(rot[0], rot[1], rot[2]);          
+          tran.rotation = RotationMatrixRad(rot[0], rot[1], rot[2]);
 
           Vec3f pushDir = scene.ForceDirection(itemIndex, step.force, sdfFactor, tran);
           std::vector<Transformation> trajectory;
@@ -101,7 +103,7 @@ void PackStep(PackingScene & scene, const PackingStep & step){
           // debug save trajectory progress
           if(count % 10 == 0 && count > 0){
             std::string trajFile = scene.trajFile + std::to_string(int(count/10) % 10) + ".txt";
-            scene.SaveTrajectories(trajFile);              
+            scene.SaveTrajectories(trajFile);
           }
           // debug save instances progress
           if( count % 20 == 0 && count > 0){
@@ -113,10 +115,8 @@ void PackStep(PackingScene & scene, const PackingStep & step){
           break;
         }
       }
-      if(!packSuccess){
-        scene.items[itemIndex].noMoreFit = true;
-      }else{
-        startNameIndex = nameIndex;
+      if(!itemPlaced){
+        item.noMoreFit = true;
       }
     }
     if (!packSuccess) {
@@ -359,7 +359,7 @@ void DebugNudge(){
 }
 
 int main(int argc, char * argv[]){
-  DebugNudge();
+  // DebugNudge();
 
   std::string meshDir = "F:/meshes/fruit_hand/fruits_1/";
   // ComputeMeshStats(meshDir);
