@@ -43,13 +43,6 @@ struct RigidBodyInfo{
 };
 
 
-class RigidInstance{
-public:
-  std::shared_ptr<RigidBody> refBody;
-  Vec3f x;
-  Quat4f r;
-};
-
 static void TestInertiaFrame(){
   const std::string fruitFile = "F:/meshes/fruit_hand/papaya_debug.obj";
   TrigMesh mesh;

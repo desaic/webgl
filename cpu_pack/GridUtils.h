@@ -2,6 +2,7 @@
 #include "Array3D.h"
 #include <array>
 #include <complex>
+#include <stdint.h>
 // similar to array utils lol.
 
 Vec3f AlignOriginToGrid(const Vec3f &o, float dx) ;

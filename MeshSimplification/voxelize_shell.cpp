@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstdint>
 #include "voxelize_shell.h"
 #include "BBox.h"
 #include "Vec2.h"

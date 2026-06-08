@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+#include <cmath>
 #include <vector>
 
 namespace MeshOptimization {

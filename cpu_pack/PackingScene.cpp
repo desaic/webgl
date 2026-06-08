@@ -563,10 +563,6 @@ void LoadPack(PackingScene &scene, const std::string &packFile) {
   }
 }
 
-static std::array<float, 3> ToArray(const Vec3f &v) {
-  return {v[0], v[1], v[2]};
-}
-
 void PackingScene::SaveTrajectories(const std::string &filename) const {
   std::ofstream trajOut(filename);
   for (size_t i = 0; i < instances.size(); i++) {

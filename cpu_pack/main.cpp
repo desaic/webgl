@@ -148,8 +148,7 @@ void PackScene(PackingScene & scene, const PackingPlan & plan) {
   } 
 }
 
-void PackFruits(const PackingPlan & plan) {
-  std::string dataDir = "F:/meshes/fruit_hand/";
+void PackFruits(const PackingPlan & plan, const std::string & dataDir) {  
   std::string meshDir = dataDir + "fruits_1/";
   PackingScene scene;
   std::vector<MeshInfo> fruits = LoadAllMeshInfo(meshDir);
@@ -361,10 +360,14 @@ void DebugNudge(){
 int main(int argc, char * argv[]){
   // DebugNudge();
 
-  std::string meshDir = "F:/meshes/fruit_hand/fruits_1/";
+  // std::string meshDir = "F:/meshes/fruit_hand/fruits_1/";
+  //linux
+  std::string dataDir = "/media/desaic/WD/meshes/fruit_hand/";
+  std::string meshDir = dataDir + "/fruits_1/";
+
   // ComputeMeshStats(meshDir);
   auto plan = PlanPackingSteps(meshDir);
   std::cout<<argv[0]<<std::endl;
-  PackFruits(plan);
+  PackFruits(plan, dataDir);
   return 0;
 }

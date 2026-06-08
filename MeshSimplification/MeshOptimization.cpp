@@ -1,6 +1,7 @@
 #include "MeshOptimization.h"
 #include "meshoptimizer.h"
 #include <array>
+#include <cmath>
 #include <iostream>
 #include <fstream>
 #include <filesystem>
@@ -140,7 +141,7 @@ void SimplifiedMeshParallel(std::vector<float>& V_in, std::vector<uint32_t>& T_i
     auto& cur_T_out = T_out_split[block_idx];
     int nVert = cur_V_in.size() / 3;
     if (nVert == 0 || cur_T_in.size() == 0) return;
-    size_t targetIndexCountMini = std::max(1ull, size_t(cur_T_in.size() * targetCountFraction));
+    size_t targetIndexCountMini = std::max(size_t(1u), size_t(cur_T_in.size() * targetCountFraction));
     cur_T_out.resize(meshopt_simplify(&cur_T_out[0], &cur_T_in[0], cur_T_in.size(), &cur_V_in[0],
                                       nVert, 3 * sizeof(float), targetIndexCountMini, targetError,
                                       meshopt_SimplifyLockBorder, &result_error));
@@ -152,7 +153,7 @@ void SimplifiedMeshParallel(std::vector<float>& V_in, std::vector<uint32_t>& T_i
     }
   }
 
-  size_t targetIndexCount = std::max(1ull, size_t(merged_T_out.size() * targetCountFraction));
+  size_t targetIndexCount = std::max(size_t(1u), size_t(merged_T_out.size() * targetCountFraction));
 
   T_out.resize(merged_T_out.size());
   T_out.resize(meshopt_simplify(&T_out[0], &merged_T_out[0], merged_T_out.size(), &V_in[0], nVertsIn, 3 * sizeof(float), targetIndexCount, targetError, 0, &result_error));
@@ -166,7 +167,7 @@ void ComputeSimplifiedMesh(std::vector<float>& V_in, std::vector<uint32_t>& T_in
                            std::vector<float>& V_out, std::vector<uint32_t>& T_out)
 {
 
-  size_t targetIndexCount = std::max(1ull, size_t(T_in.size() * targetCountFraction));
+  size_t targetIndexCount = std::max(size_t(1u), size_t(T_in.size() * targetCountFraction));
   // compute targetError from mm to relative
   BBox box;
   if (V_in.size() == 0) {

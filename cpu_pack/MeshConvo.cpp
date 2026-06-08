@@ -5,6 +5,7 @@
 #include "GridUtils.h"
 
 #include <thread>
+#include <cstring>
 
 unsigned PadSize(unsigned s, unsigned alignment) {
   if ((s > 0) && (s % alignment == 0)) {

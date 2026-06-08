@@ -3,6 +3,7 @@
 #include "ImageIO.h"
 #include "pocketfft_3df.h"
 
+#include <algorithm>
 #include <thread>
 
 
