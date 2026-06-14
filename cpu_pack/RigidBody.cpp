@@ -22,18 +22,15 @@ RigidBody::RigidBody(TrigMesh &input) {
   com /= totalVolume;
   oldOrigin = com;
   // Transform mesh to inertia frame
-  mesh = input;
-  for(size_t i = 0;i<mesh.GetNumVerts();i++){
-    mesh.Vert(i) = mesh.Vert(i) - com;
-  }
+  auto const &mesh = input;
 
   // Compute inertia tensor about center of mass
   Matrix3f I;
   for (size_t i = 0; i < mesh.GetNumTrigs(); i++) {
     Vec3u tri = mesh.Trig(i);
-    Vec3f v0 = mesh.Vert(tri[0]);
-    Vec3f v1 = mesh.Vert(tri[1]);
-    Vec3f v2 = mesh.Vert(tri[2]);
+    Vec3f v0 = mesh.Vert(tri[0]) - com;
+    Vec3f v1 = mesh.Vert(tri[1]) - com;
+    Vec3f v2 = mesh.Vert(tri[2]) - com;
 
     float tetVolume = v0.dot(v1.cross(v2)) / 6.0f;
 
@@ -90,19 +87,6 @@ RigidBody::RigidBody(TrigMesh &input) {
   inertia(1, 1) = eigenvalues[1];
   inertia(2, 2) = eigenvalues[2];
 
-  // Transform mesh to inertia frame
-  Matrix3f Rt = R0.transposed();
-  for (size_t i = 0; i < mesh.GetNumVerts(); i++) {
-    mesh.Vert(i) = Rt * mesh.Vert(i);
-  }
-}
-
-TrigMesh RigidBody::GetOriginalPose()const{
-    TrigMesh orig = mesh;
-    for(size_t i = 0;i<orig.GetNumVerts();i++){
-        orig.Vert(i) = R0 * orig.Vert(i) + oldOrigin;
-    }
-    return orig;
 }
 
 // Helper to find a non-zero vector perpendicular to a given vector
@@ -260,4 +244,16 @@ Matrix3f eigVecFromVal(const Matrix3f &A_in, const double *eigenvalues) {
   }
 
   return eigenvectors;
+}
+
+void TestInertiaFrame(){
+  const std::string fruitFile = "F:/meshes/fruit_hand/papaya_debug.obj";
+  TrigMesh mesh;
+  mesh.LoadObj(fruitFile);
+  RigidBody rb(mesh);
+  TrigMesh inertiaMesh;
+
+  inertiaMesh.SaveObj("F:/meshes/fruit_hand/debug_inertia_papaya.obj");
+  TrigMesh roundTrip;
+  roundTrip.SaveObj("F:/meshes/fruit_hand/debug_around_papaya.obj");
 }

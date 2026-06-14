@@ -5,10 +5,11 @@
 #include "Matrix3f.h"
 #include "Array3D.h"
 #include "cpu_voxelizer.h"
+#include "RigidTransform.h"
 
-TrigMesh MakeTransformedMesh(const TrigMesh & mesh, const Transformation & tran);
+TrigMesh MakeTransformedMesh(const TrigMesh & mesh, const RigidTransform & tran);
 
-TrigMesh MakeMergedMesh(const TrigMesh & item, const std::vector<Transformation> & trans);
+TrigMesh MakeMergedMesh(const TrigMesh & item, const std::vector<RigidTransform> & trans);
 
 Matrix3f RotationMatrixRad(float rx, float ry, float rz);
 void TransformVerts(const std::vector<float> &verts, std::vector<float> &dst, const Matrix3f mat);

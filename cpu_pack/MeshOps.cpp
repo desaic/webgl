@@ -1,7 +1,7 @@
 #include "MeshOps.h"
 #include "Matrix3f.h"
 
-TrigMesh MakeTransformedMesh(const TrigMesh & mesh, const Transformation & tran){
+TrigMesh MakeTransformedMesh(const TrigMesh & mesh, const RigidTransform & tran){
   TrigMesh transformedMesh = mesh;
   transformedMesh.scale(tran.scale);
   Matrix3f rotMat = tran.rotation;
@@ -12,7 +12,7 @@ TrigMesh MakeTransformedMesh(const TrigMesh & mesh, const Transformation & tran)
   return transformedMesh;
 }
 
-TrigMesh MakeMergedMesh(const TrigMesh & item, const std::vector<Transformation> & trans){
+TrigMesh MakeMergedMesh(const TrigMesh & item, const std::vector<RigidTransform> & trans){
   TrigMesh merged;
   for(const auto tran: trans){
     TrigMesh inst = MakeTransformedMesh(item, tran);

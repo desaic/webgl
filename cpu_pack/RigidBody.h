@@ -12,17 +12,15 @@ class RigidBody {
   public:
     Vec3f oldOrigin;
     // going from inertia frame back to input pose.
+    // R0^T to get mesh from input frame to inertia frame.
     Matrix3f R0;
 
     Matrix3f inertia;
-
-    TrigMesh mesh;
 
     float vol = 0.0f;
 
     RigidBody(TrigMesh &input);
 
-    TrigMesh GetOriginalPose() const;
 };
 
 struct RigidBodyInfo{
@@ -43,12 +41,4 @@ struct RigidBodyInfo{
 };
 
 
-static void TestInertiaFrame(){
-  const std::string fruitFile = "F:/meshes/fruit_hand/papaya_debug.obj";
-  TrigMesh mesh;
-  mesh.LoadObj(fruitFile);
-  RigidBody rb(mesh);
-  rb.mesh.SaveObj("F:/meshes/fruit_hand/debug_inertia_papaya.obj");
-  TrigMesh roundTrip = rb.GetOriginalPose();
-  roundTrip.SaveObj("F:/meshes/fruit_hand/debug_around_papaya.obj");
-}
+void TestInertiaFrame();

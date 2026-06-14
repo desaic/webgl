@@ -22,7 +22,7 @@ Vec3i roundf(const Vec3f &fvec) {
   return Vec3i(std::round(fvec[0]), std::round(fvec[1]), std::round(fvec[2]));
 }
 
-unsigned PackingScene::Put(unsigned itemIdx, const Transformation &tran) {
+unsigned PackingScene::Put(unsigned itemIdx, const RigidTransform &tran) {
   TrigMesh inst = MakeTransformedMesh(items[itemIdx].mesh, tran);
   Box3f bbox = ComputeBBox(inst.v);
   // saved for broad phase.
@@ -56,7 +56,7 @@ unsigned PackingScene::Put(unsigned itemIdx, const Transformation &tran) {
 }
 
 Vec3f PackingScene::ForceDirection(unsigned itemIdx, 
-  const Vec3f & gravity, float sdfFactor, const Transformation &tran) {
+  const Vec3f & gravity, float sdfFactor, const RigidTransform &tran) {
   Vec3f dir0 = gravity;
   // (0, 1)
   float dir0Weight = 0.5f;
@@ -336,11 +336,11 @@ std::vector<Contact> reduceContacts(const std::vector<Contact> &rawContacts, flo
   return reducedContacts;
 }
 
-Transformation PackingScene::Nudge(unsigned itemIdx,
-                                   const Transformation &tran,
+RigidTransform PackingScene::Nudge(unsigned itemIdx,
+                                   const RigidTransform &tran,
                                    const Vec3f &dir0,
-                                   std::vector<Transformation> &trajectory) {
-  Transformation tOut = tran;
+                                   std::vector<RigidTransform> &trajectory) {
+  RigidTransform tOut = tran;
 
   // from inertia frame to current transform.
   //RigidBodyInfo rb = items[itemIdx].rb;
@@ -509,10 +509,9 @@ Transformation PackingScene::Nudge(unsigned itemIdx,
     }
     // for debug visualization.
     trajectory.push_back(
-        Transformation(currentT, Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w())));
+        RigidTransform(currentT, Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w())));
   }
 
-  // 6. Export the finalized values back into your scene Transformation layout
   tOut.position = currentT;
   tOut.rotation = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
 
@@ -532,7 +531,7 @@ void LoadPack(PackingScene &scene, const std::string &packFile) {
   while (std::getline(in, line)) {
     std::istringstream iss(line);
     std::string itemName, posLabel, rotLabel, scaleLabel;
-    Transformation trans;
+    RigidTransform trans;
 
     // Parse: ItemName pos x y z rot x y z scale s
     if (iss >> itemName >> posLabel >> trans.position[0] >> trans.position[1] >> trans.position[2] >> rotLabel >>

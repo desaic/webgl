@@ -2,6 +2,7 @@
 
 #include "BBox.h"
 #include "BroadPhase.h"
+#include "RigidTransform.h"
 #include "TrigMesh.h"
 #include "MeshConvo.h"
 #include "MeshInfo.h"
@@ -17,11 +18,11 @@ class AdapSDF;
 
 struct InstanceInfo{
   unsigned itemId = 0;
-  Transformation tran;
-  InstanceInfo(unsigned i, const Transformation & t):itemId(i), tran(t){}
+  RigidTransform tran;
+  InstanceInfo(unsigned i, const RigidTransform & t):itemId(i), tran(t){}
 
   // for debug visualization.
-  std::vector<Transformation> trajectory;
+  std::vector<RigidTransform> trajectory;
 };
 
 class PackingScene {
@@ -36,15 +37,15 @@ class PackingScene {
     /// @param itemIdx 
     /// @param tran 
     /// @return instance index
-    unsigned Put(unsigned itemIdx, const Transformation &tran);
+    unsigned Put(unsigned itemIdx, const RigidTransform &tran);
 
     /// heuristic force direction
-    Vec3f ForceDirection(unsigned itemIdx, const Vec3f & gravity, float sdfFactor, const Transformation & tran);
+    Vec3f ForceDirection(unsigned itemIdx, const Vec3f & gravity, float sdfFactor, const RigidTransform & tran);
     /// @brief compute tighter packing location by moving in a given direction.
     /// @param itemIdx 
     /// @param tran 
     /// @return 
-    Transformation Nudge(unsigned itemIdx, const Transformation & tran, const Vec3f & dir, std::vector<Transformation> & trajectory);
+    RigidTransform Nudge(unsigned itemIdx, const RigidTransform & tran, const Vec3f & dir, std::vector<RigidTransform> & trajectory);
 
     Vec3f WorldOrigin()const{
       return bg.GetOrigin();
@@ -66,7 +67,7 @@ class PackingScene {
     bool innerContainerEnabled = false;
     std::vector<MeshInfo> items;
     // for each item, list of transformations
-    std::vector<std::vector<Transformation> > placed;
+    std::vector<std::vector<RigidTransform> > placed;
     // duplicated with placed.
     std::vector<InstanceInfo>instances;
     

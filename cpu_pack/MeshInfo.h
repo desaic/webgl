@@ -3,6 +3,8 @@
 #include "RigidBody.h"
 #include "TrigMesh.h"
 #include "Matrix3f.h"
+#include "Matrix4f.h"
+
 #include <filesystem>
 #include <string>
 
@@ -19,19 +21,6 @@ class MeshInfo {
     float BoxDiagonal() const {
       return (box.vmax - box.vmin).norm();
     }
-};
-
-// Structure to store transformation data
-struct Transformation {
-    Vec3f position;
-    Matrix3f rotation;    
-    float scale = 1.0f;
-    Transformation():rotation(Matrix3f::identity()){}
-    Transformation(const Vec3f & pos, const Matrix3f & rot):position(pos),
-    rotation(rot){}
-    /// @brief 
-    /// @return rotation matrix is printed in row major order. even though internally stored in column major order.
-    std::string toString() const;
 };
 
 int LoadMesh(TrigMesh &m, const std::filesystem::path &p);

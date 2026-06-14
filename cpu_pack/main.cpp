@@ -91,13 +91,13 @@ void PackStep(PackingScene & scene, const PackingStep & step){
         if (success) {
           packSuccess = true;
           itemPlaced = true;
-          Transformation tran;
+          RigidTransform tran;
           tran.position = pos;
           tran.rotation = RotationMatrixRad(rot[0], rot[1], rot[2]);
 
           Vec3f pushDir = scene.ForceDirection(itemIndex, step.force, sdfFactor, tran);
-          std::vector<Transformation> trajectory;
-          Transformation newTran = scene.Nudge(itemIndex,tran,pushDir, trajectory);
+          std::vector<RigidTransform> trajectory;
+          RigidTransform newTran = scene.Nudge(itemIndex,tran,pushDir, trajectory);
           unsigned instanceId = scene.Put(itemIndex, newTran);
           scene.instances[instanceId].trajectory = trajectory;
           // debug save trajectory progress
@@ -344,12 +344,12 @@ void DebugNudge(){
   scene.outputFolder = dataDir + "/out/";
   scene.InitDataStructures();
 
-  Transformation tran;
+  RigidTransform tran;
   tran.position = Vec3f(0,-1.8,-1.8);
   tran.rotation = RotationMatrixRad(0, 0, 0);
   Vec3f pushDir = Vec3f(-1,-1,-1);
-  std::vector<Transformation> trajectory;
-  Transformation newTran = scene.Nudge(0,tran,pushDir, trajectory);
+  std::vector<RigidTransform> trajectory;
+  RigidTransform newTran = scene.Nudge(0,tran,pushDir, trajectory);
   unsigned instanceId = scene.Put(0, newTran);
   scene.instances[instanceId].trajectory = trajectory;
   // debug save trajectory progress
