@@ -88,6 +88,13 @@ void PackingScene::InitDataStructures() {
     items[i].mesh.ComputeVertNormals();
   }
   ComputeContainerSDF();
+  InitRigidBodies();
+}
+
+void PackingScene::InitRigidBodies(){
+  for(size_t i = 0;i<items.size();i++){
+    
+  }
 }
 
 void PackingScene::InitContainerGrids() {

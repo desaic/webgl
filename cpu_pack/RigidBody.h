@@ -21,6 +21,9 @@ class RigidBody {
 
     RigidBody(TrigMesh &input);
 
+    void ToInertiaFrame(TrigMesh & mesh) const;
+    // back to input pose of the mesh
+    void ToInputFrame(TrigMesh & mesh) const;
 };
 
 struct RigidBodyInfo{

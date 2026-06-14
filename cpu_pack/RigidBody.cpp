@@ -246,14 +246,42 @@ Matrix3f eigVecFromVal(const Matrix3f &A_in, const double *eigenvalues) {
   return eigenvectors;
 }
 
+void RigidBody::ToInertiaFrame(TrigMesh & mesh) const {
+  const unsigned numVert = mesh.GetNumVerts();
+  Matrix3f R = R0.transposed();
+  Vec3f disp = -oldOrigin;
+  for(unsigned i = 0;i<numVert;i++){
+    Vec3f v = mesh.GetVertex(i);
+    v = R * (v + disp);
+    mesh.v[3 * i] = v[0];
+    mesh.v[3 * i + 1] = v[1];
+    mesh.v[3 * i + 2] = v[2];
+  }
+}
+
+void RigidBody::ToInputFrame(TrigMesh & mesh) const
+{
+  const unsigned numVert = mesh.GetNumVerts();    
+  for(unsigned i = 0;i<numVert;i++){
+    Vec3f v = mesh.GetVertex(i);
+    v = R0 * v + oldOrigin;
+    mesh.v[3 * i] = v[0];
+    mesh.v[3 * i + 1] = v[1];
+    mesh.v[3 * i + 2] = v[2];
+  }
+}
+
 void TestInertiaFrame(){
-  const std::string fruitFile = "F:/meshes/fruit_hand/papaya_debug.obj";
+  // const std::string fruitFile = "F:/meshes/fruit_hand/papaya_debug.obj";
+  std::string dir = "/media/desaic/WD/meshes/fruit_hand/";
+  const std::string fruitFile = dir + "papaya_debug.obj";
   TrigMesh mesh;
   mesh.LoadObj(fruitFile);
   RigidBody rb(mesh);
-  TrigMesh inertiaMesh;
-
-  inertiaMesh.SaveObj("F:/meshes/fruit_hand/debug_inertia_papaya.obj");
-  TrigMesh roundTrip;
-  roundTrip.SaveObj("F:/meshes/fruit_hand/debug_around_papaya.obj");
+  TrigMesh inertiaMesh = mesh;
+  rb.ToInertiaFrame(inertiaMesh);
+  inertiaMesh.SaveObj(dir + "debug_inertia_papaya.obj");
+  TrigMesh roundTrip= inertiaMesh;
+  rb.ToInputFrame(roundTrip);
+  roundTrip.SaveObj(dir + "debug_around_papaya.obj");
 }

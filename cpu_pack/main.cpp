@@ -152,7 +152,7 @@ void PackFruits(const PackingPlan & plan, const std::string & dataDir) {
   std::string meshDir = dataDir + "fruits_1/";
   PackingScene scene;
   std::vector<MeshInfo> fruits = LoadAllMeshInfo(meshDir);
-  scene.items = fruits;
+  scene.items = fruits;  
   fs::path containerFile(dataDir + "hands/finger4.8m.stl");
   fs::path innerContainerFile(dataDir + "hands/finger_inner4.8m.stl");
   LoadMeshInfo(scene.container, containerFile);  
@@ -359,7 +359,7 @@ void DebugNudge(){
 
 int main(int argc, char * argv[]){
   // DebugNudge();
-
+  TestInertiaFrame();
   // std::string meshDir = "F:/meshes/fruit_hand/fruits_1/";
   //linux
   std::string dataDir = "/media/desaic/WD/meshes/fruit_hand/";

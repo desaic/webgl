@@ -31,6 +31,8 @@ class PackingScene {
     /// calls InitContainerGrids and ComputeSDF, initializes object vertex normals.
     void InitDataStructures();
     void InitContainerGrids();
+    /// transform packing meshes into inertia frame
+    void InitRigidBodies();
     void ComputeContainerSDF();
     /// @brief put a copy of itemIdx at the given transformation
     /// revoxelizes because it's not a bottleneck.
