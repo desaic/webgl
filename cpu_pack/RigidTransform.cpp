@@ -36,3 +36,13 @@ void RigidTransform::RightMultRigid(const RigidTransform & b){
   Matrix4f C = A * B;
   FromRigidMatrix(C);
 }
+
+void RigidTransform::Apply(std::vector<float> &v) const {
+  for (unsigned i = 0; i < v.size(); i += 3) {
+    Vec3f vec(v[i], v[i + 1], v[i + 2]);
+    vec = rotation * vec + position;
+    v[i] = vec[0];
+    v[i + 1] = vec[1];
+    v[i + 2] = vec[2];
+  }
+}

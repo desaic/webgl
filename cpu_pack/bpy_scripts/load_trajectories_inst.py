@@ -49,14 +49,14 @@ def load_trajectories(filepath):
                 current_instance = {
                     'id': instance_id,
                     'mesh_path': mesh_path,
-                    'initial': None,
+                    'final': None,
                     'trajectory': []
                 }
                              
             elif line.startswith('Initial') or line.startswith('Final'):
                 trans = parse_transformation(line)
                 if trans and current_instance:
-                    current_instance['initial'] = trans
+                    current_instance['final'] = trans
 
             elif line.startswith('Step'):
                 trans = parse_transformation(line)
@@ -100,7 +100,7 @@ def animate_instances(instances, frames_per_step=3, pause_frames=5):
         obj.name = f"Instance_{inst['id']}"
 
         # Apply initial state transforms
-        pos, rot_matrix, scale = inst['initial']
+        pos, rot_matrix, scale = inst['trajectory'][0]
         apply_transformation(obj, pos, rot_matrix, scale)
 
         # Visibility Keyframing Setup
@@ -135,7 +135,7 @@ def animate_instances(instances, frames_per_step=3, pause_frames=5):
     bpy.context.scene.frame_end = current_frame
 
 def main():
-    trajectory_file = "F:/meshes/fruit_hand/traj6.txt"
+    trajectory_file = "/media/desaic/WD/meshes/fruit_hand/out/traj1.txt"
 
     instances = load_trajectories(trajectory_file)
     print(f"Loaded {len(instances)} instances")

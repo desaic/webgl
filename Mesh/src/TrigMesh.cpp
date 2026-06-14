@@ -340,7 +340,7 @@ void TrigMesh::append(const TrigMesh& m) {
   }
 }
 
-void TrigMesh::SaveObj(const std::string& filename) {
+void TrigMesh::SaveObj(const std::string& filename) const {
   std::ofstream out(filename);
   if (!out.is_open()) return;
 

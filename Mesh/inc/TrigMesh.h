@@ -86,7 +86,7 @@ class TrigMesh {
   void translate(float dx, float dy, float dz);
   void append(const TrigMesh& m);
 
-  void SaveObj(const std::string& filename);
+  void SaveObj(const std::string& filename) const;
   // save out a point cloud as obj.
   static void SaveObj(const std::string& filename,
                       const std::vector<Vec3f>& pts);

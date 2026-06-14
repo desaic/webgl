@@ -127,10 +127,10 @@ void PackingScene::ComputeContainerSDF() {
   std::cout << "computing container sdf \n";
   sdf = ComputeSDF(distUnit, containerSDFDx, container.mesh);
 
-  Array3D<Vec3f> gradients = ComputeSDFGradient(*sdf, distUnit, containerSDFDx);
+  // Array3D<Vec3f> gradients = ComputeSDFGradient(*sdf, distUnit, containerSDFDx);
 
-  std::string gradFile = outputFolder + "sdf_gradients.obj";
-  SaveGradientObj(gradFile, gradients, *sdf, containerSDFDx, 4);
+  // std::string gradFile = outputFolder + "sdf_gradients.obj";
+  // SaveGradientObj(gradFile, gradients, *sdf, containerSDFDx, 4);
 }
 
 Array3D<Vec3f> ComputeSDFGradient(const AdapSDF &sdf, float distUnit, float voxSize) {
@@ -367,7 +367,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   // samples are in object frame, so that it move with pos and rot.
   // If I need their normals, I need to rotate the normals first.
   std::vector<SamplePoint> samples;
-  SamplePoints(items[itemIdx].mesh, 0.5f * ds, samples);
+  SamplePoints(items[itemIdx].mesh, ds, samples);
 
   // 2. Broad Phase Environment Gathering
   Box3f instBox = ComputeBBox(instMesh.v);
@@ -576,13 +576,15 @@ void PackingScene::SaveTrajectories(const std::string &filename) const {
     const InstanceInfo &inst = instances[i];
     const auto & item = items[inst.itemId];
     std::string meshFile = item.filePath;
-    trajOut << "Instance " << i << " Mesh " << meshFile << "\n";
-    trajOut << "Final " << inst.tran.toString() << "\n";
+    trajOut << "Instance " << i << " Mesh " << meshFile << "\n";    
     for (size_t j = 0; j < inst.trajectory.size(); j++) {
       auto tran = inst.trajectory[j];
       tran = item.rb.GetInputTran(tran);
-      trajOut << "Step " << j << " " << inst.trajectory[j].toString() << "\n";
+      trajOut << "Step " << j << " " << tran.toString() << "\n";
     }
+    auto tran = inst.tran;
+    tran = item.rb.GetInputTran(tran);
+    trajOut << "Final " << tran.toString() << "\n";  
     trajOut << "\n";
   }
   trajOut.close();

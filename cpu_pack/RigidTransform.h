@@ -3,6 +3,7 @@
 #include "Vec3.h"
 #include "Matrix3f.h"
 #include "Matrix4f.h"
+#include <vector>
 
 // Structure to store transformation data
 struct RigidTransform {
@@ -20,6 +21,7 @@ struct RigidTransform {
     // scale is ignored.
     void RightMultRigid(const RigidTransform & b);
     void FromRigidMatrix(const Matrix4f & rigidMat);
+    void Apply( std::vector<float> & v)const;
     // scale is ignored. rigid transformation only.
     Matrix4f ToMatrixRigid()const;
 };
