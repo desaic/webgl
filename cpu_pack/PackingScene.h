@@ -61,6 +61,8 @@ class PackingScene {
       return it->second;      
     }
 
+    // in both export functions, transformation is converted from inertia frame back to 
+    // original input frame.
     void SaveTrajectories(const std::string &filename) const;
     void SaveInstances(const std::string & packFile)const;
 

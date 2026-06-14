@@ -359,7 +359,6 @@ void DebugNudge(){
 
 int main(int argc, char * argv[]){
   // DebugNudge();
-  TestInertiaFrame();
   // std::string meshDir = "F:/meshes/fruit_hand/fruits_1/";
   //linux
   std::string dataDir = "/media/desaic/WD/meshes/fruit_hand/";

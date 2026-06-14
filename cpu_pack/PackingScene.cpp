@@ -93,7 +93,8 @@ void PackingScene::InitDataStructures() {
 
 void PackingScene::InitRigidBodies(){
   for(size_t i = 0;i<items.size();i++){
-    
+    auto & item = items[i];
+    item.rb.ToInertiaFrame(item.mesh);
   }
 }
 
@@ -573,10 +574,13 @@ void PackingScene::SaveTrajectories(const std::string &filename) const {
   std::ofstream trajOut(filename);
   for (size_t i = 0; i < instances.size(); i++) {
     const InstanceInfo &inst = instances[i];
-    std::string meshFile = items[inst.itemId].filePath;
+    const auto & item = items[inst.itemId];
+    std::string meshFile = item.filePath;
     trajOut << "Instance " << i << " Mesh " << meshFile << "\n";
     trajOut << "Final " << inst.tran.toString() << "\n";
     for (size_t j = 0; j < inst.trajectory.size(); j++) {
+      auto tran = inst.trajectory[j];
+      tran = item.rb.GetInputTran(tran);
       trajOut << "Step " << j << " " << inst.trajectory[j].toString() << "\n";
     }
     trajOut << "\n";
@@ -588,8 +592,11 @@ void PackingScene::SaveInstances(const std::string & packFile)const{
   std::ofstream out(packFile);
   out << instances.size() <<"\n";
   for(size_t i = 0;i<instances.size();i++){
-    std::string name = items[instances[i].itemId].name;
-    out << name <<" "<<instances[i].tran.toString()<<"\n";
+    const auto & item = items[instances[i].itemId];
+    std::string name = item.name;
+    RigidTransform tran = instances[i].tran;    
+    tran = item.rb.GetInputTran(tran);
+    out << name <<" "<<tran.toString()<<"\n";
   }
 }
 

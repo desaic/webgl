@@ -15,7 +15,7 @@ class MeshInfo {
     std::string filePath;
     TrigMesh mesh;
 
-    RigidBodyInfo rb;
+    RigidBody rb;
     
     bool noMoreFit = false;
     float BoxDiagonal() const {

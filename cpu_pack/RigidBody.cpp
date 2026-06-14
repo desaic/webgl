@@ -1,6 +1,6 @@
 #include "RigidBody.h"
 
-RigidBody::RigidBody(TrigMesh &input) {
+void RigidBody::SetMesh(TrigMesh &input) {
   // Compute center of mass
   Vec3f com(0, 0, 0);
   float totalVolume = 0;
@@ -271,13 +271,24 @@ void RigidBody::ToInputFrame(TrigMesh & mesh) const
   }
 }
 
+RigidTransform RigidBody::GetInputTran(RigidTransform & input) const 
+{
+  RigidTransform tran = input;
+  RigidTransform rigid;
+  rigid.rotation = R0.transposed();
+  rigid.position = -(rigid.rotation * oldOrigin);
+  tran.RightMultRigid(rigid);
+  return tran;
+}
+
 void TestInertiaFrame(){
   // const std::string fruitFile = "F:/meshes/fruit_hand/papaya_debug.obj";
   std::string dir = "/media/desaic/WD/meshes/fruit_hand/";
   const std::string fruitFile = dir + "papaya_debug.obj";
   TrigMesh mesh;
   mesh.LoadObj(fruitFile);
-  RigidBody rb(mesh);
+  RigidBody rb;
+  rb.SetMesh(mesh);
   TrigMesh inertiaMesh = mesh;
   rb.ToInertiaFrame(inertiaMesh);
   inertiaMesh.SaveObj(dir + "debug_inertia_papaya.obj");
