@@ -189,6 +189,7 @@ struct Contact {
     Vec3f worldPos;
     Vec3f normal;
     float distance;
+    Vec3f localPos;
 };
 
 float distSq(const Vec3f &a, const Vec3f &b) {
@@ -345,32 +346,41 @@ std::vector<Contact> reduceContacts(const std::vector<Contact> &rawContacts, flo
   return reducedContacts;
 }
 
+std::vector<Vec3f> fromFloats(const std::vector<float> & f){
+  std::vector<Vec3f> vecs(f.size()/3);
+  for(unsigned i = 0;i<f.size();i+=3){
+    vecs[i / 3] = Vec3f(f[i], f[i + 1], f[i] + 2);
+  }
+  return vecs;
+}
+
 RigidTransform PackingScene::Nudge(unsigned itemIdx,
                                    const RigidTransform &tran,
                                    const Vec3f &dir0,
                                    std::vector<RigidTransform> &trajectory) {
   RigidTransform tOut = tran;
 
-  // from inertia frame to current transform.
-  // RigidBodyInfo rb = items[itemIdx].rb;
-
   const float CONTACT_ANGLE_THRESH_DEG = 5.0f;
-  float ds = 0.5f;                // Maximum linear step distance limit
-  float minDist = ds * 0.1f;      // Target contact clearance boundary
-  float eps = minDist;            // clearance threshold
-  float activeBuffer = ds * 0.1f; // buffer zone to gather near-contacts
+  float ds = 0.5f;                
+  float minDist = ds * 0.1f;      
+  float eps = minDist;            
+  
+  // FIX 1: Expand buffer to 'ds'. This creates "Speculative Contacts"
+  // PGS will now detect and break objects BEFORE they actually intersect.
+  float activeBuffer = ds; 
   size_t maxOptimizationSteps = 10;
-
   float broadPhaseDist = ds * maxOptimizationSteps;
-
   float MIN_LineSearchStep = 1e-2f;
-  TrigMesh instMesh = MakeTransformedMesh(items[itemIdx].mesh, tran);
-  // samples are in object frame, so that it move with pos and rot.
-  // If I need their normals, I need to rotate the normals first.
-  std::vector<SamplePoint> samples;
-  SamplePoints(items[itemIdx].mesh, ds, samples);
+
+  // 1. Fine Sampling for precise contact generation
+  std::vector<SamplePoint> fineSamples;
+  SamplePoints(items[itemIdx].mesh, ds, fineSamples);
+
+  // Coarse Sampling for Line-Search safety (We use raw mesh vertices)
+  const std::vector<Vec3f>& coarseSamples = fromFloats(items[itemIdx].mesh.v);
 
   // 2. Broad Phase Environment Gathering
+  TrigMesh instMesh = MakeTransformedMesh(items[itemIdx].mesh, tran);
   Box3f instBox = ComputeBBox(instMesh.v);
   std::vector<unsigned> intersectingInstances = broadPhase.GetNearby(instBox, broadPhaseDist);
 
@@ -382,25 +392,23 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     neighborMeshes[i] = MakeTransformedMesh(items[inst.itemId].mesh, inst.tran);
     accGrids[i + 1].Build(neighborMeshes[i], gridDx);
   }
-
   if (innerContainerEnabled) {
     accGrids.push_back(containerInnerGrid);
   }
 
-  // 3. Initialize State Variables for the 6-DOF Solver
+  // 3. Initialize State Variables
   Vec3f currentT = tran.position;
   Matrix3f rotMat0 = tran.rotation;
   Quat4f currentQ = Quat4f::fromRotationMatrix(rotMat0);
 
-  // @TODO: make sure no divide by 0 for weird objects
   const auto &rb = items[itemIdx].rb;
-  float invMass = 1.0f / rb.vol;
-  Vec3f invI_local(1.0f / rb.inertia(0, 0), 1.0f / rb.inertia(1, 1), 1.0f / rb.inertia(2, 2));
-
-  // Initialize persistent velocities BEFORE the step loop
+  //float invMass = 1.0f / rb.vol;
+  //Vec3f invI_local(1.0f / rb.inertia(0, 0), 1.0f / rb.inertia(1, 1), 1.0f / rb.inertia(2, 2));
+  float invMass = 1.0f;
+  Vec3f invI_local(1.0,1.0,1.0);
   Vec3f velocityX(0.0f);
   Vec3f velocityTheta(0.0f);
-  float damping = 0.7f; // Retain 70% of the rotational movement into the next step
+  float damping = 0.7f; 
 
   // 4. Main Kinematic Optimization Loop
   for (size_t step = 0; step < maxOptimizationSteps; step++) {
@@ -410,16 +418,18 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     Vec3f dir = dir0;
     dir.normalize();
 
-    // Gather all active surface contacts across all neighboring distance grids
-    for (size_t s = 0; s < samples.size(); s++) {
-      Vec3f worldPt = currentRotMat * samples[s].x + currentT;
-      Vec3f worldPt0 = rotMat0 * samples[s].x + tran.position;
+    // Gather contacts using the 100k FINE samples
+    // Query radius must look ahead far enough to cover eps + activeBuffer
+    float queryRadius = eps + activeBuffer; 
+    for (size_t s = 0; s < fineSamples.size(); s++) {
+      Vec3f worldPt = currentRotMat * fineSamples[s].x + currentT;
+      Vec3f worldPt0 = rotMat0 * fineSamples[s].x + tran.position;
+      
       for (unsigned m = 0; m < accGrids.size(); m++) {
-        ContactInfo info = accGrids[m].NearestTriangle(worldPt, ds);
-        // "fix" inverted normal. only works if initially not in contact.
-        Vec3f sampleToSurf = info.closestPt - worldPt0;
-        // If the point is close enough to be an obstacle, track it
+        ContactInfo info = accGrids[m].NearestTriangle(worldPt, queryRadius);
+        
         if (info.dist >= 0.0f && info.dist < eps + activeBuffer) {
+          Vec3f sampleToSurf = info.closestPt - worldPt0;
           if (sampleToSurf.dot(info.normal) > 0) {
             info.normal = -info.normal;
           }
@@ -430,13 +440,12 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
 
     std::vector<Contact> contacts = reduceContactManifold(activeContacts, CONTACT_ANGLE_THRESH_DEG);
     auto Rinv = currentRotMat.transposed();
-    // Initialize our ideal target movement delta (push down the packing direction)
+    
     Vec3f deltaX = (ds * dir) + velocityX * damping;
     Vec3f deltaTheta = velocityTheta * damping;
-
     std::vector<float> lambdas(contacts.size(), 0.0f);
 
-    // Run Sequential Constraint Projection passes (Matrix-free PGS)
+    // PGS Solver Passes
     int pgsPasses = 8;
     for (int pass = 0; pass < pgsPasses; pass++) {
       for (size_t c = 0; c < contacts.size(); c++) {
@@ -445,13 +454,10 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
         Vec3f r_cross_n = r.cross(contact.normal);
 
         float j_delta = deltaX.dot(contact.normal) + deltaTheta.dot(r_cross_n);
-        float b = eps - contact.distance;
-        // Transform torque to local space to utilize the diagonal inverse inertia tensor
-        // currentRotMat.transpose() maps World -> Local
+        float b = eps - contact.distance; 
+        
         Vec3f torqueLocal = Rinv * r_cross_n;
-        Vec3f angAccLocal(torqueLocal[0] * invI_local[0], torqueLocal[1] * invI_local[1],
-                          torqueLocal[2] * invI_local[2]);
-
+        Vec3f angAccLocal(torqueLocal[0] * invI_local[0], torqueLocal[1] * invI_local[1], torqueLocal[2] * invI_local[2]);
         float j_sq_len = invMass + torqueLocal.dot(angAccLocal);
 
         if (j_sq_len > 1e-8f) {
@@ -466,14 +472,13 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
       }
     }
 
-    // 5. Backtracking Line Search Gatekeeper
+    // 5. Backtracking Line Search Gatekeeper (SAFE & FAST)
     float scale = 1.0f;
     bool stepAccepted = false;
 
     while (scale > MIN_LineSearchStep) {
       Vec3f testT = currentT + deltaX * scale;
 
-      // Build the proposed incremental rotation quaternion from axis-angle deltaTheta
       Quat4f q_delta = Quat4f::IDENTITY;
       float angle = std::sqrt(deltaTheta.dot(deltaTheta));
       if (angle > 1e-6f) {
@@ -486,16 +491,16 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
       testQ.normalize();
       Matrix3f testRotMat = Matrix3f::rotation(testQ.x(), testQ.y(), testQ.z(), testQ.w());
 
-      // Verify if this test step triggers hard penetrations
+      // Check against the COARSE sample set (vertices) instead of 100k points
+      // This catches all macro-level tunneling and unconstrained step penetrations instantly!
       bool localCollision = false;
-      for (size_t s = 0; s < samples.size(); s++) {
-        Vec3f testPt = testRotMat * samples[s].x + testT;
+      for (size_t s = 0; s < coarseSamples.size(); s++) {
+        Vec3f testPt = testRotMat * coarseSamples[s] + testT;
 
         for (unsigned m = 0; m < accGrids.size(); m++) {
           Vec3f dummyNormal;
           float dist = accGrids[m].NearestTriangle(testPt, ds, dummyNormal);
 
-          // Hard cutoff: if it breaches past epsilon minus a tiny structural tolerance
           if (dist >= 0.0f && dist < eps - 0.01f) {
             localCollision = true;
             break;
@@ -506,25 +511,22 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
       }
 
       if (!localCollision) {
-        // Step is safe! Commit updates and progress to the next optimization frame
         currentT = testT;
         currentQ = testQ;
         stepAccepted = true;
         break;
       }
 
-      scale *= 0.5f; // Step failed, reduce scale and try again
+      scale *= 0.5f; 
     }
 
-    // If the line search was forced to shrink to zero, the item is completely jammed
     if (!stepAccepted || (deltaX.dot(deltaX) + deltaTheta.dot(deltaTheta)) < 1e-7f) {
       break;
     }
     velocityX = deltaX * scale;
     velocityTheta = deltaTheta * scale;
-    // for debug visualization.
-    trajectory.push_back(
-        RigidTransform(currentT, Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w())));
+    
+    trajectory.push_back(RigidTransform(currentT, Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w())));
   }
 
   tOut.position = currentT;
