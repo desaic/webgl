@@ -354,6 +354,19 @@ std::vector<Vec3f> fromFloats(const std::vector<float> & f){
   return vecs;
 }
 
+std::vector<Vec3f> BoxCorners(const Box3f & b){
+   return {
+      b.vmin,
+      Vec3f(b.vmax[0], b.vmin[1], b.vmin[2]),
+      Vec3f(b.vmin[0], b.vmax[1], b.vmin[2]),
+      Vec3f(b.vmax[0], b.vmax[1], b.vmin[2]),
+      Vec3f(b.vmin[0], b.vmin[1], b.vmax[2]),
+      Vec3f(b.vmax[0], b.vmin[1], b.vmax[2]),
+      Vec3f(b.vmin[0], b.vmax[1], b.vmax[2]),
+      b.vmax
+    };
+}
+
 RigidTransform PackingScene::Nudge(unsigned itemIdx,
                                    const RigidTransform &tran,
                                    const Vec3f &dir0,
@@ -364,69 +377,91 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   float ds = 0.5f;                
   float minDist = ds * 0.1f;      
   float eps = minDist;            
-  
-  // FIX 1: Expand buffer to 'ds'. This creates "Speculative Contacts"
-  // PGS will now detect and break objects BEFORE they actually intersect.
   float activeBuffer = ds; 
-  size_t maxOptimizationSteps = 10;
-  float broadPhaseDist = ds * maxOptimizationSteps;
+  size_t maxOptimizationSteps = 20;
   float MIN_LineSearchStep = 1e-2f;
 
-  // 1. Fine Sampling for precise contact generation
+  // 1. Fine & Coarse Samples Initialization
   std::vector<SamplePoint> fineSamples;
   SamplePoints(items[itemIdx].mesh, ds, fineSamples);
-
-  // Coarse Sampling for Line-Search safety (We use raw mesh vertices)
   const std::vector<Vec3f>& coarseSamples = fromFloats(items[itemIdx].mesh.v);
 
-  // 2. Broad Phase Environment Gathering
-  TrigMesh instMesh = MakeTransformedMesh(items[itemIdx].mesh, tran);
-  Box3f instBox = ComputeBBox(instMesh.v);
-  std::vector<unsigned> intersectingInstances = broadPhase.GetNearby(instBox, broadPhaseDist);
+  // OPTIMIZATION: Compute local bounding box once outside the loop
+  Box3f localBox = ComputeBBox(items[itemIdx].mesh.v);
 
-  std::vector<TrigGrid> accGrids(intersectingInstances.size() + 1);
-  std::vector<TrigMesh> neighborMeshes(intersectingInstances.size());
-  accGrids[0] = containerGrid;
-  for (size_t i = 0; i < intersectingInstances.size(); i++) {
-    InstanceInfo inst = instances[intersectingInstances[i]];
-    neighborMeshes[i] = MakeTransformedMesh(items[inst.itemId].mesh, inst.tran);
-    accGrids[i + 1].Build(neighborMeshes[i], gridDx);
-  }
-  if (innerContainerEnabled) {
-    accGrids.push_back(containerInnerGrid);
-  }
-
-  // 3. Initialize State Variables
+  // 2. Initialize State Variables
   Vec3f currentT = tran.position;
   Matrix3f rotMat0 = tran.rotation;
   Quat4f currentQ = Quat4f::fromRotationMatrix(rotMat0);
 
-  const auto &rb = items[itemIdx].rb;
-  //float invMass = 1.0f / rb.vol;
-  //Vec3f invI_local(1.0f / rb.inertia(0, 0), 1.0f / rb.inertia(1, 1), 1.0f / rb.inertia(2, 2));
-  float invMass = 1.0f;
-  Vec3f invI_local(1.0,1.0,1.0);
+  auto item = items[itemIdx];
+  float invMass = 1.0f/item.rb.vol;
+  Vec3f invI_local(1.0f/item.rb.inertia(0,0), 1.0f/item.rb.inertia(1,1), 1.0f/item.rb.inertia(2,2));
   Vec3f velocityX(0.0f);
   Vec3f velocityTheta(0.0f);
   float damping = 0.7f; 
 
-  // 4. Main Kinematic Optimization Loop
+  // OPTIMIZATION: Persistent cache to prevent rebuilding grids for the same neighbor
+  std::unordered_map<unsigned, std::shared_ptr<TrigGrid>> persistentNeighborGrids;
+  std::vector<std::shared_ptr<TrigMesh> > nbrMeshes;                                    
+  // 3. Main Kinematic Optimization Loop
   for (size_t step = 0; step < maxOptimizationSteps; step++) {
-    std::vector<Contact> activeContacts;
     Matrix3f currentRotMat = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
 
+    // DYNAMIC BROADPHASE STEP: Compute current world bounding box from local corners
+    
+    auto corners = BoxCorners(localBox);
+    for (int i = 0; i < corners.size(); i++) {
+      corners[i] = currentRotMat * corners[i] + currentT;
+    }
+    Box3f instBox = ComputeBBox(corners);
+    // Query broadphase with a tight radius specific only to this step's reach
+    float stepQueryDist = eps + activeBuffer;
+    std::vector<unsigned> intersectingInstances = broadPhase.GetNearby(instBox, stepQueryDist);
+
+    // Assemble acceleration grids dynamically for this step
+    // Store non-owning const pointers to eliminate vector deep copies
+    std::vector<const TrigGrid*> accGrids;
+    accGrids.push_back(&containerGrid);
+
+    for (size_t i = 0; i < intersectingInstances.size(); i++) {
+      unsigned instIdx = intersectingInstances[i];
+      
+      auto it = persistentNeighborGrids.find(instIdx);
+      if (it == persistentNeighborGrids.end()) {
+        InstanceInfo inst = instances[instIdx];
+        auto nbrMesh = std::make_shared<TrigMesh>();
+        *nbrMesh = MakeTransformedMesh(items[inst.itemId].mesh, inst.tran);
+        
+        nbrMeshes.push_back(nbrMesh);
+        // Allocate heap-backed grid and build directly on it
+        auto newGrid = std::make_shared<TrigGrid>();
+        newGrid->Build(*nbrMesh, gridDx);
+        
+        persistentNeighborGrids[instIdx] = newGrid;
+        accGrids.push_back(newGrid.get());
+      } else {
+        // Safe pointer collection without copy constructors firing
+        accGrids.push_back(it->second.get());
+      }
+    }
+
+    if (innerContainerEnabled) {
+      accGrids.push_back(&containerInnerGrid);
+    }
+
+    // 4. Narrow Phase Contact Gathering
+    std::vector<Contact> activeContacts;
     Vec3f dir = dir0;
     dir.normalize();
 
-    // Gather contacts using the 100k FINE samples
-    // Query radius must look ahead far enough to cover eps + activeBuffer
     float queryRadius = eps + activeBuffer; 
     for (size_t s = 0; s < fineSamples.size(); s++) {
       Vec3f worldPt = currentRotMat * fineSamples[s].x + currentT;
       Vec3f worldPt0 = rotMat0 * fineSamples[s].x + tran.position;
       
       for (unsigned m = 0; m < accGrids.size(); m++) {
-        ContactInfo info = accGrids[m].NearestTriangle(worldPt, queryRadius);
+        ContactInfo info = accGrids[m]->NearestTriangle(worldPt, queryRadius);
         
         if (info.dist >= 0.0f && info.dist < eps + activeBuffer) {
           Vec3f sampleToSurf = info.closestPt - worldPt0;
@@ -445,7 +480,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     Vec3f deltaTheta = velocityTheta * damping;
     std::vector<float> lambdas(contacts.size(), 0.0f);
 
-    // PGS Solver Passes
+    // 5. PGS Solver Passes
     int pgsPasses = 8;
     for (int pass = 0; pass < pgsPasses; pass++) {
       for (size_t c = 0; c < contacts.size(); c++) {
@@ -472,7 +507,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
       }
     }
 
-    // 5. Backtracking Line Search Gatekeeper (SAFE & FAST)
+    // 6. Backtracking Line Search Gatekeeper
     float scale = 1.0f;
     bool stepAccepted = false;
 
@@ -491,15 +526,13 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
       testQ.normalize();
       Matrix3f testRotMat = Matrix3f::rotation(testQ.x(), testQ.y(), testQ.z(), testQ.w());
 
-      // Check against the COARSE sample set (vertices) instead of 100k points
-      // This catches all macro-level tunneling and unconstrained step penetrations instantly!
       bool localCollision = false;
       for (size_t s = 0; s < coarseSamples.size(); s++) {
         Vec3f testPt = testRotMat * coarseSamples[s] + testT;
 
         for (unsigned m = 0; m < accGrids.size(); m++) {
           Vec3f dummyNormal;
-          float dist = accGrids[m].NearestTriangle(testPt, ds, dummyNormal);
+          float dist = accGrids[m]->NearestTriangle(testPt, ds, dummyNormal);
 
           if (dist >= 0.0f && dist < eps - 0.01f) {
             localCollision = true;
