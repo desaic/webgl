@@ -44,10 +44,10 @@ unsigned PackingScene::Put(unsigned itemIdx, const RigidTransform &tran) {
   Union(bg, offset, vox);
 
   unsigned instId = instances.size();
-  if(placed.size() != items.size()){
+  if (placed.size() != items.size()) {
     placed.resize(items.size());
   }
-  if(itemIdx < placed.size()){
+  if (itemIdx < placed.size()) {
     placed[itemIdx].push_back(tran);
   }
   instances.push_back(InstanceInfo(itemIdx, tran));
@@ -55,8 +55,10 @@ unsigned PackingScene::Put(unsigned itemIdx, const RigidTransform &tran) {
   return instances.size() - 1u;
 }
 
-Vec3f PackingScene::ForceDirection(unsigned itemIdx, 
-  const Vec3f & gravity, float sdfFactor, const RigidTransform &tran) {
+Vec3f PackingScene::ForceDirection(unsigned itemIdx,
+                                   const Vec3f &gravity,
+                                   float sdfFactor,
+                                   const RigidTransform &tran) {
   Vec3f dir0 = gravity;
   // (0, 1)
   float dir0Weight = 0.5f;
@@ -79,8 +81,7 @@ void PackingScene::InitDataStructures() {
     randAngles[i][2] = dist(engine);
   }
 
-
-  for(unsigned i =0;i<items.size();i++){
+  for (unsigned i = 0; i < items.size(); i++) {
     nameToIndex[items[i].name] = i;
   }
   InitContainerGrids();
@@ -91,16 +92,16 @@ void PackingScene::InitDataStructures() {
   InitRigidBodies();
 }
 
-void PackingScene::InitRigidBodies(){
-  for(size_t i = 0;i<items.size();i++){
-    auto & item = items[i];
+void PackingScene::InitRigidBodies() {
+  for (size_t i = 0; i < items.size(); i++) {
+    auto &item = items[i];
     item.rb.ToInertiaFrame(item.mesh);
   }
 }
 
 void PackingScene::InitContainerGrids() {
   containerGrid.Build(container.mesh, gridDx);
-  if(!containerInner.mesh.v.empty()){
+  if (!containerInner.mesh.v.empty()) {
     containerInnerGrid.Build(containerInner.mesh, gridDx);
   }
 }
@@ -190,7 +191,7 @@ struct Contact {
     float distance;
 };
 
-float distSq(const Vec3f &a, const Vec3f &b) {  
+float distSq(const Vec3f &a, const Vec3f &b) {
   return (a - b).norm2();
 }
 
@@ -351,9 +352,9 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   RigidTransform tOut = tran;
 
   // from inertia frame to current transform.
-  //RigidBodyInfo rb = items[itemIdx].rb;
-  
-  const float CONTACT_ANGLE_THRESH_DEG = 5.0f;                                    
+  // RigidBodyInfo rb = items[itemIdx].rb;
+
+  const float CONTACT_ANGLE_THRESH_DEG = 5.0f;
   float ds = 0.5f;                // Maximum linear step distance limit
   float minDist = ds * 0.1f;      // Target contact clearance boundary
   float eps = minDist;            // clearance threshold
@@ -363,7 +364,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   float broadPhaseDist = ds * maxOptimizationSteps;
 
   float MIN_LineSearchStep = 1e-2f;
-  TrigMesh instMesh = MakeTransformedMesh(items[itemIdx].mesh, tran);  
+  TrigMesh instMesh = MakeTransformedMesh(items[itemIdx].mesh, tran);
   // samples are in object frame, so that it move with pos and rot.
   // If I need their normals, I need to rotate the normals first.
   std::vector<SamplePoint> samples;
@@ -382,7 +383,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     accGrids[i + 1].Build(neighborMeshes[i], gridDx);
   }
 
-  if(innerContainerEnabled){
+  if (innerContainerEnabled) {
     accGrids.push_back(containerInnerGrid);
   }
 
@@ -391,18 +392,21 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   Matrix3f rotMat0 = tran.rotation;
   Quat4f currentQ = Quat4f::fromRotationMatrix(rotMat0);
 
-  // Matrix3f invI_local = Matrix3f::Zero();  
-  // for(unsigned i = 0;i<3;i++){    
-  //   if(rb.inertia(i,i) > 0){
-  //     invI_local(i,i) = 1.0f/rb.inertia(i,i);
-  //   }else{
-  //     invI_local(i,i) = 1.0f;
-  //   }
-  // }
+  // @TODO: make sure no divide by 0 for weird objects
+  const auto &rb = items[itemIdx].rb;
+  float invMass = 1.0f / rb.vol;
+  Vec3f invI_local(1.0f / rb.inertia(0, 0), 1.0f / rb.inertia(1, 1), 1.0f / rb.inertia(2, 2));
+
+  // Initialize persistent velocities BEFORE the step loop
+  Vec3f velocityX(0.0f);
+  Vec3f velocityTheta(0.0f);
+  float damping = 0.7f; // Retain 70% of the rotational movement into the next step
+
   // 4. Main Kinematic Optimization Loop
   for (size_t step = 0; step < maxOptimizationSteps; step++) {
     std::vector<Contact> activeContacts;
     Matrix3f currentRotMat = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
+
     Vec3f dir = dir0;
     dir.normalize();
 
@@ -425,12 +429,11 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     }
 
     std::vector<Contact> contacts = reduceContactManifold(activeContacts, CONTACT_ANGLE_THRESH_DEG);
+    auto Rinv = currentRotMat.transposed();
     // Initialize our ideal target movement delta (push down the packing direction)
-    Vec3f deltaX = ds * dir;
+    Vec3f deltaX = (ds * dir) + velocityX * damping;
+    Vec3f deltaTheta = velocityTheta * damping;
 
-    // 2. Generate a random torque/angular velocity vector
-    Vec3f deltaTheta(0.0f);
-    // Track accumulated impulses (lambdas) for proper unilateral LCP PGS
     std::vector<float> lambdas(contacts.size(), 0.0f);
 
     // Run Sequential Constraint Projection passes (Matrix-free PGS)
@@ -438,25 +441,27 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     for (int pass = 0; pass < pgsPasses; pass++) {
       for (size_t c = 0; c < contacts.size(); c++) {
         const auto &contact = contacts[c];
-        Vec3f r = contact.worldPos - (currentT );
+        Vec3f r = contact.worldPos - currentT;
         Vec3f r_cross_n = r.cross(contact.normal);
 
-        // Evaluate the current velocity projection row matching this contact
         float j_delta = deltaX.dot(contact.normal) + deltaTheta.dot(r_cross_n);
-        float b = eps - contact.distance; // Penetration error feedback depth
+        float b = eps - contact.distance;
+        // Transform torque to local space to utilize the diagonal inverse inertia tensor
+        // currentRotMat.transpose() maps World -> Local
+        Vec3f torqueLocal = Rinv * r_cross_n;
+        Vec3f angAccLocal(torqueLocal[0] * invI_local[0], torqueLocal[1] * invI_local[1],
+                          torqueLocal[2] * invI_local[2]);
 
-        float j_sq_len = 1.0f + r_cross_n.dot(r_cross_n); // Equivalent to J * M^-1 * J^T
+        float j_sq_len = invMass + torqueLocal.dot(angAccLocal);
+
         if (j_sq_len > 1e-8f) {
           float delta_lambda = (b - j_delta) / j_sq_len;
-
-          // Clamp total accumulated lambda to be non-negative (unilateral constraint)
           float old_lambda = lambdas[c];
           lambdas[c] = std::max(0.0f, old_lambda + delta_lambda);
           float actual_delta_lambda = lambdas[c] - old_lambda;
 
-          // Correct the 6-DOF vectors inline using the clamped lambda delta
-          deltaX = deltaX + actual_delta_lambda * contact.normal;
-          deltaTheta = deltaTheta + r_cross_n * actual_delta_lambda;
+          deltaX += (actual_delta_lambda * invMass) * contact.normal;
+          deltaTheta += actual_delta_lambda * (currentRotMat * angAccLocal);
         }
       }
     }
@@ -515,6 +520,8 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     if (!stepAccepted || (deltaX.dot(deltaX) + deltaTheta.dot(deltaTheta)) < 1e-7f) {
       break;
     }
+    velocityX = deltaX * scale;
+    velocityTheta = deltaTheta * scale;
     // for debug visualization.
     trajectory.push_back(
         RigidTransform(currentT, Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w())));
@@ -574,9 +581,9 @@ void PackingScene::SaveTrajectories(const std::string &filename) const {
   std::ofstream trajOut(filename);
   for (size_t i = 0; i < instances.size(); i++) {
     const InstanceInfo &inst = instances[i];
-    const auto & item = items[inst.itemId];
+    const auto &item = items[inst.itemId];
     std::string meshFile = item.filePath;
-    trajOut << "Instance " << i << " Mesh " << meshFile << "\n";    
+    trajOut << "Instance " << i << " Mesh " << meshFile << "\n";
     for (size_t j = 0; j < inst.trajectory.size(); j++) {
       auto tran = inst.trajectory[j];
       tran = item.rb.GetInputTran(tran);
@@ -584,21 +591,21 @@ void PackingScene::SaveTrajectories(const std::string &filename) const {
     }
     auto tran = inst.tran;
     tran = item.rb.GetInputTran(tran);
-    trajOut << "Final " << tran.toString() << "\n";  
+    trajOut << "Final " << tran.toString() << "\n";
     trajOut << "\n";
   }
   trajOut.close();
 }
 
-void PackingScene::SaveInstances(const std::string & packFile)const{
+void PackingScene::SaveInstances(const std::string &packFile) const {
   std::ofstream out(packFile);
-  out << instances.size() <<"\n";
-  for(size_t i = 0;i<instances.size();i++){
-    const auto & item = items[instances[i].itemId];
+  out << instances.size() << "\n";
+  for (size_t i = 0; i < instances.size(); i++) {
+    const auto &item = items[instances[i].itemId];
     std::string name = item.name;
-    RigidTransform tran = instances[i].tran;    
+    RigidTransform tran = instances[i].tran;
     tran = item.rb.GetInputTran(tran);
-    out << name <<" "<<tran.toString()<<"\n";
+    out << name << " " << tran.toString() << "\n";
   }
 }
 
@@ -619,7 +626,6 @@ void AddInnerContainer(PackingScene &scene) {
   ThreshInPlace(vox, 1);
   Union(scene.bg, Vec3i(0), vox);
   scene.innerContainerEnabled = true;
-
 }
 
 /// @brief
