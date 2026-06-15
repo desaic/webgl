@@ -349,7 +349,7 @@ std::vector<Contact> reduceContacts(const std::vector<Contact> &rawContacts, flo
 std::vector<Vec3f> fromFloats(const std::vector<float> & f){
   std::vector<Vec3f> vecs(f.size()/3);
   for(unsigned i = 0;i<f.size();i+=3){
-    vecs[i / 3] = Vec3f(f[i], f[i + 1], f[i] + 2);
+    vecs[i / 3] = Vec3f(f[i], f[i + 1], f[i + 2]);
   }
   return vecs;
 }
