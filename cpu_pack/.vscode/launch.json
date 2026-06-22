@@ -34,6 +34,19 @@
                     "ignoreFailures": true
                 }
             ]
+        },
+        {
+            "name": "Run cpu_pack release (no debugger)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/cpu_pack",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "noDebug": true
         }
     ]
 }
