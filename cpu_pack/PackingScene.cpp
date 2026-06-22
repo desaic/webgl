@@ -7,6 +7,7 @@
 #include "MeshOps.h"
 #include "PointSample.h"
 #include "Quat4f.h"
+#include "Stopwatch.h"
 #include "TrigGrid.h"
 #include "cpu_voxelizer.h"
 
@@ -403,13 +404,22 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
 
   // OPTIMIZATION: Persistent cache to prevent rebuilding grids for the same neighbor
   std::unordered_map<unsigned, std::shared_ptr<TrigGrid>> persistentNeighborGrids;
-  std::vector<std::shared_ptr<TrigMesh> > nbrMeshes;                                    
+  std::vector<std::shared_ptr<TrigMesh> > nbrMeshes;
+
+  Utils::Stopwatch nudgeTotal;
+  Utils::Stopwatch stepTimer;
+  float broadphaseMs = 0.0f;
+  float narrowphaseMs = 0.0f;
+  float pgsMs = 0.0f;
+  float lineSearchMs = 0.0f;
+  nudgeTotal.Start();
+
   // 3. Main Kinematic Optimization Loop
   for (size_t step = 0; step < maxOptimizationSteps; step++) {
     Matrix3f currentRotMat = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
 
     // DYNAMIC BROADPHASE STEP: Compute current world bounding box from local corners
-    
+    stepTimer.Start();
     auto corners = BoxCorners(localBox);
     for (int i = 0; i < corners.size(); i++) {
       corners[i] = currentRotMat * corners[i] + currentT;
@@ -449,8 +459,10 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     if (innerContainerEnabled) {
       accGrids.push_back(&containerInnerGrid);
     }
+    broadphaseMs += stepTimer.ElapsedMS();
 
     // 4. Narrow Phase Contact Gathering
+    stepTimer.Start();
     std::vector<Contact> activeContacts;
     Vec3f dir = dir0;
     dir.normalize();
@@ -474,6 +486,9 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     }
 
     std::vector<Contact> contacts = reduceContactManifold(activeContacts, CONTACT_ANGLE_THRESH_DEG);
+    std::cout << "# contact before after reduction " << activeContacts.size() << " " << contacts.size() << "\n";
+    narrowphaseMs += stepTimer.ElapsedMS();
+
     auto Rinv = currentRotMat.transposed();
     
     Vec3f deltaX = (ds * dir) + velocityX * damping;
@@ -481,6 +496,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     std::vector<float> lambdas(contacts.size(), 0.0f);
 
     // 5. PGS Solver Passes
+    stepTimer.Start();
     int pgsPasses = 8;
     for (int pass = 0; pass < pgsPasses; pass++) {
       for (size_t c = 0; c < contacts.size(); c++) {
@@ -506,8 +522,10 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
         }
       }
     }
+    pgsMs += stepTimer.ElapsedMS();
 
     // 6. Backtracking Line Search Gatekeeper
+    stepTimer.Start();
     float scale = 1.0f;
     bool stepAccepted = false;
 
@@ -552,6 +570,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
 
       scale *= 0.5f; 
     }
+    lineSearchMs += stepTimer.ElapsedMS();
 
     if (!stepAccepted || (deltaX.dot(deltaX) + deltaTheta.dot(deltaTheta)) < 1e-7f) {
       break;
@@ -565,7 +584,23 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   tOut.position = currentT;
   tOut.rotation = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
 
+  std::cout << "Nudge total " << nudgeTotal.ElapsedMS() << " ms\n";
+  std::cout << "  broadphase " << broadphaseMs << " ms\n";
+  std::cout << "  narrowphase " << narrowphaseMs << " ms\n";
+  std::cout << "  PGS solver " << pgsMs << " ms\n";
+  std::cout << "  line search " << lineSearchMs << " ms\n";
+
   return tOut;
+}
+
+static bool ReadVec3f(std::istream &in, Vec3f &v) {
+  return bool(in >> v[0] >> v[1] >> v[2]);
+}
+
+static bool ReadMatrix3f(std::istream &in, Matrix3f &m) {
+  return bool(in >> m(0,0) >> m(0,1) >> m(0,2)
+                 >> m(1,0) >> m(1,1) >> m(1,2)
+                 >> m(2,0) >> m(2,1) >> m(2,2));
 }
 
 void LoadPack(PackingScene &scene, const std::string &packFile) {
@@ -582,25 +617,24 @@ void LoadPack(PackingScene &scene, const std::string &packFile) {
     std::istringstream iss(line);
     std::string itemName, posLabel, rotLabel, scaleLabel;
     RigidTransform trans;
+    iss >> itemName >> posLabel;
+    // Parse: ItemName pos x y z rot r00..r22 scale s
+    if (!ReadVec3f(iss, trans.position)) continue;
+    if (!(iss >> rotLabel) || !ReadMatrix3f(iss, trans.rotation)) continue;
+    if (!(iss >> scaleLabel >> trans.scale)) continue;
 
-    // Parse: ItemName pos x y z rot x y z scale s
-    if (iss >> itemName >> posLabel >> trans.position[0] >> trans.position[1] >> trans.position[2] >> rotLabel >>
-        trans.rotation[0] >> trans.rotation[1] >> trans.rotation[2] >> scaleLabel >> trans.scale) {
-
-      // Find which item index this corresponds to
-      int itemIndex = -1;
-      for (size_t i = 0; i < scene.items.size(); i++) {
-        if (scene.items[i].name == itemName) {
-          itemIndex = i;
-          break;
-        }
+    int itemIndex = -1;
+    for (size_t i = 0; i < scene.items.size(); i++) {
+      if (scene.items[i].name == itemName) {
+        itemIndex = i;
+        break;
       }
+    }
 
-      if (itemIndex >= 0) {
-        scene.placed[itemIndex].push_back(trans);
-      } else {
-        std::cout << "Warning: item " << itemName << " not found in scene\n";
-      }
+    if (itemIndex >= 0) {
+      scene.Put(itemIndex, trans);
+    } else {
+      std::cout << "Warning: item " << itemName << " not found in scene\n";
     }
   }
 

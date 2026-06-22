@@ -94,8 +94,8 @@ void PackStep(PackingScene & scene, const PackingStep & step){
           RigidTransform tran;
           tran.position = pos;
           tran.rotation = RotationMatrixRad(rot[0], rot[1], rot[2]);
-
           Vec3f pushDir = scene.ForceDirection(itemIndex, step.force, sdfFactor, tran);
+          std::cout << scene.items[itemIndex].name <<" " <<pushDir[0] <<" "<<pushDir[1]<<" "<<pushDir[2]<<"\n";
           std::vector<RigidTransform> trajectory;
           RigidTransform newTran = scene.Nudge(itemIndex,tran,pushDir, trajectory);
           unsigned instanceId = scene.Put(itemIndex, newTran);
@@ -168,6 +168,7 @@ void PackFruits(const PackingPlan & plan, const std::string & dataDir) {
     //SavePackedMesh(scene, i);
   //}
   scene.InitDataStructures();
+  LoadPack(scene, "/media/desaic/WD/meshes/fruit_hand/pack_debug_10.txt");
   PackScene(scene, plan);
 }
 

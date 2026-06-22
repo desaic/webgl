@@ -4,6 +4,7 @@
 #include "GridUtils.h"
 #include "Array2D.h"
 #include "ImageIO.h"
+#include "Stopwatch.h"
 
 #include <iostream>
 
@@ -37,12 +38,24 @@ bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot,
   std::cout << "total grid size " << totalSize[0] << " " << totalSize[1] << " " << totalSize[2] << "\n";
   Vec3u gridSize = PadSizes(totalSize, FFT_ALIGNMENT);
 
+  Utils::Stopwatch fftTimer;
+  fftTimer.Start();
   bg.FFT(gridSize);
+  std::cout << "bg FFT " << fftTimer.ElapsedMS() << " ms\n";
+
+  fftTimer.Start();
   Reverse(fg.vox);
   fg.gridReversed = true;
   fg.FFT(gridSize);
+  std::cout << "fg FFT " << fftTimer.ElapsedMS() << " ms\n";
+
+  fftTimer.Start();
   Dot(bg.fft, fg.fft);
+  std::cout << "Dot " << fftTimer.ElapsedMS() << " ms\n";
+
+  fftTimer.Start();
   Array3Df conv = IFFT(fg.fft);
+  std::cout << "IFFT " << fftTimer.ElapsedMS() << " ms\n";
   Array3D8u collision = Quantize(conv);
   const float score0 = -1e6f;
   
