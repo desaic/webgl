@@ -103,7 +103,10 @@ def animate_instances(instances, frames_per_step=3, pause_frames=5):
         obj.name = f"{mesh_name}_{inst['id']}"
 
         # Apply initial state transforms
-        pos, rot_matrix, scale = inst['trajectory'][0]
+        if len(inst['trajectory']) > 0:
+            pos, rot_matrix, scale = inst['trajectory'][0]
+        else :
+            pos, rot_matrix, scale = inst['final']
         apply_transformation(obj, pos, rot_matrix, scale)
 
         # Visibility Keyframing Setup
