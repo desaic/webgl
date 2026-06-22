@@ -1,5 +1,6 @@
 import bpy
 import math
+import os
 from mathutils import Matrix, Vector
 
 def parse_transformation(line):
@@ -93,11 +94,13 @@ def animate_instances(instances, frames_per_step=3, pause_frames=5):
         else:
             # 2. Mesh already exists: Create an instant data link copy
             mesh_data = loaded_meshes[mesh_path]
-            obj = bpy.data.objects.new(name=f"Instance_{inst['id']}", object_data=mesh_data)
+            mesh_name = os.path.splitext(os.path.basename(mesh_path))[0]
+            obj = bpy.data.objects.new(name=f"{mesh_name}_{inst['id']}", object_data=mesh_data)
             current_collection.objects.link(obj)
 
         # Ensure the outer object wrapper has the unique instance ID name
-        obj.name = f"Instance_{inst['id']}"
+        mesh_name = os.path.splitext(os.path.basename(mesh_path))[0]
+        obj.name = f"{mesh_name}_{inst['id']}"
 
         # Apply initial state transforms
         pos, rot_matrix, scale = inst['trajectory'][0]
