@@ -630,7 +630,10 @@ void LoadPack(PackingScene &scene, const std::string &packFile) {
         break;
       }
     }
-
+    // convert from model coordinate to inertia coordiante
+    const auto & item = scene.items[itemIndex];
+    const auto & rb = item.rb;
+    trans = rb.GetInertiaTran(trans);
     if (itemIndex >= 0) {
       scene.Put(itemIndex, trans);
     } else {

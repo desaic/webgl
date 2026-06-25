@@ -142,6 +142,9 @@ void PackScene(PackingScene & scene, const PackingPlan & plan) {
   Vec3f origin = scene.bg.GetOrigin();
   scene.placed.resize(scene.items.size());
 
+  // debug. load pack progress.
+  LoadPack(scene, "/media/desaic/WD/meshes/fruit_hand/pack_debug_10.txt");
+
   scene.trajFile = scene.outputFolder + "/traj";
   for(size_t i = 0;i<plan.steps.size(); i++){
     PackStep(scene, plan.steps[i]);
@@ -167,8 +170,7 @@ void PackFruits(const PackingPlan & plan, const std::string & dataDir) {
   //for(unsigned i = 0;i<scene.items.size();i++){
     //SavePackedMesh(scene, i);
   //}
-  scene.InitDataStructures();
-  LoadPack(scene, "/media/desaic/WD/meshes/fruit_hand/pack_debug_10.txt");
+  scene.InitDataStructures();  
   PackScene(scene, plan);
 }
 

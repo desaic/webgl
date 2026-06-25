@@ -1,8 +1,8 @@
 #pragma once
 #include "Matrix3f.h"
+#include "Quat4f.h"
 #include "RigidTransform.h"
 #include "TrigMesh.h"
-#include "Quat4f.h"
 #include "eig3x3.h"
 
 // helpers
@@ -22,12 +22,15 @@ class RigidBody {
 
     void SetMesh(TrigMesh &input);
 
-    void ToInertiaFrame(TrigMesh & mesh) const;
+    void ToInertiaFrame(TrigMesh &mesh) const;
     // back to input pose of the mesh
-    void ToInputFrame(TrigMesh & mesh) const;
+    void ToInputFrame(TrigMesh &mesh) const;
 
     // get transformation relative to input pose instead of inertia pose.
-    RigidTransform GetInputTran(RigidTransform & input) const ;
+    RigidTransform GetInputTran(RigidTransform &input) const;
+    // Get transformation relative to inertia frame given
+    // relative to model frame.
+    RigidTransform GetInertiaTran(RigidTransform &input) const;
 };
 
 void TestInertiaFrame();

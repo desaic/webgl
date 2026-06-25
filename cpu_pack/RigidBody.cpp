@@ -281,6 +281,16 @@ RigidTransform RigidBody::GetInputTran(RigidTransform & input) const
   return tran;
 }
 
+RigidTransform RigidBody::GetInertiaTran(RigidTransform & input) const 
+{
+  RigidTransform tran = input;
+  RigidTransform rigid;
+  rigid.rotation = R0;
+  rigid.position = oldOrigin;
+  tran.RightMultRigid(rigid);
+  return tran;
+}
+
 void TestInertiaFrame(){
   // const std::string fruitFile = "F:/meshes/fruit_hand/papaya_debug.obj";
   std::string dir = "/media/desaic/WD/meshes/fruit_hand/";
