@@ -69,9 +69,11 @@ void PackStep(PackingScene & scene, const PackingStep & step){
     AddInnerContainer(scene);
   }
 
+  //debug 
+  const unsigned DEBUG_I = 10;
   for (; count < step.count; count++) {
     bool packSuccess = false;
-    for (unsigned i = 0; i < numItems; i++) {
+    for (unsigned i = DEBUG_I; i < numItems; i++) {
       unsigned nameIndex = (i + startNameIndex) % numItems;
       std::string name = step.names[nameIndex];
       unsigned itemIndex = scene.GetItemIndex(name);

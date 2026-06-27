@@ -487,7 +487,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   RigidTransform tOut = tran;
 
   const float CONTACT_ANGLE_THRESH_DEG = 5.0f;
-  float ds = 0.5f;                
+  float ds = 0.5f; //cm for fruits
   float minDist = ds * 0.1f;      
   float eps = minDist;            
   float activeBuffer = ds; 
