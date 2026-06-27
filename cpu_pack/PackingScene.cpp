@@ -368,6 +368,118 @@ std::vector<Vec3f> BoxCorners(const Box3f & b){
     };
 }
 
+static std::vector<Vec3f> TransformPoints(const std::vector<Vec3f> &points, const Matrix3f &rot, const Vec3f &trans) {
+  std::vector<Vec3f> transformed = points;
+  for (size_t i = 0; i < transformed.size(); i++) {
+    transformed[i] = rot * transformed[i] + trans;
+  }
+  return transformed;
+}
+
+static Quat4f IntegrateAngularVelocity(Vec3f deltaTheta, float scale) {
+  Quat4f q_delta = Quat4f::IDENTITY;
+  float angle = std::sqrt(deltaTheta.dot(deltaTheta));
+  if (angle > 1e-6f) {
+    float s = std::sin(angle * scale * 0.5f);
+    Vec3f axis = deltaTheta * (1.0f / angle);
+    q_delta = Quat4f(std::cos(angle * scale * 0.5f), axis[0] * s, axis[1] * s, axis[2] * s);
+  }
+  return q_delta;
+}
+
+static std::vector<Contact> GatherActiveContacts(
+    const std::vector<SamplePoint> &fineSamples,
+    const std::vector<const TrigGrid*> &accGrids,
+    const Matrix3f &currentRotMat,
+    const Vec3f &currentT,
+    const Matrix3f &rotMat0,
+    const Vec3f &tranPosition,
+    float eps,
+    float activeBuffer,
+    float contactAngleThreshDeg,
+    size_t &rawCountOut) {
+  std::vector<Contact> activeContacts;
+  float queryRadius = eps + activeBuffer;
+  for (size_t s = 0; s < fineSamples.size(); s++) {
+    Vec3f worldPt = currentRotMat * fineSamples[s].x + currentT;
+    Vec3f worldPt0 = rotMat0 * fineSamples[s].x + tranPosition;
+    
+    for (unsigned m = 0; m < accGrids.size(); m++) {
+      ContactInfo info = accGrids[m]->NearestTriangle(worldPt, queryRadius);
+      
+      if (info.dist >= 0.0f && info.dist < eps + activeBuffer) {
+        Vec3f sampleToSurf = info.closestPt - worldPt0;
+        if (sampleToSurf.dot(info.normal) > 0) {
+          info.normal = -info.normal;
+        }
+        activeContacts.push_back({worldPt, info.normal, info.dist});
+      }
+    }
+  }
+  rawCountOut = activeContacts.size();
+  return reduceContactManifold(activeContacts, contactAngleThreshDeg);
+}
+
+static void SolveContactConstraintsPGS(
+    const std::vector<Contact> &contacts,
+    const Vec3f &currentT,
+    const Matrix3f &currentRotMat,
+    const Matrix3f &Rinv,
+    float invMass,
+    const Vec3f &invI_local,
+    float eps,
+    int pgsPasses,
+    Vec3f &deltaX,
+    Vec3f &deltaTheta) {
+  std::vector<float> lambdas(contacts.size(), 0.0f);
+  for (int pass = 0; pass < pgsPasses; pass++) {
+    for (size_t c = 0; c < contacts.size(); c++) {
+      const auto &contact = contacts[c];
+      Vec3f r = contact.worldPos - currentT;
+      Vec3f r_cross_n = r.cross(contact.normal);
+
+      float j_delta = deltaX.dot(contact.normal) + deltaTheta.dot(r_cross_n);
+      float b = eps - contact.distance; 
+      
+      Vec3f torqueLocal = Rinv * r_cross_n;
+      Vec3f angAccLocal(torqueLocal[0] * invI_local[0], torqueLocal[1] * invI_local[1], torqueLocal[2] * invI_local[2]);
+      float j_sq_len = invMass + torqueLocal.dot(angAccLocal);
+
+      if (j_sq_len > 1e-8f) {
+        float delta_lambda = (b - j_delta) / j_sq_len;
+        float old_lambda = lambdas[c];
+        lambdas[c] = std::max(0.0f, old_lambda + delta_lambda);
+        float actual_delta_lambda = lambdas[c] - old_lambda;
+
+        deltaX += (actual_delta_lambda * invMass) * contact.normal;
+        deltaTheta += actual_delta_lambda * (currentRotMat * angAccLocal);
+      }
+    }
+  }
+}
+
+static bool CheckCollision(
+    const std::vector<Vec3f> &coarseSamples,
+    const std::vector<const TrigGrid*> &accGrids,
+    const Matrix3f &testRotMat,
+    const Vec3f &testT,
+    float ds,
+    float eps) {
+  for (size_t s = 0; s < coarseSamples.size(); s++) {
+    Vec3f testPt = testRotMat * coarseSamples[s] + testT;
+
+    for (unsigned m = 0; m < accGrids.size(); m++) {
+      Vec3f dummyNormal;
+      float dist = accGrids[m]->NearestTriangle(testPt, ds, dummyNormal);
+
+      if (dist >= 0.0f && dist < eps - 0.01f) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 RigidTransform PackingScene::Nudge(unsigned itemIdx,
                                    const RigidTransform &tran,
                                    const Vec3f &dir0,
@@ -420,10 +532,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
 
     // DYNAMIC BROADPHASE STEP: Compute current world bounding box from local corners
     stepTimer.Start();
-    auto corners = BoxCorners(localBox);
-    for (int i = 0; i < corners.size(); i++) {
-      corners[i] = currentRotMat * corners[i] + currentT;
-    }
+    auto corners = TransformPoints(BoxCorners(localBox), currentRotMat, currentT);
     Box3f instBox = ComputeBBox(corners);
     // Query broadphase with a tight radius specific only to this step's reach
     float stepQueryDist = eps + activeBuffer;
@@ -463,65 +572,25 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
 
     // 4. Narrow Phase Contact Gathering
     stepTimer.Start();
-    std::vector<Contact> activeContacts;
-    Vec3f dir = dir0;
-    dir.normalize();
-
-    float queryRadius = eps + activeBuffer; 
-    for (size_t s = 0; s < fineSamples.size(); s++) {
-      Vec3f worldPt = currentRotMat * fineSamples[s].x + currentT;
-      Vec3f worldPt0 = rotMat0 * fineSamples[s].x + tran.position;
-      
-      for (unsigned m = 0; m < accGrids.size(); m++) {
-        ContactInfo info = accGrids[m]->NearestTriangle(worldPt, queryRadius);
-        
-        if (info.dist >= 0.0f && info.dist < eps + activeBuffer) {
-          Vec3f sampleToSurf = info.closestPt - worldPt0;
-          if (sampleToSurf.dot(info.normal) > 0) {
-            info.normal = -info.normal;
-          }
-          activeContacts.push_back({worldPt, info.normal, info.dist});
-        }
-      }
-    }
-
-    std::vector<Contact> contacts = reduceContactManifold(activeContacts, CONTACT_ANGLE_THRESH_DEG);
-    std::cout << "# contact before after reduction " << activeContacts.size() << " " << contacts.size() << "\n";
+    size_t rawCount = 0;
+    std::vector<Contact> contacts = GatherActiveContacts(
+        fineSamples, accGrids, currentRotMat, currentT, rotMat0, tran.position,
+        eps, activeBuffer, CONTACT_ANGLE_THRESH_DEG, rawCount);
+    std::cout << "# contact before after reduction " << rawCount << " " << contacts.size() << "\n";
     narrowphaseMs += stepTimer.ElapsedMS();
 
     auto Rinv = currentRotMat.transposed();
     
+    Vec3f dir = dir0;
+    dir.normalize();
+
     Vec3f deltaX = (ds * dir) + velocityX * damping;
     Vec3f deltaTheta = velocityTheta * damping;
-    std::vector<float> lambdas(contacts.size(), 0.0f);
 
     // 5. PGS Solver Passes
     stepTimer.Start();
     int pgsPasses = 8;
-    for (int pass = 0; pass < pgsPasses; pass++) {
-      for (size_t c = 0; c < contacts.size(); c++) {
-        const auto &contact = contacts[c];
-        Vec3f r = contact.worldPos - currentT;
-        Vec3f r_cross_n = r.cross(contact.normal);
-
-        float j_delta = deltaX.dot(contact.normal) + deltaTheta.dot(r_cross_n);
-        float b = eps - contact.distance; 
-        
-        Vec3f torqueLocal = Rinv * r_cross_n;
-        Vec3f angAccLocal(torqueLocal[0] * invI_local[0], torqueLocal[1] * invI_local[1], torqueLocal[2] * invI_local[2]);
-        float j_sq_len = invMass + torqueLocal.dot(angAccLocal);
-
-        if (j_sq_len > 1e-8f) {
-          float delta_lambda = (b - j_delta) / j_sq_len;
-          float old_lambda = lambdas[c];
-          lambdas[c] = std::max(0.0f, old_lambda + delta_lambda);
-          float actual_delta_lambda = lambdas[c] - old_lambda;
-
-          deltaX += (actual_delta_lambda * invMass) * contact.normal;
-          deltaTheta += actual_delta_lambda * (currentRotMat * angAccLocal);
-        }
-      }
-    }
+    SolveContactConstraintsPGS(contacts, currentT, currentRotMat, Rinv, invMass, invI_local, eps, pgsPasses, deltaX, deltaTheta);
     pgsMs += stepTimer.ElapsedMS();
 
     // 6. Backtracking Line Search Gatekeeper
@@ -532,36 +601,13 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     while (scale > MIN_LineSearchStep) {
       Vec3f testT = currentT + deltaX * scale;
 
-      Quat4f q_delta = Quat4f::IDENTITY;
-      float angle = std::sqrt(deltaTheta.dot(deltaTheta));
-      if (angle > 1e-6f) {
-        float s = std::sin(angle * scale * 0.5f);
-        Vec3f axis = deltaTheta * (1.0f / angle);
-        q_delta = Quat4f(std::cos(angle * scale * 0.5f), axis[0] * s, axis[1] * s, axis[2] * s);
-      }
+      Quat4f q_delta = IntegrateAngularVelocity(deltaTheta, scale);
 
       Quat4f testQ = q_delta * currentQ;
       testQ.normalize();
       Matrix3f testRotMat = Matrix3f::rotation(testQ.x(), testQ.y(), testQ.z(), testQ.w());
 
-      bool localCollision = false;
-      for (size_t s = 0; s < coarseSamples.size(); s++) {
-        Vec3f testPt = testRotMat * coarseSamples[s] + testT;
-
-        for (unsigned m = 0; m < accGrids.size(); m++) {
-          Vec3f dummyNormal;
-          float dist = accGrids[m]->NearestTriangle(testPt, ds, dummyNormal);
-
-          if (dist >= 0.0f && dist < eps - 0.01f) {
-            localCollision = true;
-            break;
-          }
-        }
-        if (localCollision)
-          break;
-      }
-
-      if (!localCollision) {
+      if (!CheckCollision(coarseSamples, accGrids, testRotMat, testT, ds, eps)) {
         currentT = testT;
         currentQ = testQ;
         stepAccepted = true;
