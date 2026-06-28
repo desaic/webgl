@@ -3,6 +3,7 @@
 #include "FastSweep.h"
 #include "FloodOutside.h"
 #include "GridUtils.h"
+#include "MarchingCubes.h"
 #include "MeshConvo.h"
 #include "MeshOps.h"
 #include "PointSample.h"
@@ -593,6 +594,14 @@ static void SolveContactConstraintsPGS(
   }
 }
 
+void MovePointsInward(std::vector<SamplePoint> &points,float offset, const std::shared_ptr<AdapSDF> &sdf) {
+  for (auto& pt : points) {
+      // debug;
+      float dist = sdf->GetCoarseDist(pt.x);
+      pt.x -= pt.n * offset;
+  }
+}
+
 RigidTransform PackingScene::Nudge(unsigned itemIdx,
                                    const RigidTransform &tran,
                                    const Vec3f &dir0,
@@ -607,20 +616,34 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
 
   float ds = 0.5f;
   float eps = ds * 0.1f;
-  float activeBuffer = ds; 
-
+  float activeBuffer = ds;
+                           
   // Simulation parameters
   size_t maxOptimizationSteps = 40; // Might need slightly more steps for settling
   float dt = 1.0f / 60.0f;          // Fixed time step
   float damping = 0.85f;            // Velocity damping to simulate friction/air resistance
   float nudgeAcceleration = 200.0f; // Accelerate at 200 cm/s^2 (which is 2 m/s^2)
+  const float MAX_OVERLAP = 0.2;
+  auto &meshInfo = items[itemIdx];
 
-  std::vector<SamplePoint> allFineSamples;
-  SamplePoints(items[itemIdx].mesh, ds, allFineSamples);
-  std::vector<SamplePoint> fineSamples = DownsamplePoints(allFineSamples, ds);
+  std::vector<SamplePoint> samples;
+  if (meshInfo.samples.empty()) {
+    std::vector<SamplePoint> allFineSamples;
+    SamplePoints(meshInfo.mesh, ds, allFineSamples);
+    samples = DownsamplePoints(allFineSamples, ds);
+    meshInfo.ComputeSDFCached();
+    MovePointsInward(samples, MAX_OVERLAP, meshInfo.sdf);
+    meshInfo.mesh.SaveObj(outputFolder + "/inertia_frame.obj");
+    SavePointsObj(outputFolder + "moved_points.obj", samples);
+    meshInfo.samples = samples;
+    TrigMesh surf;
+    MarchingCubes(meshInfo.sdf->dist, -0.2, meshInfo.sdf->distUnit, meshInfo.sdf->voxSize, meshInfo.sdf->origin, &surf);
+    surf.SaveObj(outputFolder + "/debug_sdf_inner.obj");
+  } else {
+    samples = meshInfo.samples;
+  }
 
   Box3f localBox = ComputeBBox(items[itemIdx].mesh.v);
-
   Vec3f currentT = tran.position;
   Matrix3f rotMat0 = tran.rotation;
   Quat4f currentQ = Quat4f::fromRotationMatrix(rotMat0);
@@ -683,7 +706,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     // 3. Narrow Phase Contact Gathering
     size_t rawCount = 0;
     std::vector<Contact> contacts = GatherActiveContacts(
-        fineSamples, accGrids, currentRotMat, currentT, eps, activeBuffer, CONTACT_ANGLE_THRESH_DEG, rawCount);
+        samples, accGrids, currentRotMat, currentT, eps, activeBuffer, CONTACT_ANGLE_THRESH_DEG, rawCount);
 
     // 4. PGS Solver Passes (Modifies Velocities)
     int pgsPasses = 8;

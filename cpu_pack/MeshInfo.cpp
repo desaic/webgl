@@ -1,6 +1,10 @@
 #include "MeshInfo.h"
 #include "Matrix4f.h"
 
+#include <AdapSDF.h>
+#include <AdapDF.h>
+#include <FastSweep.h>
+
 #include <algorithm>
 #include <iomanip>
 #include <iostream>
@@ -86,3 +90,27 @@ std::vector<int> SortBySize(const std::vector<MeshInfo> &items) {
             [&](int i, int j) { return items[i].BoxDiagonal() > items[j].BoxDiagonal(); });
   return indices;
 }
+
+void MeshInfo::ComputeSDFCached(){
+  if(this->sdf){
+    //naive logic for only computing it once.
+    return;
+  }
+  this->sdf = std::make_shared<AdapSDF>();
+  const float MIN_H = 0.2f;
+  Vec3f boxSize = this->box.vmax - this->box.vmin;
+  float maxLen = std::max(std::max(boxSize[0], boxSize[1]), boxSize[2]);
+  sdf->voxSize = std::max(maxLen / 128.0f, MIN_H);
+  float distUnit = 0.01f * sdf->voxSize;
+  sdf->band = 16;
+  sdf->distUnit = distUnit;
+  sdf->BuildTrigList(&mesh);
+  sdf->Compress();
+  mesh.ComputePseudoNormals();
+  sdf->ComputeCoarseDist();
+  //CloseExterior(sdf->dist, sdf->MAX_DIST);
+  Array3D8u frozen;
+  int band = 8;
+  FastSweepPar(sdf->dist, sdf->voxSize, distUnit, band, frozen);
+}
+
