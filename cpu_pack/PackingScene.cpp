@@ -347,12 +347,120 @@ std::vector<Contact> reduceContacts(const std::vector<Contact> &rawContacts, flo
   return reducedContacts;
 }
 
-std::vector<Vec3f> fromFloats(const std::vector<float> & f){
-  std::vector<Vec3f> vecs(f.size()/3);
-  for(unsigned i = 0;i<f.size();i+=3){
-    vecs[i / 3] = Vec3f(f[i], f[i + 1], f[i + 2]);
+static std::vector<SamplePoint> DownsamplePoints(const std::vector<SamplePoint> &points, float minSpacing) {
+  std::vector<SamplePoint> filtered;
+  if (points.empty()) {
+    return filtered;
   }
-  return vecs;
+
+  filtered.reserve(points.size() / 4);
+
+  std::unordered_map<int64_t, std::vector<size_t>> spatialGrid;
+  auto gridKey = [minSpacing](const Vec3f &p) -> int64_t {
+    int32_t ix = static_cast<int32_t>(std::floor(p[0] / minSpacing));
+    int32_t iy = static_cast<int32_t>(std::floor(p[1] / minSpacing));
+    int32_t iz = static_cast<int32_t>(std::floor(p[2] / minSpacing));
+    return (static_cast<int64_t>(ix) << 40) | (static_cast<int64_t>(iy) << 20) | static_cast<int64_t>(iz);
+  };
+
+  float spacingSq = minSpacing * minSpacing;
+
+  for (const auto &pt : points) {
+    int64_t key = gridKey(pt.x);
+    bool tooClose = false;
+
+    for (int dx = -1; dx <= 1 && !tooClose; dx++) {
+      for (int dy = -1; dy <= 1 && !tooClose; dy++) {
+        for (int dz = -1; dz <= 1; dz++) {
+          int32_t ix = static_cast<int32_t>(std::floor(pt.x[0] / minSpacing)) + dx;
+          int32_t iy = static_cast<int32_t>(std::floor(pt.x[1] / minSpacing)) + dy;
+          int32_t iz = static_cast<int32_t>(std::floor(pt.x[2] / minSpacing)) + dz;
+          int64_t neighborKey = (static_cast<int64_t>(ix) << 40) | (static_cast<int64_t>(iy) << 20) | static_cast<int64_t>(iz);
+
+          auto it = spatialGrid.find(neighborKey);
+          if (it != spatialGrid.end()) {
+            for (size_t idx : it->second) {
+              if ((pt.x - filtered[idx].x).norm2() < spacingSq) {
+                tooClose = true;
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (!tooClose) {
+      spatialGrid[key].push_back(filtered.size());
+      filtered.push_back(pt);
+    }
+  }
+
+  return filtered;
+}
+
+static std::vector<SamplePoint> CoarseSampleMesh(const TrigMesh &mesh, float maxSpacing) {
+  std::vector<SamplePoint> samples;
+  if (mesh.v.empty()) {
+    return samples;
+  }
+
+  const auto &verts = mesh.v;
+  const auto &normals = mesh.nv;
+
+  bool hasNormals = !normals.empty() && normals.size() * 3 == verts.size();
+
+  samples.reserve(verts.size() / 3);
+
+  std::unordered_map<int64_t, std::vector<size_t>> spatialGrid;
+  auto gridKey = [maxSpacing](const Vec3f &p) -> int64_t {
+    int32_t ix = static_cast<int32_t>(std::floor(p[0] / maxSpacing));
+    int32_t iy = static_cast<int32_t>(std::floor(p[1] / maxSpacing));
+    int32_t iz = static_cast<int32_t>(std::floor(p[2] / maxSpacing));
+    return (static_cast<int64_t>(ix) << 40) | (static_cast<int64_t>(iy) << 20) | static_cast<int64_t>(iz);
+  };
+
+  float spacingSq = maxSpacing * maxSpacing;
+
+  for (size_t i = 0; i < verts.size(); i += 3) {
+    Vec3f pos(verts[i], verts[i + 1], verts[i + 2]);
+    Vec3f normal(0, 0, 1);
+
+    if (hasNormals) {
+      normal = normals[i / 3];
+    }
+
+    int64_t key = gridKey(pos);
+    bool tooClose = false;
+
+    for (int dx = -1; dx <= 1 && !tooClose; dx++) {
+      for (int dy = -1; dy <= 1 && !tooClose; dy++) {
+        for (int dz = -1; dz <= 1; dz++) {
+          int32_t ix = static_cast<int32_t>(std::floor(pos[0] / maxSpacing)) + dx;
+          int32_t iy = static_cast<int32_t>(std::floor(pos[1] / maxSpacing)) + dy;
+          int32_t iz = static_cast<int32_t>(std::floor(pos[2] / maxSpacing)) + dz;
+          int64_t neighborKey = (static_cast<int64_t>(ix) << 40) | (static_cast<int64_t>(iy) << 20) | static_cast<int64_t>(iz);
+
+          auto it = spatialGrid.find(neighborKey);
+          if (it != spatialGrid.end()) {
+            for (size_t idx : it->second) {
+              if ((pos - samples[idx].x).norm2() < spacingSq) {
+                tooClose = true;
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (!tooClose) {
+      spatialGrid[key].push_back(samples.size());
+      samples.push_back({pos, normal});
+    }
+  }
+
+  return samples;
 }
 
 std::vector<Vec3f> BoxCorners(const Box3f & b){
@@ -459,14 +567,14 @@ static void SolveContactConstraintsPGS(
 }
 
 static bool CheckCollision(
-    const std::vector<Vec3f> &coarseSamples,
+    const std::vector<SamplePoint> &coarseSamples,
     const std::vector<const TrigGrid*> &accGrids,
     const Matrix3f &testRotMat,
     const Vec3f &testT,
     float ds,
     float eps) {
   for (size_t s = 0; s < coarseSamples.size(); s++) {
-    Vec3f testPt = testRotMat * coarseSamples[s] + testT;
+    Vec3f testPt = testRotMat * coarseSamples[s].x + testT;
 
     for (unsigned m = 0; m < accGrids.size(); m++) {
       Vec3f dummyNormal;
@@ -487,20 +595,28 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   RigidTransform tOut = tran;
 
   const float CONTACT_ANGLE_THRESH_DEG = 5.0f;
-  // surface sample points average distance
-  // cm for fruits
+
+  Box3f meshBBox = ComputeBBox(items[itemIdx].mesh.v);
+  Vec3f bboxSize = meshBBox.vmax - meshBBox.vmin;
+  float maxDim = std::max({bboxSize[0], bboxSize[1], bboxSize[2]});
+
+  // surface sample points average distance (cm)
+  // scale based on object size: 0.5cm for small fruits, up to 2cm for large ones
   float ds = 0.5f;
   // parts cannot get closer than this.
-  float eps = ds * 0.1f;            
+  float eps = ds * 0.1f;
   // contact is active when distance is within eps + activeBuffer.
   float activeBuffer = ds; 
+
   size_t maxOptimizationSteps = 20;
   float MIN_LineSearchStep = 1e-2f;
 
   // 1. Fine & Coarse Samples Initialization
-  std::vector<SamplePoint> fineSamples;
-  SamplePoints(items[itemIdx].mesh, ds, fineSamples);
-  const std::vector<Vec3f>& coarseSamples = fromFloats(items[itemIdx].mesh.v);
+  std::vector<SamplePoint> allFineSamples;
+  SamplePoints(items[itemIdx].mesh, ds, allFineSamples);
+  std::vector<SamplePoint> fineSamples = DownsamplePoints(allFineSamples, ds);
+  SavePointsObj(outputFolder + "/debug_banana_points.obj", fineSamples);
+  std::vector<SamplePoint> coarseSamples = CoarseSampleMesh(items[itemIdx].mesh, ds);
 
   // OPTIMIZATION: Compute local bounding box once outside the loop
   Box3f localBox = ComputeBBox(items[itemIdx].mesh.v);

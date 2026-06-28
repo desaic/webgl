@@ -70,7 +70,7 @@ void PackStep(PackingScene & scene, const PackingStep & step){
   }
 
   //debug 
-  const unsigned DEBUG_I = 10;
+  const unsigned DEBUG_I = 12;
   for (; count < step.count; count++) {
     bool packSuccess = false;
     for (unsigned i = DEBUG_I; i < numItems; i++) {
@@ -365,8 +365,11 @@ void DebugNudge(){
 int main(int argc, char * argv[]){
   // DebugNudge();
   // std::string meshDir = "F:/meshes/fruit_hand/fruits_1/";
-  //linux
-  std::string dataDir = "/media/desaic/WD/meshes/fruit_hand/";
+  // linux desktop
+  // std::string dataDir = "/media/desaic/WD/meshes/fruit_hand/";
+  // linux laptop
+  std::string dataDir = "/media/desaic/ssd2/meshes/fruit_hand/";
+  
   std::string meshDir = dataDir + "/fruits_1/";
 
   // ComputeMeshStats(meshDir);
