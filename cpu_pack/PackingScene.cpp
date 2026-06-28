@@ -87,11 +87,13 @@ void PackingScene::InitDataStructures() {
     nameToIndex[items[i].name] = i;
   }
   InitContainerGrids();
-  for (size_t i = 0; i < items.size(); i++) {
-    items[i].mesh.ComputeVertNormals();
-  }
   ComputeContainerSDF();
   InitRigidBodies();
+
+  for (size_t i = 0; i < items.size(); i++) {
+    items[i].mesh.ComputeTrigNormals();
+    items[i].mesh.ComputeVertNormals();
+  }
 }
 
 void PackingScene::InitRigidBodies() {
@@ -632,13 +634,14 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     SamplePoints(meshInfo.mesh, ds, allFineSamples);
     samples = DownsamplePoints(allFineSamples, ds);
     meshInfo.ComputeSDFCached();
+    // SavePointsObj(outputFolder + "sample_points.obj", samples);
     MovePointsInward(samples, MAX_OVERLAP, meshInfo.sdf);
-    meshInfo.mesh.SaveObj(outputFolder + "/inertia_frame.obj");
-    SavePointsObj(outputFolder + "moved_points.obj", samples);
+    // meshInfo.mesh.SaveObj(outputFolder + "/inertia_frame.obj");
+    // SavePointsObj(outputFolder + "moved_points.obj", samples);
     meshInfo.samples = samples;
-    TrigMesh surf;
-    MarchingCubes(meshInfo.sdf->dist, -0.2, meshInfo.sdf->distUnit, meshInfo.sdf->voxSize, meshInfo.sdf->origin, &surf);
-    surf.SaveObj(outputFolder + "/debug_sdf_inner.obj");
+    // TrigMesh surf;
+    // MarchingCubes(meshInfo.sdf->dist, -0.2, meshInfo.sdf->distUnit, meshInfo.sdf->voxSize, meshInfo.sdf->origin, &surf);
+    // surf.SaveObj(outputFolder + "/debug_sdf_inner.obj");
   } else {
     samples = meshInfo.samples;
   }

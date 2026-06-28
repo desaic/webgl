@@ -103,6 +103,9 @@ void SavePointsObj(const std::string & filename, const std::vector<SamplePoint> 
     std::ofstream out(filename);
     for(size_t i = 0;i<points.size(); i++){
         out << "v " << points[i].x[0] <<" " <<points[i].x[1] <<" "<<points[i].x[2] <<"\n";
+        Vec3f n = points[i].x + 0.2f * points[i].n;
+        out << "v " << n[0] << " " << n[1] << " " << n[2] << "\n";
+        out << "l " << (2 * i + 1) << " " << (2 * i + 2) << "\n";
     }
     out.close();
 }
