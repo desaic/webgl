@@ -107,6 +107,41 @@ void SavePointsObj(const std::string & filename, const std::vector<SamplePoint> 
     out.close();
 }
 
+void SaveVec3fObj(const std::string & filename, const std::vector<Vec3f> & points){
+    std::ofstream out(filename);
+    for(size_t i = 0;i<points.size(); i++){
+        out << "v " << points[i][0] <<" " <<points[i][1] <<" "<<points[i][2] <<"\n";
+    }
+    out.close();
+}
+
+std::vector<Vec3f> SubsampleMeshVertices(const std::vector<Vec3f>& vertices,
+                                         float targetSpacing) {
+    if (vertices.empty() || targetSpacing <= 0.0f) {
+        return vertices;
+    }
+
+    std::unordered_set<SpatialKey, SpatialKeyHash> occupiedCells;
+    std::vector<Vec3f> subsampledVerts;
+    subsampledVerts.reserve(vertices.size() / 4);
+
+    float invSpacing = 1.0f / targetSpacing;
+
+    for (const auto& v : vertices) {
+        SpatialKey key;
+        key.x = static_cast<int>(std::floor(v[0] * invSpacing));
+        key.y = static_cast<int>(std::floor(v[1] * invSpacing));
+        key.z = static_cast<int>(std::floor(v[2] * invSpacing));
+
+        if (occupiedCells.insert(key).second) {
+            subsampledVerts.push_back(v);
+        }
+    }
+
+    return subsampledVerts;
+}
+
+
 void TestSamplePoints(){
     float eps = 0.1f;
     TrigMesh mesh;

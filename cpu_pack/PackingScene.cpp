@@ -487,9 +487,12 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   RigidTransform tOut = tran;
 
   const float CONTACT_ANGLE_THRESH_DEG = 5.0f;
-  float ds = 0.5f; //cm for fruits
-  float minDist = ds * 0.1f;      
-  float eps = minDist;            
+  // surface sample points average distance
+  // cm for fruits
+  float ds = 0.5f;
+  // parts cannot get closer than this.
+  float eps = ds * 0.1f;            
+  // contact is active when distance is within eps + activeBuffer.
   float activeBuffer = ds; 
   size_t maxOptimizationSteps = 20;
   float MIN_LineSearchStep = 1e-2f;

@@ -17,4 +17,10 @@ class SamplePoint {
 int SamplePoints (const TrigMesh & mesh, float eps, std::vector<SamplePoint> & points);
 
 void SavePointsObj(const std::string & filename, const std::vector<SamplePoint> & points);
+
+void SaveVec3fObj(const std::string & filename, const std::vector<Vec3f> & points);
+
+std::vector<Vec3f> SubsampleMeshVertices(const std::vector<Vec3f>& vertices,
+                                         float targetSpacing);
+
 void TestSamplePoints();
