@@ -483,14 +483,13 @@ static std::vector<Vec3f> TransformPoints(const std::vector<Vec3f> &points, cons
   }
   return transformed;
 }
-
-static Quat4f IntegrateAngularVelocity(Vec3f deltaTheta, float scale) {
+static Quat4f IntegrateAngularVelocity(Vec3f angVel, float dt) {
   Quat4f q_delta = Quat4f::IDENTITY;
-  float angle = std::sqrt(deltaTheta.dot(deltaTheta));
+  float angle = std::sqrt(angVel.dot(angVel));
   if (angle > 1e-6f) {
-    float s = std::sin(angle * scale * 0.5f);
-    Vec3f axis = deltaTheta * (1.0f / angle);
-    q_delta = Quat4f(std::cos(angle * scale * 0.5f), axis[0] * s, axis[1] * s, axis[2] * s);
+    float s = std::sin(angle * dt * 0.5f);
+    Vec3f axis = angVel * (1.0f / angle);
+    q_delta = Quat4f(std::cos(angle * dt * 0.5f), axis[0] * s, axis[1] * s, axis[2] * s);
   }
   return q_delta;
 }
@@ -500,26 +499,30 @@ static std::vector<Contact> GatherActiveContacts(
     const std::vector<const TrigGrid*> &accGrids,
     const Matrix3f &currentRotMat,
     const Vec3f &currentT,
-    const Matrix3f &rotMat0,
-    const Vec3f &tranPosition,
     float eps,
     float activeBuffer,
     float contactAngleThreshDeg,
     size_t &rawCountOut) {
+    
   std::vector<Contact> activeContacts;
   float queryRadius = eps + activeBuffer;
+  
   for (size_t s = 0; s < fineSamples.size(); s++) {
     Vec3f worldPt = currentRotMat * fineSamples[s].x + currentT;
-    Vec3f worldPt0 = rotMat0 * fineSamples[s].x + tranPosition;
     
     for (unsigned m = 0; m < accGrids.size(); m++) {
       ContactInfo info = accGrids[m]->NearestTriangle(worldPt, queryRadius);
       
-      if (info.dist >= 0.0f && info.dist < eps + activeBuffer) {
-        Vec3f sampleToSurf = info.closestPt - worldPt0;
-        if (sampleToSurf.dot(info.normal) > 0) {
-          info.normal = -info.normal;
+      // We only care about points within our interaction radius
+      if (info.dist >= 0.0f && info.dist < queryRadius) {
+        
+        // FIX 1: Normal Flipping Bug. 
+        // We want the normal to always point FROM the obstacle TO the fruit sample.
+        Vec3f surfToSample = worldPt - info.closestPt;
+        if (surfToSample.dot(info.normal) < 0.0f) {
+          info.normal = -info.normal; 
         }
+        
         activeContacts.push_back({worldPt, info.normal, info.dist});
       }
     }
@@ -537,55 +540,57 @@ static void SolveContactConstraintsPGS(
     const Vec3f &invI_local,
     float eps,
     int pgsPasses,
-    Vec3f &deltaX,
-    Vec3f &deltaTheta) {
+    float dt,
+    Vec3f &linearVel,
+    Vec3f &angularVel) {
+    
   std::vector<float> lambdas(contacts.size(), 0.0f);
+  
+  // Baumgarte Stabilization factor (0.1 to 0.3 is standard). 
+  // Determines how aggressively we push out of penetrations.
+  float beta = 0.2f; 
+
   for (int pass = 0; pass < pgsPasses; pass++) {
     for (size_t c = 0; c < contacts.size(); c++) {
       const auto &contact = contacts[c];
       Vec3f r = contact.worldPos - currentT;
       Vec3f r_cross_n = r.cross(contact.normal);
 
-      float j_delta = deltaX.dot(contact.normal) + deltaTheta.dot(r_cross_n);
-      float b = eps - contact.distance; 
-      
+      // Current relative velocity at the contact point
+      Vec3f v_contact = linearVel + angularVel.cross(r);
+      float rel_vel = v_contact.dot(contact.normal);
+
+      // FIX 3: Baumgarte Stabilization (Position correction translated to velocity)
+      // If distance < eps, we are penetrating. Create a bias velocity to push it out.
+      float penetration = eps - contact.distance;
+      float bias = 0.0f;
+      if (penetration > 0.0f) {
+          bias = (beta / dt) * penetration;
+      }
+
+      // Target velocity: we want to stop moving into the surface (-rel_vel) 
+      // and add the bias to fix penetration.
+      float target_vel = -rel_vel + bias;
+
+      // Effective mass at the contact point
       Vec3f torqueLocal = Rinv * r_cross_n;
       Vec3f angAccLocal(torqueLocal[0] * invI_local[0], torqueLocal[1] * invI_local[1], torqueLocal[2] * invI_local[2]);
       float j_sq_len = invMass + torqueLocal.dot(angAccLocal);
 
       if (j_sq_len > 1e-8f) {
-        float delta_lambda = (b - j_delta) / j_sq_len;
+        float delta_lambda = target_vel / j_sq_len;
         float old_lambda = lambdas[c];
+        
+        // Clamp impulse to > 0 (forces can only push objects apart, not pull them together)
         lambdas[c] = std::max(0.0f, old_lambda + delta_lambda);
         float actual_delta_lambda = lambdas[c] - old_lambda;
 
-        deltaX += (actual_delta_lambda * invMass) * contact.normal;
-        deltaTheta += actual_delta_lambda * (currentRotMat * angAccLocal);
+        // Apply impulse to velocities
+        linearVel += (actual_delta_lambda * invMass) * contact.normal;
+        angularVel += actual_delta_lambda * (currentRotMat * angAccLocal);
       }
     }
   }
-}
-
-static bool CheckCollision(
-    const std::vector<SamplePoint> &coarseSamples,
-    const std::vector<const TrigGrid*> &accGrids,
-    const Matrix3f &testRotMat,
-    const Vec3f &testT,
-    float ds,
-    float eps) {
-  for (size_t s = 0; s < coarseSamples.size(); s++) {
-    Vec3f testPt = testRotMat * coarseSamples[s].x + testT;
-
-    for (unsigned m = 0; m < accGrids.size(); m++) {
-      Vec3f dummyNormal;
-      float dist = accGrids[m]->NearestTriangle(testPt, ds, dummyNormal);
-
-      if (dist >= 0.0f && dist < eps - 0.01f) {
-        return true;
-      }
-    }
-  }
-  return false;
 }
 
 RigidTransform PackingScene::Nudge(unsigned itemIdx,
@@ -600,86 +605,73 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   Vec3f bboxSize = meshBBox.vmax - meshBBox.vmin;
   float maxDim = std::max({bboxSize[0], bboxSize[1], bboxSize[2]});
 
-  // surface sample points average distance (cm)
-  // scale based on object size: 0.5cm for small fruits, up to 2cm for large ones
   float ds = 0.5f;
-  // parts cannot get closer than this.
   float eps = ds * 0.1f;
-  // contact is active when distance is within eps + activeBuffer.
   float activeBuffer = ds; 
 
-  size_t maxOptimizationSteps = 20;
-  float MIN_LineSearchStep = 1e-2f;
+  // Simulation parameters
+  size_t maxOptimizationSteps = 40; // Might need slightly more steps for settling
+  float dt = 1.0f / 60.0f;          // Fixed time step
+  float damping = 0.85f;            // Velocity damping to simulate friction/air resistance
+  float nudgeAcceleration = 200.0f; // Accelerate at 200 cm/s^2 (which is 2 m/s^2)
 
-  // 1. Fine & Coarse Samples Initialization
   std::vector<SamplePoint> allFineSamples;
   SamplePoints(items[itemIdx].mesh, ds, allFineSamples);
   std::vector<SamplePoint> fineSamples = DownsamplePoints(allFineSamples, ds);
-  SavePointsObj(outputFolder + "/debug_banana_points.obj", fineSamples);
-  std::vector<SamplePoint> coarseSamples = CoarseSampleMesh(items[itemIdx].mesh, ds);
 
-  // OPTIMIZATION: Compute local bounding box once outside the loop
   Box3f localBox = ComputeBBox(items[itemIdx].mesh.v);
 
-  // 2. Initialize State Variables
   Vec3f currentT = tran.position;
   Matrix3f rotMat0 = tran.rotation;
   Quat4f currentQ = Quat4f::fromRotationMatrix(rotMat0);
 
   auto item = items[itemIdx];
-  float invMass = 1.0f/item.rb.vol;
+  float invMass = 1.0f / item.rb.vol;
   Vec3f invI_local(1.0f/item.rb.inertia(0,0), 1.0f/item.rb.inertia(1,1), 1.0f/item.rb.inertia(2,2));
-  Vec3f velocityX(0.0f);
-  Vec3f velocityTheta(0.0f);
-  float damping = 0.7f; 
+  
+  // FIX 2 & 3: Proper Velocity Tracking
+  Vec3f linearVel(0.0f);
+  Vec3f angularVel(0.0f);
 
-  // OPTIMIZATION: Persistent cache to prevent rebuilding grids for the same neighbor
   std::unordered_map<unsigned, std::shared_ptr<TrigGrid>> persistentNeighborGrids;
   std::vector<std::shared_ptr<TrigMesh> > nbrMeshes;
 
   Utils::Stopwatch nudgeTotal;
   Utils::Stopwatch stepTimer;
-  float broadphaseMs = 0.0f;
-  float narrowphaseMs = 0.0f;
-  float pgsMs = 0.0f;
-  float lineSearchMs = 0.0f;
   nudgeTotal.Start();
 
-  // 3. Main Kinematic Optimization Loop
   for (size_t step = 0; step < maxOptimizationSteps; step++) {
     Matrix3f currentRotMat = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
+    auto Rinv = currentRotMat.transposed();
 
-    // DYNAMIC BROADPHASE STEP: Compute current world bounding box from local corners
-    stepTimer.Start();
+    // 1. Apply External Forces (The "Bulldozer" is now a physical force)
+    Vec3f forceDir = dir0;
+    forceDir.normalize();
+    linearVel += (forceDir * nudgeAcceleration) * dt;
+
+    // 2. DYNAMIC BROADPHASE STEP
     auto corners = TransformPoints(BoxCorners(localBox), currentRotMat, currentT);
     Box3f instBox = ComputeBBox(corners);
-    // Query broadphase with a tight radius specific only to this step's reach
     float stepQueryDist = eps + activeBuffer;
     std::vector<unsigned> intersectingInstances = broadPhase.GetNearby(instBox, stepQueryDist);
 
-    // Assemble acceleration grids dynamically for this step
-    // Store non-owning const pointers to eliminate vector deep copies
     std::vector<const TrigGrid*> accGrids;
     accGrids.push_back(&containerGrid);
 
     for (size_t i = 0; i < intersectingInstances.size(); i++) {
       unsigned instIdx = intersectingInstances[i];
-      
       auto it = persistentNeighborGrids.find(instIdx);
       if (it == persistentNeighborGrids.end()) {
         InstanceInfo inst = instances[instIdx];
         auto nbrMesh = std::make_shared<TrigMesh>();
         *nbrMesh = MakeTransformedMesh(items[inst.itemId].mesh, inst.tran);
-        
         nbrMeshes.push_back(nbrMesh);
-        // Allocate heap-backed grid and build directly on it
+        
         auto newGrid = std::make_shared<TrigGrid>();
         newGrid->Build(*nbrMesh, gridDx);
-        
         persistentNeighborGrids[instIdx] = newGrid;
         accGrids.push_back(newGrid.get());
       } else {
-        // Safe pointer collection without copy constructors firing
         accGrids.push_back(it->second.get());
       }
     }
@@ -687,74 +679,39 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     if (innerContainerEnabled) {
       accGrids.push_back(&containerInnerGrid);
     }
-    broadphaseMs += stepTimer.ElapsedMS();
 
-    // 4. Narrow Phase Contact Gathering
-    stepTimer.Start();
+    // 3. Narrow Phase Contact Gathering
     size_t rawCount = 0;
     std::vector<Contact> contacts = GatherActiveContacts(
-        fineSamples, accGrids, currentRotMat, currentT, rotMat0, tran.position,
-        eps, activeBuffer, CONTACT_ANGLE_THRESH_DEG, rawCount);
-    std::cout << "# contact before after reduction " << rawCount << " " << contacts.size() << "\n";
-    narrowphaseMs += stepTimer.ElapsedMS();
+        fineSamples, accGrids, currentRotMat, currentT, eps, activeBuffer, CONTACT_ANGLE_THRESH_DEG, rawCount);
 
-    auto Rinv = currentRotMat.transposed();
-    
-    Vec3f dir = dir0;
-    dir.normalize();
-
-    Vec3f deltaX = (ds * dir) + velocityX * damping;
-    Vec3f deltaTheta = velocityTheta * damping;
-
-    // 5. PGS Solver Passes
-    stepTimer.Start();
+    // 4. PGS Solver Passes (Modifies Velocities)
     int pgsPasses = 8;
-    SolveContactConstraintsPGS(contacts, currentT, currentRotMat, Rinv, invMass, invI_local, eps, pgsPasses, deltaX, deltaTheta);
-    pgsMs += stepTimer.ElapsedMS();
+    SolveContactConstraintsPGS(contacts, currentT, currentRotMat, Rinv, invMass, invI_local, eps, pgsPasses, dt, linearVel, angularVel);
 
-    // 6. Backtracking Line Search Gatekeeper
-    stepTimer.Start();
-    float scale = 1.0f;
-    bool stepAccepted = false;
-
-    while (scale > MIN_LineSearchStep) {
-      Vec3f testT = currentT + deltaX * scale;
-
-      Quat4f q_delta = IntegrateAngularVelocity(deltaTheta, scale);
-
-      Quat4f testQ = q_delta * currentQ;
-      testQ.normalize();
-      Matrix3f testRotMat = Matrix3f::rotation(testQ.x(), testQ.y(), testQ.z(), testQ.w());
-
-      if (!CheckCollision(coarseSamples, accGrids, testRotMat, testT, ds, eps)) {
-        currentT = testT;
-        currentQ = testQ;
-        stepAccepted = true;
-        break;
-      }
-
-      scale *= 0.5f; 
-    }
-    lineSearchMs += stepTimer.ElapsedMS();
-
-    if (!stepAccepted || (deltaX.dot(deltaX) + deltaTheta.dot(deltaTheta)) < 1e-7f) {
-      break;
-    }
-    velocityX = deltaX * scale;
-    velocityTheta = deltaTheta * scale;
+    // 5. Integrate Velocities to Positions (FIX 4: No line search, let physics slide)
+    currentT += linearVel * dt;
     
+    Quat4f q_delta = IntegrateAngularVelocity(angularVel, dt);
+    currentQ = q_delta * currentQ;
+    currentQ.normalize();
+
+    // Apply damping so the fruit settles down and energy bleeds out
+    linearVel *= damping;
+    angularVel *= damping;
+
     trajectory.push_back(RigidTransform(currentT, Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w())));
+    
+    // Early exit if the fruit has completely settled into a snug spot
+    if (linearVel.dot(linearVel) < 1e-6f && angularVel.dot(angularVel) < 1e-6f) {
+        break; 
+    }
   }
 
   tOut.position = currentT;
   tOut.rotation = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
 
   std::cout << "Nudge total " << nudgeTotal.ElapsedMS() << " ms\n";
-  std::cout << "  broadphase " << broadphaseMs << " ms\n";
-  std::cout << "  narrowphase " << narrowphaseMs << " ms\n";
-  std::cout << "  PGS solver " << pgsMs << " ms\n";
-  std::cout << "  line search " << lineSearchMs << " ms\n";
-
   return tOut;
 }
 

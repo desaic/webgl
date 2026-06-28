@@ -70,7 +70,7 @@ void PackStep(PackingScene & scene, const PackingStep & step){
   }
 
   //debug 
-  const unsigned DEBUG_I = 12;
+  const unsigned DEBUG_I = 0;
   for (; count < step.count; count++) {
     bool packSuccess = false;
     for (unsigned i = DEBUG_I; i < numItems; i++) {
