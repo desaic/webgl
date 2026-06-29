@@ -598,8 +598,6 @@ static void SolveContactConstraintsPGS(
 
 void MovePointsInward(std::vector<SamplePoint> &points,float offset, const std::shared_ptr<AdapSDF> &sdf) {
   for (auto& pt : points) {
-      // debug;
-      float dist = sdf->GetCoarseDist(pt.x);
       pt.x -= pt.n * offset;
   }
 }
@@ -634,14 +632,8 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     SamplePoints(meshInfo.mesh, ds, allFineSamples);
     samples = DownsamplePoints(allFineSamples, ds);
     meshInfo.ComputeSDFCached();
-    // SavePointsObj(outputFolder + "sample_points.obj", samples);
     MovePointsInward(samples, MAX_OVERLAP, meshInfo.sdf);
-    // meshInfo.mesh.SaveObj(outputFolder + "/inertia_frame.obj");
-    // SavePointsObj(outputFolder + "moved_points.obj", samples);
     meshInfo.samples = samples;
-    // TrigMesh surf;
-    // MarchingCubes(meshInfo.sdf->dist, -0.2, meshInfo.sdf->distUnit, meshInfo.sdf->voxSize, meshInfo.sdf->origin, &surf);
-    // surf.SaveObj(outputFolder + "/debug_sdf_inner.obj");
   } else {
     samples = meshInfo.samples;
   }
@@ -655,7 +647,6 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   float invMass = 1.0f / item.rb.vol;
   Vec3f invI_local(1.0f/item.rb.inertia(0,0), 1.0f/item.rb.inertia(1,1), 1.0f/item.rb.inertia(2,2));
   
-  // FIX 2 & 3: Proper Velocity Tracking
   Vec3f linearVel(0.0f);
   Vec3f angularVel(0.0f);
 
@@ -670,7 +661,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     Matrix3f currentRotMat = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
     auto Rinv = currentRotMat.transposed();
 
-    // 1. Apply External Forces (The "Bulldozer" is now a physical force)
+    // 1. Apply External Forces
     Vec3f forceDir = dir0;
     forceDir.normalize();
     linearVel += (forceDir * nudgeAcceleration) * dt;
@@ -715,7 +706,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     int pgsPasses = 8;
     SolveContactConstraintsPGS(contacts, currentT, currentRotMat, Rinv, invMass, invI_local, eps, pgsPasses, dt, linearVel, angularVel);
 
-    // 5. Integrate Velocities to Positions (FIX 4: No line search, let physics slide)
+    // 5. Integrate Velocities to Positions
     currentT += linearVel * dt;
     
     Quat4f q_delta = IntegrateAngularVelocity(angularVel, dt);

@@ -53,6 +53,23 @@ void MakeInnerMesh() {
   surf.SaveObj("F:/meshes/fruit_hand/hand4.5m_inner.obj");
 }
 
+void DebugPointSampling(MeshInfo & meshInfo, const std::string & outputFolder){
+    std::vector<SamplePoint> allFineSamples;
+    float ds = 0.5f;
+    float MAX_OVERLAP = 0.2f;
+    SamplePoints(meshInfo.mesh, ds, allFineSamples);
+    std::vector<SamplePoint> samples = DownsamplePoints(allFineSamples, ds);
+    meshInfo.ComputeSDFCached();
+    SavePointsObj(outputFolder + "sample_points.obj", samples);
+    MovePointsInward(samples, MAX_OVERLAP, meshInfo.sdf);
+    meshInfo.mesh.SaveObj(outputFolder + "/inertia_frame.obj");
+    SavePointsObj(outputFolder + "moved_points.obj", samples);
+    meshInfo.samples = samples;
+    TrigMesh surf;
+    MarchingCubes(meshInfo.sdf->dist, -0.2, meshInfo.sdf->distUnit, meshInfo.sdf->voxSize, meshInfo.sdf->origin, &surf);
+    surf.SaveObj(outputFolder + "/debug_sdf_inner.obj");
+}
+
 void PackStep(PackingScene & scene, const PackingStep & step){
   unsigned count = 0;
   // first item to consider in the next iteration.
@@ -69,13 +86,16 @@ void PackStep(PackingScene & scene, const PackingStep & step){
     AddInnerContainer(scene);
   }
 
-  //debug 
+  //debug
+  //DebugPointSampling(scene.items[8], scene.outputFolder);
+  // debug
   const unsigned DEBUG_I = 0;
   for (; count < step.count; count++) {
     bool packSuccess = false;
     for (unsigned i = DEBUG_I; i < numItems; i++) {
       unsigned nameIndex = (i + startNameIndex) % numItems;
       std::string name = step.names[nameIndex];
+
       unsigned itemIndex = scene.GetItemIndex(name);
       MeshInfo &item = scene.items[itemIndex];
       if (item.noMoreFit) {

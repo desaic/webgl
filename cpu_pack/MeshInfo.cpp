@@ -53,9 +53,9 @@ std::vector<MeshInfo> LoadAllMeshInfo(const std::string &meshDir) {
     }
     std::cout << entry.path().filename() << "\n";
     fs::path p = entry.path();
-    std::cout << "Full Filename: " << p.filename() << "\n";
-    std::cout << "Stem (Name):   " << p.stem() << "\n";
-    std::cout << "Extension:     " << p.extension() << "\n";
+    std::cout << "Filename: " << p.filename() << " | ";
+    std::cout << p.stem() << " | ";
+    std::cout << p.extension() << "\n";
 
     std::string stem = p.stem().string();
     if (stem.ends_with("_m")) {
