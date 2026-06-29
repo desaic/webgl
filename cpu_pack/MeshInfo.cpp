@@ -51,7 +51,6 @@ std::vector<MeshInfo> LoadAllMeshInfo(const std::string &meshDir) {
     if (!entry.is_regular_file()) {
       continue;
     }
-    std::cout << entry.path().filename() << "\n";
     fs::path p = entry.path();
     std::cout << "Filename: " << p.filename() << " | ";
     std::cout << p.stem() << " | ";

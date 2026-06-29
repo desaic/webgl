@@ -193,7 +193,7 @@ struct Contact {
     Vec3f worldPos;
     Vec3f normal;
     float distance;
-    Vec3f localPos;
+    int meshIndex = -1;
 };
 
 float distSq(const Vec3f &a, const Vec3f &b) {
@@ -519,14 +519,14 @@ static std::vector<Contact> GatherActiveContacts(
       // We only care about points within our interaction radius
       if (info.dist >= 0.0f && info.dist < queryRadius) {
         
-        // FIX 1: Normal Flipping Bug. 
-        // We want the normal to always point FROM the obstacle TO the fruit sample.
+        // the normal to point FROM the obstacle TO the fruit sample.
+        // may lock up the sim if there is already penetration.
         Vec3f surfToSample = worldPt - info.closestPt;
         if (surfToSample.dot(info.normal) < 0.0f) {
           info.normal = -info.normal; 
         }
         
-        activeContacts.push_back({worldPt, info.normal, info.dist});
+        activeContacts.push_back({worldPt, info.normal, info.dist, int(m)});
       }
     }
   }
@@ -623,6 +623,8 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   float dt = 1.0f / 60.0f;          // Fixed time step
   float damping = 0.85f;            // Velocity damping to simulate friction/air resistance
   float nudgeAcceleration = 200.0f; // Accelerate at 200 cm/s^2 (which is 2 m/s^2)
+  // attraction towards contacting object.
+  Vec3f attractionDir(-1,0,0);
   const float MAX_OVERLAP = 0.2;
   auto &meshInfo = items[itemIdx];
 
@@ -662,7 +664,8 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     auto Rinv = currentRotMat.transposed();
 
     // 1. Apply External Forces
-    Vec3f forceDir = dir0;
+    float dir0Weight = 1.0f - step/float(maxOptimizationSteps);
+    Vec3f forceDir = dir0Weight *dir0 + (1-dir0Weight) * attractionDir;
     forceDir.normalize();
     linearVel += (forceDir * nudgeAcceleration) * dt;
 
@@ -672,8 +675,9 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     float stepQueryDist = eps + activeBuffer;
     std::vector<unsigned> intersectingInstances = broadPhase.GetNearby(instBox, stepQueryDist);
 
+    // must be ordered by the intersectingInstances than 1-2 container meshes
+    // for active contacts to return correct indices
     std::vector<const TrigGrid*> accGrids;
-    accGrids.push_back(&containerGrid);
 
     for (size_t i = 0; i < intersectingInstances.size(); i++) {
       unsigned instIdx = intersectingInstances[i];
@@ -693,6 +697,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
       }
     }
 
+    accGrids.push_back(&containerGrid);
     if (innerContainerEnabled) {
       accGrids.push_back(&containerInnerGrid);
     }
@@ -701,7 +706,24 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     size_t rawCount = 0;
     std::vector<Contact> contacts = GatherActiveContacts(
         samples, accGrids, currentRotMat, currentT, eps, activeBuffer, CONTACT_ANGLE_THRESH_DEG, rawCount);
-
+    float minX = 1e30f;
+    int attractItem = -1;
+    // pick contacting object with min x coord.
+    for (size_t i = 0; i < contacts.size(); i++){
+      int gridIdx = contacts[i].meshIndex;
+      if(gridIdx>=0 && gridIdx < intersectingInstances.size()){
+        unsigned instIdx = intersectingInstances[unsigned(gridIdx)];
+        float x = instances[instIdx].tran.position[0];
+        if(x<minX || attractItem < 0){
+          minX = x;
+          attractItem = instIdx;
+        }
+      }
+    }
+    if(attractItem>= 0){
+      attractionDir = instances[unsigned(attractItem)].tran.position - currentT;
+      attractionDir.normalize();
+    }
     // 4. PGS Solver Passes (Modifies Velocities)
     int pgsPasses = 8;
     SolveContactConstraintsPGS(contacts, currentT, currentRotMat, Rinv, invMass, invI_local, eps, pgsPasses, dt, linearVel, angularVel);
@@ -795,8 +817,25 @@ void PackingScene::SaveTrajectories(const std::string &filename) const {
     const auto &item = items[inst.itemId];
     std::string meshFile = item.filePath;
     trajOut << "Instance " << i << " Mesh " << meshFile << "\n";
-    for (size_t j = 0; j < inst.trajectory.size(); j++) {
-      auto tran = inst.trajectory[j];
+
+    std::vector<RigidTransform> trajToSave;
+    if (inst.trajectory.size() > 50) {
+      size_t targetCount = 10;
+      size_t stride = inst.trajectory.size() / targetCount;
+      size_t lastIdx = 0;
+      for (size_t j = 0; j < inst.trajectory.size(); j += stride) {
+        trajToSave.push_back(inst.trajectory[j]);
+        lastIdx = j;
+      }
+      if (lastIdx != inst.trajectory.size() - 1) {
+        trajToSave.push_back(inst.trajectory.back());
+      }
+    } else {
+      trajToSave = inst.trajectory;
+    }
+
+    for (size_t j = 0; j < trajToSave.size(); j++) {
+      auto tran = trajToSave[j];
       tran = item.rb.GetInputTran(tran);
       trajOut << "Step " << j << " " << tran.toString() << "\n";
     }
