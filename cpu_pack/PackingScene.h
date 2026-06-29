@@ -131,3 +131,6 @@ Array3D<Vec3f> ComputeSDFGradient(const AdapSDF& sdf, float distUnit, float voxS
 /// @param stride subsample stride for visualization
 void SaveGradientObj(const std::string& filename, const Array3D<Vec3f>& gradients,
                      const AdapSDF& sdf, float voxSize, unsigned stride);
+
+void MovePointsInward(std::vector<SamplePoint> &points, float offset, const std::shared_ptr<AdapSDF> &sdf);
+std::vector<SamplePoint> DownsamplePoints(const std::vector<SamplePoint> &points, float minSpacing);

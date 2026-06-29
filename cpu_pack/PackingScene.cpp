@@ -350,7 +350,7 @@ std::vector<Contact> reduceContacts(const std::vector<Contact> &rawContacts, flo
   return reducedContacts;
 }
 
-static std::vector<SamplePoint> DownsamplePoints(const std::vector<SamplePoint> &points, float minSpacing) {
+std::vector<SamplePoint> DownsamplePoints(const std::vector<SamplePoint> &points, float minSpacing) {
   std::vector<SamplePoint> filtered;
   if (points.empty()) {
     return filtered;
@@ -621,7 +621,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   float activeBuffer = ds;
                            
   // Simulation parameters
-  size_t maxOptimizationSteps = 40; // Might need slightly more steps for settling
+  size_t maxOptimizationSteps = 100; // Might need slightly more steps for settling
   float dt = 1.0f / 60.0f;          // Fixed time step
   float damping = 0.85f;            // Velocity damping to simulate friction/air resistance
   float nudgeAcceleration = 200.0f; // Accelerate at 200 cm/s^2 (which is 2 m/s^2)
@@ -729,7 +729,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     trajectory.push_back(RigidTransform(currentT, Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w())));
     
     // Early exit if the fruit has completely settled into a snug spot
-    if (linearVel.dot(linearVel) < 1e-6f && angularVel.dot(angularVel) < 1e-6f) {
+    if (linearVel.dot(linearVel) < 1e-4f && angularVel.dot(angularVel) < 1e-4f) {
         break; 
     }
   }
