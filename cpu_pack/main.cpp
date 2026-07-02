@@ -379,16 +379,16 @@ void DebugNudge(){
   scene.instances[instanceId].trajectory = trajectory;
   // debug save trajectory progress
   std::string trajFile = dataDir + "traj_debug.txt";
-  scene.SaveTrajectories(trajFile);              
+  scene.SaveTrajectories(trajFile);
 }
 
 int main(int argc, char * argv[]){
   // DebugNudge();
   // std::string meshDir = "F:/meshes/fruit_hand/fruits_1/";
   // linux desktop
-  // std::string dataDir = "/media/desaic/WD/meshes/fruit_hand/";
+  std::string dataDir = "/media/desaic/WD/meshes/fruit_hand/";
   // linux laptop
-  std::string dataDir = "/media/desaic/ssd2/meshes/fruit_hand/";
+  // std::string dataDir = "/media/desaic/ssd2/meshes/fruit_hand/";
   
   std::string meshDir = dataDir + "/fruits_1/";
 

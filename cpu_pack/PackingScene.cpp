@@ -601,12 +601,70 @@ void MovePointsInward(std::vector<SamplePoint> &points,float offset, const std::
       pt.x -= pt.n * offset;
   }
 }
+  
+struct RigidBodyState {
+  size_t step;
+  Vec3f position;
+  Quat4f rotation;
+  Vec3f linearVel;
+  Vec3f angularVel;
+  Vec3f externalForce;
+  std::vector<Contact> contacts;
+};
+
+std::string RigidBodyStateToString(const std::vector<RigidBodyState> & debugSteps) {
+  std::ostringstream out;
+  out << std::fixed << std::setprecision(6);
+  out << "{\n";
+  out << "  \"steps\": [\n";
+  for (size_t i = 0; i < debugSteps.size(); i++) {
+    const auto &ds = debugSteps[i];
+    out << "    {\n";
+    out << "      \"step\": " << ds.step << ",\n";
+    out << "      \"position\": [" << ds.position[0] << ", " << ds.position[1] << ", " << ds.position[2] << "],\n";
+    out << "      \"rotation\": [" << ds.rotation.w() << ", " << ds.rotation.x() << ", " << ds.rotation.y() << ", "
+        << ds.rotation.z() << "],\n";
+    out << "      \"linearVelocity\": [" << ds.linearVel[0] << ", " << ds.linearVel[1] << ", " << ds.linearVel[2]
+        << "],\n";
+    out << "      \"angularVelocity\": [" << ds.angularVel[0] << ", " << ds.angularVel[1] << ", " << ds.angularVel[2]
+        << "],\n";
+    out << "      \"externalForce\": [" << ds.externalForce[0] << ", " << ds.externalForce[1] << ", "
+        << ds.externalForce[2] << "],\n";
+    out << "      \"contacts\": [\n";
+    for (size_t c = 0; c < ds.contacts.size(); c++) {
+      const auto &contact = ds.contacts[c];
+      out << "        {\n";
+      out << "          \"worldPos\": [" << contact.worldPos[0] << ", " << contact.worldPos[1] << ", "
+          << contact.worldPos[2] << "],\n";
+      out << "          \"normal\": [" << contact.normal[0] << ", " << contact.normal[1] << ", " << contact.normal[2]
+          << "],\n";
+      out << "          \"distance\": " << contact.distance << ",\n";
+      out << "          \"meshIndex\": " << contact.meshIndex << "\n";
+      out << "        }";
+      if (c + 1 < ds.contacts.size()) {
+        out << ",";
+      }
+      out << "\n";
+    }
+    out << "      ]\n";
+    out << "    }";
+    if (i + 1 < debugSteps.size()) {
+      out << ",";
+    }
+    out << "\n";
+  }
+  out << "  ]\n";
+  out << "}\n";
+  return out.str();
+}
 
 RigidTransform PackingScene::Nudge(unsigned itemIdx,
                                    const RigidTransform &tran,
                                    const Vec3f &dir0,
                                    std::vector<RigidTransform> &trajectory) {
   RigidTransform tOut = tran;
+
+  std::vector<RigidBodyState> debugSteps;
 
   const float CONTACT_ANGLE_THRESH_DEG = 5.0f;
 
@@ -739,12 +797,34 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     linearVel *= damping;
     angularVel *= damping;
 
+    // Record debug step data
+    RigidBodyState dStep;
+    dStep.step = step;
+    dStep.position = currentT;
+    dStep.rotation = currentQ;
+    dStep.linearVel = linearVel;
+    dStep.angularVel = angularVel;
+    dStep.externalForce = forceDir * nudgeAcceleration;
+    dStep.contacts = contacts;
+    debugSteps.push_back(dStep);
+
     trajectory.push_back(RigidTransform(currentT, Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w())));
     
     // Early exit if the fruit has completely settled into a snug spot
     if (linearVel.dot(linearVel) < 1e-4f && angularVel.dot(angularVel) < 1e-4f) {
         break; 
     }
+  }
+
+  // Save nudge debug visualization data to a JSON file
+  std::string debugFolder = outputFolder.empty() ? "." : outputFolder;
+  std::string debugFilename = debugFolder + "/nudge_debug_" + items[itemIdx].name + "_" + std::to_string(instances.size()) + ".json";
+  std::string debugMeshFile = debugFolder + "/inertia_" + items[itemIdx].name + ".obj";
+  meshInfo.mesh.SaveObj(debugMeshFile);
+  fs::create_directories(debugFolder);
+  std::ofstream out(debugFilename);
+  if (out.good()) {
+    out << RigidBodyStateToString(debugSteps);
   }
 
   tOut.position = currentT;
