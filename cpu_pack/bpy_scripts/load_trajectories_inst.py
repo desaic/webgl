@@ -141,12 +141,12 @@ def animate_instances(instances, frames_per_step=3, pause_frames=5):
     bpy.context.scene.frame_end = current_frame
 
 def main():
-    trajectory_file = "/media/desaic/WD/meshes/fruit_hand/out/traj1.txt"
+    trajectory_file = "/media/desaic/WD/meshes/fruit_hand/out/traj9.txt"
 
     instances = load_trajectories(trajectory_file)
     print(f"Loaded {len(instances)} instances")
 
-    animate_instances(instances, frames_per_step=3, pause_frames=5)
+    animate_instances(instances, frames_per_step=1, pause_frames=2)
 
     print("Animation complete")
 

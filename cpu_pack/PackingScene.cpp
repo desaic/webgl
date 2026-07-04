@@ -500,6 +500,7 @@ static Quat4f IntegrateAngularVelocity(Vec3f angVel, float dt) {
 static std::vector<Contact> GatherActiveContacts(
     const std::vector<SamplePoint> &fineSamples,
     const std::vector<const TrigGrid*> &accGrids,
+    const std::vector<bool> &flipNormal,
     const Matrix3f &currentRotMat,
     const Vec3f &currentT,
     float eps,
@@ -518,12 +519,11 @@ static std::vector<Contact> GatherActiveContacts(
       
       // We only care about points within our interaction radius
       if (info.dist >= 0.0f && info.dist < queryRadius) {
-        
-        // the normal to point FROM the obstacle TO the fruit sample.
-        // may lock up the sim if there is already penetration.
-        Vec3f surfToSample = worldPt - info.closestPt;
-        if (surfToSample.dot(info.normal) < 0.0f) {
-          info.normal = -info.normal; 
+        // Flip deterministically per-grid instead of guessing from the
+        // sample position: the old surfToSample heuristic broke once the
+        // sample crossed the wall and the solver drove it deeper through.
+        if (m < flipNormal.size() && flipNormal[m]) {
+          info.normal = -info.normal;
         }
         
         activeContacts.push_back({worldPt, info.normal, info.dist, int(m)});
@@ -563,15 +563,19 @@ static void SolveContactConstraintsPGS(
       Vec3f v_contact = linearVel + angularVel.cross(r);
       float rel_vel = v_contact.dot(contact.normal);
 
-      // FIX 3: Baumgarte Stabilization (Position correction translated to velocity)
-      // If distance < eps, we are penetrating. Create a bias velocity to push it out.
+      // Only constrain when actually penetrating (distance < eps).
+      // Contacts in the buffer zone (eps <= distance < queryRadius) are for
+      // early detection only; they must not block approach or the sample
+      // freezes at the buffer edge and never reaches eps.
       float penetration = eps - contact.distance;
-      float bias = 0.0f;
-      if (penetration > 0.0f) {
-          bias = (beta / dt) * penetration;
+      if (penetration <= 0.0f) {
+        continue;
       }
 
-      // Target velocity: we want to stop moving into the surface (-rel_vel) 
+      // Baumgarte Stabilization: bias velocity to push out of penetration.
+      float bias = (beta / dt) * penetration;
+
+      // Target velocity: stop moving into the surface (-rel_vel)
       // and add the bias to fix penetration.
       float target_vel = -rel_vel + bias;
 
@@ -583,7 +587,7 @@ static void SolveContactConstraintsPGS(
       if (j_sq_len > 1e-8f) {
         float delta_lambda = target_vel / j_sq_len;
         float old_lambda = lambdas[c];
-        
+
         // Clamp impulse to > 0 (forces can only push objects apart, not pull them together)
         lambdas[c] = std::max(0.0f, old_lambda + delta_lambda);
         float actual_delta_lambda = lambdas[c] - old_lambda;
@@ -666,7 +670,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
 
   std::vector<RigidBodyState> debugSteps;
 
-  const float CONTACT_ANGLE_THRESH_DEG = 5.0f;
+  const float CONTACT_ANGLE_THRESH_DEG = 20.0f;
 
   Box3f meshBBox = ComputeBBox(items[itemIdx].mesh.v);
   Vec3f bboxSize = meshBBox.vmax - meshBBox.vmin;
@@ -760,10 +764,18 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
       accGrids.push_back(&containerInnerGrid);
     }
 
+    // Neighbors and the inner container are closed solids the fruit sits
+    // outside of, so their outward face normals already point toward the
+    // fruit. The outer container holds the fruit on its interior, so its
+    // outward normals must be flipped to push the fruit inward.
+    std::vector<bool> flipNormal(accGrids.size(), false);
+    flipNormal[intersectingInstances.size()] = true;
+
     // 3. Narrow Phase Contact Gathering
     size_t rawCount = 0;
     std::vector<Contact> contacts = GatherActiveContacts(
-        samples, accGrids, currentRotMat, currentT, eps, activeBuffer, CONTACT_ANGLE_THRESH_DEG, rawCount);
+        samples, accGrids, flipNormal, currentRotMat, currentT, eps, activeBuffer, CONTACT_ANGLE_THRESH_DEG, rawCount);
+    // std::cout << "step " << step << " raw=" << rawCount << " reduced=" << contacts.size() << "\n";
     float minX = 1e30f;
     int attractItem = -1;
     // pick contacting object with min x coord.
@@ -817,15 +829,15 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   }
 
   // Save nudge debug visualization data to a JSON file
-  std::string debugFolder = outputFolder.empty() ? "." : outputFolder;
-  std::string debugFilename = debugFolder + "/nudge_debug_" + items[itemIdx].name + "_" + std::to_string(instances.size()) + ".json";
-  std::string debugMeshFile = debugFolder + "/inertia_" + items[itemIdx].name + ".obj";
-  meshInfo.mesh.SaveObj(debugMeshFile);
-  fs::create_directories(debugFolder);
-  std::ofstream out(debugFilename);
-  if (out.good()) {
-    out << RigidBodyStateToString(debugSteps);
-  }
+  // std::string debugFolder = outputFolder.empty() ? "." : outputFolder;
+  // std::string debugFilename = debugFolder + "/nudge_debug_" + items[itemIdx].name + "_" + std::to_string(instances.size()) + ".json";
+  // std::string debugMeshFile = debugFolder + "/inertia_" + items[itemIdx].name + ".obj";
+  // meshInfo.mesh.SaveObj(debugMeshFile);
+  // fs::create_directories(debugFolder);
+  // std::ofstream out(debugFilename);
+  // if (out.good()) {
+  //   out << RigidBodyStateToString(debugSteps);
+  // }
 
   tOut.position = currentT;
   tOut.rotation = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());

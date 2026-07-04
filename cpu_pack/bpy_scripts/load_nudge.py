@@ -23,6 +23,9 @@ FORCE_COLOR = (1.0, 0.9, 0.1, 1.0)
 
 def make_arrow_mesh(name, shaft_radius=0.04, shaft_len=0.7,
                     tip_radius=0.11, tip_len=0.3, n=12):
+    existing = bpy.data.meshes.get(name)
+    if existing is not None:
+        return existing
     verts = []
     faces = []
 
@@ -77,6 +80,9 @@ def make_arrow_mesh(name, shaft_radius=0.04, shaft_len=0.7,
 
 
 def make_material(name, color):
+    existing = bpy.data.materials.get(name)
+    if existing is not None:
+        return existing
     mat = bpy.data.materials.new(name)
     mat.use_nodes = True
     bsdf = mat.node_tree.nodes.get("Principled BSDF")
@@ -89,8 +95,11 @@ def make_material(name, color):
 
 
 def make_arrow_object(name, mesh, collection):
-    obj = bpy.data.objects.new(name, mesh)
-    collection.objects.link(obj)
+    obj = bpy.data.objects.get(name)
+    if obj is None:
+        obj = bpy.data.objects.new(name, mesh)
+    if obj.name not in collection.objects:
+        collection.objects.link(obj)
     obj.rotation_mode = 'QUATERNION'
     obj.hide_viewport = True
     obj.hide_render = True

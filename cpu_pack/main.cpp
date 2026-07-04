@@ -165,7 +165,7 @@ void PackScene(PackingScene & scene, const PackingPlan & plan) {
   scene.placed.resize(scene.items.size());
 
   // debug. load pack progress.
-  LoadPack(scene, "/media/desaic/WD/meshes/fruit_hand/pack_debug_10.txt");
+  // LoadPack(scene, "/media/desaic/WD/meshes/fruit_hand/pack_debug_10.txt");
 
   scene.trajFile = scene.outputFolder + "/traj";
   for(size_t i = 0;i<plan.steps.size(); i++){
