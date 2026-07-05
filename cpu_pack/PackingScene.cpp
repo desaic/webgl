@@ -71,6 +71,12 @@ Vec3f PackingScene::ForceDirection(unsigned itemIdx,
   return dir;
 }
 
+static void ReverseWinding(TrigMesh &m) {
+  for (size_t i = 0; i < m.t.size(); i += 3) {
+    std::swap(m.t[i + 1], m.t[i + 2]);
+  }
+}
+
 void PackingScene::InitDataStructures() {
   randAngles.resize(100);
   unsigned int seed = 123;
@@ -86,8 +92,11 @@ void PackingScene::InitDataStructures() {
   for (unsigned i = 0; i < items.size(); i++) {
     nameToIndex[items[i].name] = i;
   }
-  InitContainerGrids();
+  // SDF must be computed before reversing the container winding, since
+  // AdapSDF bakes its sign convention from the original outward normals.
   ComputeContainerSDF();
+  ReverseWinding(container.mesh);
+  InitContainerGrids();
   InitRigidBodies();
 
   for (size_t i = 0; i < items.size(); i++) {
@@ -401,7 +410,6 @@ static Quat4f IntegrateAngularVelocity(Vec3f angVel, float dt) {
 static std::vector<Contact> GatherActiveContacts(
     const std::vector<SamplePoint> &fineSamples,
     const std::vector<const TrigGrid*> &accGrids,
-    const std::vector<bool> &flipNormal,
     const Matrix3f &currentRotMat,
     const Vec3f &currentT,
     float eps,
@@ -419,18 +427,13 @@ static std::vector<Contact> GatherActiveContacts(
       
       // We only care about points within our interaction radius
       if (info.dist >= 0.0f && info.dist < queryRadius) {
-        // Flip deterministically per-grid instead of guessing from the
-        // sample position: the old surfToSample heuristic broke once the
-        // sample crossed the wall and the solver drove it deeper through.
-        if (m < flipNormal.size() && flipNormal[m]) {
-          info.normal = -info.normal;
-        }
-        
-        // Compute signed distance using the (already oriented) normal.
-        // Normal points toward where the fruit SHOULD be. If the sample
-        // is on the wrong side (protruding through the wall), the dot
-        // product is negative and we negate the distance so the reduction
-        // (which keeps min distance = deepest penetration) works correctly.
+        // Compute signed distance using the face normal. All grids now
+        // have normals oriented toward where the fruit should be
+        // (container winding is reversed at init, neighbors/inner keep
+        // outward winding). If the sample is on the wrong side
+        // (protruding through the wall), the dot product is negative
+        // and we negate the distance so the reduction (which keeps min
+        // distance = deepest penetration) works correctly.
         Vec3f surfToSample = worldPt - info.closestPt;
         float signedDist = info.dist;
         if (surfToSample.dot(info.normal) < 0.0f) {
@@ -677,16 +680,9 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
       accGrids.push_back(&containerInnerGrid);
     }
 
-    // Neighbors and the inner container are closed solids the fruit sits
-    // outside of, so their outward face normals already point toward the
-    // fruit. The outer container holds the fruit on its interior, so its
-    // outward normals must be flipped to push the fruit inward.
-    std::vector<bool> flipNormal(accGrids.size(), false);
-    flipNormal[intersectingInstances.size()] = true;
-
     // 3. Narrow Phase Contact Gathering
     std::vector<Contact> contacts = GatherActiveContacts(
-        samples, accGrids, flipNormal, currentRotMat, currentT, eps, activeBuffer, CONTACT_ANGLE_THRESH_DEG);
+        samples, accGrids, currentRotMat, currentT, eps, activeBuffer, CONTACT_ANGLE_THRESH_DEG);
     float minX = 1e30f;
     int attractItem = -1;
     // pick contacting object with min x coord.
@@ -740,15 +736,15 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   }
 
   // Save nudge debug visualization data to a JSON file
-  std::string debugFolder = outputFolder.empty() ? "." : outputFolder;
-  std::string debugFilename = debugFolder + "/nudge_debug_" + items[itemIdx].name + "_" + std::to_string(instances.size()) + ".json";
-  std::string debugMeshFile = debugFolder + "/inertia_" + items[itemIdx].name + ".obj";
-  meshInfo.mesh.SaveObj(debugMeshFile);
-  fs::create_directories(debugFolder);
-  std::ofstream out(debugFilename);
-  if (out.good()) {
-    out << RigidBodyStateToString(debugSteps);
-  }
+  // std::string debugFolder = outputFolder.empty() ? "." : outputFolder;
+  // std::string debugFilename = debugFolder + "/nudge_debug_" + items[itemIdx].name + "_" + std::to_string(instances.size()) + ".json";
+  // std::string debugMeshFile = debugFolder + "/inertia_" + items[itemIdx].name + ".obj";
+  // meshInfo.mesh.SaveObj(debugMeshFile);
+  // fs::create_directories(debugFolder);
+  // std::ofstream out(debugFilename);
+  // if (out.good()) {
+  //   out << RigidBodyStateToString(debugSteps);
+  // }
 
   tOut.position = currentT;
   tOut.rotation = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
