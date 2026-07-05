@@ -526,7 +526,18 @@ static std::vector<Contact> GatherActiveContacts(
           info.normal = -info.normal;
         }
         
-        activeContacts.push_back({worldPt, info.normal, info.dist, int(m)});
+        // Compute signed distance using the (already oriented) normal.
+        // Normal points toward where the fruit SHOULD be. If the sample
+        // is on the wrong side (protruding through the wall), the dot
+        // product is negative and we negate the distance so the reduction
+        // (which keeps min distance = deepest penetration) works correctly.
+        Vec3f surfToSample = worldPt - info.closestPt;
+        float signedDist = info.dist;
+        if (surfToSample.dot(info.normal) < 0.0f) {
+          signedDist = -info.dist;
+        }
+        
+        activeContacts.push_back({worldPt, info.normal, signedDist, int(m)});
       }
     }
   }
@@ -563,21 +574,30 @@ static void SolveContactConstraintsPGS(
       Vec3f v_contact = linearVel + angularVel.cross(r);
       float rel_vel = v_contact.dot(contact.normal);
 
-      // Only constrain when actually penetrating (distance < eps).
-      // Contacts in the buffer zone (eps <= distance < queryRadius) are for
-      // early detection only; they must not block approach or the sample
-      // freezes at the buffer edge and never reaches eps.
       float penetration = eps - contact.distance;
-      if (penetration <= 0.0f) {
-        continue;
+      float target_vel;
+
+      if (penetration > 0.0f) {
+        // Penetrating: push out with Baumgarte stabilization.
+        // target_vel is a velocity delta, so final vel = rel_vel + target_vel = bias.
+        float bias = (beta / dt) * penetration;
+        target_vel = bias - rel_vel;
+      } else {
+        // Not penetrating but within detection range.
+        // Cap the approach velocity so the sample cannot move farther
+        // than the remaining gap in one step. This prevents tunneling
+        // through thin walls (e.g. container) while still allowing the
+        // sample to approach and settle at dist = eps.
+        // rel_vel < 0 means approaching the wall.
+        float maxApproach = -(contact.distance - eps) / dt;
+        if (rel_vel < maxApproach) {
+          // final vel = rel_vel + target_vel = maxApproach.
+          target_vel = maxApproach - rel_vel;
+        } else {
+          // Velocity is safe (slow approach or separating). Skip.
+          continue;
+        }
       }
-
-      // Baumgarte Stabilization: bias velocity to push out of penetration.
-      float bias = (beta / dt) * penetration;
-
-      // Target velocity: stop moving into the surface (-rel_vel)
-      // and add the bias to fix penetration.
-      float target_vel = -rel_vel + bias;
 
       // Effective mass at the contact point
       Vec3f torqueLocal = Rinv * r_cross_n;
@@ -829,15 +849,15 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   }
 
   // Save nudge debug visualization data to a JSON file
-  // std::string debugFolder = outputFolder.empty() ? "." : outputFolder;
-  // std::string debugFilename = debugFolder + "/nudge_debug_" + items[itemIdx].name + "_" + std::to_string(instances.size()) + ".json";
-  // std::string debugMeshFile = debugFolder + "/inertia_" + items[itemIdx].name + ".obj";
-  // meshInfo.mesh.SaveObj(debugMeshFile);
-  // fs::create_directories(debugFolder);
-  // std::ofstream out(debugFilename);
-  // if (out.good()) {
-  //   out << RigidBodyStateToString(debugSteps);
-  // }
+  std::string debugFolder = outputFolder.empty() ? "." : outputFolder;
+  std::string debugFilename = debugFolder + "/nudge_debug_" + items[itemIdx].name + "_" + std::to_string(instances.size()) + ".json";
+  std::string debugMeshFile = debugFolder + "/inertia_" + items[itemIdx].name + ".obj";
+  meshInfo.mesh.SaveObj(debugMeshFile);
+  fs::create_directories(debugFolder);
+  std::ofstream out(debugFilename);
+  if (out.good()) {
+    out << RigidBodyStateToString(debugSteps);
+  }
 
   tOut.position = currentT;
   tOut.rotation = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());

@@ -2,7 +2,7 @@ import bpy
 import os
 from mathutils import Matrix, Vector
 
-PACK_FILE = "/media/desaic/WD/meshes/fruit_hand/pack_debug_10.txt"
+PACK_FILE = "/media/desaic/WD/meshes/fruit_hand/pack_debug_60.txt"
 MESH_DIR = "/media/desaic/WD/meshes/fruit_hand/fruits_1/"
 
 

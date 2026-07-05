@@ -89,7 +89,7 @@ void PackStep(PackingScene & scene, const PackingStep & step){
   //debug
   //DebugPointSampling(scene.items[8], scene.outputFolder);
   // debug
-  const unsigned DEBUG_I = 0;
+  const unsigned DEBUG_I = 8;
   for (; count < step.count; count++) {
     bool packSuccess = false;
     for (unsigned i = DEBUG_I; i < numItems; i++) {
@@ -111,6 +111,16 @@ void PackStep(PackingScene & scene, const PackingStep & step){
         }
         bool success = FindSpot(scene.bg, item.mesh, pos, rot, scene.sdf, sdfFactor);
         if (success) {
+
+          std::vector<SamplePoint> allFineSamples;
+          SamplePoints(item.mesh, 0.5, allFineSamples);
+          std::vector<SamplePoint> samples = DownsamplePoints(allFineSamples, 0.5);
+          item.ComputeSDFCached();
+          MovePointsInward(samples, 0.2, item.sdf);
+          item.samples = samples;
+          SavePointsObj(scene.outputFolder + "/whitegreen_points.obj", samples);
+          item.mesh.SaveObj(scene.outputFolder + "/whitegreen_inertia.obj");
+
           packSuccess = true;
           itemPlaced = true;
           RigidTransform tran;
@@ -165,10 +175,11 @@ void PackScene(PackingScene & scene, const PackingPlan & plan) {
   scene.placed.resize(scene.items.size());
 
   // debug. load pack progress.
-  // LoadPack(scene, "/media/desaic/WD/meshes/fruit_hand/pack_debug_10.txt");
+  LoadPack(scene, "/media/desaic/WD/meshes/fruit_hand/pack_debug_60.txt");
 
   scene.trajFile = scene.outputFolder + "/traj";
-  for(size_t i = 0;i<plan.steps.size(); i++){
+  const unsigned DEBUG_STEP = 1;
+  for(size_t i = DEBUG_STEP;i<plan.steps.size(); i++){
     PackStep(scene, plan.steps[i]);
   } 
 }

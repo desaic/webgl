@@ -3,7 +3,7 @@ import json
 import math
 from mathutils import Vector, Quaternion
 
-JSON_FILE = "/media/desaic/WD/meshes/fruit_hand/out/nudge_debug_bananas2_10.json"
+JSON_FILE = "/media/desaic/WD/meshes/fruit_hand/out/nudge_debug_WhiteYellowGreen_60.json"
 MESH_FILE = ""
 MAX_CONTACTS = 64
 FRAMES_PER_STEP = 3
