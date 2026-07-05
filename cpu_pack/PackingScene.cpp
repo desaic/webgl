@@ -315,41 +315,6 @@ std::vector<Contact> reduceContactManifold(const std::vector<Contact> &rawContac
   return finalManifold;
 }
 
-// 1 pt per normal cluster
-std::vector<Contact> reduceContacts(const std::vector<Contact> &rawContacts, float angleThresholdDegrees = 5.0f) {
-  std::vector<Contact> reducedContacts;
-
-  // Convert angle threshold to a dot product limit (e.g., cos(3°) ≈ 0.9986)
-  float dotThreshold = std::cos(angleThresholdDegrees * 3.14159265f / 180.0f);
-
-  for (const auto &newContact : rawContacts) {
-    bool matchFound = false;
-
-    for (auto &existingContact : reducedContacts) {
-      // If the normals are pointing at the same cube face
-      if (newContact.normal.dot(existingContact.normal) > dotThreshold) {
-        matchFound = true;
-
-        // Keep the deepest point.
-        // Assumes smaller/more negative distance = deeper penetration.
-        if (newContact.distance < existingContact.distance) {
-          existingContact.worldPos = newContact.worldPos;
-          existingContact.distance = newContact.distance;
-          existingContact.normal = newContact.normal;
-        }
-        break;
-      }
-    }
-
-    // If it's a unique face normal, track it as a new contact row
-    if (!matchFound) {
-      reducedContacts.push_back(newContact);
-    }
-  }
-
-  return reducedContacts;
-}
-
 std::vector<SamplePoint> DownsamplePoints(const std::vector<SamplePoint> &points, float minSpacing) {
   std::vector<SamplePoint> filtered;
   if (points.empty()) {
@@ -402,70 +367,6 @@ std::vector<SamplePoint> DownsamplePoints(const std::vector<SamplePoint> &points
   return filtered;
 }
 
-static std::vector<SamplePoint> CoarseSampleMesh(const TrigMesh &mesh, float maxSpacing) {
-  std::vector<SamplePoint> samples;
-  if (mesh.v.empty()) {
-    return samples;
-  }
-
-  const auto &verts = mesh.v;
-  const auto &normals = mesh.nv;
-
-  bool hasNormals = !normals.empty() && normals.size() * 3 == verts.size();
-
-  samples.reserve(verts.size() / 3);
-
-  std::unordered_map<int64_t, std::vector<size_t>> spatialGrid;
-  auto gridKey = [maxSpacing](const Vec3f &p) -> int64_t {
-    int32_t ix = static_cast<int32_t>(std::floor(p[0] / maxSpacing));
-    int32_t iy = static_cast<int32_t>(std::floor(p[1] / maxSpacing));
-    int32_t iz = static_cast<int32_t>(std::floor(p[2] / maxSpacing));
-    return (static_cast<int64_t>(ix) << 40) | (static_cast<int64_t>(iy) << 20) | static_cast<int64_t>(iz);
-  };
-
-  float spacingSq = maxSpacing * maxSpacing;
-
-  for (size_t i = 0; i < verts.size(); i += 3) {
-    Vec3f pos(verts[i], verts[i + 1], verts[i + 2]);
-    Vec3f normal(0, 0, 1);
-
-    if (hasNormals) {
-      normal = normals[i / 3];
-    }
-
-    int64_t key = gridKey(pos);
-    bool tooClose = false;
-
-    for (int dx = -1; dx <= 1 && !tooClose; dx++) {
-      for (int dy = -1; dy <= 1 && !tooClose; dy++) {
-        for (int dz = -1; dz <= 1; dz++) {
-          int32_t ix = static_cast<int32_t>(std::floor(pos[0] / maxSpacing)) + dx;
-          int32_t iy = static_cast<int32_t>(std::floor(pos[1] / maxSpacing)) + dy;
-          int32_t iz = static_cast<int32_t>(std::floor(pos[2] / maxSpacing)) + dz;
-          int64_t neighborKey = (static_cast<int64_t>(ix) << 40) | (static_cast<int64_t>(iy) << 20) | static_cast<int64_t>(iz);
-
-          auto it = spatialGrid.find(neighborKey);
-          if (it != spatialGrid.end()) {
-            for (size_t idx : it->second) {
-              if ((pos - samples[idx].x).norm2() < spacingSq) {
-                tooClose = true;
-                break;
-              }
-            }
-          }
-        }
-      }
-    }
-
-    if (!tooClose) {
-      spatialGrid[key].push_back(samples.size());
-      samples.push_back({pos, normal});
-    }
-  }
-
-  return samples;
-}
-
 std::vector<Vec3f> BoxCorners(const Box3f & b){
    return {
       b.vmin,
@@ -505,8 +406,7 @@ static std::vector<Contact> GatherActiveContacts(
     const Vec3f &currentT,
     float eps,
     float activeBuffer,
-    float contactAngleThreshDeg,
-    size_t &rawCountOut) {
+    float contactAngleThreshDeg) {
     
   std::vector<Contact> activeContacts;
   float queryRadius = eps + activeBuffer;
@@ -541,7 +441,6 @@ static std::vector<Contact> GatherActiveContacts(
       }
     }
   }
-  rawCountOut = activeContacts.size();
   return reduceContactManifold(activeContacts, contactAngleThreshDeg);
 }
 
@@ -692,10 +591,6 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
 
   const float CONTACT_ANGLE_THRESH_DEG = 20.0f;
 
-  Box3f meshBBox = ComputeBBox(items[itemIdx].mesh.v);
-  Vec3f bboxSize = meshBBox.vmax - meshBBox.vmin;
-  float maxDim = std::max({bboxSize[0], bboxSize[1], bboxSize[2]});
-
   float ds = 0.5f;
   float eps = ds * 0.1f;
   float activeBuffer = ds;
@@ -724,10 +619,9 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
 
   Box3f localBox = ComputeBBox(items[itemIdx].mesh.v);
   Vec3f currentT = tran.position;
-  Matrix3f rotMat0 = tran.rotation;
-  Quat4f currentQ = Quat4f::fromRotationMatrix(rotMat0);
+  Quat4f currentQ = Quat4f::fromRotationMatrix(tran.rotation);
 
-  auto item = items[itemIdx];
+  const auto &item = items[itemIdx];
   float invMass = 1.0f / item.rb.vol;
   Vec3f invI_local(1.0f/item.rb.inertia(0,0), 1.0f/item.rb.inertia(1,1), 1.0f/item.rb.inertia(2,2));
   
@@ -738,7 +632,6 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   std::vector<std::shared_ptr<TrigMesh> > nbrMeshes;
 
   Utils::Stopwatch nudgeTotal;
-  Utils::Stopwatch stepTimer;
   nudgeTotal.Start();
 
   for (size_t step = 0; step < maxOptimizationSteps; step++) {
@@ -792,10 +685,8 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     flipNormal[intersectingInstances.size()] = true;
 
     // 3. Narrow Phase Contact Gathering
-    size_t rawCount = 0;
     std::vector<Contact> contacts = GatherActiveContacts(
-        samples, accGrids, flipNormal, currentRotMat, currentT, eps, activeBuffer, CONTACT_ANGLE_THRESH_DEG, rawCount);
-    // std::cout << "step " << step << " raw=" << rawCount << " reduced=" << contacts.size() << "\n";
+        samples, accGrids, flipNormal, currentRotMat, currentT, eps, activeBuffer, CONTACT_ANGLE_THRESH_DEG);
     float minX = 1e30f;
     int attractItem = -1;
     // pick contacting object with min x coord.
@@ -980,8 +871,6 @@ void AddInnerContainer(PackingScene &scene) {
 
   conf.gridSize = ComputeGridSize(box, dx, 1);
   Array3D8u vox;
-  vox.Allocate(conf.gridSize, 0);
-
   vox.Allocate(conf.gridSize, 0);
   cpu_voxelize_grid(conf, &scene.containerInner.mesh, vox);
   FloodOutside8u(vox, 1, 2);
