@@ -4,6 +4,7 @@
 #include "GridUtils.h"
 #include "Array2D.h"
 #include "ImageIO.h"
+#include "PackingScene.h"
 #include "Stopwatch.h"
 
 #include <iostream>
@@ -119,4 +120,151 @@ bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot,
     pos = GetDisplacement(bestPos, dx, fg.vox.GetSize(), fg.GetOrigin(), bg.GetOrigin());
   }
   return found;
+}
+
+struct CollisionGridResult {
+  Array3D8u collision;
+  Vec3u gridSize;
+  Vec3u fgSize;
+  Vec3f fgOrigin;
+  Vec3f meshCenter;
+  Box3f meshBox;
+};
+
+static CollisionGridResult ComputeCollisionGrid(MeshConvo &bg,
+                                                const TrigMesh &part,
+                                                const Vec3f &rot) {
+  CollisionGridResult r;
+
+  Matrix3f rotMat = RotationMatrixRad(rot[0], rot[1], rot[2]);
+  TrigMesh rotated = part;
+  TransformVerts(part.v, rotated.v, rotMat);
+  float dx = bg.dx;
+
+  MeshConvo fg;
+  fg.SetMeshPtr(&rotated);
+  fg.Voxelize(dx);
+  ThreshInPlace(fg.vox, 1);
+
+  const unsigned FFT_ALIGNMENT = 8;
+  Vec3u bgSize = bg.GridSize();
+  r.fgSize = fg.GridSize();
+  Vec3u totalSize = bgSize;
+
+  std::array<unsigned, 3> padded = PadSizes(totalSize, FFT_ALIGNMENT);
+  r.gridSize = Vec3u(padded[0], padded[1], padded[2]);
+
+  bg.FFT(r.gridSize);
+
+  Reverse(fg.vox);
+  fg.gridReversed = true;
+  fg.FFT(r.gridSize);
+
+  Dot(bg.fft, fg.fft);
+
+  Array3Df conv = IFFT(fg.fft);
+  r.collision = Quantize(conv);
+  r.fgOrigin = fg.GetOrigin();
+  r.meshCenter = fg.GetMeshCenter();
+  r.meshBox = fg.meshBox;
+  return r;
+}
+
+static float XSignMargin(const Box3f &meshBox, int xSign) {
+  if (xSign < 0) {
+    return -meshBox.vmax[0];
+  } else if (xSign > 0) {
+    return -meshBox.vmin[0];
+  }
+  return 0.0f;
+}
+
+static bool PassesXSignConstraint(float dispX, float margin, int xSign) {
+  if (xSign < 0) {
+    return dispX < margin;
+  } else if (xSign > 0) {
+    return dispX > margin;
+  }
+  return true;
+}
+
+static bool FindSpotConstrainedImpl(MeshConvo &bg,
+                                    const TrigMesh &part,
+                                    Vec3f &pos,
+                                    const Vec3f &rot,
+                                    std::shared_ptr<AdapSDF> sdf,
+                                    float factor,
+                                    const PackingConstraints &constraints) {
+  CollisionGridResult coll = ComputeCollisionGrid(bg, part, rot);
+  Vec3u gridSize = coll.gridSize;
+  Vec3u fgSize = coll.fgSize;
+  Vec3f fgOrigin = coll.fgOrigin;
+  Vec3f bgOrigin = bg.GetOrigin();
+  Vec3f meshCenter = coll.meshCenter;
+  float dx = bg.dx;
+
+  const float score0 = -1e6f;
+  float highScore = score0;
+  Vec3u bestPos(0);
+
+  Vec3f originDisp = bgOrigin - fgOrigin - Vec3f(dx) * (fgSize.cast<float>() - Vec3f(1.0f));
+
+  unsigned xMin = fgSize[0] - 1;
+  unsigned xMax = gridSize[0];
+  if (constraints.lockPosX) {
+    float targetXf = (constraints.fixedPosX - originDisp[0]) / dx;
+    int targetX = (int)std::round(targetXf);
+    int lo = std::max(int(fgSize[0] - 1), targetX - 1);
+    int hi = std::min(int(gridSize[0]), targetX + 2);
+    if (lo >= hi) {
+      return false;
+    }
+    xMin = (unsigned)lo;
+    xMax = (unsigned)hi;
+  }
+
+  float margin = XSignMargin(coll.meshBox, constraints.xSign);
+  float positionWeightX = -float(constraints.xSign);
+  float positionWeightYZ = -1.0f;
+
+  for (unsigned z = fgSize[2] - 1; z < gridSize[2]; z++) {
+    for (unsigned y = fgSize[1] - 1; y < gridSize[1]; y++) {
+      for (unsigned x = xMin; x < xMax; x++) {
+        if (coll.collision(x, y, z) > 0) {
+          continue;
+        }
+        Vec3f disp = GetDisplacement(Vec3u(x, y, z), dx, fgSize, fgOrigin, bgOrigin);
+        if (!PassesXSignConstraint(disp[0], margin, constraints.xSign)) {
+          continue;
+        }
+        Vec3f coord = disp + meshCenter;
+        float dist = sdf->GetCoarseDist(coord);
+        if (dist >= 32766) {
+          dist = -dist;
+        }
+        float score = factor * dist + positionWeightX * coord[0]
+                      + positionWeightYZ * (coord[1] + coord[2]);
+        if (score > highScore) {
+          highScore = score;
+          bestPos = Vec3u(x, y, z);
+        }
+      }
+    }
+  }
+
+  bool found = (highScore > score0);
+  if (found) {
+    pos = GetDisplacement(bestPos, dx, fgSize, fgOrigin, bgOrigin);
+  }
+  return found;
+}
+
+bool FindSpotConstrained(MeshConvo &bg,
+                         const TrigMesh &part,
+                         Vec3f &pos,
+                         const Vec3f &rot,
+                         std::shared_ptr<AdapSDF> sdf,
+                         float factor,
+                         const PackingConstraints &constraints) {
+  return FindSpotConstrainedImpl(bg, part, pos, rot, sdf, factor, constraints);
 }

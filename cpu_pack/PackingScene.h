@@ -25,6 +25,16 @@ struct InstanceInfo{
   std::vector<RigidTransform> trajectory;
 };
 
+struct PackingConstraints {
+  // locks the part's x position to fixedPosX.
+  bool lockPosX = false;
+  float fixedPosX = 0.0f;
+  // locks rotation to x-axis only (yz rotation projected out).
+  bool lockRotYZ = false;
+  // -1: part must stay at x < 0 (left), 0: no constraint, +1: x > 0 (right).
+  int xSign = 0;
+};
+
 class PackingScene {
   public:
 
@@ -48,6 +58,10 @@ class PackingScene {
     /// @param tran 
     /// @return 
     RigidTransform Nudge(unsigned itemIdx, const RigidTransform & tran, const Vec3f & dir, std::vector<RigidTransform> & trajectory);
+
+    RigidTransform NudgeConstrained(unsigned itemIdx, const RigidTransform & tran,
+                                    const Vec3f & dir0, const PackingConstraints & constraints,
+                                    std::vector<RigidTransform> & trajectory);
 
     Vec3f WorldOrigin()const{
       return bg.GetOrigin();

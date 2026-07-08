@@ -23,4 +23,9 @@ void SaveVec3fObj(const std::string & filename, const std::vector<Vec3f> & point
 std::vector<Vec3f> SubsampleMeshVertices(const std::vector<Vec3f>& vertices,
                                          float targetSpacing);
 
+void AddConvexHullSamples(const TrigMesh &mesh,
+                          float minSpacing,
+                          unsigned maxPoints,
+                          std::vector<SamplePoint> &samples);
+
 void TestSamplePoints();

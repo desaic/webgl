@@ -4,6 +4,8 @@
 #include <fstream>
 #include <random>
 #include <unordered_set>
+#include <algorithm>
+#include <QuickHull.hpp>
 // Custom spatial key for filtering redundant points down to epsilon resolution
 struct SpatialKey {
     int x, y, z;
@@ -144,6 +146,94 @@ std::vector<Vec3f> SubsampleMeshVertices(const std::vector<Vec3f>& vertices,
     return subsampledVerts;
 }
 
+
+static Vec3f ConvexHullVertexNormal(size_t vertIdx,
+                                   const quickhull::ConvexHull<float> &hull) {
+  const auto &indices = hull.getIndexBuffer();
+  const auto &verts = hull.getVertexBuffer();
+  Vec3f normal(0, 0, 0);
+  for (size_t i = 0; i < indices.size(); i += 3) {
+    bool found = false;
+    for (int j = 0; j < 3; j++) {
+      if (indices[i + j] == vertIdx) {
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      continue;
+    }
+    const auto &a = verts[indices[i]];
+    const auto &b = verts[indices[i + 1]];
+    const auto &c = verts[indices[i + 2]];
+    quickhull::Vector3<float> ab = b - a;
+    quickhull::Vector3<float> ac = c - a;
+    quickhull::Vector3<float> n = ab.crossProduct(ac);
+    normal[0] += n.x;
+    normal[1] += n.y;
+    normal[2] += n.z;
+  }
+  normal.normalize();
+  return normal;
+}
+
+static std::vector<SamplePoint> ReduceHullPoints(
+    const std::vector<SamplePoint> &hullPoints, float minSpacing,
+    unsigned maxPoints) {
+  if (hullPoints.size() <= maxPoints) {
+    return hullPoints;
+  }
+  std::vector<SamplePoint> filtered;
+  filtered.reserve(maxPoints);
+  std::unordered_set<SpatialKey, SpatialKeyHash> occupiedCells;
+  float invSpacing = 1.0f / minSpacing;
+
+  for (const auto &sp : hullPoints) {
+    SpatialKey key;
+    key.x = static_cast<int>(std::floor(sp.x[0] * invSpacing));
+    key.y = static_cast<int>(std::floor(sp.x[1] * invSpacing));
+    key.z = static_cast<int>(std::floor(sp.x[2] * invSpacing));
+    if (occupiedCells.insert(key).second) {
+      filtered.push_back(sp);
+      if (filtered.size() >= maxPoints) {
+        break;
+      }
+    }
+  }
+  return filtered;
+}
+
+void AddConvexHullSamples(const TrigMesh &mesh,
+                          float minSpacing,
+                          unsigned maxPoints,
+                          std::vector<SamplePoint> &samples) {
+  if (mesh.v.empty()) {
+    return;
+  }
+  size_t numVerts = mesh.GetNumVerts();
+  std::vector<quickhull::Vector3<float>> pointCloud(numVerts);
+  for (size_t i = 0; i < numVerts; i++) {
+    pointCloud[i] = quickhull::Vector3<float>(mesh.v[3 * i], mesh.v[3 * i + 1],
+                                               mesh.v[3 * i + 2]);
+  }
+  quickhull::QuickHull<float> qh;
+  quickhull::ConvexHull<float> hull =
+      qh.getConvexHull(pointCloud, true, false);
+
+  const auto &hullVerts = hull.getVertexBuffer();
+  size_t numHullVerts = hullVerts.size();
+
+  std::vector<SamplePoint> hullPoints;
+  hullPoints.reserve(numHullVerts);
+  for (size_t i = 0; i < numHullVerts; i++) {
+    Vec3f pos(hullVerts[i].x, hullVerts[i].y, hullVerts[i].z);
+    Vec3f nrm = ConvexHullVertexNormal(i, hull);
+    hullPoints.push_back(SamplePoint(pos, nrm));
+  }
+
+  auto reduced = ReduceHullPoints(hullPoints, minSpacing, maxPoints);
+  samples.insert(samples.end(), reduced.begin(), reduced.end());
+}
 
 void TestSamplePoints(){
     float eps = 0.1f;

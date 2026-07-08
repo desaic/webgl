@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 set(BIN "cpu_pack")
 PROJECT (CpuPack)
-FILE(GLOB EXE_SRC "*.cpp" "*.c")
+FILE(GLOB EXE_SRC "*.cpp" "*.c" "quickhull/*.cpp")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_CXX_STANDARD 20)
 
@@ -46,6 +46,7 @@ include_directories("./pocketfft/")
 include_directories("../Util")
 include_directories("../SparseSDF")
 include_directories("../MeshSimplification")
+include_directories("./quickhull")
 
 add_executable(${BIN} ${EXE_SRC})
 target_link_libraries(${BIN} Mesh MathLib ImageIO SparseSDF Util MeshSimplification)

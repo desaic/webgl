@@ -753,6 +753,274 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   return tOut;
 }
 
+static Quat4f ExtractTwistX(const Quat4f &q) {
+  Vec3f axis(1, 0, 0);
+  Vec3f v(q.x(), q.y(), q.z());
+  float projLen = v.dot(axis);
+  Quat4f twist(q.w(), projLen, 0, 0);
+  twist.normalize();
+  return twist;
+}
+
+static void ApplyPositionConstraints(Vec3f &pos, Vec3f &vel,
+                                     const PackingConstraints &c) {
+  if (c.lockPosX) {
+    pos[0] = c.fixedPosX;
+    vel[0] = 0.0f;
+  }
+}
+
+static void ApplyRotationConstraints(Quat4f &q, Vec3f &angVel,
+                                     const PackingConstraints &c) {
+  if (c.lockRotYZ) {
+    q = ExtractTwistX(q);
+    angVel[1] = 0.0f;
+    angVel[2] = 0.0f;
+  }
+}
+
+static void EnforceXSignWall(Vec3f &pos, Vec3f &vel, int xSign) {
+  if (xSign == 0) {
+    return;
+  }
+  const float EPS = 1e-3f;
+  if (xSign < 0 && pos[0] > -EPS) {
+    pos[0] = -EPS;
+    if (vel[0] > 0.0f) {
+      vel[0] = 0.0f;
+    }
+  } else if (xSign > 0 && pos[0] < EPS) {
+    pos[0] = EPS;
+    if (vel[0] < 0.0f) {
+      vel[0] = 0.0f;
+    }
+  }
+}
+
+static Vec3f CenterAttractionDir(const Vec3f &pos,
+                                 const PackingConstraints &c) {
+  if (c.xSign != 0) {
+    Vec3f dir(-pos[0], 0, 0);
+    dir.normalize();
+    return dir;
+  }
+  return Vec3f(-1, 0, 0);
+}
+
+static void SolveContactPBD(const std::vector<Contact> &contacts,
+                            Vec3f &pos,
+                            Quat4f &q,
+                            float invMass,
+                            const Vec3f &invI_local,
+                            float targetDist,
+                            int passes,
+                            float linStiffness,
+                            float angStiffness) {
+  float perPassLin = 1.0f - std::pow(1.0f - linStiffness, 1.0f / passes);
+  float perPassAng = 1.0f - std::pow(1.0f - angStiffness, 1.0f / passes);
+  for (int pass = 0; pass < passes; pass++) {
+    for (const auto &contact : contacts) {
+      float penetration = targetDist - contact.distance;
+      if (penetration <= 0.0f) {
+        continue;
+      }
+      Vec3f r = contact.worldPos - pos;
+      Vec3f r_cross_n = r.cross(contact.normal);
+      Matrix3f R = Matrix3f::rotation(q.x(), q.y(), q.z(), q.w());
+      Vec3f rcn_local = R.transposed() * r_cross_n;
+      Vec3f angCorrLocal(rcn_local[0] * invI_local[0],
+                         rcn_local[1] * invI_local[1],
+                         rcn_local[2] * invI_local[2]);
+      Vec3f angCorrWorld = R * angCorrLocal;
+      float w_total = invMass + r_cross_n.dot(angCorrWorld);
+      if (w_total < 1e-8f) {
+        continue;
+      }
+      float lambdaLin = penetration / w_total * perPassLin;
+      pos += (lambdaLin * invMass) * contact.normal;
+      float lambdaAng = penetration / w_total * perPassAng;
+      Vec3f rotCorrection = angCorrWorld * lambdaAng;
+      float angle = std::sqrt(rotCorrection.dot(rotCorrection));
+      if (angle > 1e-6f) {
+        Vec3f axis = rotCorrection * (1.0f / angle);
+        Quat4f dq(std::cos(angle * 0.5f),
+                  axis[0] * std::sin(angle * 0.5f),
+                  axis[1] * std::sin(angle * 0.5f),
+                  axis[2] * std::sin(angle * 0.5f));
+        q = dq * q;
+        q.normalize();
+      }
+    }
+  }
+}
+
+static Vec3f AngVelFromQuatDelta(const Quat4f &qNew, const Quat4f &qOld, float dt) {
+  Quat4f dq = qNew * qOld.inverse();
+  dq.normalize();
+  if (dq.w() < 0.0f) {
+    dq = Quat4f(-dq.w(), -dq.x(), -dq.y(), -dq.z());
+  }
+  float rotAngle;
+  Vec3f rotAxis = dq.getAxisAngle(&rotAngle);
+  if (rotAngle < 1e-6f) {
+    return Vec3f(0.0f);
+  }
+  return rotAxis * (rotAngle / dt);
+}
+
+RigidTransform PackingScene::NudgeConstrained(unsigned itemIdx,
+                                               const RigidTransform &tran,
+                                               const Vec3f &dir0,
+                                               const PackingConstraints &constraints,
+                                               std::vector<RigidTransform> &trajectory) {
+  RigidTransform tOut = tran;
+
+  const float CONTACT_ANGLE_THRESH_DEG = 20.0f;
+  float ds = 0.5f;
+  float eps = ds * 0.1f;
+  float activeBuffer = 1.0f;
+
+  size_t maxOptimizationSteps = 40;
+  float dt = 1.0f / 60.0f;
+  float damping = 0.85f;
+  float nudgeAcceleration = 200.0f;
+  const float MAX_OVERLAP = 0.2f;
+  auto &meshInfo = items[itemIdx];
+
+  std::vector<SamplePoint> samples;
+  if (meshInfo.samples.empty()) {
+    std::vector<SamplePoint> allFineSamples;
+    SamplePoints(meshInfo.mesh, ds, allFineSamples);
+    samples = DownsamplePoints(allFineSamples, ds);
+    meshInfo.ComputeSDFCached();
+    MovePointsInward(samples, MAX_OVERLAP, meshInfo.sdf);
+    std::vector<SamplePoint> hullSamples;
+    AddConvexHullSamples(meshInfo.mesh, ds, 100, hullSamples);
+    MovePointsInward(hullSamples, 0.02f, meshInfo.sdf);
+    samples.insert(samples.end(), hullSamples.begin(), hullSamples.end());
+    meshInfo.samples = samples;
+  } else {
+    samples = meshInfo.samples;
+  }
+
+  Box3f localBox = ComputeBBox(items[itemIdx].mesh.v);
+  Vec3f currentT = tran.position;
+  Quat4f currentQ = Quat4f::fromRotationMatrix(tran.rotation);
+
+  Vec3f zeroVel(0.0f);
+  ApplyPositionConstraints(currentT, zeroVel, constraints);
+  ApplyRotationConstraints(currentQ, zeroVel, constraints);
+
+  const auto &item = items[itemIdx];
+  float invMass = 1.0f / item.rb.vol;
+  Vec3f invI_local(1.0f/item.rb.inertia(0,0), 1.0f/item.rb.inertia(1,1), 1.0f/item.rb.inertia(2,2));
+
+  Vec3f linearVel(0.0f);
+  Vec3f angularVel(0.0f);
+
+  std::unordered_map<unsigned, std::shared_ptr<TrigGrid>> persistentNeighborGrids;
+  std::vector<std::shared_ptr<TrigMesh>> nbrMeshes;
+
+  Utils::Stopwatch nudgeTotal;
+  nudgeTotal.Start();
+
+  for (size_t step = 0; step < maxOptimizationSteps; step++) {
+    Matrix3f currentRotMat = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
+
+    float dir0Weight = 1.0f - step/float(maxOptimizationSteps);
+    Vec3f attractionDir = CenterAttractionDir(currentT, constraints);
+    Vec3f forceDir = dir0Weight * dir0 + (1-dir0Weight) * attractionDir;
+    if (constraints.lockPosX) {
+      forceDir[0] = 0.0f;
+    }
+    forceDir.normalize();
+    linearVel += (forceDir * nudgeAcceleration) * dt;
+
+    Vec3f predT = currentT + linearVel * dt;
+    Quat4f predQ = IntegrateAngularVelocity(angularVel, dt) * currentQ;
+    predQ.normalize();
+    Matrix3f predRotMat = Matrix3f::rotation(predQ.x(), predQ.y(), predQ.z(), predQ.w());
+
+    auto corners = TransformPoints(BoxCorners(localBox), predRotMat, predT);
+    Box3f instBox = ComputeBBox(corners);
+    float stepQueryDist = eps + activeBuffer;
+    std::vector<unsigned> intersectingInstances = broadPhase.GetNearby(instBox, stepQueryDist);
+
+    std::vector<const TrigGrid*> accGrids;
+    for (size_t i = 0; i < intersectingInstances.size(); i++) {
+      unsigned instIdx = intersectingInstances[i];
+      auto it = persistentNeighborGrids.find(instIdx);
+      if (it == persistentNeighborGrids.end()) {
+        InstanceInfo inst = instances[instIdx];
+        auto nbrMesh = std::make_shared<TrigMesh>();
+        *nbrMesh = MakeTransformedMesh(items[inst.itemId].mesh, inst.tran);
+        nbrMeshes.push_back(nbrMesh);
+        auto newGrid = std::make_shared<TrigGrid>();
+        newGrid->Build(*nbrMesh, gridDx);
+        persistentNeighborGrids[instIdx] = newGrid;
+        accGrids.push_back(newGrid.get());
+      } else {
+        accGrids.push_back(it->second.get());
+      }
+    }
+    accGrids.push_back(&containerGrid);
+    if (innerContainerEnabled) {
+      accGrids.push_back(&containerInnerGrid);
+    }
+
+    std::vector<Contact> contacts = GatherActiveContacts(
+        samples, accGrids, predRotMat, predT, eps, activeBuffer, CONTACT_ANGLE_THRESH_DEG);
+
+    int pbdPasses = 8;
+    float pbdTarget = 0.5f;
+    SolveContactPBD(contacts, predT, predQ, invMass, invI_local,
+                    pbdTarget, pbdPasses, 1.0f, 0.1f);
+
+    Vec3f correction = predT - currentT;
+    float maxCorrection = 5.0f * dt;
+    float corrLen = std::sqrt(correction.dot(correction));
+    if (corrLen > maxCorrection) {
+      correction *= maxCorrection / corrLen;
+      predT = currentT + correction;
+    }
+
+    linearVel = (predT - currentT) / dt;
+    angularVel = AngVelFromQuatDelta(predQ, currentQ, dt);
+
+    const float MAX_SPEED = 50.0f;
+    float linSpeed = std::sqrt(linearVel.dot(linearVel));
+    if (linSpeed > MAX_SPEED) {
+      linearVel *= MAX_SPEED / linSpeed;
+    }
+    float angSpeed = std::sqrt(angularVel.dot(angularVel));
+    if (angSpeed > MAX_SPEED) {
+      angularVel *= MAX_SPEED / angSpeed;
+    }
+
+    ApplyPositionConstraints(predT, linearVel, constraints);
+    ApplyRotationConstraints(predQ, angularVel, constraints);
+    EnforceXSignWall(predT, linearVel, constraints.xSign);
+
+    currentT = predT;
+    currentQ = predQ;
+
+    linearVel *= damping;
+    angularVel *= damping;
+
+    trajectory.push_back(RigidTransform(currentT, Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w())));
+
+    if (linearVel.dot(linearVel) < 1e-4f && angularVel.dot(angularVel) < 1e-4f) {
+      break;
+    }
+  }
+
+  tOut.position = currentT;
+  tOut.rotation = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
+
+  std::cout << "NudgeConstrained total " << nudgeTotal.ElapsedMS() << " ms\n";
+  return tOut;
+}
+
 static bool ReadVec3f(std::istream &in, Vec3f &v) {
   return bool(in >> v[0] >> v[1] >> v[2]);
 }
