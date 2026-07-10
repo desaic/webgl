@@ -394,10 +394,9 @@ int main(int argc, char * argv[]){
   
   std::string meshDir = dataDir + "/fruits_1/";
 
-  // ComputeMeshStats(meshDir);
-  // auto plan = PlanPackingSteps(meshDir);
-  // std::cout<<argv[0]<<std::endl;
-  // PackFruits(plan, dataDir);
-  PackBones();
+  ComputeMeshStats(meshDir);
+  auto plan = PlanPackingSteps(meshDir);
+  PackFruits(plan, dataDir);
+  // PackBones();
   return 0;
 }
