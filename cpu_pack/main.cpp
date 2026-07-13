@@ -293,7 +293,7 @@ PackingPlan PlanPackingSteps(const std::string & meshDir){
   std::cout << "loaded " << stats.size() <<" stats\n";
   std::cout <<"last one is " << stats.back().name <<"\n";
   // >20 large, medium large, medium small, small
-  std::vector<float> SIZE_THRESH = {20, 10, 5};
+  std::vector<float> SIZE_THRESH = {20, 6, 3};
 
   PackingPlan plan;
 
@@ -388,9 +388,9 @@ int main(int argc, char * argv[]){
   // DebugNudge();
   // std::string meshDir = "F:/meshes/fruit_hand/fruits_1/";
   // linux desktop
-  std::string dataDir = "/media/desaic/WD/meshes/fruit_hand/";
+  // std::string dataDir = "/media/desaic/WD/meshes/fruit_hand/";
   // linux laptop
-  // std::string dataDir = "/media/desaic/ssd2/meshes/fruit_hand/";
+  std::string dataDir = "/media/desaic/ssd2/meshes/fruit_hand/";
   
   std::string meshDir = dataDir + "/fruits_1/";
 
