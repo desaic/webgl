@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Three.js OBJ Viewer</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <aside id="sidebar">
+        <div class="sidebar-section">
+          <input type="file" id="obj-input" accept=".obj,.stl" hidden />
+          <button id="load-btn">Load Model</button>
+          <span id="status">No model loaded</span>
+        </div>
+
+        <div class="sidebar-divider"></div>
+
+        <div class="sidebar-section">
+          <label class="sidebar-label" for="curve-form">Curve Form</label>
+          <select id="curve-form">
+            <option value="fermat">Fermat: x³ + y³ = a</option>
+            <option value="weierstrass">Weierstrass: y² = x³ + ax² + bx + c</option>
+          </select>
+
+          <div id="fermat-params">
+            <label class="sidebar-label" for="fermat-a">a (constant &gt; 0)</label>
+            <input type="text" id="fermat-a" value="1" inputmode="decimal" />
+          </div>
+
+          <div id="weierstrass-params" hidden>
+            <label class="sidebar-label" for="weier-a">a</label>
+            <input type="text" id="weier-a" value="0" inputmode="decimal" />
+            <label class="sidebar-label" for="weier-b">b</label>
+            <input type="text" id="weier-b" value="0" inputmode="decimal" />
+            <label class="sidebar-label" for="weier-c">c</label>
+            <input type="text" id="weier-c" value="1" inputmode="decimal" />
+          </div>
+
+          <button id="plot-btn">Plot Curve</button>
+          <span id="curve-status"></span>
+        </div>
+      </aside>
+
+      <div id="resizer"></div>
+
+      <main id="viewport">
+        <canvas id="scene"></canvas>
+      </main>
+    </div>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
