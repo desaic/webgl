@@ -601,7 +601,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   Box3f fruitBox = ComputeBBox(meshInfo.mesh.v);
   Vec3f fruitExtent = fruitBox.vmax - fruitBox.vmin;
   float minExtent = std::min({fruitExtent[0], fruitExtent[1], fruitExtent[2]});
-  float ds = std::max(0.05f, std::min(0.5f, minExtent * 0.1f));
+  float ds = 0.5f;
   float eps = ds * 0.1f;
   float activeBuffer = ds;
 
@@ -617,8 +617,10 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   std::vector<SamplePoint> samples;
   if (meshInfo.samples.empty()) {
     std::vector<SamplePoint> allFineSamples;
-    SamplePoints(meshInfo.mesh, ds, allFineSamples);
-    samples = DownsamplePoints(allFineSamples, ds);
+    float sampleSpacing = std::max(0.1f, std::min(ds, minExtent * 0.1f));
+    SamplePoints(meshInfo.mesh, sampleSpacing, allFineSamples);
+    samples = DownsamplePoints(allFineSamples, sampleSpacing);
+    std::cout<<"sample spacing " << sampleSpacing <<" num samples " << samples.size()<<"\n";
     meshInfo.ComputeSDFCached();
     MovePointsInward(samples, MAX_OVERLAP, meshInfo.sdf);
     meshInfo.samples = samples;
@@ -886,7 +888,7 @@ RigidTransform PackingScene::NudgeConstrained(unsigned itemIdx,
   Box3f fruitBox = ComputeBBox(meshInfo.mesh.v);
   Vec3f fruitExtent = fruitBox.vmax - fruitBox.vmin;
   float minExtent = std::min({fruitExtent[0], fruitExtent[1], fruitExtent[2]});
-  float ds = std::max(0.05f, std::min(0.5f, minExtent * 0.1f));
+  float ds = 0.5f;
   float eps = ds * 0.1f;
   float activeBuffer = 1.0f;
 

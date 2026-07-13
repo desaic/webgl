@@ -166,10 +166,10 @@ void PackScene(PackingScene & scene, const PackingPlan & plan) {
   scene.placed.resize(scene.items.size());
 
   // debug. load pack progress.
-  // LoadPack(scene, "/media/desaic/WD/meshes/fruit_hand/pack_debug_60.txt");
+  LoadPack(scene, "/media/desaic/WD/meshes/fruit_hand/pack5.txt");
 
   scene.trajFile = scene.outputFolder + "/traj";
-  const unsigned DEBUG_STEP = 0;
+  const unsigned DEBUG_STEP = 4;
   for(size_t i = DEBUG_STEP;i<plan.steps.size(); i++){
     PackStep(scene, plan.steps[i]);
   } 
@@ -388,9 +388,9 @@ int main(int argc, char * argv[]){
   // DebugNudge();
   // std::string meshDir = "F:/meshes/fruit_hand/fruits_1/";
   // linux desktop
-  // std::string dataDir = "/media/desaic/WD/meshes/fruit_hand/";
+  std::string dataDir = "/media/desaic/WD/meshes/fruit_hand/";
   // linux laptop
-  std::string dataDir = "/media/desaic/ssd2/meshes/fruit_hand/";
+  // std::string dataDir = "/media/desaic/ssd2/meshes/fruit_hand/";
   
   std::string meshDir = dataDir + "/fruits_1/";
 
