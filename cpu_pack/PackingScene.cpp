@@ -594,10 +594,17 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
 
   const float CONTACT_ANGLE_THRESH_DEG = 20.0f;
 
-  float ds = 0.5f;
+  auto &meshInfo = items[itemIdx];
+  // Scale sample spacing by fruit size so small fruits still get enough
+  // samples to detect overlap. ds is capped at 0.5 for large fruits and
+  // floored so tiny meshes don't blow up sample count.
+  Box3f fruitBox = ComputeBBox(meshInfo.mesh.v);
+  Vec3f fruitExtent = fruitBox.vmax - fruitBox.vmin;
+  float minExtent = std::min({fruitExtent[0], fruitExtent[1], fruitExtent[2]});
+  float ds = std::max(0.05f, std::min(0.5f, minExtent * 0.1f));
   float eps = ds * 0.1f;
   float activeBuffer = ds;
-                           
+
   // Simulation parameters
   size_t maxOptimizationSteps = 100; // Might need slightly more steps for settling
   float dt = 1.0f / 60.0f;          // Fixed time step
@@ -606,7 +613,6 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   // attraction towards contacting object.
   Vec3f attractionDir(-1,0,0);
   const float MAX_OVERLAP = 0.2;
-  auto &meshInfo = items[itemIdx];
 
   std::vector<SamplePoint> samples;
   if (meshInfo.samples.empty()) {
@@ -620,14 +626,14 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     samples = meshInfo.samples;
   }
 
-  Box3f localBox = ComputeBBox(items[itemIdx].mesh.v);
+  Box3f localBox = fruitBox;
   Vec3f currentT = tran.position;
   Quat4f currentQ = Quat4f::fromRotationMatrix(tran.rotation);
 
   const auto &item = items[itemIdx];
   float invMass = 1.0f / item.rb.vol;
   Vec3f invI_local(1.0f/item.rb.inertia(0,0), 1.0f/item.rb.inertia(1,1), 1.0f/item.rb.inertia(2,2));
-  
+
   Vec3f linearVel(0.0f);
   Vec3f angularVel(0.0f);
 
@@ -876,7 +882,11 @@ RigidTransform PackingScene::NudgeConstrained(unsigned itemIdx,
   RigidTransform tOut = tran;
 
   const float CONTACT_ANGLE_THRESH_DEG = 20.0f;
-  float ds = 0.5f;
+  auto &meshInfo = items[itemIdx];
+  Box3f fruitBox = ComputeBBox(meshInfo.mesh.v);
+  Vec3f fruitExtent = fruitBox.vmax - fruitBox.vmin;
+  float minExtent = std::min({fruitExtent[0], fruitExtent[1], fruitExtent[2]});
+  float ds = std::max(0.05f, std::min(0.5f, minExtent * 0.1f));
   float eps = ds * 0.1f;
   float activeBuffer = 1.0f;
 
@@ -885,7 +895,6 @@ RigidTransform PackingScene::NudgeConstrained(unsigned itemIdx,
   float damping = 0.85f;
   float nudgeAcceleration = 200.0f;
   const float MAX_OVERLAP = 0.2f;
-  auto &meshInfo = items[itemIdx];
 
   std::vector<SamplePoint> samples;
   if (meshInfo.samples.empty()) {
@@ -903,7 +912,7 @@ RigidTransform PackingScene::NudgeConstrained(unsigned itemIdx,
     samples = meshInfo.samples;
   }
 
-  Box3f localBox = ComputeBBox(items[itemIdx].mesh.v);
+  Box3f localBox = fruitBox;
   Vec3f currentT = tran.position;
   Quat4f currentQ = Quat4f::fromRotationMatrix(tran.rotation);
 
