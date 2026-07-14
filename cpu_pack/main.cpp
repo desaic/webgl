@@ -42,7 +42,9 @@ Vec3f closestPointTriangle(const Vec3f & p, const Vec3f & a, const Vec3f & b, co
 
 void MakeInnerMesh() {
   TrigMesh container;
-  container.LoadStl("F:/meshes/fruit_hand/hands/hand4.5m.stl");
+  std::string meshDir = "/media/desaic/WD/meshes/fruit_hand/hands/";
+  std::string input = meshDir + "/finger4.8m.stl";
+  container.LoadStl(input);
   float dx = 2.0f;
   float distUnit = 0.01f * dx;
   std::shared_ptr<AdapSDF> sdf = ComputeSDF(distUnit, dx, container);
@@ -50,8 +52,8 @@ void MakeInnerMesh() {
   Box3f box = ComputeBBox(container.v);
   Vec3f boxSize = box.vmax - box.vmin;
   TrigMesh surf;
-  MarchingCubes(sdf->dist, -32, sdf->distUnit, sdf->voxSize, sdf->origin, &surf);
-  surf.SaveObj("F:/meshes/fruit_hand/hand4.5m_inner.obj");
+  MarchingCubes(sdf->dist, -4, sdf->distUnit, sdf->voxSize, sdf->origin, &surf);
+  surf.SaveObj(meshDir + "finger4.8m_inner.obj");
 }
 
 void DebugPointSampling(MeshInfo & meshInfo, const std::string & outputFolder){
@@ -90,10 +92,10 @@ void PackStep(PackingScene & scene, const PackingStep & step){
   //debug
   //DebugPointSampling(scene.items[8], scene.outputFolder);
   // debug
-  const unsigned DEBUG_I = 0;
+  const unsigned DEBUG_ITEM = 0;
   for (; count < step.count; count++) {
     bool packSuccess = false;
-    for (unsigned i = DEBUG_I; i < numItems; i++) {
+    for (unsigned i = DEBUG_ITEM; i < numItems; i++) {
       unsigned nameIndex = (i + startNameIndex) % numItems;
       std::string name = step.names[nameIndex];
 
@@ -166,10 +168,10 @@ void PackScene(PackingScene & scene, const PackingPlan & plan) {
   scene.placed.resize(scene.items.size());
 
   // debug. load pack progress.
-  LoadPack(scene, "/media/desaic/WD/meshes/fruit_hand/pack5.txt");
+  // LoadPack(scene, "/media/desaic/WD/meshes/fruit_hand/pack5.txt");
 
   scene.trajFile = scene.outputFolder + "/traj";
-  const unsigned DEBUG_STEP = 4;
+  const unsigned DEBUG_STEP = 0;
   for(size_t i = DEBUG_STEP;i<plan.steps.size(); i++){
     PackStep(scene, plan.steps[i]);
   } 
@@ -181,7 +183,7 @@ void PackFruits(const PackingPlan & plan, const std::string & dataDir) {
   std::vector<MeshInfo> fruits = LoadAllMeshInfo(meshDir);
   scene.items = fruits;  
   fs::path containerFile(dataDir + "hands/finger4.8m.stl");
-  fs::path innerContainerFile(dataDir + "hands/finger_inner4.8m.stl");
+  fs::path innerContainerFile(dataDir + "hands/finger_4.8m_inner.stl");
   LoadMeshInfo(scene.container, containerFile);  
   LoadMeshInfo(scene.containerInner, innerContainerFile);
   float broadPhaseDx = 2.0f;
@@ -353,6 +355,14 @@ PackingPlan PlanPackingSteps(const std::string & meshDir){
   lastStep.count = 1000000;
 
   plan.steps.push_back(lastStep);
+
+  // pack medium small fruits towards center instead of outwards.
+  size_t numSteps = plan.steps.size();
+  if(numSteps > 2){
+    PackingStep & smallMedium = plan.steps[numSteps - 2];
+    smallMedium.outwards = false;
+  }
+
   return plan;
 }
 
