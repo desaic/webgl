@@ -11,6 +11,7 @@ data/*.log
 data/*.txt
 data/token.json
 data/rh_session.json
+data/script_state/
 !data/.gitkeep
 
 scripts/*.py

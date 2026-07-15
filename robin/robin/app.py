@@ -31,6 +31,7 @@ from robin.config import (
     setup_logging,
 )
 from robin.gemini import GeminiClient, GeminiError
+from robin.news import NewsSource
 from robin.notifier import EventBus
 from robin.poller import Poller
 from robin.rh_client import RobinhoodClient
@@ -87,6 +88,7 @@ class AppState:
     strategy: StrategyEngine
     bus: EventBus
     poller: Poller
+    news: NewsSource
     gemini: GeminiClient | None = None
 
 
@@ -109,12 +111,14 @@ async def lifespan(app: FastAPI):
     client = RobinhoodClient(auth=rh_auth)
     strategy = StrategyEngine()
     bus = EventBus()
+    news = NewsSource()
     state = AppState(
         gemini_keys=gemini_keys,
         rh_auth=rh_auth,
         client=client,
         strategy=strategy,
         bus=bus,
+        news=news,
         poller=None,  # type: ignore[arg-type]
     )
     state.gemini = _make_gemini(state)
@@ -156,6 +160,10 @@ class GeminiKeyRequest(BaseModel):
     api_key: str
 
 
+class UpdateScriptRequest(BaseModel):
+    source: str
+
+
 @app.get("/")
 async def index() -> FileResponse:
     path = STATIC_DIR / "index.html"
@@ -175,7 +183,6 @@ async def status() -> dict[str, Any]:
         "gemini_has_key": state.gemini_keys.has_key(),
         "gemini_model": GEMINI_MODEL,
         "gemini_ready": state.gemini is not None,
-        "gemini_search_enabled": state.gemini._search_enabled if state.gemini else False,
         "market_open": state.poller.market_open,
         "scripts": len(state.strategy.scripts),
         "last_tick": state.poller.last_tick,
@@ -229,6 +236,23 @@ async def scripts() -> list[dict[str, Any]]:
     return _state(app).strategy.list_scripts()
 
 
+@app.put("/api/scripts/{name}")
+async def update_script(name: str, req: UpdateScriptRequest) -> dict[str, Any]:
+    try:
+        script = await anyio.to_thread.run_sync(
+            _state(app).strategy.update_script, name, req.source
+        )
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+    return {"status": "ok", "name": script.name, "targets": script.targets}
+
+
+@app.delete("/api/scripts/{name}")
+async def delete_script(name: str) -> dict[str, Any]:
+    await anyio.to_thread.run_sync(_state(app).strategy.delete_script, name)
+    return {"status": "ok"}
+
+
 @app.post("/api/auth/robinhood")
 async def auth_robinhood(req: LoginRequest) -> dict[str, Any]:
     state = _state(app)
@@ -250,19 +274,6 @@ async def auth_gemini(req: GeminiKeyRequest) -> dict[str, Any]:
     state.gemini = _make_gemini(state)
     state.poller.set_gemini(state.gemini)
     return {"status": "ok", "gemini_ready": state.gemini is not None}
-
-
-class SearchToggleRequest(BaseModel):
-    enabled: bool
-
-
-@app.post("/api/gemini/search")
-async def toggle_search(req: SearchToggleRequest) -> dict[str, Any]:
-    state = _state(app)
-    if state.gemini is None:
-        raise HTTPException(409, "Gemini API key not set. Enter it in the UI first.")
-    state.gemini.set_search_enabled(req.enabled)
-    return {"status": "ok", "search_enabled": state.gemini._search_enabled}
 
 
 @app.post("/api/auth/logout")
@@ -312,7 +323,9 @@ async def llm_ask(req: AskRequest) -> dict[str, Any]:
         snapshot = p.to_dict()
         state.poller.latest_portfolio = snapshot
     try:
-        answer = await anyio.to_thread.run_sync(state.gemini.ask, req.prompt, snapshot)
+        answer = await anyio.to_thread.run_sync(
+            state.gemini.ask, req.prompt, snapshot, state.news
+        )
     except GeminiError as e:
         raise HTTPException(502, str(e)) from e
     _save_chat(req.prompt, answer)

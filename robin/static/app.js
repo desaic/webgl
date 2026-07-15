@@ -10,15 +10,12 @@ function setStatus(s) {
     ["Mode", s.robinhood_mode, s.robinhood_mode === "real" ? "ok" : "warn"],
     ["Market", s.market_open ? "open" : "closed", s.market_open ? "ok" : "warn"],
     ["Gemini", s.gemini_ready ? "ready" : (s.gemini_has_key ? "init fail" : "no key"), s.gemini_ready ? "ok" : "warn"],
-    ["Search", s.gemini_search_enabled ? "on" : "off", s.gemini_search_enabled ? "ok" : "info"],
     ["Scripts", s.scripts, "info"],
     ["Model", s.gemini_model, "info"],
   ];
   el.innerHTML = items.map(([k, v, c]) => `<span class="chip ${c}">${k}: ${v}</span>`).join("");
   document.getElementById("mode-badge").textContent = s.robinhood_mode === "real" ? "live" : "simulated";
   document.getElementById("mode-badge").className = "badge " + (s.robinhood_mode === "real" ? "ok" : "warn");
-  const cb = document.getElementById("search-toggle");
-  cb.checked = !!s.gemini_search_enabled;
   const banner = document.getElementById("market-banner");
   if (s.market_open) {
     banner.textContent = "Market is OPEN — prices every 5 min, holdings every 30 min";
@@ -146,18 +143,6 @@ document.getElementById("btn-gemini-key").onclick = async () => {
   refresh();
 };
 
-document.getElementById("search-toggle").onchange = async (e) => {
-  const enabled = e.target.checked;
-  try {
-    const r = await fetch("/api/gemini/search", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ enabled }),
-    });
-    if (!r.ok) { e.target.checked = !enabled; alert("Toggle failed"); }
-  } catch (err) { e.target.checked = !enabled; alert(err); }
-  refresh();
-};
-
 document.getElementById("btn-robinhood").onclick = async () => {
   const username = prompt("Robinhood username:");
   if (!username) return;
@@ -264,6 +249,99 @@ async function sendChat() {
 document.getElementById("btn-clear-chat").onclick = async () => {
   document.getElementById("chat-messages").innerHTML = "";
   try { await fetch("/api/chat/clear", { method: "POST" }); } catch (e) {}
+};
+
+// --- Tabs ---
+const tabChat = document.getElementById("tab-chat");
+const tabScript = document.getElementById("tab-script");
+const panelChat = document.getElementById("tab-panel-chat");
+const panelScript = document.getElementById("tab-panel-script");
+
+tabChat.onclick = () => {
+  tabChat.classList.add("active"); tabScript.classList.remove("active");
+  panelChat.classList.add("active"); panelScript.classList.remove("active");
+};
+tabScript.onclick = () => {
+  tabScript.classList.add("active"); tabChat.classList.remove("active");
+  panelScript.classList.add("active"); panelChat.classList.remove("active");
+  loadScriptList();
+};
+
+// --- Script editor ---
+let currentScripts = [];
+
+async function loadScriptList() {
+  try {
+    currentScripts = await getJSON("/api/scripts");
+    const sel = document.getElementById("script-select");
+    sel.innerHTML = currentScripts.map(s => `<option value="${s.name}">${s.name} (${(s.targets||[]).join(",")||"all"})</option>`).join("");
+    if (currentScripts.length > 0) {
+      sel.selectedIndex = 0;
+      loadScriptIntoEditor(currentScripts[0]);
+    } else {
+      document.getElementById("script-editor").value = "";
+    }
+  } catch (e) { console.error(e); }
+}
+
+document.getElementById("script-select").onchange = () => {
+  const name = document.getElementById("script-select").value;
+  const s = currentScripts.find(x => x.name === name);
+  if (s) loadScriptIntoEditor(s);
+};
+
+function loadScriptIntoEditor(s) {
+  document.getElementById("script-editor").value = s.source || "";
+  document.getElementById("script-status").textContent = "";
+  document.getElementById("script-status").className = "script-status";
+}
+
+document.getElementById("btn-save-script").onclick = async () => {
+  const name = document.getElementById("script-select").value;
+  if (!name) return;
+  const source = document.getElementById("script-editor").value;
+  const status = document.getElementById("script-status");
+  status.textContent = "compiling…";
+  status.className = "script-status";
+  try {
+    const r = await fetch(`/api/scripts/${encodeURIComponent(name)}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source }),
+    });
+    const j = await r.json();
+    if (j.status === "ok") {
+      status.textContent = `✓ ${j.name} compiled OK (targets: ${(j.targets||[]).join(", ")||"all"})`;
+      status.className = "script-status ok";
+      loadScriptList();
+    } else {
+      status.textContent = `✗ ${j.error}`;
+      status.className = "script-status error";
+    }
+  } catch (e) {
+    status.textContent = `✗ ${e}`;
+    status.className = "script-status error";
+  }
+};
+
+document.getElementById("btn-delete-script").onclick = async () => {
+  const name = document.getElementById("script-select").value;
+  if (!name || !confirm(`Delete script '${name}'?`)) return;
+  try {
+    await fetch(`/api/scripts/${encodeURIComponent(name)}`, { method: "DELETE" });
+    loadScriptList();
+  } catch (e) { alert(e); }
+};
+
+document.getElementById("btn-new-script").onclick = () => {
+  const name = prompt("Script name (e.g. stop_loss_aapl):");
+  if (!name) return;
+  const template = "TARGETS = []\n\ndef check(ctx):\n    # ctx keys: symbol, name, quantity, avg_cost,\n    # current_price, prev_close, day_high, day_low,\n    # market_value, unrealized_pl, unrealized_pl_pct,\n    # equity_pct, history, as_of, portfolio, state\n    #\n    # state: persistent dict saved to disk between polls.\n    # Use it to track things like high_water_mark:\n    #   hi = ctx['state'].get('high', 0)\n    #   ctx['state']['high'] = max(hi, ctx['current_price'])\n    return None\n";
+  document.getElementById("script-select").innerHTML += `<option value="${name}">${name} (new)</option>`;
+  const sel = document.getElementById("script-select");
+  sel.value = name;
+  document.getElementById("script-editor").value = template;
+  document.getElementById("script-status").textContent = "Click Save & Compile to create";
+  document.getElementById("script-status").className = "script-status";
 };
 
 refresh();

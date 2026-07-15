@@ -75,16 +75,15 @@
 
         <div class="panel">
           <div class="panel-head"><h2>Actions</h2></div>
-          <div class="actions">
-            <div class="key-input">
-              <input id="gemini-key" type="password" placeholder="Paste Gemini API key…" />
-              <button id="btn-gemini-key">Set Gemini Key</button>
-            </div>
-            <label class="checkbox"><input type="checkbox" id="search-toggle" /> Enable Google Search (uses separate quota)</label>
-            <button id="btn-robinhood">Connect Robinhood</button>
-            <button id="btn-logout" class="danger">Logout All</button>
-            <button id="btn-strategy">Regenerate Strategy Scripts</button>
+        <div class="actions">
+          <div class="key-input">
+            <input id="gemini-key" type="password" placeholder="Paste Gemini API key…" />
+            <button id="btn-gemini-key">Set Gemini Key</button>
           </div>
+          <button id="btn-robinhood">Connect Robinhood</button>
+          <button id="btn-logout" class="danger">Logout All</button>
+          <button id="btn-strategy">Regenerate Strategy Scripts</button>
+        </div>
           <div class="panel-head"><h2>Strategy Scripts</h2></div>
           <ul id="scripts" class="scripts"></ul>
         </div>
@@ -92,14 +91,37 @@
     </main>
 
     <aside class="chat-sidebar">
-      <div class="chat-head">
-        <h2>Ask Gemini</h2>
-        <button id="btn-clear-chat" class="small">Clear</button>
+      <div class="tab-bar">
+        <button class="tab active" id="tab-chat">Chat</button>
+        <button class="tab" id="tab-script">Scripts</button>
       </div>
-      <div id="chat-messages" class="chat-messages"></div>
-      <div class="chat-input">
-        <textarea id="ask-input" rows="2" placeholder="Ask about your portfolio…"></textarea>
-        <button id="btn-ask">Send</button>
+
+      <div id="tab-panel-chat" class="tab-panel active">
+        <div class="chat-head">
+          <h2>Ask Gemini</h2>
+          <button id="btn-clear-chat" class="small">Clear</button>
+        </div>
+        <div id="chat-messages" class="chat-messages"></div>
+        <div class="chat-input">
+          <textarea id="ask-input" rows="2" placeholder="Ask about your portfolio…"></textarea>
+          <button id="btn-ask">Send</button>
+        </div>
+      </div>
+
+      <div id="tab-panel-script" class="tab-panel">
+        <div class="chat-head">
+          <h2>Strategy Scripts</h2>
+          <button id="btn-save-script" class="small">Save &amp; Compile</button>
+        </div>
+        <div class="script-list-wrap">
+          <select id="script-select" size="6"></select>
+          <div class="script-btns">
+            <button id="btn-new-script" class="small">New</button>
+            <button id="btn-delete-script" class="small danger">Delete</button>
+          </div>
+        </div>
+        <textarea id="script-editor" class="script-editor" spellcheck="false" placeholder="Select a script to edit…"></textarea>
+        <div id="script-status" class="script-status"></div>
       </div>
     </aside>
   </div>

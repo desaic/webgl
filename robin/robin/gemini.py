@@ -11,47 +11,61 @@ _MAX_RETRIES = 4
 _RETRY_BASE_DELAY = 2.0
 
 _SCRIPT_GEN_SYSTEM = (
-    "You are a conservative, low-frequency equity strategy engineer. The user is "
-    "long-term, capital-preservation focused, and wants minimal trading. "
-    "You write Python CHECK SCRIPTS that run every poll and flag only situations "
+    "You are a casual equity strategy engineer. The user is "
+    "medium-term, risk averting, and wants maybe one trade per week or less."
+    "You can write Python CHECK SCRIPTS that run every poll 5 minutes and flag only situations "
     "that need human attention: hard stop-losses, trailing stop-losses from a "
-    "recent high, downside accelerations, large single-day moves, and positions "
+    "recent high, downside accelerations, sufficient gains, large single-day moves, and positions "
     "that grew dangerously concentrated. Do NOT flag normal small moves."
 )
 
 _SCRIPT_GEN_INSTR = (
-    "Write one check script per holding that needs guarding. Each script must "
+    "Write one check script per significant holding that needs guarding. Each script must "
     "define a function `check(ctx)` and a module-level list `TARGETS` of the "
     "symbols it applies to (use [] to apply to every holding). `ctx` is a dict "
     "with keys: symbol, name, quantity, avg_cost, current_price, prev_close, "
     "day_high, day_low, market_value, unrealized_pl, unrealized_pl_pct, "
     "equity_pct, history (list of recent close floats, oldest->newest), as_of, "
-    "and portfolio (dict with total_market_value, total_cost, "
-    "total_unrealized_pl, total_unrealized_pl_pct). `check` must return None when "
-    "all is well, or a dict with keys: kind (e.g. 'stop_loss','trailing_stop',"
-    "'concentration','large_move'), severity ('low'|'medium'|'high'), message "
-    "(short human sentence), and any extra data. Only available globals: math, "
-    "statistics, datetime, timedelta, Event, and common safe builtins (no file or "
-    "network access). Return STRICT JSON: "
+    "portfolio (dict with total_market_value, total_cost, "
+    "total_unrealized_pl, total_unrealized_pl_pct), and state (a persistent dict "
+    "that survives across polls -- use it to track things like high_water_mark "
+    "for trailing stops; read from ctx['state'] and write back to it, e.g. "
+    "ctx['state']['high'] = max(ctx['state'].get('high', 0), ctx['current_price'])). "
+    "`check` must return None when all is well, or a dict with keys: kind (e.g. "
+    "'stop_loss','trailing_stop','concentration','large_move'), severity ('low'|"
+    "'medium'|'high'), message (short human sentence), and any extra data. Only "
+    "available globals: math, statistics, datetime, timedelta, Event, and common "
+    "safe builtins (no file or network access). Return STRICT JSON: "
     '{"scripts":[{"name":str,"targets":[str],"source":str}]}. '
     "Keep each script small and defensive."
 )
 
 _REASON_SYSTEM = (
-    "You are a conservative long-term investing assistant. An automated trigger "
+    "You are a casual medium-term investing assistant. An automated trigger "
     "fired and the user needs a brief, calm assessment. Do not panic. Prefer hold "
     "or review over selling unless capital is genuinely at risk. "
-    "You have access to Google Search to look up recent news about the stock. "
-    "Use it to give context for why a trigger may have fired (earnings, FDA, "
-    "macro events, sector moves). Always cite the news source briefly."
+    "Be succinct. One or two sentences max."
 )
 
 _ASK_SYSTEM = (
-    "You are a conservative long-term investing assistant for a US-only equity "
-    "portfolio. The user's portfolio snapshot (holdings, prices, gain/loss) is "
-    "provided with each question. You have Google Search access to look up "
-    "latest news, earnings, analyst ratings, and market context. "
-    "Keep answers concise and actionable. Prefer hold or review over selling."
+    "You are a medium-term investing assistant for a US-only equity "
+    "portfolio. The portfolio snapshot (holdings, prices, gain/loss) is "
+    "provided. You can request news for specific stocks by "
+    "returning a JSON response with a 'news_requests' field listing ticker "
+    "symbols. If you need news, return ONLY the JSON and the system will fetch "
+    "news and ask you again. If you have enough information to answer, respond "
+    "normally. Be succinct. "
+    "Strategy suggestions must be short bullet points: stock name, condition met, "
+    "and action. Example: 'NVDL: down 12% from high — review stop level'. "
+    "Prefer hold or review over selling."
+)
+
+_ASK_NEWS_INSTR = (
+    "If you need recent news to answer the user's question, return STRICT JSON: "
+    '{"news_requests":["AAPL","MSFT",...]}. List 1-4 ticker symbols you want '
+    "news for. The system will fetch public news headlines for those stocks and "
+    "pass them back to you. If you don't need news, just answer the question "
+    "directly."
 )
 
 
@@ -71,6 +85,18 @@ def _strip_json(text: str) -> str:
     return text
 
 
+def _try_parse_news_request(text: str) -> list[str] | None:
+    """Check if Gemini's response is a news request JSON. Returns tickers or None."""
+    try:
+        data = json.loads(_strip_json(text))
+    except json.JSONDecodeError:
+        return None
+    tickers = data.get("news_requests")
+    if isinstance(tickers, list) and all(isinstance(t, str) for t in tickers):
+        return [t.upper() for t in tickers[:4]]
+    return None
+
+
 class GeminiClient:
     _PORTFOLIO_REFRESH_INTERVAL = 10
     _MAX_HISTORY = 10
@@ -81,28 +107,20 @@ class GeminiClient:
         self._genai = genai
         self.client = genai.Client(api_key=api_key)
         self.model = GEMINI_MODEL
-        self._search_tool = genai.types.Tool(google_search=genai.types.GoogleSearch())
-        self._search_enabled = False
         self._chat = self._create_chat()
         self._msgs_since_portfolio = self._PORTFOLIO_REFRESH_INTERVAL
 
     def _create_chat(self, history: list[Any] | None = None) -> Any:
-        config_kwargs: dict[str, Any] = {
-            "system_instruction": _ASK_SYSTEM,
-            "temperature": 0.3,
-        }
-        if self._search_enabled:
-            config_kwargs["tools"] = [self._search_tool]
         return self.client.chats.create(
             model=self.model,
-            config=self._genai.types.GenerateContentConfig(**config_kwargs),
+            config=self._genai.types.GenerateContentConfig(
+                system_instruction=_ASK_SYSTEM,
+                temperature=0.3,
+            ),
             history=history,
         )
 
     def _trim_chat(self) -> None:
-        """Recreate the chat with only the last _MAX_HISTORY messages to cap
-        token usage and avoid hitting free-tier rate limits.
-        """
         try:
             history = self._chat.get_history()
         except Exception:
@@ -113,19 +131,7 @@ class GeminiClient:
         self._chat = self._create_chat(trimmed)
         logger.info("trimmed chat history to last %d messages", len(trimmed))
 
-    def set_search_enabled(self, enabled: bool) -> None:
-        if enabled != self._search_enabled:
-            self._search_enabled = enabled
-            try:
-                history = self._chat.get_history()
-            except Exception:
-                history = None
-            self._chat = self._create_chat(history)
-            self._msgs_since_portfolio = self._PORTFOLIO_REFRESH_INTERVAL
-            logger.info("gemini google search %s", "enabled" if enabled else "disabled")
-
     def clear_chat(self) -> None:
-        """Start a fresh chat session with no history."""
         self._chat = self._create_chat()
         self._msgs_since_portfolio = self._PORTFOLIO_REFRESH_INTERVAL
         logger.info("gemini chat cleared")
@@ -136,13 +142,10 @@ class GeminiClient:
         *,
         system: str,
         json_out: bool,
-        search: bool = False,
     ) -> str:
         config_kwargs: dict[str, Any] = {"temperature": 0.2}
-        if json_out and not search:
+        if json_out:
             config_kwargs["response_mime_type"] = "application/json"
-        if search:
-            config_kwargs["tools"] = [self._search_tool]
         config = self._genai.types.GenerateContentConfig(system_instruction=system, **config_kwargs)
         last_exc: Exception | None = None
         for attempt in range(_MAX_RETRIES):
@@ -204,20 +207,11 @@ class GeminiClient:
             f"unrealized_pl_pct={ctx.get('unrealized_pl_pct')}%, "
             f"equity_pct={ctx.get('equity_pct')}%\n"
             f"Recent closes: {ctx.get('history')}\n\n"
-            "Search for recent news about this stock to explain the trigger, "
-            "then return STRICT JSON: "
+            "Return STRICT JSON: "
             '{"severity":"low|medium|high","action":"hold|review|sell|rebalance",'
-            '"message":"one or two sentences with news context"}'
+            '"message":"one or two sentences"}'
         )
-        try:
-            raw = self._generate(prompt, system=_REASON_SYSTEM, json_out=True, search=self._search_enabled)
-        except GeminiError:
-            if self._search_enabled:
-                logger.warning("reason_on_event: disabling google search and retrying")
-                self.set_search_enabled(False)
-                raw = self._generate(prompt, system=_REASON_SYSTEM, json_out=True, search=False)
-            else:
-                raise
+        raw = self._generate(prompt, system=_REASON_SYSTEM, json_out=True)
         try:
             return json.loads(_strip_json(raw))
         except json.JSONDecodeError:
@@ -227,27 +221,17 @@ class GeminiClient:
                 "message": raw[:300],
             }
 
-    def ask(self, prompt: str, portfolio: dict[str, Any]) -> str:
-        if self._msgs_since_portfolio >= self._PORTFOLIO_REFRESH_INTERVAL:
-            summary = json.dumps(portfolio, default=str)
-            full = f"Portfolio snapshot (holdings, prices, gain/loss):\n{summary}\n\nUser question: {prompt}"
-            self._msgs_since_portfolio = 0
-        else:
-            full = prompt
-        self._msgs_since_portfolio += 1
+    def _send_chat(self, message: str) -> str:
+        """Send a message to the chat session with retry logic."""
         last_exc: Exception | None = None
         for attempt in range(_MAX_RETRIES):
             try:
-                resp = self._chat.send_message(full)
+                resp = self._chat.send_message(message)
                 self._trim_chat()
                 return resp.text or ""
             except Exception as e:
                 last_exc = e
                 msg = str(e).lower()
-                if ("429" in msg or "resource_exhausted" in msg) and self._search_enabled:
-                    logger.warning("gemini rate-limited; disabling google search and retrying without it")
-                    self.set_search_enabled(False)
-                    continue
                 if "429" in msg or "resource_exhausted" in msg or "quota" in msg:
                     delay = _RETRY_BASE_DELAY * (2 ** attempt)
                     logger.warning(
@@ -261,3 +245,31 @@ class GeminiClient:
             f"gemini rate-limited after {_MAX_RETRIES} retries (free tier quota). "
             f"Wait a minute and try again. Last error: {last_exc}"
         ) from last_exc
+
+    def ask(self, prompt: str, portfolio: dict[str, Any], news_source: Any | None = None) -> str:
+        """Two-turn flow: send the question, if Gemini requests news for specific
+        stocks, fetch it from public sources and send back for a final answer.
+        """
+        if self._msgs_since_portfolio >= self._PORTFOLIO_REFRESH_INTERVAL:
+            summary = json.dumps(portfolio, default=str)
+            full = f"Portfolio snapshot (holdings, prices, gain/loss):\n{summary}\n\n{_ASK_NEWS_INSTR}\n\nUser question: {prompt}"
+            self._msgs_since_portfolio = 0
+        else:
+            full = f"{_ASK_NEWS_INSTR}\n\nUser question: {prompt}"
+        self._msgs_since_portfolio += 1
+
+        resp1 = self._send_chat(full)
+
+        if news_source is None:
+            return resp1
+
+        tickers = _try_parse_news_request(resp1)
+        if tickers is None:
+            return resp1
+
+        logger.info("gemini requested news for: %s", tickers)
+        general = news_source.general_summary()
+        stock_news = news_source.stocks_summary(tickers)
+        news_msg = f"Here are the latest news headlines:\n\n{general}\n\n{stock_news}\n\nPlease answer the user's question now with this news context."
+        resp2 = self._send_chat(news_msg)
+        return resp2

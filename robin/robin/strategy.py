@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import contextlib
 import datetime as _dt
+import json
 import math
 import statistics
 import threading
@@ -8,8 +10,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from robin.config import SCRIPTS_DIR, logger
+from robin.config import DATA_DIR, SCRIPTS_DIR, logger
 from robin.notifier import Event
+
+_STATE_DIR = DATA_DIR / "script_state"
 
 _SAFE_BUILTINS: dict[str, Any] = {
     "abs": abs,
@@ -71,6 +75,22 @@ class CheckScript:
         if not self.targets:
             return True
         return symbol.upper() in [t.upper() for t in self.targets]
+
+    def _state_path(self) -> Path:
+        return _STATE_DIR / f"{self.name}.json"
+
+    def load_state(self) -> dict[str, Any]:
+        path = self._state_path()
+        if not path.exists():
+            return {}
+        try:
+            return json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError):
+            return {}
+
+    def save_state(self, state: dict[str, Any]) -> None:
+        _STATE_DIR.mkdir(parents=True, exist_ok=True)
+        self._state_path().write_text(json.dumps(state, indent=2, default=str))
 
     def run(self, ctx: dict[str, Any]) -> Event | None:
         try:
@@ -167,13 +187,40 @@ class StrategyEngine:
             self.scripts = [s for s in self.scripts if s.name != script.name] + [script]
         return script
 
+    def update_script(self, name: str, source: str) -> CheckScript:
+        """Recompile and save a script with edited source. Creates the script
+        if it doesn't exist yet. Raises the compile error so the caller can
+        show it to the user.
+        """
+        safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)[:60] or "rule"
+        path = self.scripts_dir / f"{safe_name}.py"
+        path.write_text(source)
+        script = self._compile_source(safe_name, source, path)
+        with self._lock:
+            self.scripts = [s for s in self.scripts if s.name != script.name] + [script]
+        return script
+
+    def delete_script(self, name: str) -> None:
+        safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)[:60] or "rule"
+        path = self.scripts_dir / f"{safe_name}.py"
+        with contextlib.suppress(FileNotFoundError):
+            path.unlink()
+        with self._lock:
+            self.scripts = [s for s in self.scripts if s.name != safe_name]
+
     def list_scripts(self) -> list[dict[str, Any]]:
         return [
             {"name": s.name, "targets": s.targets, "source": s.source, "path": str(s.path)}
             for s in self.scripts
         ]
 
-    def _ctx_for(self, holding: dict[str, Any], portfolio: dict[str, Any], history: list[float]) -> dict[str, Any]:
+    def _ctx_for(
+        self,
+        holding: dict[str, Any],
+        portfolio: dict[str, Any],
+        history: list[float],
+        state: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         return {
             "symbol": holding["symbol"],
             "name": holding.get("name", holding["symbol"]),
@@ -195,6 +242,7 @@ class StrategyEngine:
                 "total_unrealized_pl": portfolio.get("total_unrealized_pl", 0.0),
                 "total_unrealized_pl_pct": portfolio.get("total_unrealized_pl_pct", 0.0),
             },
+            "state": state if state is not None else {},
         }
 
     def evaluate(self, portfolio: dict[str, Any], histories: dict[str, list[float]] | None = None) -> list[Event]:
@@ -204,11 +252,18 @@ class StrategyEngine:
             return events
         for holding in portfolio.get("holdings", []):
             symbol = holding["symbol"]
-            ctx = self._ctx_for(holding, portfolio, histories.get(symbol, []))
             for script in self.scripts:
                 if not script.applies_to(symbol):
                     continue
+                all_state = script.load_state()
+                sym_state = all_state.get(symbol, {})
+                state_copy = dict(sym_state)
+                ctx = self._ctx_for(holding, portfolio, histories.get(symbol, []), state_copy)
                 event = script.run(ctx)
+                new_state = ctx.get("state", state_copy)
+                if new_state != sym_state:
+                    all_state[symbol] = new_state
+                    script.save_state(all_state)
                 if event is not None:
                     events.append(event)
         return events

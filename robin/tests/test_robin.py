@@ -97,6 +97,54 @@ def test_sandbox_blocks_import(tmp_path: Path):
         eng.add_script("evil", "import os\ndef check(ctx):\n    return None\n")
 
 
+def test_script_persistent_state_across_polls(tmp_path: Path, monkeypatch):
+    """Verify that ctx['state'] persists to disk and is loaded on the next poll."""
+    state_dir = tmp_path / "script_state"
+    monkeypatch.setattr("robin.strategy._STATE_DIR", state_dir)
+
+    eng = StrategyEngine(scripts_dir=tmp_path)
+    eng.add_script(
+        "trailing_stop",
+        "def check(ctx):\n"
+        "    s = ctx['state']\n"
+        "    hi = s.get('high', ctx['current_price'])\n"
+        "    s['high'] = max(hi, ctx['current_price'])\n"
+        "    if ctx['current_price'] < s['high'] * 0.95:\n"
+        "        return {'kind':'trailing_stop','severity':'high',\n"
+        "                'message':f\"{ctx['symbol']} below 5% trailing stop\"}\n"
+        "    return None\n",
+        targets=["AAPL"],
+    )
+    portfolio = {"holdings": [
+        {"symbol": "AAPL", "quantity": 10, "avg_cost": 100, "current_price": 100,
+         "market_value": 1000, "unrealized_pl": 0, "unrealized_pl_pct": 0, "equity_pct": 100},
+    ]}
+    # Poll 1: price 100, high becomes 100, no trigger
+    events = eng.evaluate(portfolio, histories={"AAPL": []})
+    assert events == []
+    state_file = state_dir / "trailing_stop.json"
+    assert state_file.exists()
+    import json
+    saved = json.loads(state_file.read_text())
+    assert saved["AAPL"]["high"] == 100
+
+    # Poll 2: price rises to 110, high becomes 110, no trigger
+    portfolio["holdings"][0]["current_price"] = 110
+    events = eng.evaluate(portfolio, histories={"AAPL": []})
+    assert events == []
+    saved = json.loads(state_file.read_text())
+    assert saved["AAPL"]["high"] == 110
+
+    # Poll 3: price drops to 104 (below 110 * 0.95 = 104.5), trigger fires
+    portfolio["holdings"][0]["current_price"] = 104
+    events = eng.evaluate(portfolio, histories={"AAPL": []})
+    assert len(events) == 1
+    assert events[0].kind == "trailing_stop"
+    assert events[0].symbol == "AAPL"
+    saved = json.loads(state_file.read_text())
+    assert saved["AAPL"]["high"] == 110  # high preserved
+
+
 def test_sandbox_blocks_open_at_runtime(tmp_path: Path):
     eng = StrategyEngine(scripts_dir=tmp_path)
     eng.add_script("evil2", "def check(ctx):\n    open('/etc/passwd')\n    return None\n")
