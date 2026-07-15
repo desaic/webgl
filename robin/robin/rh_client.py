@@ -383,7 +383,7 @@ class RobinhoodClient:
             # avoid hammering Yahoo with 50+ requests every 5 min.
             if len(cached) <= 50:
                 for w in cached:
-                    quote = self.prices.fetch(w["symbol"])
+                    quote = self.prices.fetch(w["symbol"], light=True)
                     if quote:
                         w["current_price"] = quote.price
                         w["name"] = quote.name
@@ -411,7 +411,7 @@ class RobinhoodClient:
                     if not symbol or symbol in seen:
                         continue
                     seen.add(symbol)
-                    quote = self.prices.fetch(symbol)
+                    quote = self.prices.fetch(symbol, light=True)
                     watchlist.append(
                         {
                             "symbol": symbol,

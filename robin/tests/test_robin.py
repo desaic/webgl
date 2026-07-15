@@ -256,10 +256,11 @@ def test_holding_from_quote_math():
     assert d["prev_close"] == 115.0
 
 
-def test_public_price_source_caches_and_uses(monkeypatch):
+def test_public_price_source_caches_and_uses(monkeypatch, tmp_path):
+    monkeypatch.setattr("robin.prices._DISK_CACHE_PATH", tmp_path / "prices.json")
     calls: list[str] = []
 
-    def fake_fetch_one(self, symbol: str) -> Quote:
+    def fake_fetch_one(self, symbol: str, light: bool = False) -> Quote:
         calls.append(symbol)
         return Quote(symbol=symbol, name=symbol, price=100.0, prev_close=99.0,
                      day_high=101.0, day_low=98.0, history=[99.0, 100.0])
@@ -325,10 +326,11 @@ def test_refresh_holdings_busts_cache(monkeypatch):
     assert c._positions_cache[1] == []
 
 
-def test_google_fallback_used_when_yahoo_fails(monkeypatch):
+def test_google_fallback_used_when_yahoo_fails(monkeypatch, tmp_path):
+    monkeypatch.setattr("robin.prices._DISK_CACHE_PATH", tmp_path / "prices.json")
     src = PublicPriceSource(cache_ttl=0.0)
 
-    monkeypatch.setattr(PublicPriceSource, "_fetch_yahoo", lambda self, s: None)
+    monkeypatch.setattr(PublicPriceSource, "_fetch_yahoo", lambda self, s, light=False: None)
     monkeypatch.setattr(
         PublicPriceSource,
         "_fetch_google",
@@ -341,12 +343,13 @@ def test_google_fallback_used_when_yahoo_fails(monkeypatch):
     assert q.history == []
 
 
-def test_yahoo_preferred_over_google(monkeypatch):
+def test_yahoo_preferred_over_google(monkeypatch, tmp_path):
+    monkeypatch.setattr("robin.prices._DISK_CACHE_PATH", tmp_path / "prices.json")
     src = PublicPriceSource(cache_ttl=0.0)
     monkeypatch.setattr(
         PublicPriceSource,
         "_fetch_yahoo",
-        lambda self, s: Quote(symbol=s, name=s, price=200.0, prev_close=199.0,
+        lambda self, s, light=False: Quote(symbol=s, name=s, price=200.0, prev_close=199.0,
                               day_high=201.0, day_low=198.0, history=[199.0, 200.0]),
     )
     google_called: list[str] = []

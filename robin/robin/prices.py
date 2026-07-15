@@ -53,10 +53,13 @@ class PublicPriceSource:
         self._disk_dirty = False
         self._load_disk_cache()
 
-    def _fetch_yahoo(self, symbol: str) -> Quote | None:
+    def _fetch_yahoo(self, symbol: str, light: bool = False) -> Quote | None:
         import httpx
 
-        params = {"interval": "5m", "range": "5d", "includeAdjustedClose": "true"}
+        if light:
+            params = {"interval": "1d", "range": "1d"}
+        else:
+            params = {"interval": "5m", "range": "5d", "includeAdjustedClose": "true"}
         headers = {"User-Agent": _UA, "Accept": "application/json"}
         resp = None
         for url_tpl in _YAHOO_HOSTS:
@@ -94,7 +97,7 @@ class PublicPriceSource:
                 ),
                 day_high=float(meta.get("regularMarketDayHigh", 0.0) or 0.0),
                 day_low=float(meta.get("regularMarketDayLow", 0.0) or 0.0),
-                history=history[-RECENT_HISTORY_POINTS:],
+                history=history[-RECENT_HISTORY_POINTS:] if not light else [],
             )
         except Exception as e:
             logger.warning("could not parse yahoo response for %s: %s", symbol, e)
@@ -140,8 +143,8 @@ class PublicPriceSource:
             )
         return None
 
-    def _fetch_one(self, symbol: str) -> Quote | None:
-        quote = self._fetch_yahoo(symbol)
+    def _fetch_one(self, symbol: str, light: bool = False) -> Quote | None:
+        quote = self._fetch_yahoo(symbol, light=light)
         if quote is not None:
             return quote
         logger.info("yahoo unavailable for %s; trying Google Finance fallback", symbol)
@@ -197,35 +200,54 @@ class PublicPriceSource:
 
         os.replace(tmp, _DISK_CACHE_PATH)
 
-    def fetch(self, symbol: str) -> Quote | None:
+    def fetch(self, symbol: str, light: bool = True) -> Quote | None:
         symbol = symbol.upper()
         now = time.time()
         with self._lock:
             cached = self._cache.get(symbol)
             if cached and (now - cached[0]) < self.cache_ttl:
                 return cached[1]
-        quote = self._fetch_one(symbol)
-        if quote is not None:
+        quote = self._fetch_one(symbol, light=light)
+        if quote is None:
+            # Network failed — return stale cached quote if we have one
             with self._lock:
-                self._cache[symbol] = (now, quote)
-            self._save_disk_cache()
+                cached = self._cache.get(symbol)
+                if cached:
+                    return cached[1]
+            return None
+        # Light fetch returns no history; merge from cache if available
+        if light and not quote.history:
+            with self._lock:
+                cached = self._cache.get(symbol)
+                if cached and cached[1].history:
+                    quote.history = cached[1].history
+        with self._lock:
+            self._cache[symbol] = (now, quote)
+        self._save_disk_cache()
         return quote
 
-    def fetch_many(self, symbols: list[str]) -> dict[str, Quote]:
+    def fetch_many(self, symbols: list[str], light: bool = True) -> dict[str, Quote]:
         out: dict[str, Quote] = {}
         for i, sym in enumerate(symbols):
             if i > 0:
                 time.sleep(0.5)
-            q = self.fetch(sym)
+            q = self.fetch(sym, light=light)
             if q is not None:
                 out[sym.upper()] = q
         return out
 
     def history(self, symbol: str, n: int = RECENT_HISTORY_POINTS) -> list[float]:
-        q = self.fetch(symbol)
-        if q is None:
+        symbol = symbol.upper()
+        # Check cache first (might have history from a previous full fetch)
+        with self._lock:
+            cached = self._cache.get(symbol)
+            if cached and cached[1].history:
+                return cached[1].history[-n:]
+        # Cache miss or no history — do a full fetch
+        quote = self.fetch(symbol, light=False)
+        if quote is None:
             return []
-        return q.history[-n:]
+        return quote.history[-n:]
 
 
 def is_available() -> bool:
