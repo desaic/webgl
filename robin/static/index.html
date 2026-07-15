@@ -82,7 +82,6 @@
           </div>
           <button id="btn-robinhood">Connect Robinhood</button>
           <button id="btn-logout" class="danger">Logout All</button>
-          <button id="btn-strategy">Regenerate Strategy Scripts</button>
         </div>
           <div class="panel-head"><h2>Strategy Scripts</h2></div>
           <ul id="scripts" class="scripts"></ul>
@@ -99,7 +98,10 @@
       <div id="tab-panel-chat" class="tab-panel active">
         <div class="chat-head">
           <h2>Ask Gemini</h2>
-          <button id="btn-clear-chat" class="small">Clear</button>
+          <div class="badge-row">
+            <button id="btn-strategy" class="small">Write a script</button>
+            <button id="btn-clear-chat" class="small">Clear</button>
+          </div>
         </div>
         <div id="chat-messages" class="chat-messages"></div>
         <div class="chat-input">

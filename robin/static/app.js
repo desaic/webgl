@@ -272,12 +272,21 @@ let currentScripts = [];
 
 async function loadScriptList() {
   try {
+    const prevName = document.getElementById("script-select").value;
     currentScripts = await getJSON("/api/scripts");
     const sel = document.getElementById("script-select");
     sel.innerHTML = currentScripts.map(s => `<option value="${s.name}">${s.name} (${(s.targets||[]).join(",")||"all"})</option>`).join("");
     if (currentScripts.length > 0) {
-      sel.selectedIndex = 0;
-      loadScriptIntoEditor(currentScripts[0]);
+      if (prevName && currentScripts.some(s => s.name === prevName)) {
+        sel.value = prevName;
+        const s = currentScripts.find(x => x.name === prevName);
+        if (s && s.source !== document.getElementById("script-editor").value) {
+          loadScriptIntoEditor(s);
+        }
+      } else {
+        sel.selectedIndex = 0;
+        loadScriptIntoEditor(currentScripts[0]);
+      }
     } else {
       document.getElementById("script-editor").value = "";
     }
@@ -312,7 +321,8 @@ document.getElementById("btn-save-script").onclick = async () => {
     if (j.status === "ok") {
       status.textContent = `✓ ${j.name} compiled OK (targets: ${(j.targets||[]).join(", ")||"all"})`;
       status.className = "script-status ok";
-      loadScriptList();
+      await loadScriptList();
+      document.getElementById("script-select").value = name;
     } else {
       status.textContent = `✗ ${j.error}`;
       status.className = "script-status error";

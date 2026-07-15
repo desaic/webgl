@@ -13,7 +13,7 @@ ROBINHOOD_SESSION_PATH = DATA_DIR / "rh_session.json"
 
 READ_ONLY = True
 
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-flash-lite-latest")
 GEMINI_API_KEY_ENV = os.environ.get("GEMINI_API_KEY", "")
 POLL_INTERVAL_SECONDS = int(os.environ.get("ROBIN_POLL_INTERVAL", "300"))
 POSITIONS_TTL_SECONDS = int(os.environ.get("ROBIN_POSITIONS_TTL", "1800"))

@@ -20,9 +20,13 @@ _SCRIPT_GEN_SYSTEM = (
 )
 
 _SCRIPT_GEN_INSTR = (
-    "Write one check script per significant holding that needs guarding. Each script must "
+    "Write check scripts that guard the portfolio. Each script must "
     "define a function `check(ctx)` and a module-level list `TARGETS` of the "
-    "symbols it applies to (use [] to apply to every holding). `ctx` is a dict "
+    "symbols it applies to. Use [] to apply to ALL holdings, or list specific "
+    "symbols like ['AAPL','MSFT'] for stock-specific rules. Prefer fewer generic "
+    "scripts that apply to all stocks over many per-stock scripts. For example, "
+    "one script with TARGETS=[] can check stop-loss for every holding. Only write "
+    "a per-stock script if the rule is truly stock-specific. `ctx` is a dict "
     "with keys: symbol, name, quantity, avg_cost, current_price, prev_close, "
     "day_high, day_low, market_value, unrealized_pl, unrealized_pl_pct, "
     "equity_pct, history (list of recent close floats, oldest->newest), as_of, "
@@ -37,7 +41,7 @@ _SCRIPT_GEN_INSTR = (
     "available globals: math, statistics, datetime, timedelta, Event, and common "
     "safe builtins (no file or network access). Return STRICT JSON: "
     '{"scripts":[{"name":str,"targets":[str],"source":str}]}. '
-    "Keep each script small and defensive."
+    "Keep each script small and defensive. Aim for 2-4 scripts total, not one per stock."
 )
 
 _REASON_SYSTEM = (

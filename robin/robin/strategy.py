@@ -184,21 +184,29 @@ class StrategyEngine:
         path.write_text(header + source)
         script = self._compile_source(safe_name, path.read_text(), path)
         with self._lock:
-            self.scripts = [s for s in self.scripts if s.name != script.name] + [script]
+            self._upsert_script(script)
         return script
 
     def update_script(self, name: str, source: str) -> CheckScript:
         """Recompile and save a script with edited source. Creates the script
         if it doesn't exist yet. Raises the compile error so the caller can
-        show it to the user.
+        show it to the user. Preserves list ordering.
         """
         safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)[:60] or "rule"
         path = self.scripts_dir / f"{safe_name}.py"
         path.write_text(source)
         script = self._compile_source(safe_name, source, path)
         with self._lock:
-            self.scripts = [s for s in self.scripts if s.name != script.name] + [script]
+            self._upsert_script(script)
         return script
+
+    def _upsert_script(self, script: CheckScript) -> None:
+        """Replace in place if exists, append if new. Preserves ordering."""
+        for i, s in enumerate(self.scripts):
+            if s.name == script.name:
+                self.scripts[i] = script
+                return
+        self.scripts.append(script)
 
     def delete_script(self, name: str) -> None:
         safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)[:60] or "rule"
