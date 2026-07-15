@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import json
 import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from robin.config import RECENT_HISTORY_POINTS, logger
+from robin.config import DATA_DIR, RECENT_HISTORY_POINTS, logger
 
 _UA = "Mozilla/5.0"
 _YAHOO_HOSTS = [
@@ -29,6 +30,9 @@ class PriceError(Exception):
     pass
 
 
+_DISK_CACHE_PATH = DATA_DIR / "prices_cache.json"
+
+
 class PublicPriceSource:
     """Public market-data source (Yahoo Finance chart endpoint).
 
@@ -36,6 +40,9 @@ class PublicPriceSource:
     close, day high/low, and recent intraday closes. We send a real browser
     User-Agent, cap concurrency, and cache briefly so a 60s poll loop makes at
     most one gentle request per symbol per cycle.
+
+    All fetched quotes are persisted to data/prices_cache.json so the app can
+    show last-known prices on startup before fresh data arrives.
     """
 
     def __init__(self, cache_ttl: float = 20.0, timeout: float = 10.0) -> None:
@@ -43,6 +50,8 @@ class PublicPriceSource:
         self.timeout = timeout
         self._cache: dict[str, tuple[float, Quote]] = {}
         self._lock = threading.Lock()
+        self._disk_dirty = False
+        self._load_disk_cache()
 
     def _fetch_yahoo(self, symbol: str) -> Quote | None:
         import httpx
@@ -138,6 +147,56 @@ class PublicPriceSource:
         logger.info("yahoo unavailable for %s; trying Google Finance fallback", symbol)
         return self._fetch_google(symbol)
 
+    def _load_disk_cache(self) -> None:
+        """Load last-known prices from disk so the UI shows data on startup."""
+        if not _DISK_CACHE_PATH.exists():
+            return
+        try:
+            data = json.loads(_DISK_CACHE_PATH.read_text())
+        except (json.JSONDecodeError, OSError):
+            return
+        loaded = 0
+        for symbol, entry in data.items():
+            try:
+                ts = float(entry.get("_ts", 0))
+                quote = Quote(
+                    symbol=entry["symbol"],
+                    name=entry.get("name", entry["symbol"]),
+                    price=float(entry["price"]),
+                    prev_close=float(entry.get("prev_close", 0)),
+                    day_high=float(entry.get("day_high", 0)),
+                    day_low=float(entry.get("day_low", 0)),
+                    history=[float(x) for x in entry.get("history", [])],
+                )
+                self._cache[symbol.upper()] = (ts, quote)
+                loaded += 1
+            except (KeyError, TypeError, ValueError):
+                continue
+        if loaded:
+            logger.info("loaded %d cached quotes from disk", loaded)
+
+    def _save_disk_cache(self) -> None:
+        """Persist all cached quotes to disk (called after fresh fetches)."""
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        data: dict[str, Any] = {}
+        with self._lock:
+            for symbol, (ts, quote) in self._cache.items():
+                data[symbol] = {
+                    "_ts": ts,
+                    "symbol": quote.symbol,
+                    "name": quote.name,
+                    "price": quote.price,
+                    "prev_close": quote.prev_close,
+                    "day_high": quote.day_high,
+                    "day_low": quote.day_low,
+                    "history": quote.history,
+                }
+        tmp = _DISK_CACHE_PATH.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(data, indent=2))
+        import os
+
+        os.replace(tmp, _DISK_CACHE_PATH)
+
     def fetch(self, symbol: str) -> Quote | None:
         symbol = symbol.upper()
         now = time.time()
@@ -149,6 +208,7 @@ class PublicPriceSource:
         if quote is not None:
             with self._lock:
                 self._cache[symbol] = (now, quote)
+            self._save_disk_cache()
         return quote
 
     def fetch_many(self, symbols: list[str]) -> dict[str, Quote]:

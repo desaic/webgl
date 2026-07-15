@@ -378,10 +378,15 @@ class RobinhoodClient:
         now = time.time()
         cached_at, cached = self._watchlist_cache
         if cached and (now - cached_at) < self._positions_ttl:
-            for w in cached:
-                quote = self.prices.fetch(w["symbol"])
-                if quote:
-                    w["current_price"] = quote.price
+            # Cache hit: only refresh prices if the watchlist is small (<=50).
+            # For large watchlists, prices refresh on the 30-min cycle to
+            # avoid hammering Yahoo with 50+ requests every 5 min.
+            if len(cached) <= 50:
+                for w in cached:
+                    quote = self.prices.fetch(w["symbol"])
+                    if quote:
+                        w["current_price"] = quote.price
+                        w["name"] = quote.name
             return cached
 
         result = self.mcp.call_tool("get_watchlists")

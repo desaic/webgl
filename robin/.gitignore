@@ -11,6 +11,8 @@ data/*.log
 data/*.txt
 data/token.json
 data/rh_session.json
+data/rh_mcp_creds.json
+data/prices_cache.json
 data/script_state/
 !data/.gitkeep
 
