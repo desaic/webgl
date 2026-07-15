@@ -64,10 +64,26 @@
           </thead>
           <tbody></tbody>
         </table>
-        <p id="no-options" class="muted" style="display:none;">No open option positions.</p>
-      </section>
+      <p id="no-options" class="muted" style="display:none;">No open option positions.</p>
+    </section>
 
-      <section class="grid">
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Watchlist</h2>
+        <span id="watchlist-count" class="badge">0</span>
+      </div>
+      <table id="watchlist-table">
+        <thead>
+          <tr>
+            <th>Symbol</th><th>Name</th><th class="num">Price</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <p id="no-watchlist" class="muted" style="display:none;">No stocks in watchlist.</p>
+    </section>
+
+    <section class="grid">
         <div class="panel">
           <div class="panel-head"><h2>Events &amp; Alerts</h2></div>
           <ul id="events" class="events"></ul>

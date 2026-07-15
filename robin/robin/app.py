@@ -16,7 +16,6 @@ from pydantic import BaseModel
 
 from robin.auth_robinhood import (
     NeedLogin,
-    NeedMfa,
     RobinhoodAuth,
     RobinhoodAuthError,
 )
@@ -146,12 +145,6 @@ def _state(app: FastAPI) -> AppState:
     return app.state.robin
 
 
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-    mfa_code: str | None = None
-
-
 class AskRequest(BaseModel):
     prompt: str
 
@@ -254,17 +247,14 @@ async def delete_script(name: str) -> dict[str, Any]:
 
 
 @app.post("/api/auth/robinhood")
-async def auth_robinhood(req: LoginRequest) -> dict[str, Any]:
+async def auth_robinhood() -> dict[str, Any]:
+    """Trigger Robinhood OAuth browser login flow."""
     state = _state(app)
     try:
-        await anyio.to_thread.run_sync(
-            state.rh_auth.login_with_credentials, req.username, req.password, req.mfa_code
-        )
-    except NeedMfa:
-        return {"status": "mfa_required", "message": "Enter your MFA code and retry."}
+        await anyio.to_thread.run_sync(state.rh_auth.login_oauth)
     except RobinhoodAuthError as e:
         raise HTTPException(401, str(e)) from e
-    return {"status": "ok", "username": req.username, "mode": state.client.resolve_mode()}
+    return {"status": "ok", "mode": state.client.resolve_mode()}
 
 
 @app.post("/api/auth/gemini")

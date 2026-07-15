@@ -158,106 +158,63 @@ def test_sandbox_blocks_open_at_runtime(tmp_path: Path):
 
 def test_robinhood_auth_read_only_guard():
     auth = RobinhoodAuth()
-    assert auth.logged_in is False
     auth.assert_read_only()
 
 
-def test_robinhood_session_stored_as_json_not_pickle(tmp_path, monkeypatch):
+def test_mcp_credentials_detection(monkeypatch, tmp_path):
+    """Verify the MCP client detects stored credentials."""
     import json
+    import time
 
-    monkeypatch.setattr("robin.auth_robinhood.ROBINHOOD_SESSION_PATH", tmp_path / "rh_session.json")
-    auth = RobinhoodAuth()
-    assert not auth.has_session()
+    creds_path = tmp_path / "rh_mcp_creds.json"
+    monkeypatch.setattr("robin.mcp_client.CREDS_PATH", creds_path)
 
-    def fake_request_post(url, payload):
-        if payload.get("grant_type") == "password":
-            return {"token_type": "Bearer", "access_token": "abc123",
-                    "refresh_token": "ref456"}
-        return None
+    # No creds → not authenticated
+    from robin.mcp_client import RobinhoodMCPClient
 
-    import robin_stocks.robinhood as rh
+    client = RobinhoodMCPClient()
+    assert not client.has_credentials()
+    assert not client.is_authenticated()
 
-    monkeypatch.setattr(rh.helper, "request_post", fake_request_post)
-    monkeypatch.setattr(rh.helper, "update_session", lambda k, v: None)
-    monkeypatch.setattr(rh.helper, "set_login_state", lambda v: None)
-    monkeypatch.setattr(rh.authentication, "generate_device_token", lambda: "dev789")
-
-    auth.login_with_credentials("test@example.com", "pass", mfa_code="123456")
-    assert auth.logged_in is True
-    assert auth.username == "test@example.com"
-
-    session = json.loads((tmp_path / "rh_session.json").read_text())
-    assert session["access_token"] == "abc123"
-    assert session["refresh_token"] == "ref456"
-    assert session["username"] == "test@example.com"
-    assert auth.has_session()
-
-
-def test_robinhood_auto_login_from_json(monkeypatch, tmp_path):
-    import json
-
-    session_path = tmp_path / "rh_session.json"
-    session_path.write_text(json.dumps({
-        "username": "test@example.com",
+    # Write valid creds
+    now = time.time()
+    creds_path.write_text(json.dumps({
+        "access_token": "test_token",
+        "refresh_token": "test_refresh",
+        "access_token_expires_at": int(now + 3600),
         "token_type": "Bearer",
-        "access_token": "old_token",
-        "refresh_token": "ref456",
-        "device_token": "dev789",
-        "saved_at": "2026-01-01T00:00:00+00:00",
+        "scope": "internal",
     }))
 
-    monkeypatch.setattr("robin.auth_robinhood.ROBINHOOD_SESSION_PATH", session_path)
-
-    import robin_stocks.robinhood as rh
-
-    set_calls: list[tuple[str, str]] = []
-    monkeypatch.setattr(rh.helper, "update_session", lambda k, v: set_calls.append((k, v)))
-    monkeypatch.setattr(rh.helper, "set_login_state", lambda v: None)
-
-    class FakeResponse:
-        def raise_for_status(self): pass
-
-    monkeypatch.setattr(rh.helper, "request_get", lambda *a, **k: FakeResponse())
-
-    auth = RobinhoodAuth()
-    auth.auto_login()
-    assert auth.logged_in is True
-    assert auth.username == "test@example.com"
-    assert set_calls[0] == ("Authorization", "Bearer old_token")
+    client2 = RobinhoodMCPClient()
+    assert client2.has_credentials()
+    assert client2.is_authenticated()
 
 
-def test_robinhood_logout_deletes_session_file(monkeypatch, tmp_path):
+def test_mcp_logout_deletes_credentials(monkeypatch, tmp_path):
+    """Verify logout deletes the MCP credentials file."""
     import json
+    import time
 
-    session_path = tmp_path / "rh_session.json"
-    session_path.write_text(json.dumps({
-        "username": "test@example.com",
-        "token_type": "Bearer",
+    creds_path = tmp_path / "rh_mcp_creds.json"
+    now = time.time()
+    creds_path.write_text(json.dumps({
         "access_token": "tok",
         "refresh_token": "ref",
-        "device_token": "dev",
-        "saved_at": "2026-01-01T00:00:00+00:00",
+        "access_token_expires_at": int(now + 3600),
+        "token_type": "Bearer",
+        "scope": "internal",
     }))
-    monkeypatch.setattr("robin.auth_robinhood.ROBINHOOD_SESSION_PATH", session_path)
+    monkeypatch.setattr("robin.mcp_client.CREDS_PATH", creds_path)
 
-    import robin_stocks.robinhood as rh
+    from robin.mcp_client import RobinhoodMCPClient
 
-    monkeypatch.setattr(rh.helper, "update_session", lambda k, v: None)
-    monkeypatch.setattr(rh.helper, "set_login_state", lambda v: None)
+    client = RobinhoodMCPClient()
+    assert client.has_credentials()
 
-    class FakeResponse:
-        def raise_for_status(self): pass
-
-    monkeypatch.setattr(rh.helper, "request_get", lambda *a, **k: FakeResponse())
-
-    auth = RobinhoodAuth()
-    auth.auto_login()
-    assert auth.has_session()
-
-    auth.logout()
-    assert not auth.logged_in
-    assert not auth.has_session()
-    assert not session_path.exists()
+    client.logout()
+    assert not client.has_credentials()
+    assert not creds_path.exists()
 
 
 def test_gemini_key_manager_set_and_clear(monkeypatch, tmp_path):
@@ -316,7 +273,8 @@ def test_public_price_source_caches_and_uses(monkeypatch):
     assert calls == ["AAPL"]  # second call served from cache
 
 
-def test_real_mode_does_not_call_robinhood_for_prices(monkeypatch):
+def test_real_mode_uses_public_prices_not_mcp(monkeypatch):
+    """Prices come from Yahoo, not the MCP server. MCP is only for holdings."""
     c = RobinhoodClient(auth=None)
     c.mode = "real"
 
@@ -325,6 +283,7 @@ def test_real_mode_does_not_call_robinhood_for_prices(monkeypatch):
         {"cash": 500.0, "buying_power": 1000.0, "unsettled_funds": 0.0},
     ))
     monkeypatch.setattr(c, "_load_options", lambda: [])
+    monkeypatch.setattr(c, "_load_watchlists", lambda: [])
 
     def fake_fetch_many(symbols):
         return {s.upper(): Quote(symbol=s.upper(), name=s, price=200.0, prev_close=190.0,
@@ -333,26 +292,13 @@ def test_real_mode_does_not_call_robinhood_for_prices(monkeypatch):
 
     monkeypatch.setattr(c.prices, "fetch_many", fake_fetch_many)
 
-    rh_imports: list[str] = []
-    import builtins
-    real_import = builtins.__import__
-
-    def spy_import(name, *args, **kwargs):
-        if name.startswith("robin_stocks"):
-            rh_imports.append(name)
-            raise ImportError(f"robin_stocks should not be imported during price poll, got {name}")
-        return real_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", spy_import)
     p = c.get_portfolio()
     assert p.mode == "real"
     assert p.holdings[0].current_price == 200.0
     assert p.holdings[0].unrealized_pl == 1000.0
-    assert rh_imports == []
 
 
 def test_refresh_holdings_busts_cache(monkeypatch):
-    import builtins
     import time
 
     c = RobinhoodClient(auth=None)
@@ -366,26 +312,15 @@ def test_refresh_holdings_busts_cache(monkeypatch):
     monkeypatch.setattr(c.prices, "fetch_many", fake_fetch_many)
 
     # Pre-seed the positions cache with qty=10; while the cache is valid,
-    # _load_positions returns early and must NOT import robin_stocks.
+    # _load_positions returns early (no MCP call needed).
     c._positions_cache = (time.time(), [{"symbol": "AAPL", "quantity": 10, "avg_cost": 100.0}], {"cash": 0.0, "buying_power": 0.0, "unsettled_funds": 0.0})
     c._options_cache = (time.time(), [])
-
-    rh_imports: list[str] = []
-    real_import = builtins.__import__
-
-    def spy_import(name, *args, **kwargs):
-        if name.startswith("robin_stocks"):
-            rh_imports.append(name)
-            raise ImportError("robin_stocks should not be imported while cache is valid")
-        return real_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", spy_import)
     monkeypatch.setattr(c, "_load_options", lambda: [])
+    monkeypatch.setattr(c, "_load_watchlists", lambda: [])
     p1 = c.get_portfolio()
     assert p1.holdings[0].quantity == 10
-    assert rh_imports == []  # cache hit, no Robinhood touch
 
-    # After a trade: bust the cache. Now _load_positions must re-fetch.
+    # After a trade: bust the cache.
     c.refresh_holdings()
     assert c._positions_cache[1] == []
 

@@ -185,10 +185,13 @@ class GeminiClient:
                 f"equity_pct={h['equity_pct']}%"
             )
         summary = "\n".join(lines) or "- (no holdings)"
+        watchlist = portfolio.get("watchlist", [])
+        wl_summary = ", ".join(w["symbol"] for w in watchlist) if watchlist else "(none)"
         prompt = (
             f"Current portfolio (total market value {portfolio.get('total_market_value')}, "
             f"total unrealized P/L {portfolio.get('total_unrealized_pl')} "
             f"({portfolio.get('total_unrealized_pl_pct')}%)):\n{summary}\n\n"
+            f"Watchlist (stocks the user is considering buying or writing options on): {wl_summary}\n\n"
             f"{_SCRIPT_GEN_INSTR}"
         )
         raw = self._generate(prompt, system=_SCRIPT_GEN_SYSTEM, json_out=True)

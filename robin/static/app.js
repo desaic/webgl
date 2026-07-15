@@ -83,6 +83,16 @@ function renderPortfolio(p) {
   }).join("");
   document.getElementById("option-count").textContent = opts.length;
   document.getElementById("no-options").style.display = opts.length ? "none" : "block";
+
+  const wl = p.watchlist || [];
+  document.querySelector("#watchlist-table tbody").innerHTML = wl.map(w => `
+    <tr>
+      <td class="sym">${w.symbol}</td>
+      <td>${w.name}</td>
+      <td class="num">${usd.format(w.current_price ?? 0)}</td>
+    </tr>`).join("");
+  document.getElementById("watchlist-count").textContent = wl.length;
+  document.getElementById("no-watchlist").style.display = wl.length ? "none" : "block";
 }
 
 function renderEvent(d) {
@@ -144,21 +154,12 @@ document.getElementById("btn-gemini-key").onclick = async () => {
 };
 
 document.getElementById("btn-robinhood").onclick = async () => {
-  const username = prompt("Robinhood username:");
-  if (!username) return;
-  const password = prompt("Robinhood password:");
-  if (!password) return;
-  const mfa_code = prompt("MFA code (leave blank if none):") || null;
   const btn = document.getElementById("btn-robinhood");
-  btn.disabled = true; btn.textContent = "Connecting… check your Robinhood app if prompted";
+  btn.disabled = true; btn.textContent = "Opening browser…";
   try {
-    const r = await fetch("/api/auth/robinhood", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password, mfa_code }),
-    });
+    const r = await fetch("/api/auth/robinhood", { method: "POST" });
     const j = await r.json();
-    if (j.status === "mfa_required") alert("MFA required — enter the code and retry.");
-    else if (!r.ok) alert("Login failed: " + (j.detail || JSON.stringify(j)));
+    if (!r.ok) alert("Login failed: " + (j.detail || JSON.stringify(j)));
   } catch (e) { alert(e); }
   btn.disabled = false; btn.textContent = "Connect Robinhood";
   refresh();

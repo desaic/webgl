@@ -7,7 +7,6 @@ requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
-    "robin-stocks>=3.1",
     "google-genai>=1.19",
     "pydantic>=2.9",
     "anyio>=4",
@@ -17,7 +16,7 @@ dependencies = [
 
 [tool.pixi.workspace]
 channels = ["conda-forge"]
-platforms = ["linux-64"]
+platforms = ["linux-64", "win-64"]
 
 [tool.pixi.dependencies]
 python = "3.12.*"

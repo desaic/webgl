@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from robin.config import POSITIONS_TTL_SECONDS, RECENT_HISTORY_POINTS, SIMULATE, logger
+from robin.mcp_client import MCPError, RobinhoodMCPClient
 from robin.prices import PublicPriceSource, holding_from_quote
 
 
@@ -58,6 +59,7 @@ class OptionPosition:
 class Portfolio:
     holdings: list[Holding] = field(default_factory=list)
     options: list[OptionPosition] = field(default_factory=list)
+    watchlist: list[dict[str, Any]] = field(default_factory=list)
     total_market_value: float = 0.0
     total_cost: float = 0.0
     total_unrealized_pl: float = 0.0
@@ -74,6 +76,7 @@ class Portfolio:
         return {
             "holdings": [h.to_dict() for h in self.holdings],
             "options": [o.to_dict() for o in self.options],
+            "watchlist": self.watchlist,
             "total_market_value": self.total_market_value,
             "total_cost": self.total_cost,
             "total_unrealized_pl": self.total_unrealized_pl,
@@ -87,6 +90,7 @@ class Portfolio:
             "mode": self.mode,
             "holding_count": len(self.holdings),
             "option_count": len(self.options),
+            "watchlist_count": len(self.watchlist),
         }
 
 
@@ -100,37 +104,40 @@ def _f(value: Any, default: float = 0.0) -> float:
 
 
 class RobinhoodClient:
-    """Read-only portfolio/price access. Real mode talks to robin_stocks;
-    simulate mode synthesizes a small portfolio so the rest of the app can run
-    without credentials or network.
+    """Read-only portfolio access via Robinhood's official MCP server.
+
+    Replaces the old robin_stocks (unofficial) approach. Uses OAuth 2.1
+    for authentication and JSON-RPC for tool calls. Prices come from the
+    public Yahoo source; holdings/options/watchlists/account info come
+    from the MCP server (cached 30 min).
     """
 
     def __init__(self, auth: Any | None = None) -> None:
         self.auth = auth
         self.mode: str = "simulate" if SIMULATE == "1" else "auto"
-        self._instrument_symbol: dict[str, str] = {}
         self._sim: dict[str, dict[str, Any]] = {}
         self._sim_inited = False
         self._rng = random.Random(20240714)
         self.prices = PublicPriceSource()
+        self.mcp = RobinhoodMCPClient()
+        self._account_number: str | None = None
         self._positions_cache: tuple[float, list[dict[str, Any]], dict[str, float]] = (0.0, [], {})
         self._options_cache: tuple[float, list[dict[str, Any]]] = (0.0, [])
+        self._watchlist_cache: tuple[float, list[dict[str, Any]]] = (0.0, [])
         self._positions_ttl = float(POSITIONS_TTL_SECONDS)
-
-    def refresh_holdings(self) -> None:
-        """Bust the positions and options cache so the next get_portfolio()
-        re-fetches from Robinhood. Call this after you place a trade.
-        """
-        self._positions_cache = (0.0, [], {})
-        self._options_cache = (0.0, [])
-        logger.info("holdings cache busted; next poll will re-fetch from Robinhood")
 
     def resolve_mode(self) -> str:
         if self.mode == "auto":
-            if self.auth is not None and self.auth.has_session():
+            if self.mcp.is_authenticated():
                 return "real"
             return "simulate"
         return self.mode
+
+    def refresh_holdings(self) -> None:
+        self._positions_cache = (0.0, [], {})
+        self._options_cache = (0.0, [])
+        self._watchlist_cache = (0.0, [])
+        logger.info("holdings cache busted; next poll will re-fetch from MCP")
 
     def _ensure_sim(self) -> None:
         if self._sim_inited:
@@ -218,6 +225,10 @@ class RobinhoodClient:
         return Portfolio(
             holdings=holdings,
             options=[],
+            watchlist=[
+                {"symbol": s, "name": s, "current_price": d["price"]}
+                for s, d in self._sim.items()
+            ],
             total_market_value=round(total_mv, 2),
             total_cost=round(total_cost, 2),
             total_unrealized_pl=round(total_mv - total_cost, 2),
@@ -233,81 +244,93 @@ class RobinhoodClient:
             mode="simulate",
         )
 
-    def _symbol_for_instrument(self, url: str) -> str:
-        if url in self._instrument_symbol:
-            return self._instrument_symbol[url]
-        import robin_stocks.robinhood as r
+    def _get_account_number(self) -> str:
+        if self._account_number:
+            return self._account_number
+        result = self.mcp.call_tool("get_accounts")
+        accounts = result.get("data", {}).get("accounts", []) if isinstance(result, dict) else []
+        for acc in accounts:
+            if acc.get("is_default"):
+                self._account_number = acc["account_number"]
+                return self._account_number
+        if accounts:
+            self._account_number = accounts[0]["account_number"]
+            return self._account_number
+        raise MCPError("no accounts found")
 
-        data = r.stocks.get_instrument_by_url(url) or {}
-        symbol = data.get("symbol", "?")
-        self._instrument_symbol[url] = symbol
-        return symbol
-
-    def _load_positions(self) -> tuple[list[dict[str, Any]], float]:
-        """Fetch open stock positions + account info from Robinhood.
-
-        Holdings (what you own, cost basis) and account info (cash, buying
-        power) change rarely, so we cache them for several minutes. Prices are
-        NOT fetched here -- those come from the public source.
-        """
+    def _load_positions(self) -> tuple[list[dict[str, Any]], dict[str, float]]:
         now = time.time()
         cached_at, cached_rows, cached_account = self._positions_cache
         if cached_rows and (now - cached_at) < self._positions_ttl:
             return cached_rows, cached_account
-        import robin_stocks.robinhood as r
 
-        positions = r.account.get_open_stock_positions() or []
+        acct = self._get_account_number()
+
+        result = self.mcp.call_tool("get_equity_positions", {"account_number": acct})
+        data = result.get("data", result) if isinstance(result, dict) else {}
+        positions = data.get("positions", []) if isinstance(data, dict) else []
         rows: list[dict[str, Any]] = []
         for p in positions:
             qty = _f(p.get("quantity"))
             if qty <= 0:
                 continue
-            symbol = self._symbol_for_instrument(p.get("instrument", ""))
             rows.append(
                 {
-                    "symbol": symbol,
+                    "symbol": p.get("symbol", "?"),
                     "quantity": qty,
                     "avg_cost": _f(p.get("average_buy_price")),
                 }
             )
-        account = {"cash": 0.0, "buying_power": 0.0, "unsettled_funds": 0.0}
-        try:
-            portfolio_profile = r.load_portfolio_profile() or {}
-            account["cash"] = _f(portfolio_profile.get("uninvested_cash"))
-        except Exception as e:
-            logger.debug("could not load portfolio profile: %s", e)
-        try:
-            account_profile = r.load_account_profile() or {}
-            account["buying_power"] = _f(account_profile.get("buying_power"))
-            account["unsettled_funds"] = _f(account_profile.get("unsettled_funds"))
-            if not account["cash"]:
-                account["cash"] = _f(account_profile.get("cash"))
-        except Exception as e:
-            logger.debug("could not load account profile: %s", e)
+
+        acct_result = self.mcp.call_tool("get_portfolio", {"account_number": acct})
+        acct_data = acct_result.get("data", {}) if isinstance(acct_result, dict) else {}
+        bp = acct_data.get("buying_power", {})
+        account = {
+            "cash": _f(acct_data.get("cash")),
+            "buying_power": _f(bp.get("buying_power") if isinstance(bp, dict) else bp),
+            "unsettled_funds": 0.0,
+        }
+
         self._positions_cache = (now, rows, account)
         return rows, account
 
     def _load_options(self, stock_symbols: set[str] | None = None) -> list[dict[str, Any]]:
-        """Fetch open option positions from Robinhood (cached 30 min).
-
-        For short options, avg_price is negative (credit received). P/L =
-        credit_received - current_buyback_cost. For long options, avg_price
-        is positive (cost paid). P/L = current_value - cost_paid.
-
-        Covered call detection: a short call where you own the underlying
-        stock position.
-        """
         stock_symbols = stock_symbols or set()
         now = time.time()
         cached_at, cached = self._options_cache
         if cached and (now - cached_at) < self._positions_ttl:
             return cached
-        import robin_stocks.robinhood as r
 
-        url = r.account.option_positions_url(None)
-        data = r.helper.request_get(url, "pagination") or []
+        acct = self._get_account_number()
+        result = self.mcp.call_tool(
+            "get_option_positions", {"account_number": acct, "nonzero": True}
+        )
+        positions = result.get("data", {}).get("positions", []) if isinstance(result, dict) else []
+
+        opt_ids = [p["option_id"] for p in positions if p.get("option_id")]
+        instruments: dict[str, dict[str, Any]] = {}
+        if opt_ids:
+            with contextlib.suppress(Exception):
+                inst_result = self.mcp.call_tool(
+                    "get_option_instruments", {"ids": ",".join(opt_ids)}
+                )
+                insts = inst_result.get("data", {}).get("instruments", []) if isinstance(inst_result, dict) else []
+                if not insts:
+                    insts = inst_result.get("instruments", []) if isinstance(inst_result, dict) else []
+                for inst in insts:
+                    instruments[inst.get("id", "")] = inst
+
+        quotes: dict[str, dict[str, Any]] = {}
+        if opt_ids:
+            with contextlib.suppress(Exception):
+                q_result = self.mcp.call_tool("get_option_quotes", {"instrument_ids": opt_ids})
+                results = q_result.get("data", {}).get("results", []) if isinstance(q_result, dict) else []
+                for r in results:
+                    q = r.get("quote", {})
+                    quotes[q.get("instrument_id", "")] = q
+
         rows: list[dict[str, Any]] = []
-        for pos in data:
+        for pos in positions:
             qty = _f(pos.get("quantity"))
             if qty <= 0:
                 continue
@@ -315,29 +338,19 @@ class RobinhoodClient:
             direction = pos.get("type", "?")
             expiration = pos.get("expiration_date", "")
             avg_price = _f(pos.get("average_price"))
-            trade_value_multiplier = _f(pos.get("trade_value_multiplier"), 100.0)
+            tvm = _f(pos.get("trade_value_multiplier"), 100.0)
+            opt_id = pos.get("option_id", "")
 
-            option_url = pos.get("option", "")
-            option_id = pos.get("option_id") or option_url.rstrip("/").split("/")[-1]
-            strike = 0.0
-            opt_type = "?"
-            if option_url:
-                with contextlib.suppress(Exception):
-                    opt_data = r.helper.request_get(option_url, "regular") or {}
-                    strike = _f(opt_data.get("strike_price"))
-                    opt_type = opt_data.get("type", "?")
+            inst = instruments.get(opt_id, {})
+            strike = _f(inst.get("strike_price"))
+            opt_type = inst.get("type", "?")
 
-            mark_price = 0.0
-            with contextlib.suppress(Exception):
-                md = r.helper.request_get(
-                    f"https://api.robinhood.com/marketdata/options/{option_id}/",
-                    "regular",
-                ) or {}
-                mark_price = _f(md.get("mark_price"))
+            q = quotes.get(opt_id, {})
+            mark_price = _f(q.get("mark_price"))
 
             is_short = direction == "short"
             credit_or_cost = abs(avg_price) * qty
-            market_value = mark_price * qty * trade_value_multiplier
+            market_value = mark_price * qty * tvm
             unrealized_pl = credit_or_cost - market_value if is_short else market_value - credit_or_cost
             covered = is_short and opt_type == "call" and chain_symbol in stock_symbols
 
@@ -349,7 +362,7 @@ class RobinhoodClient:
                     "strike": strike,
                     "expiration": expiration,
                     "quantity": qty,
-                    "avg_cost": round(abs(avg_price) / trade_value_multiplier, 4),
+                    "avg_cost": round(abs(avg_price) / tvm, 4),
                     "current_price": mark_price,
                     "market_value": round(market_value, 2),
                     "total_cost": round(credit_or_cost, 2),
@@ -360,6 +373,49 @@ class RobinhoodClient:
             )
         self._options_cache = (now, rows)
         return rows
+
+    def _load_watchlists(self) -> list[dict[str, Any]]:
+        now = time.time()
+        cached_at, cached = self._watchlist_cache
+        if cached and (now - cached_at) < self._positions_ttl:
+            for w in cached:
+                quote = self.prices.fetch(w["symbol"])
+                if quote:
+                    w["current_price"] = quote.price
+            return cached
+
+        result = self.mcp.call_tool("get_watchlists")
+        data = result.get("data", result) if isinstance(result, dict) else {}
+        lists = data.get("watchlists", []) if isinstance(data, dict) else []
+        watchlist: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for wl in lists:
+            allowed = wl.get("allowed_object_types", [])
+            if "instrument" not in allowed:
+                continue
+            list_id = wl.get("id")
+            if not list_id:
+                continue
+            with contextlib.suppress(Exception):
+                items_result = self.mcp.call_tool("get_watchlist_items", {"list_id": list_id})
+                items = items_result.get("data", {}).get("items", []) if isinstance(items_result, dict) else []
+                for item in items:
+                    if item.get("object_type") != "instrument":
+                        continue
+                    symbol = item.get("symbol", "?")
+                    if not symbol or symbol in seen:
+                        continue
+                    seen.add(symbol)
+                    quote = self.prices.fetch(symbol)
+                    watchlist.append(
+                        {
+                            "symbol": symbol,
+                            "name": symbol,
+                            "current_price": quote.price if quote else 0.0,
+                        }
+                    )
+        self._watchlist_cache = (now, watchlist)
+        return watchlist
 
     def _get_portfolio_real(self) -> Portfolio:
         rows, account = self._load_positions()
@@ -417,9 +473,16 @@ class RobinhoodClient:
         except Exception as e:
             logger.warning("could not load option positions: %s", e)
 
+        watchlist: list[dict[str, Any]] = []
+        try:
+            watchlist = self._load_watchlists()
+        except Exception as e:
+            logger.warning("could not load watchlists: %s", e)
+
         return Portfolio(
             holdings=holdings,
             options=options,
+            watchlist=watchlist,
             total_market_value=round(total_mv, 2),
             total_cost=round(total_cost, 2),
             total_unrealized_pl=round(total_mv - total_cost, 2),
