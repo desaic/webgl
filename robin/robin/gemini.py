@@ -72,6 +72,9 @@ def _strip_json(text: str) -> str:
 
 
 class GeminiClient:
+    _PORTFOLIO_REFRESH_INTERVAL = 10
+    _MAX_HISTORY = 10
+
     def __init__(self, api_key: str) -> None:
         from google import genai
 
@@ -79,14 +82,53 @@ class GeminiClient:
         self.client = genai.Client(api_key=api_key)
         self.model = GEMINI_MODEL
         self._search_tool = genai.types.Tool(google_search=genai.types.GoogleSearch())
-        self._chat = self.client.chats.create(
+        self._search_enabled = False
+        self._chat = self._create_chat()
+        self._msgs_since_portfolio = self._PORTFOLIO_REFRESH_INTERVAL
+
+    def _create_chat(self, history: list[Any] | None = None) -> Any:
+        config_kwargs: dict[str, Any] = {
+            "system_instruction": _ASK_SYSTEM,
+            "temperature": 0.3,
+        }
+        if self._search_enabled:
+            config_kwargs["tools"] = [self._search_tool]
+        return self.client.chats.create(
             model=self.model,
-            config=genai.types.GenerateContentConfig(
-                system_instruction=_ASK_SYSTEM,
-                temperature=0.3,
-                tools=[self._search_tool],
-            ),
+            config=self._genai.types.GenerateContentConfig(**config_kwargs),
+            history=history,
         )
+
+    def _trim_chat(self) -> None:
+        """Recreate the chat with only the last _MAX_HISTORY messages to cap
+        token usage and avoid hitting free-tier rate limits.
+        """
+        try:
+            history = self._chat.get_history()
+        except Exception:
+            return
+        if len(history) <= self._MAX_HISTORY:
+            return
+        trimmed = history[-self._MAX_HISTORY :]
+        self._chat = self._create_chat(trimmed)
+        logger.info("trimmed chat history to last %d messages", len(trimmed))
+
+    def set_search_enabled(self, enabled: bool) -> None:
+        if enabled != self._search_enabled:
+            self._search_enabled = enabled
+            try:
+                history = self._chat.get_history()
+            except Exception:
+                history = None
+            self._chat = self._create_chat(history)
+            self._msgs_since_portfolio = self._PORTFOLIO_REFRESH_INTERVAL
+            logger.info("gemini google search %s", "enabled" if enabled else "disabled")
+
+    def clear_chat(self) -> None:
+        """Start a fresh chat session with no history."""
+        self._chat = self._create_chat()
+        self._msgs_since_portfolio = self._PORTFOLIO_REFRESH_INTERVAL
+        logger.info("gemini chat cleared")
 
     def _generate(
         self,
@@ -167,7 +209,15 @@ class GeminiClient:
             '{"severity":"low|medium|high","action":"hold|review|sell|rebalance",'
             '"message":"one or two sentences with news context"}'
         )
-        raw = self._generate(prompt, system=_REASON_SYSTEM, json_out=True, search=True)
+        try:
+            raw = self._generate(prompt, system=_REASON_SYSTEM, json_out=True, search=self._search_enabled)
+        except GeminiError:
+            if self._search_enabled:
+                logger.warning("reason_on_event: disabling google search and retrying")
+                self.set_search_enabled(False)
+                raw = self._generate(prompt, system=_REASON_SYSTEM, json_out=True, search=False)
+            else:
+                raise
         try:
             return json.loads(_strip_json(raw))
         except json.JSONDecodeError:
@@ -178,16 +228,26 @@ class GeminiClient:
             }
 
     def ask(self, prompt: str, portfolio: dict[str, Any]) -> str:
-        summary = json.dumps(portfolio, default=str)
-        full = f"Portfolio snapshot (holdings, prices, gain/loss):\n{summary}\n\nUser question: {prompt}"
+        if self._msgs_since_portfolio >= self._PORTFOLIO_REFRESH_INTERVAL:
+            summary = json.dumps(portfolio, default=str)
+            full = f"Portfolio snapshot (holdings, prices, gain/loss):\n{summary}\n\nUser question: {prompt}"
+            self._msgs_since_portfolio = 0
+        else:
+            full = prompt
+        self._msgs_since_portfolio += 1
         last_exc: Exception | None = None
         for attempt in range(_MAX_RETRIES):
             try:
                 resp = self._chat.send_message(full)
+                self._trim_chat()
                 return resp.text or ""
             except Exception as e:
                 last_exc = e
                 msg = str(e).lower()
+                if ("429" in msg or "resource_exhausted" in msg) and self._search_enabled:
+                    logger.warning("gemini rate-limited; disabling google search and retrying without it")
+                    self.set_search_enabled(False)
+                    continue
                 if "429" in msg or "resource_exhausted" in msg or "quota" in msg:
                     delay = _RETRY_BASE_DELAY * (2 ** attempt)
                     logger.warning(

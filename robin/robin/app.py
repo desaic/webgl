@@ -5,6 +5,7 @@ import contextlib
 import json
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import UTC
 from typing import Any
 
 import anyio
@@ -20,6 +21,7 @@ from robin.auth_robinhood import (
     RobinhoodAuthError,
 )
 from robin.config import (
+    DATA_DIR,
     GEMINI_API_KEY_ENV,
     GEMINI_KEY_FILE,
     GEMINI_MODEL,
@@ -173,6 +175,7 @@ async def status() -> dict[str, Any]:
         "gemini_has_key": state.gemini_keys.has_key(),
         "gemini_model": GEMINI_MODEL,
         "gemini_ready": state.gemini is not None,
+        "gemini_search_enabled": state.gemini._search_enabled if state.gemini else False,
         "market_open": state.poller.market_open,
         "scripts": len(state.strategy.scripts),
         "last_tick": state.poller.last_tick,
@@ -249,6 +252,19 @@ async def auth_gemini(req: GeminiKeyRequest) -> dict[str, Any]:
     return {"status": "ok", "gemini_ready": state.gemini is not None}
 
 
+class SearchToggleRequest(BaseModel):
+    enabled: bool
+
+
+@app.post("/api/gemini/search")
+async def toggle_search(req: SearchToggleRequest) -> dict[str, Any]:
+    state = _state(app)
+    if state.gemini is None:
+        raise HTTPException(409, "Gemini API key not set. Enter it in the UI first.")
+    state.gemini.set_search_enabled(req.enabled)
+    return {"status": "ok", "search_enabled": state.gemini._search_enabled}
+
+
 @app.post("/api/auth/logout")
 async def logout() -> dict[str, Any]:
     """Invalidate all auth: delete the Gemini API key file and clear the
@@ -274,7 +290,8 @@ async def strategy_refresh() -> dict[str, Any]:
     if state.gemini is None:
         raise HTTPException(409, "Gemini API key not set. Enter it in the UI first.")
     if not state.poller.latest_portfolio:
-        raise HTTPException(409, "No portfolio yet; wait for the first poll.")
+        p = await anyio.to_thread.run_sync(state.client.get_portfolio)
+        state.poller.latest_portfolio = p.to_dict()
     try:
         added = await anyio.to_thread.run_sync(
             state.strategy.generate_with_llm, state.gemini, state.poller.latest_portfolio
@@ -289,12 +306,39 @@ async def llm_ask(req: AskRequest) -> dict[str, Any]:
     state = _state(app)
     if state.gemini is None:
         raise HTTPException(409, "Gemini API key not set. Enter it in the UI first.")
-    snapshot = state.poller.latest_portfolio or {}
+    snapshot = state.poller.latest_portfolio
+    if not snapshot:
+        p = await anyio.to_thread.run_sync(state.client.get_portfolio)
+        snapshot = p.to_dict()
+        state.poller.latest_portfolio = snapshot
     try:
         answer = await anyio.to_thread.run_sync(state.gemini.ask, req.prompt, snapshot)
     except GeminiError as e:
         raise HTTPException(502, str(e)) from e
+    _save_chat(req.prompt, answer)
     return {"answer": answer}
+
+
+def _save_chat(prompt: str, answer: str) -> None:
+    """Append the exchange to data/chat_YYYY_MMDD.txt (one file per day)."""
+    from datetime import datetime
+
+    now = datetime.now(UTC)
+    ts = now.strftime("%Y-%m-%d %H:%M:%S")
+    filename = f"chat_{now.strftime('%Y_%m%d')}.txt"
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with (DATA_DIR / filename).open("a", encoding="utf-8") as f:
+        f.write(f"\n[{ts}] USER:\n{prompt}\n\n[{ts}] GEMINI:\n{answer}\n")
+
+
+@app.post("/api/chat/clear")
+async def chat_clear() -> dict[str, Any]:
+    """Clear the Gemini chat session history (starts a fresh conversation)."""
+    state = _state(app)
+    if state.gemini is None:
+        raise HTTPException(409, "Gemini API key not set.")
+    state.gemini.clear_chat()
+    return {"status": "ok"}
 
 
 @app.get("/api/stream")

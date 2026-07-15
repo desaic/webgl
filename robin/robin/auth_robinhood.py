@@ -137,6 +137,65 @@ class RobinhoodAuth:
         except Exception as e:
             raise RobinhoodAuthError(f"login request failed: {e}") from e
 
+    @staticmethod
+    def _poll_verification(r: Any, device_token: str, workflow_id: str) -> None:
+        """Poll Robinhood's verification workflow until approved or timeout.
+
+        Replaces robin_stocks' _validate_sherrif_id which crashes on None
+        responses. Polls the pathfinder inquiry endpoint for up to 2 minutes.
+        The user approves the login in the Robinhood app during this window.
+        """
+        import time
+
+        pathfinder_url = "https://api.robinhood.com/pathfinder/user_machine/"
+        machine_payload = {
+            "device_id": device_token,
+            "flow": "suv",
+            "input": {"workflow_id": workflow_id},
+        }
+        machine_data = r.helper.request_post(pathfinder_url, machine_payload, json=True) or {}
+        machine_id = machine_data.get("id") or machine_data.get("machine_id")
+        if not machine_id:
+            for _key, val in machine_data.items():
+                if isinstance(val, str) and len(val) > 10:
+                    machine_id = val
+                    break
+        if not machine_id:
+            raise RobinhoodAuthError("verification: could not get machine id from pathfinder")
+
+        inquiries_url = f"https://api.robinhood.com/pathfinder/inquiries/{machine_id}/user_view/"
+        deadline = time.time() + 120
+        while time.time() < deadline:
+            time.sleep(5)
+            resp = r.helper.request_get(inquiries_url)
+            if not resp or not isinstance(resp, dict):
+                continue
+            ctx = resp.get("context") or {}
+            challenge = ctx.get("sheriff_challenge")
+            if challenge:
+                status = challenge.get("status")
+                ctype = challenge.get("type")
+                if status == "validated":
+                    logger.info("verification challenge validated")
+                    return
+                if ctype == "prompt" and status == "issued":
+                    prompt_id = challenge.get("id")
+                    if prompt_id:
+                        prompt_url = f"https://api.robinhood.com/push/{prompt_id}/get_prompts_status/"
+                        while time.time() < deadline:
+                            time.sleep(5)
+                            pr = r.helper.request_get(prompt_url)
+                            if pr and isinstance(pr, dict) and pr.get("challenge_status") == "validated":
+                                logger.info("verification prompt validated")
+                                return
+                    return
+            workflow = resp.get("verification_workflow") or {}
+            ws = workflow.get("workflow_status")
+            if ws == "workflow_status_approved":
+                logger.info("verification workflow approved")
+                return
+        raise RobinhoodAuthError("verification challenge timed out after 120s — approve the login in your Robinhood app and try again")
+
     def login_with_credentials(
         self, username: str, password: str, mfa_code: str | None = None
     ) -> None:
@@ -165,10 +224,7 @@ class RobinhoodAuth:
         if "verification_workflow" in data:
             workflow_id = data["verification_workflow"]["id"]
             logger.info("robinhood verification challenge triggered; approve it in your app")
-            try:
-                r.authentication._validate_sherrif_id(device_token, workflow_id)
-            except Exception as e:
-                raise RobinhoodAuthError(f"verification challenge timed out: {e}") from e
+            self._poll_verification(r, device_token, workflow_id)
             data = self._post_login(r, payload)
             if not data or "access_token" not in data:
                 raise RobinhoodAuthError("login failed after verification: no access token")

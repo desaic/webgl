@@ -8,6 +8,7 @@ __pycache__/
 
 data/*.json
 data/*.log
+data/*.txt
 data/token.json
 data/rh_session.json
 !data/.gitkeep

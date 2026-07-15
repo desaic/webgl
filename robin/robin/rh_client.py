@@ -37,6 +37,7 @@ class Holding:
 class OptionPosition:
     symbol: str
     option_type: str
+    direction: str
     strike: float
     expiration: str
     quantity: float
@@ -47,6 +48,7 @@ class OptionPosition:
     unrealized_pl: float
     unrealized_pl_pct: float
     intraday_pl: float
+    covered: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -285,8 +287,17 @@ class RobinhoodClient:
         self._positions_cache = (now, rows, account)
         return rows, account
 
-    def _load_options(self) -> list[dict[str, Any]]:
-        """Fetch open option positions from Robinhood (cached 30 min)."""
+    def _load_options(self, stock_symbols: set[str] | None = None) -> list[dict[str, Any]]:
+        """Fetch open option positions from Robinhood (cached 30 min).
+
+        For short options, avg_price is negative (credit received). P/L =
+        credit_received - current_buyback_cost. For long options, avg_price
+        is positive (cost paid). P/L = current_value - cost_paid.
+
+        Covered call detection: a short call where you own the underlying
+        stock position.
+        """
+        stock_symbols = stock_symbols or set()
         now = time.time()
         cached_at, cached = self._options_cache
         if cached and (now - cached_at) < self._positions_ttl:
@@ -300,25 +311,51 @@ class RobinhoodClient:
             qty = _f(pos.get("quantity"))
             if qty <= 0:
                 continue
-            option_url = pos.get("option") or ""
-            option_data = {}
+            chain_symbol = pos.get("chain_symbol", "?")
+            direction = pos.get("type", "?")
+            expiration = pos.get("expiration_date", "")
+            avg_price = _f(pos.get("average_price"))
+            trade_value_multiplier = _f(pos.get("trade_value_multiplier"), 100.0)
+
+            option_url = pos.get("option", "")
+            option_id = pos.get("option_id") or option_url.rstrip("/").split("/")[-1]
+            strike = 0.0
+            opt_type = "?"
             if option_url:
                 with contextlib.suppress(Exception):
-                    option_data = r.helper.request_document(option_url) or {}
+                    opt_data = r.helper.request_get(option_url, "regular") or {}
+                    strike = _f(opt_data.get("strike_price"))
+                    opt_type = opt_data.get("type", "?")
+
+            mark_price = 0.0
+            with contextlib.suppress(Exception):
+                md = r.helper.request_get(
+                    f"https://api.robinhood.com/marketdata/options/{option_id}/",
+                    "regular",
+                ) or {}
+                mark_price = _f(md.get("mark_price"))
+
+            is_short = direction == "short"
+            credit_or_cost = abs(avg_price) * qty
+            market_value = mark_price * qty * trade_value_multiplier
+            unrealized_pl = credit_or_cost - market_value if is_short else market_value - credit_or_cost
+            covered = is_short and opt_type == "call" and chain_symbol in stock_symbols
+
             rows.append(
                 {
-                    "symbol": option_data.get("chain_symbol", "?"),
-                    "option_type": option_data.get("type", "?"),
-                    "strike": _f(option_data.get("strike_price")),
-                    "expiration": option_data.get("expiration_date", ""),
+                    "symbol": chain_symbol,
+                    "option_type": opt_type,
+                    "direction": direction,
+                    "strike": strike,
+                    "expiration": expiration,
                     "quantity": qty,
-                    "avg_cost": _f(pos.get("average_price")),
-                    "current_price": _f(pos.get("mark_price") or pos.get("current_price")),
-                    "market_value": _f(pos.get("market_value")),
-                    "total_cost": _f(pos.get("average_price")) * qty,
-                    "unrealized_pl": _f(pos.get("market_value"))
-                    - _f(pos.get("average_price")) * qty,
-                    "intraday_pl": _f(pos.get("intraday_profit_loss")),
+                    "avg_cost": round(abs(avg_price) / trade_value_multiplier, 4),
+                    "current_price": mark_price,
+                    "market_value": round(market_value, 2),
+                    "total_cost": round(credit_or_cost, 2),
+                    "unrealized_pl": round(unrealized_pl, 2),
+                    "intraday_pl": 0.0,
+                    "covered": covered,
                 }
             )
         self._options_cache = (now, rows)
@@ -347,16 +384,23 @@ class RobinhoodClient:
         for h in holdings:
             h.equity_pct = round((h.market_value / total_mv) * 100, 2) if total_mv else 0.0
 
+        stock_symbols = {h.symbol.upper() for h in holdings}
         options: list[OptionPosition] = []
         try:
-            opt_rows = self._load_options()
+            opt_rows = self._load_options(stock_symbols)
             for o in opt_rows:
                 cost = o["total_cost"]
                 upl = o["unrealized_pl"]
+                label = o["option_type"]
+                if o["direction"] == "short":
+                    label += " short"
+                    if o["covered"]:
+                        label += " (covered)"
                 options.append(
                     OptionPosition(
                         symbol=o["symbol"],
-                        option_type=o["option_type"],
+                        option_type=label,
+                        direction=o["direction"],
                         strike=o["strike"],
                         expiration=o["expiration"],
                         quantity=o["quantity"],
@@ -367,6 +411,7 @@ class RobinhoodClient:
                         unrealized_pl=round(upl, 2),
                         unrealized_pl_pct=round((upl / cost) * 100, 2) if cost else 0.0,
                         intraday_pl=round(o["intraday_pl"], 2),
+                        covered=o["covered"],
                     )
                 )
         except Exception as e:

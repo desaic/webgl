@@ -10,12 +10,15 @@ function setStatus(s) {
     ["Mode", s.robinhood_mode, s.robinhood_mode === "real" ? "ok" : "warn"],
     ["Market", s.market_open ? "open" : "closed", s.market_open ? "ok" : "warn"],
     ["Gemini", s.gemini_ready ? "ready" : (s.gemini_has_key ? "init fail" : "no key"), s.gemini_ready ? "ok" : "warn"],
+    ["Search", s.gemini_search_enabled ? "on" : "off", s.gemini_search_enabled ? "ok" : "info"],
     ["Scripts", s.scripts, "info"],
     ["Model", s.gemini_model, "info"],
   ];
   el.innerHTML = items.map(([k, v, c]) => `<span class="chip ${c}">${k}: ${v}</span>`).join("");
   document.getElementById("mode-badge").textContent = s.robinhood_mode === "real" ? "live" : "simulated";
   document.getElementById("mode-badge").className = "badge " + (s.robinhood_mode === "real" ? "ok" : "warn");
+  const cb = document.getElementById("search-toggle");
+  cb.checked = !!s.gemini_search_enabled;
   const banner = document.getElementById("market-banner");
   if (s.market_open) {
     banner.textContent = "Market is OPEN — prices every 5 min, holdings every 30 min";
@@ -67,9 +70,10 @@ function renderPortfolio(p) {
   const opts = p.options || [];
   optTbody.innerHTML = opts.map(o => {
     const exp = o.expiration ? new Date(o.expiration).toLocaleDateString() : "—";
+    const typeCls = o.covered ? "cov" : (o.direction === "short" ? "neg" : "pos");
     return `<tr>
       <td class="sym">${o.symbol}</td>
-      <td>${o.option_type}</td>
+      <td class="${typeCls}">${o.option_type}</td>
       <td class="num">${usd.format(o.strike)}</td>
       <td>${exp}</td>
       <td class="num">${o.quantity}</td>
@@ -78,7 +82,6 @@ function renderPortfolio(p) {
       <td class="num">${usd.format(o.market_value)}</td>
       <td class="num ${cls(o.unrealized_pl)}">${usd.format(o.unrealized_pl)}</td>
       <td class="num ${cls(o.unrealized_pl_pct)}">${pct(o.unrealized_pl_pct)}</td>
-      <td class="num ${cls(o.intraday_pl)}">${usd.format(o.intraday_pl)}</td>
     </tr>`;
   }).join("");
   document.getElementById("option-count").textContent = opts.length;
@@ -143,6 +146,18 @@ document.getElementById("btn-gemini-key").onclick = async () => {
   refresh();
 };
 
+document.getElementById("search-toggle").onchange = async (e) => {
+  const enabled = e.target.checked;
+  try {
+    const r = await fetch("/api/gemini/search", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+    if (!r.ok) { e.target.checked = !enabled; alert("Toggle failed"); }
+  } catch (err) { e.target.checked = !enabled; alert(err); }
+  refresh();
+};
+
 document.getElementById("btn-robinhood").onclick = async () => {
   const username = prompt("Robinhood username:");
   if (!username) return;
@@ -185,7 +200,7 @@ document.getElementById("btn-refresh").onclick = async () => {
 };
 
 document.getElementById("btn-logout").onclick = async () => {
-  if (!confirm("Logout and invalidate all auth? You'll need to re-connect Google and Robinhood.")) return;
+  if (!confirm("Logout and invalidate all auth? You'll need to re-connect Gemini and Robinhood.")) return;
   const btn = document.getElementById("btn-logout");
   btn.disabled = true; btn.textContent = "Logging out…";
   try {
@@ -197,17 +212,58 @@ document.getElementById("btn-logout").onclick = async () => {
   refresh();
 };
 
-document.getElementById("btn-ask").onclick = async () => {
-  const prompt = document.getElementById("ask-input").value.trim();
+// --- Chat sidebar ---
+
+function addChatMsg(role, text) {
+  const container = document.getElementById("chat-messages");
+  const div = document.createElement("div");
+  div.className = `msg ${role}`;
+  if (role === "ai") {
+    div.innerHTML = marked.parse(text);
+  } else {
+    div.textContent = text;
+  }
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+  return div;
+}
+
+document.getElementById("btn-ask").onclick = sendChat;
+document.getElementById("ask-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(); }
+});
+
+async function sendChat() {
+  const input = document.getElementById("ask-input");
+  const prompt = input.value.trim();
   if (!prompt) return;
-  const out = document.getElementById("ask-output");
-  out.textContent = "thinking…";
-  const r = await fetch("/api/llm/ask", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt }),
-  });
-  const j = await r.json();
-  out.textContent = r.ok ? (j.answer || "(no answer)") : "error: " + (j.detail || JSON.stringify(j));
+  input.value = "";
+  addChatMsg("user", prompt);
+  const thinking = addChatMsg("ai", "_thinking…_");
+  thinking.classList.add("msg-thinking");
+  try {
+    const r = await fetch("/api/llm/ask", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt }),
+    });
+    const j = await r.json();
+    thinking.classList.remove("msg-thinking");
+    if (r.ok) {
+      thinking.innerHTML = marked.parse(j.answer || "(no answer)");
+    } else {
+      thinking.innerHTML = `<span class="msg-error">error: ${j.detail || JSON.stringify(j)}</span>`;
+    }
+  } catch (e) {
+    thinking.classList.remove("msg-thinking");
+    thinking.innerHTML = `<span class="msg-error">error: ${e}</span>`;
+  }
+  const container = document.getElementById("chat-messages");
+  container.scrollTop = container.scrollHeight;
+}
+
+document.getElementById("btn-clear-chat").onclick = async () => {
+  document.getElementById("chat-messages").innerHTML = "";
+  try { await fetch("/api/chat/clear", { method: "POST" }); } catch (e) {}
 };
 
 refresh();
