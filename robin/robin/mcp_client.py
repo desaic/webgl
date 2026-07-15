@@ -61,7 +61,9 @@ def _gen_pkce() -> tuple[str, str]:
     return verifier, challenge
 
 
-def _http_post_json(url: str, data: dict[str, Any], headers: dict[str, str] | None = None) -> dict[str, Any]:
+def _http_post_json(
+    url: str, data: dict[str, Any], headers: dict[str, str] | None = None
+) -> dict[str, Any]:
     body = json.dumps(data).encode("utf-8")
     h = {"Content-Type": "application/json", "Accept": "application/json", "User-Agent": USER_AGENT}
     if headers:
@@ -223,7 +225,10 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         params = urllib.parse.parse_qs(parsed.query)
         self.server.cb_state.received_state = params.get("state", [None])[0]  # type: ignore[attr-defined]
         if "error" in params:
-            self.server.cb_state.error = (params["error"][0], params.get("error_description", [""])[0])  # type: ignore[attr-defined]
+            self.server.cb_state.error = (
+                params["error"][0],
+                params.get("error_description", [""])[0],
+            )  # type: ignore[attr-defined]
         elif "code" in params:
             self.server.cb_state.code = params["code"][0]  # type: ignore[attr-defined]
         else:
@@ -371,7 +376,9 @@ class RobinhoodMCPClient:
             if e.code == 401:
                 creds = _refresh_token()
                 return self._retry_with_token(envelope, creds["access_token"])
-            raise MCPError(f"upstream HTTP {e.code}: {e.read().decode('utf-8', 'replace')[:200]}") from e
+            raise MCPError(
+                f"upstream HTTP {e.code}: {e.read().decode('utf-8', 'replace')[:200]}"
+            ) from e
         except urllib.error.URLError as e:
             raise MCPError(f"network error: {e.reason}") from e
 

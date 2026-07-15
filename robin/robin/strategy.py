@@ -115,7 +115,11 @@ class CheckScript:
                 kind=str(result.get("kind", "signal")),
                 severity=str(result.get("severity", "low")),
                 message=str(result.get("message", "triggered")),
-                data={k: v for k, v in result.items() if k not in {"kind", "severity", "message", "symbol"}},
+                data={
+                    k: v
+                    for k, v in result.items()
+                    if k not in {"kind", "severity", "message", "symbol"}
+                },
                 script=self.name,
             )
         return Event(
@@ -172,7 +176,9 @@ class StrategyEngine:
         targets = namespace.get("TARGETS", [])
         if not isinstance(targets, list):
             targets = []
-        return CheckScript(name=name, path=path, source=source, targets=[str(t) for t in targets], check=check)
+        return CheckScript(
+            name=name, path=path, source=source, targets=[str(t) for t in targets], check=check
+        )
 
     def add_script(self, name: str, source: str, targets: list[str] | None = None) -> CheckScript:
         self.scripts_dir.mkdir(parents=True, exist_ok=True)
@@ -253,7 +259,9 @@ class StrategyEngine:
             "state": state if state is not None else {},
         }
 
-    def evaluate(self, portfolio: dict[str, Any], histories: dict[str, list[float]] | None = None) -> list[Event]:
+    def evaluate(
+        self, portfolio: dict[str, Any], histories: dict[str, list[float]] | None = None
+    ) -> list[Event]:
         histories = histories or {}
         events: list[Event] = []
         if not self.scripts:

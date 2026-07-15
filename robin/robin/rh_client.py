@@ -9,7 +9,7 @@ from typing import Any
 
 from robin.config import POSITIONS_TTL_SECONDS, RECENT_HISTORY_POINTS, SIMULATE, logger
 from robin.mcp_client import MCPError, RobinhoodMCPClient
-from robin.prices import PublicPriceSource, holding_from_quote
+from robin.prices import PublicPriceSource, Quote, holding_from_quote
 
 
 @dataclass
@@ -226,8 +226,7 @@ class RobinhoodClient:
             holdings=holdings,
             options=[],
             watchlist=[
-                {"symbol": s, "name": s, "current_price": d["price"]}
-                for s, d in self._sim.items()
+                {"symbol": s, "name": s, "current_price": d["price"]} for s, d in self._sim.items()
             ],
             total_market_value=round(total_mv, 2),
             total_cost=round(total_cost, 2),
@@ -314,9 +313,15 @@ class RobinhoodClient:
                 inst_result = self.mcp.call_tool(
                     "get_option_instruments", {"ids": ",".join(opt_ids)}
                 )
-                insts = inst_result.get("data", {}).get("instruments", []) if isinstance(inst_result, dict) else []
+                insts = (
+                    inst_result.get("data", {}).get("instruments", [])
+                    if isinstance(inst_result, dict)
+                    else []
+                )
                 if not insts:
-                    insts = inst_result.get("instruments", []) if isinstance(inst_result, dict) else []
+                    insts = (
+                        inst_result.get("instruments", []) if isinstance(inst_result, dict) else []
+                    )
                 for inst in insts:
                     instruments[inst.get("id", "")] = inst
 
@@ -324,7 +329,11 @@ class RobinhoodClient:
         if opt_ids:
             with contextlib.suppress(Exception):
                 q_result = self.mcp.call_tool("get_option_quotes", {"instrument_ids": opt_ids})
-                results = q_result.get("data", {}).get("results", []) if isinstance(q_result, dict) else []
+                results = (
+                    q_result.get("data", {}).get("results", [])
+                    if isinstance(q_result, dict)
+                    else []
+                )
                 for r in results:
                     q = r.get("quote", {})
                     quotes[q.get("instrument_id", "")] = q
@@ -351,7 +360,9 @@ class RobinhoodClient:
             is_short = direction == "short"
             credit_or_cost = abs(avg_price) * qty
             market_value = mark_price * qty * tvm
-            unrealized_pl = credit_or_cost - market_value if is_short else market_value - credit_or_cost
+            unrealized_pl = (
+                credit_or_cost - market_value if is_short else market_value - credit_or_cost
+            )
             covered = is_short and opt_type == "call" and chain_symbol in stock_symbols
 
             rows.append(
@@ -403,7 +414,11 @@ class RobinhoodClient:
                 continue
             with contextlib.suppress(Exception):
                 items_result = self.mcp.call_tool("get_watchlist_items", {"list_id": list_id})
-                items = items_result.get("data", {}).get("items", []) if isinstance(items_result, dict) else []
+                items = (
+                    items_result.get("data", {}).get("items", [])
+                    if isinstance(items_result, dict)
+                    else []
+                )
                 for item in items:
                     if item.get("object_type") != "instrument":
                         continue
@@ -421,6 +436,102 @@ class RobinhoodClient:
                     )
         self._watchlist_cache = (now, watchlist)
         return watchlist
+
+    def get_portfolio_cached(self) -> Portfolio:
+        """Build Portfolio from MCP cache + price cache only (no Yahoo calls).
+
+        Used by the poller to show data immediately before fresh prices arrive.
+        """
+        rows, account = self._load_positions()
+        holdings: list[Holding] = []
+        total_mv = 0.0
+        total_cost = 0.0
+        day_pl = 0.0
+        for row in rows:
+            symbol = row["symbol"]
+            cached = self.prices._cache.get(symbol.upper())
+            if cached:
+                quote = cached[1]
+                d = holding_from_quote(symbol, row["quantity"], row["avg_cost"], quote)
+            else:
+                d = holding_from_quote(
+                    symbol,
+                    row["quantity"],
+                    row["avg_cost"],
+                    Quote(
+                        symbol=symbol,
+                        name=symbol,
+                        price=0.0,
+                        prev_close=0.0,
+                        day_high=0.0,
+                        day_low=0.0,
+                    ),
+                )
+            holdings.append(Holding(**d))
+            total_mv += d["market_value"]
+            total_cost += d["total_cost"]
+            day_pl += d["day_pl"]
+        holdings.sort(key=lambda h: h.market_value, reverse=True)
+        for h in holdings:
+            h.equity_pct = round((h.market_value / total_mv) * 100, 2) if total_mv else 0.0
+
+        stock_symbols = {h.symbol.upper() for h in holdings}
+        options: list[OptionPosition] = []
+        try:
+            opt_rows = self._load_options(stock_symbols)
+            for o in opt_rows:
+                cost = o["total_cost"]
+                upl = o["unrealized_pl"]
+                label = o["option_type"]
+                if o["direction"] == "short":
+                    label += " short"
+                    if o["covered"]:
+                        label += " (covered)"
+                options.append(
+                    OptionPosition(
+                        symbol=o["symbol"],
+                        option_type=label,
+                        direction=o["direction"],
+                        strike=o["strike"],
+                        expiration=o["expiration"],
+                        quantity=o["quantity"],
+                        avg_cost=o["avg_cost"],
+                        current_price=o["current_price"],
+                        market_value=round(o["market_value"], 2),
+                        total_cost=round(cost, 2),
+                        unrealized_pl=round(upl, 2),
+                        unrealized_pl_pct=round((upl / cost) * 100, 2) if cost else 0.0,
+                        intraday_pl=round(o["intraday_pl"], 2),
+                        covered=o["covered"],
+                    )
+                )
+        except Exception as e:
+            logger.warning("could not load option positions: %s", e)
+
+        watchlist: list[dict[str, Any]] = []
+        try:
+            watchlist = self._load_watchlists()
+        except Exception as e:
+            logger.warning("could not load watchlists: %s", e)
+
+        return Portfolio(
+            holdings=holdings,
+            options=options,
+            watchlist=watchlist,
+            total_market_value=round(total_mv, 2),
+            total_cost=round(total_cost, 2),
+            total_unrealized_pl=round(total_mv - total_cost, 2),
+            total_unrealized_pl_pct=round(((total_mv - total_cost) / total_cost) * 100, 2)
+            if total_cost
+            else 0.0,
+            cash=account.get("cash", 0.0),
+            buying_power=account.get("buying_power", 0.0),
+            unsettled_funds=account.get("unsettled_funds", 0.0),
+            day_pl=round(day_pl, 2),
+            extended_hours=False,
+            updated_at=datetime.now(UTC).isoformat(),
+            mode="real",
+        )
 
     def _get_portfolio_real(self) -> Portfolio:
         rows, account = self._load_positions()
@@ -509,3 +620,39 @@ class RobinhoodClient:
             hist = self._sim.get(symbol, {}).get("history", [])
             return [float(x) for x in hist[-n:]]
         return self.prices.history(symbol, n)
+
+    def fetch_prices_incremental(self, portfolio: Portfolio) -> Portfolio:
+        """Fetch fresh prices one symbol at a time, updating the portfolio in place.
+
+        Returns the updated portfolio. Each symbol that gets a fresh quote
+        updates the corresponding holding and recalculates totals.
+        """
+        for holding in portfolio.holdings:
+            quote = self.prices.fetch(holding.symbol, light=True)
+            if quote is None:
+                continue
+            d = holding_from_quote(holding.symbol, holding.quantity, holding.avg_cost, quote)
+            holding.current_price = d["current_price"]
+            holding.prev_close = d["prev_close"]
+            holding.day_high = d["day_high"]
+            holding.day_low = d["day_low"]
+            holding.market_value = d["market_value"]
+            holding.unrealized_pl = d["unrealized_pl"]
+            holding.unrealized_pl_pct = d["unrealized_pl_pct"]
+            holding.day_pl = d["day_pl"]
+            holding.day_pl_pct = d["day_pl_pct"]
+        self.prices.flush_cache()
+        # Recalculate totals
+        total_mv = sum(h.market_value for h in portfolio.holdings)
+        total_cost = sum(h.total_cost for h in portfolio.holdings)
+        portfolio.total_market_value = round(total_mv, 2)
+        portfolio.total_cost = round(total_cost, 2)
+        portfolio.total_unrealized_pl = round(total_mv - total_cost, 2)
+        portfolio.total_unrealized_pl_pct = (
+            round(((total_mv - total_cost) / total_cost) * 100, 2) if total_cost else 0.0
+        )
+        portfolio.day_pl = round(sum(h.day_pl for h in portfolio.holdings), 2)
+        portfolio.updated_at = datetime.now(UTC).isoformat()
+        for h in portfolio.holdings:
+            h.equity_pct = round((h.market_value / total_mv) * 100, 2) if total_mv else 0.0
+        return portfolio

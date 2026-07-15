@@ -8,7 +8,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 SCRIPTS_DIR = BASE_DIR / "scripts"
 STATIC_DIR = BASE_DIR / "static"
-GEMINI_KEY_FILE = Path(os.environ.get("GEMINI_KEY_FILE", str(Path.home() / "gemini_free_api_key" / "key.txt")))
+GEMINI_KEY_FILE = Path(
+    os.environ.get("GEMINI_KEY_FILE", str(Path.home() / "gemini_free_api_key" / "key.txt"))
+)
 ROBINHOOD_SESSION_PATH = DATA_DIR / "rh_session.json"
 
 READ_ONLY = True

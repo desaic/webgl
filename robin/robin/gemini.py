@@ -166,10 +166,12 @@ class GeminiClient:
                 last_exc = e
                 msg = str(e).lower()
                 if "429" in msg or "resource_exhausted" in msg or "quota" in msg:
-                    delay = _RETRY_BASE_DELAY * (2 ** attempt)
+                    delay = _RETRY_BASE_DELAY * (2**attempt)
                     logger.warning(
                         "gemini rate-limited (attempt %d/%d); retrying in %.0fs",
-                        attempt + 1, _MAX_RETRIES, delay,
+                        attempt + 1,
+                        _MAX_RETRIES,
+                        delay,
                     )
                     time.sleep(delay)
                     continue
@@ -244,10 +246,12 @@ class GeminiClient:
                 last_exc = e
                 msg = str(e).lower()
                 if "429" in msg or "resource_exhausted" in msg or "quota" in msg:
-                    delay = _RETRY_BASE_DELAY * (2 ** attempt)
+                    delay = _RETRY_BASE_DELAY * (2**attempt)
                     logger.warning(
                         "gemini rate-limited (attempt %d/%d); retrying in %.0fs",
-                        attempt + 1, _MAX_RETRIES, delay,
+                        attempt + 1,
+                        _MAX_RETRIES,
+                        delay,
                     )
                     time.sleep(delay)
                     continue
@@ -282,7 +286,9 @@ class GeminiClient:
         if self._msgs_since_portfolio >= self._PORTFOLIO_REFRESH_INTERVAL:
             summary = json.dumps(portfolio, default=str)
             history = self._load_chat_history()
-            history_block = f"\n\nPrevious chat history (for context):\n{history}\n" if history else ""
+            history_block = (
+                f"\n\nPrevious chat history (for context):\n{history}\n" if history else ""
+            )
             full = f"Portfolio snapshot (holdings, prices, gain/loss):\n{summary}{history_block}\n\n{_ASK_NEWS_INSTR}\n\nUser question: {prompt}"
             self._msgs_since_portfolio = 0
         else:

@@ -206,12 +206,12 @@ async def holdings() -> list[dict[str, Any]]:
 async def refresh() -> dict[str, Any]:
     """Manually bust the holdings cache and re-poll immediately.
 
-    Overrides market-hours restrictions so you can pull fresh data right
-    after placing a trade, even if the market is closed.
+    Returns the last-known portfolio immediately; fresh data arrives via SSE
+    as prices are fetched in the background.
     """
     state = _state(app)
     state.client.refresh_holdings()
-    await state.poller.tick()
+    asyncio.create_task(state.poller.tick())
     return {
         "status": "ok",
         "portfolio": state.poller.latest_portfolio,
@@ -313,9 +313,7 @@ async def llm_ask(req: AskRequest) -> dict[str, Any]:
         snapshot = p.to_dict()
         state.poller.latest_portfolio = snapshot
     try:
-        answer = await anyio.to_thread.run_sync(
-            state.gemini.ask, req.prompt, snapshot, state.news
-        )
+        answer = await anyio.to_thread.run_sync(state.gemini.ask, req.prompt, snapshot, state.news)
     except GeminiError as e:
         raise HTTPException(502, str(e)) from e
     _save_chat(req.prompt, answer)

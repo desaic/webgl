@@ -82,10 +82,24 @@ class Poller:
 
     async def tick(self) -> None:
         t0 = time.time()
-        portfolio = await anyio.to_thread.run_sync(self.client.get_portfolio)
-        portfolio_dict = portfolio.to_dict()
-        self.latest_portfolio = portfolio_dict
-        self.bus.publish_raw("portfolio", portfolio_dict)
+
+        if self.client.resolve_mode() == "simulate":
+            portfolio = await anyio.to_thread.run_sync(self.client.get_portfolio)
+            portfolio_dict = portfolio.to_dict()
+            self.latest_portfolio = portfolio_dict
+            self.bus.publish_raw("portfolio", portfolio_dict)
+        else:
+            portfolio = await anyio.to_thread.run_sync(self.client.get_portfolio_cached)
+            self.latest_portfolio = portfolio.to_dict()
+            self.bus.publish_raw("portfolio", self.latest_portfolio)
+
+            portfolio = await anyio.to_thread.run_sync(
+                self.client.fetch_prices_incremental, portfolio
+            )
+            self.latest_portfolio = portfolio.to_dict()
+            self.bus.publish_raw("portfolio", self.latest_portfolio)
+
+        portfolio_dict = self.latest_portfolio
 
         events: list[Event] = []
         if self.strategy.scripts:
@@ -98,14 +112,18 @@ class Poller:
                 except Exception as e:
                     logger.debug("history fetch failed for %s: %s", h["symbol"], e)
                     histories[h["symbol"]] = []
-            events = await anyio.to_thread.run_sync(self.strategy.evaluate, portfolio_dict, histories)
+            events = await anyio.to_thread.run_sync(
+                self.strategy.evaluate, portfolio_dict, histories
+            )
             for event in events:
                 if self.gemini is not None:
                     holding = next(
                         (h for h in portfolio_dict["holdings"] if h["symbol"] == event.symbol), None
                     )
                     if holding:
-                        ctx = self.strategy._ctx_for(holding, portfolio_dict, histories.get(event.symbol, []))
+                        ctx = self.strategy._ctx_for(
+                            holding, portfolio_dict, histories.get(event.symbol, [])
+                        )
                         try:
                             event.llm = await anyio.to_thread.run_sync(
                                 self.gemini.reason_on_event, event.to_dict(), ctx

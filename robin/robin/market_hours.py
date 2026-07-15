@@ -58,16 +58,16 @@ def _last_weekday(year: int, month: int, weekday: int) -> date:
 def nyse_holidays(year: int) -> set[date]:
     """All NYSE closed dates for a year (observed rules applied)."""
     raw = [
-        date(year, 1, 1),                       # New Year's Day
-        _nth_weekday(year, 1, 0, 3),             # MLK Day
-        _nth_weekday(year, 2, 0, 3),             # Washington's Birthday
-        _easter(year) - timedelta(days=2),       # Good Friday
-        _last_weekday(year, 5, 0),               # Memorial Day
-        date(year, 6, 19),                       # Juneteenth
-        date(year, 7, 4),                        # Independence Day
-        _nth_weekday(year, 9, 0, 1),             # Labor Day
-        _nth_weekday(year, 11, 3, 4),            # Thanksgiving
-        date(year, 12, 25),                      # Christmas
+        date(year, 1, 1),  # New Year's Day
+        _nth_weekday(year, 1, 0, 3),  # MLK Day
+        _nth_weekday(year, 2, 0, 3),  # Washington's Birthday
+        _easter(year) - timedelta(days=2),  # Good Friday
+        _last_weekday(year, 5, 0),  # Memorial Day
+        date(year, 6, 19),  # Juneteenth
+        date(year, 7, 4),  # Independence Day
+        _nth_weekday(year, 9, 0, 1),  # Labor Day
+        _nth_weekday(year, 11, 3, 4),  # Thanksgiving
+        date(year, 12, 25),  # Christmas
     ]
     holidays: set[date] = set()
     for h in raw:
@@ -87,7 +87,11 @@ def _holidays_for(year: int) -> set[date]:
 
 
 def is_holiday(d: date) -> bool:
-    return d in _holidays_for(d.year) or d in _holidays_for(d.year - 1) or d in _holidays_for(d.year + 1)
+    return (
+        d in _holidays_for(d.year)
+        or d in _holidays_for(d.year - 1)
+        or d in _holidays_for(d.year + 1)
+    )
 
 
 def is_trading_day(d: date) -> bool:
@@ -99,8 +103,12 @@ def is_market_open(now: datetime | None = None) -> bool:
     now_et = (now or datetime.now(ET)).astimezone(ET)
     if not is_trading_day(now_et.date()):
         return False
-    market_open = now_et.replace(hour=MARKET_OPEN_HOUR, minute=MARKET_OPEN_MINUTE, second=0, microsecond=0)
-    market_close = now_et.replace(hour=MARKET_CLOSE_HOUR, minute=MARKET_CLOSE_MINUTE, second=0, microsecond=0)
+    market_open = now_et.replace(
+        hour=MARKET_OPEN_HOUR, minute=MARKET_OPEN_MINUTE, second=0, microsecond=0
+    )
+    market_close = now_et.replace(
+        hour=MARKET_CLOSE_HOUR, minute=MARKET_CLOSE_MINUTE, second=0, microsecond=0
+    )
     return market_open <= now_et < market_close
 
 
@@ -109,7 +117,9 @@ def next_market_open(now: datetime | None = None) -> datetime:
     now_et = (now or datetime.now(ET)).astimezone(ET)
     d = now_et.date()
     if is_trading_day(d):
-        today_open = now_et.replace(hour=MARKET_OPEN_HOUR, minute=MARKET_OPEN_MINUTE, second=0, microsecond=0)
+        today_open = now_et.replace(
+            hour=MARKET_OPEN_HOUR, minute=MARKET_OPEN_MINUTE, second=0, microsecond=0
+        )
         if now_et < today_open:
             return today_open
     for _ in range(15):

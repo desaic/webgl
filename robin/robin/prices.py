@@ -67,7 +67,9 @@ class PublicPriceSource:
                 try:
                     resp = httpx.get(
                         url_tpl.format(symbol=symbol),
-                        params=params, headers=headers, timeout=self.timeout,
+                        params=params,
+                        headers=headers,
+                        timeout=self.timeout,
                     )
                 except Exception as e:
                     logger.warning("yahoo fetch failed for %s: %s", symbol, e)
@@ -223,7 +225,7 @@ class PublicPriceSource:
                     quote.history = cached[1].history
         with self._lock:
             self._cache[symbol] = (now, quote)
-        self._save_disk_cache()
+            self._disk_dirty = True
         return quote
 
     def fetch_many(self, symbols: list[str], light: bool = True) -> dict[str, Quote]:
@@ -234,7 +236,16 @@ class PublicPriceSource:
             q = self.fetch(sym, light=light)
             if q is not None:
                 out[sym.upper()] = q
+        self.flush_cache()
         return out
+
+    def flush_cache(self) -> None:
+        """Write cache to disk once if any updates happened since last flush."""
+        with self._lock:
+            if not self._disk_dirty:
+                return
+            self._disk_dirty = False
+        self._save_disk_cache()
 
     def history(self, symbol: str, n: int = RECENT_HISTORY_POINTS) -> list[float]:
         symbol = symbol.upper()
