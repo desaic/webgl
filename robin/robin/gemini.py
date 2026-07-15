@@ -64,7 +64,8 @@ _ASK_SYSTEM = (
     "Prefer hold or review over selling.\n"
     "Note: short put positions are cash-secured puts, meaning the strike price "
     "times quantity times 100 in cash is locked as collateral and not available "
-    "for other trades. Factor this into buying power and risk assessments."
+    "for other trades. This cash is not margin — it is fully reserved. "
+    "Factor this into buying power and risk assessments."
 )
 
 _ASK_NEWS_INSTR = (
@@ -256,13 +257,33 @@ class GeminiClient:
             f"Wait a minute and try again. Last error: {last_exc}"
         ) from last_exc
 
+    @staticmethod
+    def _load_chat_history() -> str:
+        """Load recent chat history from data/chat_*.txt files (last 50 lines)."""
+        from pathlib import Path
+
+        from robin.config import DATA_DIR
+
+        files = sorted(Path(DATA_DIR).glob("chat_*.txt"), reverse=True)
+        if not files:
+            return ""
+        lines: list[str] = []
+        for f in files:
+            lines = f.read_text(encoding="utf-8", errors="replace").splitlines() + lines
+            if len(lines) > 100:
+                break
+        recent = lines[-100:]
+        return "\n".join(recent) if recent else ""
+
     def ask(self, prompt: str, portfolio: dict[str, Any], news_source: Any | None = None) -> str:
         """Two-turn flow: send the question, if Gemini requests news for specific
         stocks, fetch it from public sources and send back for a final answer.
         """
         if self._msgs_since_portfolio >= self._PORTFOLIO_REFRESH_INTERVAL:
             summary = json.dumps(portfolio, default=str)
-            full = f"Portfolio snapshot (holdings, prices, gain/loss):\n{summary}\n\n{_ASK_NEWS_INSTR}\n\nUser question: {prompt}"
+            history = self._load_chat_history()
+            history_block = f"\n\nPrevious chat history (for context):\n{history}\n" if history else ""
+            full = f"Portfolio snapshot (holdings, prices, gain/loss):\n{summary}{history_block}\n\n{_ASK_NEWS_INSTR}\n\nUser question: {prompt}"
             self._msgs_since_portfolio = 0
         else:
             full = f"{_ASK_NEWS_INSTR}\n\nUser question: {prompt}"

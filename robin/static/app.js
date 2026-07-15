@@ -355,6 +355,18 @@ document.getElementById("btn-new-script").onclick = () => {
   document.getElementById("script-status").className = "script-status";
 };
 
+// --- Theme toggle ---
+const themeBtn = document.getElementById("theme-toggle");
+if (localStorage.getItem("robin-theme") === "light") {
+  document.body.classList.add("light");
+  themeBtn.textContent = "☀";
+}
+themeBtn.onclick = () => {
+  const isLight = document.body.classList.toggle("light");
+  themeBtn.textContent = isLight ? "☀" : "🌙";
+  localStorage.setItem("robin-theme", isLight ? "light" : "dark");
+};
+
 refresh();
 stream();
 setInterval(refresh, 15000);
