@@ -372,7 +372,7 @@ async def stream() -> StreamingResponse:
 def main() -> None:
     import uvicorn
 
-    uvicorn.run("robin.app:app", host="127.0.0.1", port=8000, reload=False)
+    uvicorn.run("robin.app:app", host="127.0.0.1", port=8888, reload=False)
 
 
 if __name__ == "__main__":

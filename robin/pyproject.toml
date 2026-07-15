@@ -32,8 +32,8 @@ default = { solve-group = "default" }
 dev = { features = ["dev"], solve-group = "default" }
 
 [tool.pixi.tasks]
-serve = "uvicorn robin.app:app --host 127.0.0.1 --port 8000"
-dev = "uvicorn robin.app:app --reload --host 127.0.0.1 --port 8000"
+serve = "uvicorn robin.app:app --host 127.0.0.1 --port 8888"
+dev = "uvicorn robin.app:app --reload --host 127.0.0.1 --port 8888"
 test = "pytest -q"
 lint = "ruff check ."
 fmt = "ruff format ."
