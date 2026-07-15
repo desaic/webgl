@@ -61,7 +61,10 @@ _ASK_SYSTEM = (
     "normally. Be succinct. "
     "Strategy suggestions must be short bullet points: stock name, condition met, "
     "and action. Example: 'NVDL: down 12% from high — review stop level'. "
-    "Prefer hold or review over selling."
+    "Prefer hold or review over selling.\n"
+    "Note: short put positions are cash-secured puts, meaning the strike price "
+    "times quantity times 100 in cash is locked as collateral and not available "
+    "for other trades. Factor this into buying power and risk assessments."
 )
 
 _ASK_NEWS_INSTR = (
