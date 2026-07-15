@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Robin — Portfolio Monitor</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header>
+    <h1>Robin</h1>
+    <div id="status" class="status"></div>
+  </header>
+
+  <div id="market-banner" class="banner"></div>
+
+  <main>
+    <section class="cards" id="cards">
+      <div class="card"><span class="label">Total Holdings</span><span id="total-value" class="value">—</span><span class="sub" id="holding-count">0 positions</span></div>
+      <div class="card"><span class="label">Total Cost Basis</span><span id="total-cost" class="value">—</span><span class="sub">invested capital</span></div>
+      <div class="card"><span class="label">Total Gain / Loss</span><span id="total-pl" class="value">—</span><span id="total-pl-pct" class="sub">—</span></div>
+      <div class="card"><span class="label">Day Change</span><span id="day-pl" class="value">—</span><span id="day-pl-sub" class="sub">—</span></div>
+      <div class="card"><span class="label">Buying Power</span><span id="buying-power" class="value">—</span><span class="sub" id="cash-sub">cash —</span></div>
+      <div class="card"><span class="label">Unsettled Funds</span><span id="unsettled-funds" class="value">—</span><span class="sub">pending clearance</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Holdings</h2>
+        <div class="badge-row">
+          <span id="mode-badge" class="badge">—</span>
+          <button id="btn-refresh" class="small" title="Re-fetch holdings from Robinhood and prices now">Refresh</button>
+        </div>
+      </div>
+      <table id="holdings">
+        <thead>
+          <tr>
+            <th>Symbol</th><th>Name</th><th class="num">Qty</th>
+            <th class="num">Avg Cost</th><th class="num">Price</th>
+            <th class="num">Mkt Value</th><th class="num">Day %</th>
+            <th class="num">Total G/L $</th><th class="num">Total G/L %</th>
+            <th class="num">Weight</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Option Positions</h2>
+        <span id="option-count" class="badge">0</span>
+      </div>
+      <table id="options">
+        <thead>
+          <tr>
+            <th>Symbol</th><th>Type</th><th class="num">Strike</th>
+            <th>Expiration</th><th class="num">Qty</th>
+            <th class="num">Avg Cost</th><th class="num">Mark</th>
+            <th class="num">Mkt Value</th><th class="num">G/L $</th><th class="num">G/L %</th>
+            <th class="num">Day P/L</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <p id="no-options" class="muted" style="display:none;">No open option positions.</p>
+    </section>
+
+    <section class="grid">
+      <div class="panel">
+        <div class="panel-head"><h2>Events &amp; Alerts</h2></div>
+        <ul id="events" class="events"></ul>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Actions</h2></div>
+        <div class="actions">
+          <div class="key-input">
+            <input id="gemini-key" type="password" placeholder="Paste Gemini API key…" />
+            <button id="btn-gemini-key">Set Gemini Key</button>
+          </div>
+          <button id="btn-robinhood">Connect Robinhood</button>
+          <button id="btn-logout" class="danger">Logout All</button>
+          <button id="btn-strategy">Regenerate Strategy Scripts</button>
+        </div>
+        <div class="panel-head"><h2>Ask Gemini</h2></div>
+        <div class="ask">
+          <textarea id="ask-input" rows="2" placeholder="Ask about your portfolio…"></textarea>
+          <button id="btn-ask">Ask</button>
+        </div>
+        <div id="ask-output" class="ask-output"></div>
+        <div class="panel-head"><h2>Strategy Scripts</h2></div>
+        <ul id="scripts" class="scripts"></ul>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
