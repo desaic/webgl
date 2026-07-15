@@ -410,7 +410,7 @@ class RobinhoodClient:
                     watchlist.append(
                         {
                             "symbol": symbol,
-                            "name": symbol,
+                            "name": quote.name if quote else symbol,
                             "current_price": quote.price if quote else 0.0,
                         }
                     )
