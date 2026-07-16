@@ -188,7 +188,9 @@ async def status() -> dict[str, Any]:
 async def portfolio() -> dict[str, Any]:
     state = _state(app)
     if not state.poller.latest_portfolio:
-        p = await anyio.to_thread.run_sync(state.client.get_portfolio)
+        p = await anyio.to_thread.run_sync(
+            state.client.get_portfolio_cached, state.poller.latest_portfolio
+        )
         return p.to_dict()
     return state.poller.latest_portfolio
 
@@ -197,7 +199,9 @@ async def portfolio() -> dict[str, Any]:
 async def holdings() -> list[dict[str, Any]]:
     state = _state(app)
     if not state.poller.latest_portfolio:
-        p = await anyio.to_thread.run_sync(state.client.get_portfolio)
+        p = await anyio.to_thread.run_sync(
+            state.client.get_portfolio_cached, state.poller.latest_portfolio
+        )
         return [h.to_dict() for h in p.holdings]
     return state.poller.latest_portfolio.get("holdings", [])
 
@@ -222,6 +226,24 @@ async def refresh() -> dict[str, Any]:
 @app.get("/api/events")
 async def events(limit: int = 50) -> list[dict[str, Any]]:
     return _state(app).bus.recent(limit)
+
+
+@app.get("/api/transactions")
+async def transactions(limit: int = 30) -> dict[str, Any]:
+    state = _state(app)
+    rows = await anyio.to_thread.run_sync(state.client.get_transactions, limit)
+    return {"transactions": rows, "count": len(rows)}
+
+
+@app.get("/api/mcp/tools")
+async def mcp_tools() -> dict[str, Any]:
+    """Debug: list available MCP tools."""
+    state = _state(app)
+    try:
+        tools = await anyio.to_thread.run_sync(state.client.mcp.list_tools)
+        return {"tools": [t.get("name", "?") for t in tools]}
+    except Exception as e:
+        return {"error": str(e), "tools": []}
 
 
 @app.get("/api/scripts")
@@ -309,11 +331,19 @@ async def llm_ask(req: AskRequest) -> dict[str, Any]:
         raise HTTPException(409, "Gemini API key not set. Enter it in the UI first.")
     snapshot = state.poller.latest_portfolio
     if not snapshot:
-        p = await anyio.to_thread.run_sync(state.client.get_portfolio)
+        p = await anyio.to_thread.run_sync(
+            state.client.get_portfolio_cached, state.poller.latest_portfolio
+        )
         snapshot = p.to_dict()
         state.poller.latest_portfolio = snapshot
     try:
-        answer = await anyio.to_thread.run_sync(state.gemini.ask, req.prompt, snapshot, state.news)
+        transactions = await anyio.to_thread.run_sync(state.client.get_transactions, 10)
+    except Exception:
+        transactions = []
+    try:
+        answer = await anyio.to_thread.run_sync(
+            state.gemini.ask, req.prompt, snapshot, state.news, transactions
+        )
     except GeminiError as e:
         raise HTTPException(502, str(e)) from e
     _save_chat(req.prompt, answer)

@@ -437,12 +437,64 @@ class RobinhoodClient:
         self._watchlist_cache = (now, watchlist)
         return watchlist
 
-    def get_portfolio_cached(self) -> Portfolio:
+    def get_portfolio_cached(self, old: dict[str, Any] | None = None) -> Portfolio:
         """Build Portfolio from MCP cache + price cache only (no Yahoo calls).
 
         Used by the poller to show data immediately before fresh prices arrive.
+        If ``old`` is provided (the previous portfolio dict), stale prices are
+        carried over for symbols whose price cache is empty.
         """
+        old_holdings: dict[str, dict[str, Any]] = {}
+        if old:
+            for h in old.get("holdings", []):
+                old_holdings[h["symbol"]] = h
+
         rows, account = self._load_positions()
+
+        if not rows and old and old.get("holdings"):
+            holdings: list[Holding] = []
+            total_mv = 0.0
+            total_cost = 0.0
+            day_pl = 0.0
+            for oh in old["holdings"]:
+                symbol = oh["symbol"]
+                cached = self.prices._cache.get(symbol.upper())
+                if cached:
+                    quote = cached[1]
+                else:
+                    quote = Quote(
+                        symbol=symbol,
+                        name=oh.get("name", symbol),
+                        price=oh.get("current_price", 0.0),
+                        prev_close=oh.get("prev_close", 0.0),
+                        day_high=oh.get("day_high", 0.0),
+                        day_low=oh.get("day_low", 0.0),
+                    )
+                d = holding_from_quote(symbol, oh["quantity"], oh["avg_cost"], quote)
+                holdings.append(Holding(**d))
+                total_mv += d["market_value"]
+                total_cost += d["total_cost"]
+                day_pl += d["day_pl"]
+            holdings.sort(key=lambda h: h.market_value, reverse=True)
+            for h in holdings:
+                h.equity_pct = round((h.market_value / total_mv) * 100, 2) if total_mv else 0.0
+            return Portfolio(
+                holdings=holdings,
+                total_market_value=round(total_mv, 2),
+                total_cost=round(total_cost, 2),
+                total_unrealized_pl=round(total_mv - total_cost, 2),
+                total_unrealized_pl_pct=(
+                    round(((total_mv - total_cost) / total_cost) * 100, 2) if total_cost else 0.0
+                ),
+                cash=old.get("cash", 0.0),
+                buying_power=old.get("buying_power", 0.0),
+                unsettled_funds=old.get("unsettled_funds", 0.0),
+                day_pl=round(day_pl, 2),
+                extended_hours=False,
+                updated_at=datetime.now(UTC).isoformat(),
+                mode="real",
+            )
+
         holdings: list[Holding] = []
         total_mv = 0.0
         total_cost = 0.0
@@ -453,6 +505,21 @@ class RobinhoodClient:
             if cached:
                 quote = cached[1]
                 d = holding_from_quote(symbol, row["quantity"], row["avg_cost"], quote)
+            elif symbol in old_holdings:
+                oh = old_holdings[symbol]
+                d = holding_from_quote(
+                    symbol,
+                    row["quantity"],
+                    row["avg_cost"],
+                    Quote(
+                        symbol=symbol,
+                        name=oh.get("name", symbol),
+                        price=oh.get("current_price", 0.0),
+                        prev_close=oh.get("prev_close", 0.0),
+                        day_high=oh.get("day_high", 0.0),
+                        day_low=oh.get("day_low", 0.0),
+                    ),
+                )
             else:
                 d = holding_from_quote(
                     symbol,
@@ -508,29 +575,24 @@ class RobinhoodClient:
         except Exception as e:
             logger.warning("could not load option positions: %s", e)
 
+        now_ts = time.time()
         watchlist: list[dict[str, Any]] = []
         try:
-            watchlist = self._load_watchlists()
-        except Exception as e:
-            logger.warning("could not load watchlists: %s", e)
+            cached_at, cached = self._watchlist_cache
+            if cached and (now_ts - cached_at) < self._positions_ttl:
+                watchlist = cached
+        except Exception:
+            pass
 
         return Portfolio(
-            holdings=holdings,
-            options=options,
-            watchlist=watchlist,
-            total_market_value=round(total_mv, 2),
-            total_cost=round(total_cost, 2),
+            holdings=holdings, options=options, watchlist=watchlist,
+            total_market_value=round(total_mv, 2), total_cost=round(total_cost, 2),
             total_unrealized_pl=round(total_mv - total_cost, 2),
             total_unrealized_pl_pct=round(((total_mv - total_cost) / total_cost) * 100, 2)
-            if total_cost
-            else 0.0,
-            cash=account.get("cash", 0.0),
-            buying_power=account.get("buying_power", 0.0),
-            unsettled_funds=account.get("unsettled_funds", 0.0),
-            day_pl=round(day_pl, 2),
-            extended_hours=False,
-            updated_at=datetime.now(UTC).isoformat(),
-            mode="real",
+            if total_cost else 0.0,
+            cash=account.get("cash", 0.0), buying_power=account.get("buying_power", 0.0),
+            unsettled_funds=account.get("unsettled_funds", 0.0), day_pl=round(day_pl, 2),
+            extended_hours=False, updated_at=datetime.now(UTC).isoformat(), mode="real",
         )
 
     def _get_portfolio_real(self) -> Portfolio:
@@ -656,3 +718,58 @@ class RobinhoodClient:
         for h in portfolio.holdings:
             h.equity_pct = round((h.market_value / total_mv) * 100, 2) if total_mv else 0.0
         return portfolio
+
+    def get_transactions(self, limit: int = 30) -> list[dict[str, Any]]:
+        """Fetch recent transactions from Robinhood MCP.
+
+        Tries get_equity_orders, get_option_orders, get_pnl_trade_history,
+        and get_realized_pnl. Returns a merged, newest-first list capped at
+        ``limit``.
+        """
+        if self.resolve_mode() == "simulate":
+            return []
+        try:
+            acct = self._get_account_number()
+        except Exception:
+            return []
+
+        tools = ["get_equity_orders", "get_option_orders"]
+        out: list[dict[str, Any]] = []
+        for tool in tools:
+            try:
+                result = self.mcp.call_tool(tool, {"account_number": acct})
+            except Exception as e:
+                logger.debug("tool %s failed: %s", tool, e)
+                continue
+            data = result.get("data", result) if isinstance(result, dict) else {}
+            rows = data.get("orders", data.get("results", data.get("items", [])))
+            if not isinstance(rows, list):
+                if isinstance(data, list):
+                    rows = data
+                else:
+                    continue
+            for r in rows[:limit]:
+                if tool == "get_option_orders":
+                    raw = r.get("direction", "")
+                    side = {"debit": "buy", "credit": "sell"}.get(raw, raw)
+                    symbol = r.get("chain_symbol", "")
+                else:
+                    side = r.get("side", "")
+                    symbol = r.get("symbol", "")
+                out.append({
+                    "id": r.get("id", ""),
+                    "side": side,
+                    "type": r.get("type", ""),
+                    "symbol": symbol,
+                    "quantity": _f(r.get("quantity")),
+                    "price": _f(r.get("average_price", r.get("price"))),
+                    "total": _f(r.get("processed_premium", r.get("premium", r.get("total", 0)))),
+                    "status": r.get("state", ""),
+                    "executed_at": r.get("last_transaction_at") or r.get("created_at") or "",
+                })
+        out.sort(key=lambda x: x.get("executed_at", ""), reverse=True)
+        if out:
+            logger.info("loaded %d transactions from MCP", len(out))
+        else:
+            logger.warning("no transactions returned from MCP order tools")
+        return out[:limit]

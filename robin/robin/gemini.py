@@ -210,7 +210,23 @@ class GeminiClient:
             raise GeminiError("scripts JSON missing 'scripts' list")
         return scripts
 
-    def reason_on_event(self, event: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
+    def reason_on_event(
+        self,
+        event: dict[str, Any],
+        ctx: dict[str, Any],
+        transactions: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        txn_block = ""
+        if transactions:
+            lines = []
+            for t in transactions[:10]:
+                sym = t.get("symbol", "?")
+                ttype = t.get("type", "?")
+                qty = t.get("quantity", "")
+                price = t.get("price", "")
+                ts = t.get("executed_at", "")
+                lines.append(f"  {ts} {ttype} {sym} x{qty} @{price}")
+            txn_block = "\nRecent transactions:\n" + "\n".join(lines) + "\n"
         prompt = (
             f"An automated trigger fired for {ctx.get('symbol')}.\n"
             f"Trigger: kind={event.get('kind')}, severity={event.get('severity')}, "
@@ -219,7 +235,8 @@ class GeminiClient:
             f"current_price={ctx.get('current_price')}, "
             f"unrealized_pl_pct={ctx.get('unrealized_pl_pct')}%, "
             f"equity_pct={ctx.get('equity_pct')}%\n"
-            f"Recent closes: {ctx.get('history')}\n\n"
+            f"Recent closes: {ctx.get('history')}\n"
+            f"{txn_block}\n"
             "Return STRICT JSON: "
             '{"severity":"low|medium|high","action":"hold|review|sell|rebalance",'
             '"message":"one or two sentences"}'
@@ -279,17 +296,38 @@ class GeminiClient:
         recent = lines[-100:]
         return "\n".join(recent) if recent else ""
 
-    def ask(self, prompt: str, portfolio: dict[str, Any], news_source: Any | None = None) -> str:
+    def ask(
+        self,
+        prompt: str,
+        portfolio: dict[str, Any],
+        news_source: Any | None = None,
+        transactions: list[dict[str, Any]] | None = None,
+    ) -> str:
         """Two-turn flow: send the question, if Gemini requests news for specific
         stocks, fetch it from public sources and send back for a final answer.
         """
+        txn_block = ""
+        if transactions:
+            lines = []
+            for t in transactions[:10]:
+                sym = t.get("symbol", "?")
+                ttype = t.get("type", "?")
+                qty = t.get("quantity", "")
+                price = t.get("price", "")
+                ts = t.get("executed_at", "")
+                lines.append(f"  {ts} {ttype} {sym} x{qty} @{price}")
+            txn_block = "\nRecent transactions:\n" + "\n".join(lines) + "\n"
+
         if self._msgs_since_portfolio >= self._PORTFOLIO_REFRESH_INTERVAL:
             summary = json.dumps(portfolio, default=str)
             history = self._load_chat_history()
             history_block = (
                 f"\n\nPrevious chat history (for context):\n{history}\n" if history else ""
             )
-            full = f"Portfolio snapshot (holdings, prices, gain/loss):\n{summary}{history_block}\n\n{_ASK_NEWS_INSTR}\n\nUser question: {prompt}"
+            full = (
+                f"Portfolio snapshot (holdings, prices, gain/loss):\n{summary}"
+                f"{txn_block}{history_block}\n\n{_ASK_NEWS_INSTR}\n\nUser question: {prompt}"
+            )
             self._msgs_since_portfolio = 0
         else:
             full = f"{_ASK_NEWS_INSTR}\n\nUser question: {prompt}"

@@ -110,6 +110,7 @@
       <div class="tab-bar">
         <button class="tab active" id="tab-chat">Chat</button>
         <button class="tab" id="tab-script">Scripts</button>
+        <button class="tab" id="tab-activity">Activity</button>
       </div>
 
       <div id="tab-panel-chat" class="tab-panel active">
@@ -141,6 +142,14 @@
         </div>
         <textarea id="script-editor" class="script-editor" spellcheck="false" placeholder="Select a script to edit…"></textarea>
         <div id="script-status" class="script-status"></div>
+      </div>
+
+      <div id="tab-panel-activity" class="tab-panel">
+        <div class="chat-head">
+          <h2>Activity</h2>
+          <button id="btn-refresh-activity" class="small">Refresh</button>
+        </div>
+        <div class="activity-list" id="activity-list"></div>
       </div>
     </aside>
   </div>

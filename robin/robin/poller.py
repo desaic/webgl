@@ -89,7 +89,10 @@ class Poller:
             self.latest_portfolio = portfolio_dict
             self.bus.publish_raw("portfolio", portfolio_dict)
         else:
-            portfolio = await anyio.to_thread.run_sync(self.client.get_portfolio_cached)
+            old = self.latest_portfolio
+            portfolio = await anyio.to_thread.run_sync(
+                self.client.get_portfolio_cached, old
+            )
             self.latest_portfolio = portfolio.to_dict()
             self.bus.publish_raw("portfolio", self.latest_portfolio)
 
@@ -115,6 +118,11 @@ class Poller:
             events = await anyio.to_thread.run_sync(
                 self.strategy.evaluate, portfolio_dict, histories
             )
+            transactions: list[dict[str, Any]] = []
+            with contextlib.suppress(Exception):
+                transactions = await anyio.to_thread.run_sync(
+                    self.client.get_transactions, 10
+                )
             for event in events:
                 if self.gemini is not None:
                     holding = next(
@@ -126,7 +134,10 @@ class Poller:
                         )
                         try:
                             event.llm = await anyio.to_thread.run_sync(
-                                self.gemini.reason_on_event, event.to_dict(), ctx
+                                self.gemini.reason_on_event,
+                                event.to_dict(),
+                                ctx,
+                                transactions,
                             )
                         except Exception as e:
                             event.data["llm_error"] = str(e)

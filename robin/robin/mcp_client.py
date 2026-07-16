@@ -457,6 +457,23 @@ class RobinhoodMCPClient:
             return result
         raise MCPError(f"tool '{name}' returned no response")
 
+    def list_tools(self) -> list[dict[str, Any]]:
+        """List available MCP tools. Returns list of {name, description, inputSchema}."""
+        self._ensure_initialized()
+        envelope = {
+            "jsonrpc": "2.0",
+            "id": self._next_id(),
+            "method": "tools/list",
+        }
+        responses = self._call_upstream(envelope)
+        for resp in responses:
+            if resp.get("id") != envelope["id"]:
+                continue
+            if "error" in resp:
+                raise MCPError(f"tools/list error: {resp['error']}")
+            return resp.get("result", {}).get("tools", [])
+        return []
+
     def has_credentials(self) -> bool:
         creds = _load_creds()
         return bool(creds.get("access_token") or creds.get("refresh_token"))

@@ -57,14 +57,34 @@ def test_strategy_script_detects_stop_loss(tmp_path: Path):
         "total_unrealized_pl": -100,
         "total_unrealized_pl_pct": -9.0,
         "holdings": [
-            {"symbol": "AAPL", "name": "Apple", "quantity": 10, "avg_cost": 100,
-             "current_price": 90, "prev_close": 95, "day_high": 96, "day_low": 89,
-             "market_value": 900, "unrealized_pl": -100, "unrealized_pl_pct": -10,
-             "equity_pct": 90},
-            {"symbol": "MSFT", "name": "Microsoft", "quantity": 2, "avg_cost": 400,
-             "current_price": 420, "prev_close": 415, "day_high": 425, "day_low": 414,
-             "market_value": 840, "unrealized_pl": 40, "unrealized_pl_pct": 5,
-             "equity_pct": 84},
+            {
+                "symbol": "AAPL",
+                "name": "Apple",
+                "quantity": 10,
+                "avg_cost": 100,
+                "current_price": 90,
+                "prev_close": 95,
+                "day_high": 96,
+                "day_low": 89,
+                "market_value": 900,
+                "unrealized_pl": -100,
+                "unrealized_pl_pct": -10,
+                "equity_pct": 90,
+            },
+            {
+                "symbol": "MSFT",
+                "name": "Microsoft",
+                "quantity": 2,
+                "avg_cost": 400,
+                "current_price": 420,
+                "prev_close": 415,
+                "day_high": 425,
+                "day_low": 414,
+                "market_value": 840,
+                "unrealized_pl": 40,
+                "unrealized_pl_pct": 5,
+                "equity_pct": 84,
+            },
         ],
     }
     events = eng.evaluate(portfolio, histories={"AAPL": [], "MSFT": []})
@@ -81,12 +101,30 @@ def test_strategy_script_targets_filter(tmp_path: Path):
         "def check(ctx):\n    return {'kind':'signal','severity':'low','message':'x'}\n",
         targets=["AAPL"],
     )
-    portfolio = {"holdings": [
-        {"symbol": "AAPL", "quantity": 1, "avg_cost": 1, "current_price": 1, "market_value": 1,
-         "unrealized_pl": 0, "unrealized_pl_pct": 0, "equity_pct": 50},
-        {"symbol": "MSFT", "quantity": 1, "avg_cost": 1, "current_price": 1, "market_value": 1,
-         "unrealized_pl": 0, "unrealized_pl_pct": 0, "equity_pct": 50},
-    ]}
+    portfolio = {
+        "holdings": [
+            {
+                "symbol": "AAPL",
+                "quantity": 1,
+                "avg_cost": 1,
+                "current_price": 1,
+                "market_value": 1,
+                "unrealized_pl": 0,
+                "unrealized_pl_pct": 0,
+                "equity_pct": 50,
+            },
+            {
+                "symbol": "MSFT",
+                "quantity": 1,
+                "avg_cost": 1,
+                "current_price": 1,
+                "market_value": 1,
+                "unrealized_pl": 0,
+                "unrealized_pl_pct": 0,
+                "equity_pct": 50,
+            },
+        ]
+    }
     events = eng.evaluate(portfolio, histories={"AAPL": [], "MSFT": []})
     assert [e.symbol for e in events] == ["AAPL"]
 
@@ -115,16 +153,27 @@ def test_script_persistent_state_across_polls(tmp_path: Path, monkeypatch):
         "    return None\n",
         targets=["AAPL"],
     )
-    portfolio = {"holdings": [
-        {"symbol": "AAPL", "quantity": 10, "avg_cost": 100, "current_price": 100,
-         "market_value": 1000, "unrealized_pl": 0, "unrealized_pl_pct": 0, "equity_pct": 100},
-    ]}
+    portfolio = {
+        "holdings": [
+            {
+                "symbol": "AAPL",
+                "quantity": 10,
+                "avg_cost": 100,
+                "current_price": 100,
+                "market_value": 1000,
+                "unrealized_pl": 0,
+                "unrealized_pl_pct": 0,
+                "equity_pct": 100,
+            },
+        ]
+    }
     # Poll 1: price 100, high becomes 100, no trigger
     events = eng.evaluate(portfolio, histories={"AAPL": []})
     assert events == []
     state_file = state_dir / "trailing_stop.json"
     assert state_file.exists()
     import json
+
     saved = json.loads(state_file.read_text())
     assert saved["AAPL"]["high"] == 100
 
@@ -148,9 +197,20 @@ def test_script_persistent_state_across_polls(tmp_path: Path, monkeypatch):
 def test_sandbox_blocks_open_at_runtime(tmp_path: Path):
     eng = StrategyEngine(scripts_dir=tmp_path)
     eng.add_script("evil2", "def check(ctx):\n    open('/etc/passwd')\n    return None\n")
-    portfolio = {"holdings": [{"symbol": "X", "quantity": 1, "avg_cost": 1, "current_price": 1,
-                               "market_value": 1, "unrealized_pl": 0, "unrealized_pl_pct": 0,
-                               "equity_pct": 100}]}
+    portfolio = {
+        "holdings": [
+            {
+                "symbol": "X",
+                "quantity": 1,
+                "avg_cost": 1,
+                "current_price": 1,
+                "market_value": 1,
+                "unrealized_pl": 0,
+                "unrealized_pl_pct": 0,
+                "equity_pct": 100,
+            }
+        ]
+    }
     events = eng.evaluate(portfolio, histories={"X": []})
     assert len(events) == 1
     assert events[0].kind == "script_error"
@@ -178,13 +238,17 @@ def test_mcp_credentials_detection(monkeypatch, tmp_path):
 
     # Write valid creds
     now = time.time()
-    creds_path.write_text(json.dumps({
-        "access_token": "test_token",
-        "refresh_token": "test_refresh",
-        "access_token_expires_at": int(now + 3600),
-        "token_type": "Bearer",
-        "scope": "internal",
-    }))
+    creds_path.write_text(
+        json.dumps(
+            {
+                "access_token": "test_token",
+                "refresh_token": "test_refresh",
+                "access_token_expires_at": int(now + 3600),
+                "token_type": "Bearer",
+                "scope": "internal",
+            }
+        )
+    )
 
     client2 = RobinhoodMCPClient()
     assert client2.has_credentials()
@@ -198,13 +262,17 @@ def test_mcp_logout_deletes_credentials(monkeypatch, tmp_path):
 
     creds_path = tmp_path / "rh_mcp_creds.json"
     now = time.time()
-    creds_path.write_text(json.dumps({
-        "access_token": "tok",
-        "refresh_token": "ref",
-        "access_token_expires_at": int(now + 3600),
-        "token_type": "Bearer",
-        "scope": "internal",
-    }))
+    creds_path.write_text(
+        json.dumps(
+            {
+                "access_token": "tok",
+                "refresh_token": "ref",
+                "access_token_expires_at": int(now + 3600),
+                "token_type": "Bearer",
+                "scope": "internal",
+            }
+        )
+    )
     monkeypatch.setattr("robin.mcp_client.CREDS_PATH", creds_path)
 
     from robin.mcp_client import RobinhoodMCPClient
@@ -244,8 +312,15 @@ def test_gemini_key_manager_set_and_clear(monkeypatch, tmp_path):
 
 
 def test_holding_from_quote_math():
-    q = Quote(symbol="AAPL", name="Apple", price=120.0, prev_close=115.0,
-              day_high=122.0, day_low=114.0, history=[115.0, 118.0, 120.0])
+    q = Quote(
+        symbol="AAPL",
+        name="Apple",
+        price=120.0,
+        prev_close=115.0,
+        day_high=122.0,
+        day_low=114.0,
+        history=[115.0, 118.0, 120.0],
+    )
     d = holding_from_quote("AAPL", qty=10, avg_cost=100.0, quote=q)
     assert d["market_value"] == 1200.0
     assert d["total_cost"] == 1000.0
@@ -262,8 +337,15 @@ def test_public_price_source_caches_and_uses(monkeypatch, tmp_path):
 
     def fake_fetch_one(self, symbol: str, light: bool = False) -> Quote:
         calls.append(symbol)
-        return Quote(symbol=symbol, name=symbol, price=100.0, prev_close=99.0,
-                     day_high=101.0, day_low=98.0, history=[99.0, 100.0])
+        return Quote(
+            symbol=symbol,
+            name=symbol,
+            price=100.0,
+            prev_close=99.0,
+            day_high=101.0,
+            day_low=98.0,
+            history=[99.0, 100.0],
+        )
 
     monkeypatch.setattr(PublicPriceSource, "_fetch_one", fake_fetch_one)
     src = PublicPriceSource(cache_ttl=10.0)
@@ -279,17 +361,30 @@ def test_real_mode_uses_public_prices_not_mcp(monkeypatch):
     c = RobinhoodClient(auth=None)
     c.mode = "real"
 
-    monkeypatch.setattr(c, "_load_positions", lambda: (
-        [{"symbol": "AAPL", "quantity": 10, "avg_cost": 100.0}],
-        {"cash": 500.0, "buying_power": 1000.0, "unsettled_funds": 0.0},
-    ))
+    monkeypatch.setattr(
+        c,
+        "_load_positions",
+        lambda: (
+            [{"symbol": "AAPL", "quantity": 10, "avg_cost": 100.0}],
+            {"cash": 500.0, "buying_power": 1000.0, "unsettled_funds": 0.0},
+        ),
+    )
     monkeypatch.setattr(c, "_load_options", lambda: [])
     monkeypatch.setattr(c, "_load_watchlists", lambda: [])
 
     def fake_fetch_many(symbols):
-        return {s.upper(): Quote(symbol=s.upper(), name=s, price=200.0, prev_close=190.0,
-                                 day_high=205.0, day_low=188.0, history=[190.0, 200.0])
-                for s in symbols}
+        return {
+            s.upper(): Quote(
+                symbol=s.upper(),
+                name=s,
+                price=200.0,
+                prev_close=190.0,
+                day_high=205.0,
+                day_low=188.0,
+                history=[190.0, 200.0],
+            )
+            for s in symbols
+        }
 
     monkeypatch.setattr(c.prices, "fetch_many", fake_fetch_many)
 
@@ -306,15 +401,28 @@ def test_refresh_holdings_busts_cache(monkeypatch):
     c.mode = "real"
 
     def fake_fetch_many(symbols):
-        return {s.upper(): Quote(symbol=s.upper(), name=s, price=200.0, prev_close=190.0,
-                                 day_high=205.0, day_low=188.0, history=[])
-                for s in symbols}
+        return {
+            s.upper(): Quote(
+                symbol=s.upper(),
+                name=s,
+                price=200.0,
+                prev_close=190.0,
+                day_high=205.0,
+                day_low=188.0,
+                history=[],
+            )
+            for s in symbols
+        }
 
     monkeypatch.setattr(c.prices, "fetch_many", fake_fetch_many)
 
     # Pre-seed the positions cache with qty=10; while the cache is valid,
     # _load_positions returns early (no MCP call needed).
-    c._positions_cache = (time.time(), [{"symbol": "AAPL", "quantity": 10, "avg_cost": 100.0}], {"cash": 0.0, "buying_power": 0.0, "unsettled_funds": 0.0})
+    c._positions_cache = (
+        time.time(),
+        [{"symbol": "AAPL", "quantity": 10, "avg_cost": 100.0}],
+        {"cash": 0.0, "buying_power": 0.0, "unsettled_funds": 0.0},
+    )
     c._options_cache = (time.time(), [])
     monkeypatch.setattr(c, "_load_options", lambda: [])
     monkeypatch.setattr(c, "_load_watchlists", lambda: [])
@@ -334,8 +442,9 @@ def test_google_fallback_used_when_yahoo_fails(monkeypatch, tmp_path):
     monkeypatch.setattr(
         PublicPriceSource,
         "_fetch_google",
-        lambda self, s: Quote(symbol=s, name=s, price=333.0, prev_close=0.0,
-                              day_high=0.0, day_low=0.0, history=[]),
+        lambda self, s: Quote(
+            symbol=s, name=s, price=333.0, prev_close=0.0, day_high=0.0, day_low=0.0, history=[]
+        ),
     )
     q = src.fetch("AAPL")
     assert q is not None
@@ -349,15 +458,24 @@ def test_yahoo_preferred_over_google(monkeypatch, tmp_path):
     monkeypatch.setattr(
         PublicPriceSource,
         "_fetch_yahoo",
-        lambda self, s, light=False: Quote(symbol=s, name=s, price=200.0, prev_close=199.0,
-                              day_high=201.0, day_low=198.0, history=[199.0, 200.0]),
+        lambda self, s, light=False: Quote(
+            symbol=s,
+            name=s,
+            price=200.0,
+            prev_close=199.0,
+            day_high=201.0,
+            day_low=198.0,
+            history=[199.0, 200.0],
+        ),
     )
     google_called: list[str] = []
     monkeypatch.setattr(
         PublicPriceSource,
         "_fetch_google",
-        lambda self, s: google_called.append(s) or Quote(symbol=s, name=s, price=999.0,
-                                                         prev_close=0, day_high=0, day_low=0, history=[]),
+        lambda self, s: (
+            google_called.append(s)
+            or Quote(symbol=s, name=s, price=999.0, prev_close=0, day_high=0, day_low=0, history=[])
+        ),
     )
     q = src.fetch("AAPL")
     assert q is not None
@@ -366,6 +484,7 @@ def test_yahoo_preferred_over_google(monkeypatch, tmp_path):
 
 
 # --- market hours tests ---
+
 
 def test_weekends_are_not_trading_days():
     from datetime import date
@@ -384,17 +503,17 @@ def test_2026_holidays():
     from datetime import date
 
     h = nyse_holidays(2026)
-    assert date(2026, 1, 1) in h          # New Year's Day (Thu)
-    assert date(2026, 1, 19) in h         # MLK Day
-    assert date(2026, 2, 16) in h         # Presidents' Day
-    assert date(2026, 4, 3) in h          # Good Friday
-    assert date(2026, 5, 25) in h         # Memorial Day
-    assert date(2026, 6, 19) in h         # Juneteenth (Fri)
-    assert date(2026, 7, 4) not in h      # Jul 4 is Saturday, not observed
-    assert date(2026, 7, 3) not in h      # Fri before Sat Jul 4 -- NYSE does NOT observe, market open
-    assert date(2026, 9, 7) in h          # Labor Day
-    assert date(2026, 11, 26) in h        # Thanksgiving
-    assert date(2026, 12, 25) in h        # Christmas (Fri)
+    assert date(2026, 1, 1) in h  # New Year's Day (Thu)
+    assert date(2026, 1, 19) in h  # MLK Day
+    assert date(2026, 2, 16) in h  # Presidents' Day
+    assert date(2026, 4, 3) in h  # Good Friday
+    assert date(2026, 5, 25) in h  # Memorial Day
+    assert date(2026, 6, 19) in h  # Juneteenth (Fri)
+    assert date(2026, 7, 4) not in h  # Jul 4 is Saturday, not observed
+    assert date(2026, 7, 3) not in h  # Fri before Sat Jul 4 -- NYSE does NOT observe, market open
+    assert date(2026, 9, 7) in h  # Labor Day
+    assert date(2026, 11, 26) in h  # Thanksgiving
+    assert date(2026, 12, 25) in h  # Christmas (Fri)
 
 
 def test_market_open_during_trading_hours():

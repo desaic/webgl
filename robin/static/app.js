@@ -253,20 +253,79 @@ document.getElementById("btn-clear-chat").onclick = async () => {
 };
 
 // --- Tabs ---
-const tabChat = document.getElementById("tab-chat");
-const tabScript = document.getElementById("tab-script");
-const panelChat = document.getElementById("tab-panel-chat");
-const panelScript = document.getElementById("tab-panel-script");
+const allTabs = [
+  { btn: "tab-chat", panel: "tab-panel-chat" },
+  { btn: "tab-script", panel: "tab-panel-script" },
+  { btn: "tab-activity", panel: "tab-panel-activity" },
+];
 
-tabChat.onclick = () => {
-  tabChat.classList.add("active"); tabScript.classList.remove("active");
-  panelChat.classList.add("active"); panelScript.classList.remove("active");
-};
-tabScript.onclick = () => {
-  tabScript.classList.add("active"); tabChat.classList.remove("active");
-  panelScript.classList.add("active"); panelChat.classList.remove("active");
-  loadScriptList();
-};
+function switchTab(activeId) {
+  for (const t of allTabs) {
+    const btn = document.getElementById(t.btn);
+    const panel = document.getElementById(t.panel);
+    if (t.btn === activeId) {
+      btn.classList.add("active"); panel.classList.add("active");
+    } else {
+      btn.classList.remove("active"); panel.classList.remove("active");
+    }
+  }
+}
+
+document.getElementById("tab-chat").onclick = () => switchTab("tab-chat");
+document.getElementById("tab-script").onclick = () => { switchTab("tab-script"); loadScriptList(); };
+document.getElementById("tab-activity").onclick = () => { switchTab("tab-activity"); loadActivity(); };
+
+// --- Activity tab ---
+async function loadActivity() {
+  const list = document.getElementById("activity-list");
+  try {
+    const [txnData, events] = await Promise.all([
+      getJSON("/api/transactions"), getJSON("/api/events?limit=30"),
+    ]);
+    const txns = txnData.transactions || [];
+    const items = [];
+    for (const t of txns) {
+      const time = t.executed_at ? new Date(t.executed_at).toLocaleString() : "";
+      const side = (t.side || "").toUpperCase();
+      const type = (t.type || "").toUpperCase();
+      const cls = side === "BUY" ? "buy" : side === "SELL" ? "sell" : "";
+      const label = side && type ? side + " " + type : side || type || "—";
+      items.push({
+        ts: t.executed_at || "",
+        html: `<div class="act-row">
+          <span class="act-type ${cls}">${label}</span>
+          <span class="act-sym">${t.symbol}</span>
+          <span class="act-qty">${t.quantity ? t.quantity + " sh" : ""}</span>
+          <span class="act-price">${t.price ? usd.format(t.price) : ""}</span>
+          <span class="act-total">${t.total ? usd.format(t.total) : ""}</span>
+          <span class="act-status">${t.status || ""}</span>
+          <span class="act-time">${time}</span>
+        </div>`,
+      });
+    }
+    for (const e of events) {
+      if (e.kind === "portfolio") continue;
+      const time = e.ts ? new Date(e.ts).toLocaleString() : "";
+      items.push({
+        ts: e.ts || "",
+        html: `<div class="act-row event ${e.severity || "info"}">
+          <span class="act-type">${e.kind}</span>
+          <span class="act-sym">${e.symbol || ""}</span>
+          <span class="act-msg">${e.message || ""}</span>
+          <span class="act-time">${time}</span>
+        </div>`,
+      });
+    }
+    items.sort((a, b) => b.ts.localeCompare(a.ts));
+    list.innerHTML = items.length
+      ? items.slice(0, 30).map(i => i.html).join("")
+      : '<p class="muted">No recent activity.</p>';
+  } catch (e) {
+    list.innerHTML = `<p class="muted">Failed to load activity: ${e}</p>`;
+  }
+}
+
+document.getElementById("btn-refresh-activity").onclick = () => loadActivity();
 
 // --- Script editor ---
 let currentScripts = [];
