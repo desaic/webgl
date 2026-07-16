@@ -581,6 +581,8 @@ class RobinhoodClient:
             cached_at, cached = self._watchlist_cache
             if cached and (now_ts - cached_at) < self._positions_ttl:
                 watchlist = cached
+            else:
+                watchlist = self._load_watchlists()
         except Exception:
             pass
 
