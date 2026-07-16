@@ -286,10 +286,10 @@ async function loadActivity() {
     const items = [];
     for (const t of txns) {
       const time = t.executed_at ? new Date(t.executed_at).toLocaleString() : "";
-      const side = (t.side || "").toUpperCase();
+      const display = (t.raw_side || t.side || "").toUpperCase();
       const type = (t.type || "").toUpperCase();
-      const cls = side === "BUY" ? "buy" : side === "SELL" ? "sell" : "";
-      const label = side && type ? side + " " + type : side || type || "—";
+      const cls = display === "BUY" ? "buy" : display === "SELL" ? "sell" : display === "DEBIT" ? "debit" : display === "CREDIT" ? "credit" : "";
+      const label = display && type ? display + " " + type : display || type || "—";
       items.push({
         ts: t.executed_at || "",
         html: `<div class="act-row">

@@ -137,6 +137,8 @@ button:disabled { opacity: .6; cursor: default; }
 .act-type { font-weight: 600; text-transform: uppercase; font-size: 11px; }
 .act-type.buy, .act-type.dividend { color: var(--pos); }
 .act-type.sell { color: var(--neg); }
+.act-type.debit { color: var(--accent); }
+.act-type.credit { color: var(--warn); }
 .act-sym { font-weight: 600; }
 .act-qty, .act-price, .act-total { text-align: right; font-variant-numeric: tabular-nums; }
 .act-status { font-size: 11px; color: var(--muted); }

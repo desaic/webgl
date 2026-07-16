@@ -754,11 +754,13 @@ class RobinhoodClient:
                     side = {"debit": "buy", "credit": "sell"}.get(raw, raw)
                     symbol = r.get("chain_symbol", "")
                 else:
-                    side = r.get("side", "")
+                    raw = r.get("side", "")
+                    side = raw
                     symbol = r.get("symbol", "")
                 out.append({
                     "id": r.get("id", ""),
                     "side": side,
+                    "raw_side": raw,
                     "type": r.get("type", ""),
                     "symbol": symbol,
                     "quantity": _f(r.get("quantity")),
