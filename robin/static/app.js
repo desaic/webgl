@@ -426,6 +426,48 @@ themeBtn.onclick = () => {
   localStorage.setItem("robin-theme", isLight ? "light" : "dark");
 };
 
+// --- Sidebar resizer ---
+(function () {
+  const resizer = document.getElementById("sidebar-resizer");
+  const sidebar = document.querySelector(".chat-sidebar");
+  if (!resizer || !sidebar) return;
+
+  const saved = localStorage.getItem("robin-sidebar-w");
+  if (saved) sidebar.style.width = saved + "px";
+
+  let dragging = false;
+  let startX = 0;
+  let startW = 0;
+
+  resizer.addEventListener("mousedown", (e) => {
+    dragging = true;
+    startX = e.clientX;
+    startW = sidebar.getBoundingClientRect().width;
+    resizer.classList.add("dragging");
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    e.preventDefault();
+  });
+
+  document.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    const dx = startX - e.clientX;
+    const minW = parseInt(getComputedStyle(sidebar).minWidth) || 280;
+    const maxW = window.innerWidth * 0.7;
+    const newW = Math.min(Math.max(startW + dx, minW), maxW);
+    sidebar.style.width = newW + "px";
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (!dragging) return;
+    dragging = false;
+    resizer.classList.remove("dragging");
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    localStorage.setItem("robin-sidebar-w", Math.round(sidebar.getBoundingClientRect().width));
+  });
+})();
+
 refresh();
 stream();
 setInterval(refresh, 15000);
