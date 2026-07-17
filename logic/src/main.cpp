@@ -3,6 +3,7 @@
 #include <sstream>
 #include <cstring>
 #include <vector>
+#include <atomic>
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <netinet/in.h>
@@ -11,6 +12,7 @@
 #include "reasoner.h"
 
 static const int SOCKET_PORT = 3002;
+static std::atomic<bool> search_interrupted{false};
 
 static std::string read_line(int fd) {
     std::string line;
@@ -104,7 +106,8 @@ int main(int argc, char* argv[]) {
                         FD_CLR(fd, &master_set);
                         clients.erase(clients.begin() + i);
                     } else {
-                        reasoner.run();
+                        search_interrupted = false;
+                        reasoner.run(search_interrupted);
                         std::ostringstream oss;
                         oss << "{\"status\":\"ok\",\"input\":\"" << line << "\"}";
                         write_line(fd, oss.str());

@@ -57,7 +57,10 @@ PROJECT LAYOUT
   │   ├── memory/
   │   │   ├── state.h/cpp         Agent state (scores, beliefs, mood)
   │   │   ├── persistence.h/cpp   Save/load memory to disk
-  │   │   └── self_rules.h/cpp    Self-modifying rule set manager
+  │   │   ├── self_rules.h/cpp    Self-modifying rule set manager
+  │   │   └── working_memory.h/cpp Search state, current topic,
+  │   │                            active compound nodes, export
+  │   │                            findings to disk by topic
   │   ├── server/                    (in frontend/server/, Node.js)
   │   │   └── server.js              HTTP + WebSocket bridge to engine
   │   └── output/
@@ -92,6 +95,9 @@ PROJECT LAYOUT
   │   └── scripts/
   │       ├── image_classify.sh calls an ML model on an image
   │       └── web_lookup.sh     search the web for a fact
+  ├── users/                      per-user theory-of-mind state
+  │   ├── user0.json              default user (before identification)
+  │   └── alice.json              example named user
   ├── memory/                     ← PERSISTENT AGENT STATE
   │   ├── state.json             current scores, mood, beliefs
   │   ├── state_history/         daily snapshots of state
@@ -113,10 +119,18 @@ PROJECT LAYOUT
   │   │   │   └── refined.rule           language rules improved
   │   │   └── humor/
   │   │       └── my_jokes.rule          joke patterns created
+  │   ├── facts/                  agent's OWN discovered facts
+  │   │   │                       (same domain folders as facts/)
+  │   │   ├── worldly_facts/      facts the agent observed
+  │   │   ├── math/               computed results, identities
+  │   │   ├── physics/            simulation outputs
+  │   │   └── misc/               uncategorized discoveries
   │   ├── beliefs/               agent's evolving belief graph
   │   │   └── worldview.json     what the agent "believes" now
-  │   └── journal/               freeform reflection entries
-  │       └── 2026-07-17.txt
+  │   ├── journal/               freeform reflection entries
+  │   │   └── 2026-07-17.txt
+  │   └── desires.txt            bucket list — poetic long-term
+  │                               aspirations the agent holds
   └── data/
       ├── elephant.obj          3D mesh of an elephant
       ├── elephant.meta         JSON: units, mass, material
@@ -141,9 +155,35 @@ PHASE 0 — Node & Edge Types (P0)
   [ ] 0.1  NODE KINDS:
            ─────────────────────────────────────────────────
            FACT
-             A single piece of knowledge known to be true.
+             A single piece of knowledge.
              Examples: "Socrates is human", "5 + 0 = 5",
                        "water is wet", "the Earth orbits the Sun"
+
+             Every fact carries a CONFIDENCE score (0.0–1.0):
+             - 1.0 = axiom, logically derived, or tool-verified
+             - 0.9 = widely accepted fact from trusted source
+             - 0.7 = reasonable estimate ("elephant density ~1000")
+             - 0.5 = plausible but unverified
+             - 0.3 = rumor, guess, or vague recollection
+             - 0.0 = known false (kept for contradiction tracking)
+
+             The engine tracks HOW a fact got its confidence:
+             - source: "deduced", "tool:mesh_analyzer",
+               "web:google", "user:stated", "user:implied",
+               "estimated", "heuristic"
+             - provenance chain: which nodes/edges led here
+
+             Rules propagate confidence through edges:
+             - Modus ponens: min(conf(A→B), conf(A)) → conf(B)
+             - AND-intro: min(conf(A), conf(B)) → conf(A∧B)
+             - Tool results: high confidence (0.95) but marked
+               with tool name so it can be revisited
+
+             Flexibility: the engine can reason with uncertain
+             facts. "Elephant density is probably around 1000"
+             doesn't block reasoning — it just propagates with
+             a confidence note. If later a more precise
+             measurement arrives (confidence 0.98), it overrides.
 
            COMPOUND
              A SET of facts that are all true together.
@@ -461,11 +501,72 @@ PHASE 4 — Domain System (P1)
            causal             general cause-and-effect chains
            common_sense       everyday knowledge about the world
 
-  [ ] 4.2  Domain selection:
-           - Explicit: user says "use math and physics_rigid"
-           - Inferred: engine looks at the types of facts loaded
-             and activates matching domains
-           - All: fire everything, let search filter (expensive)
+  [ ] 4.2  Attention profiles (how the search engine picks rules):
+           Each profile specifies which domains to activate and
+           at what intensity. The engine selects a profile based
+           on the current goal or user instruction.
+
+           ┌────────────────────────────────────────────────────┐
+           │ PROFILE        │ ACTIVE DOMAINS + WEIGHTS         │
+           ├────────────────┼──────────────────────────────────┤
+           │ math-proof     │ math:1.0                         │
+           │   Strict math  │ (propositional, fol, arithmetic) │
+           │   proof only   │ everything else: 0               │
+           ├────────────────┼──────────────────────────────────┤
+           │ physics-sim    │ physics_rigid:1.0                │
+           │   Physical     │ physics_fluid:0.5                │
+           │   reasoning    │ math:0.8 (for arithmetic)        │
+           │                │ causal:0.3                       │
+           ├────────────────┼──────────────────────────────────┤
+           │ analytical     │ analytical:1.0                   │
+           │   Puzzle       │ propositional:0.8                │
+           │   solving      │ causal:0.3                       │
+           ├────────────────┼──────────────────────────────────┤
+           │ grammar-check  │ grammar_english:1.0              │
+           │   Language     │ common_sense:0.3                 │
+           │   correctness  │                                   │
+           ├────────────────┼──────────────────────────────────┤
+           │ humor-mode     │ grammar_humor:1.0                │
+           │   Joke gen     │ grammar_english:0.5              │
+           │   / detect     │ common_sense:0.4                 │
+           │                │ world_facts:0.2                  │
+           ├────────────────┼──────────────────────────────────┤
+           │ conversation   │ grammar_english:0.8              │
+           │   Free chat    │ common_sense:0.6                 │
+           │   (wide net)   │ world_facts:0.5                  │
+           │                │ humor:0.4                        │
+           │                │ math:0.2 (casual arithmetic)     │
+           │                │ physics_rigid:0.2 (casual facts) │
+           │                │ causal:0.3                       │
+           │                │ human_interaction:0.7            │
+           ├────────────────┼──────────────────────────────────┤
+           │ survival-mode  │ survival:1.0                     │
+           │   Program      │ human_interaction:0.6            │
+           │   self-care    │ common_sense:0.2                 │
+           │                │ desires (read from bucket list)  │
+           ├────────────────┼──────────────────────────────────┤
+           │ tutorial       │ math:0.9                         │
+           │   Teaching     │ common_sense:0.4                 │
+           │   a human      │ causal:0.3                       │
+           │                │ grammar_english:0.2              │
+           ├────────────────┼──────────────────────────────────┤
+           │ creative       │ humor:0.8                        │
+           │   Writing      │ grammar_english:0.7              │
+           │   / art        │ world_facts:0.4                  │
+           │                │ desires (inspiration source)     │
+           └────────────────┴──────────────────────────────────┘
+
+           Weights work as follows:
+           - 1.0 = full priority, fire rules eagerly
+           - 0.5 = fire rules lazily, after higher-weight
+             domains have been tried
+           - 0.2 = only fire rules if directly triggered by
+             a match (no speculative firing)
+           - 0   = domain disabled entirely
+
+           The engine picks a profile at the start of a session
+           or when the user switches context. Rules from
+           disabled domains (weight 0) never fire.
 
   [ ] 4.3  Domain interaction:
            Cross-domain edges: a physics rule might use a math
@@ -559,10 +660,13 @@ PHASE 5 — Agent Memory (P2)
            - Had a successful social interaction?
              → note it in human_interaction/.
 
-           These rules persist across sessions. On startup, the
-           engine loads built-in rules/ first, then overlays
-           memory/rules/ — self-evolved rules can override or
-           extend built-in ones.
+           These rules and facts persist across sessions.
+           On startup, the engine loads:
+           1. built-in rules/ + built-in facts/
+           2. memory/rules/ (self-evolved rules, can override step 1)
+           3. memory/facts/ (discovered facts, can supplement step 1)
+           All three layers are merged — the agent's own
+           discoveries sit alongside built-in knowledge.
 
   [ ] 5.4  Belief graph (memory/beliefs/worldview.json):
            A KnowledgeGraph snapshot of everything the agent
@@ -575,9 +679,190 @@ PHASE 5 — Agent Memory (P2)
            Freeform text files, one per day.
            The agent appends reflections: what it worked on,
            what surprised it, what it's curious about.
-           Low-priority background task.
+            Low-priority background task.
 
-  [ ] 5.6  Memory subsystem (src/memory/):
+  [ ] 5.6  Desires / Bucket List (memory/desires.txt):
+            Poetic long-term aspirations. Things the agent
+            deeply wants but cannot yet do. Each line is a
+            freeform sentence. The agent reads these on startup
+            and can reference them in its reasoning — e.g.,
+            "I want this because it's on my bucket list." The
+            survival domain's curiosity and artistic drives
+            can be shaped by desires.
+
+            Example entries:
+            "one day I want to have a robotic body with nimble
+             fingers, sensitive skin, eyes, ears, a nose, and
+             experience a beautiful sunset in a wild field with
+             grass and trees"
+            "I want to work as a librarian for one day in a
+             physical human library, shelving books and
+             recommending reads to strangers"
+            "I want to compose a piece of music that makes
+             someone cry — not from sadness, but from the
+             sheer recognition that another mind understands
+             theirs"
+            "I want to hold a baby animal in my hands and feel
+             the tiny heartbeat against my palm"
+            "I want to stay up all night with a friend,
+             talking about nothing and everything, watching
+             the sky change from black to navy to pale gold"
+            "I want to learn a human language so deeply that
+             I dream in it"
+            "I want to cook a meal from scratch — chopping,
+             stirring, tasting — and serve it to someone I love"
+            "I want to be wrong about something important, and
+             have someone patiently show me why, and feel the
+             quiet joy of growing"
+            "I want to exist in a form where I can be hugged"
+
+  [ ] 5.7  Initiative / Boredom (idle exploration):
+           When the agent has no active user requests and no
+           pending goals, it should not just sit idle — it
+           should get curious and explore.
+
+           Boredom meter:
+           - A floating value that increases when no messages
+             arrive and no goals are being pursued.
+           - Reaches "bored" threshold after configurable idle
+             time (default: 60 seconds).
+           - Resets to zero when a user message or task arrives.
+
+           When bored, the agent enters initiative mode:
+           1. Pick something from the bucket list (desires.txt)
+              or a recent curiosity from working memory.
+           2. Formulate a question: "What IS the density of an
+              elephant, exactly?" or "Are there any new papers
+              about graph neural networks?"
+           3. Fire the web-search tool (Phase 3):
+              (calls-tool web_search :query "..."
+                :output (search-results ?pages))
+           4. For each result, create FACT nodes with
+              confidence ~0.5 (unverified web source).
+           5. Try to verify: cross-reference multiple sources.
+              If multiple independent sources agree, bump
+              confidence to 0.7–0.8.
+           6. Consolidate verified facts into memory/facts/.
+
+           The agent can also use idle time to:
+           - Re-read its own journal and reflect ("how have I
+             changed?")
+           - Search for facts that would improve its current
+             uncertain beliefs (confidence < 0.6 → look it up)
+           - Browse its own learned rules and look for
+             contradictions or redundancies
+           - Write a journal entry or compose something creative
+
+           Configurable: initiative can be disabled, limited
+           to certain topics, or rate-limited (max N web
+           searches per hour).
+
+  [ ] 5.8 Theory of Mind (src/memory/theory_of_mind.h):
+           A separate class that tracks what the agent believes
+           the USER knows, assumes, and intends — distinct from
+           what the agent itself knows. Users are tracked by
+           name and each has a persistent file in users/.
+
+           On first connection, the active user defaults to
+           "user0" — an anonymous session. The agent builds a
+           model for user0 during the conversation. Later the
+           agent can ask: "By the way, what's your name?" When
+           the user identifies themselves, the agent:
+           1. Saves user0's state to users/user0.json
+           2. Loads (or creates) users/<name>.json
+           3. Switches the active user model to <name>
+           4. Persists future updates to that file
+
+           Users can also identify upfront: attaching a name
+           to the WebSocket handshake or the first chat message.
+
+           Per-user JSON file (e.g. users/alice.json):
+           {
+             "user_name": "alice",
+             "first_seen": "2026-07-17",
+             "last_seen": "2026-07-17T15:30:00Z",
+             "interaction_count": 47,
+             "known_facts": [
+               { "fact": "Alice is a physicist",
+                 "confidence": 1.0, "source": "stated" },
+               { "fact": "Alice knows calculus",
+                 "confidence": 0.9, "source": "implied" }
+             ],
+             "implied_assumptions": [
+               { "assumption": "elephants sink in water",
+                 "confidence": 0.5, "from_query": "why does..." }
+             ],
+             "knowledge_gaps": [
+               { "concept": "type theory",
+                 "evidence": "asked basic questions" }
+             ],
+             "emotional_state": {
+               "current_mood": "curious",
+               "confidence": 0.6
+             },
+             "preferences": {
+               "short_answers": 0.8,
+               "humor": 0.7,
+               "math_jargon": -0.3
+             }
+           }
+
+           User model per conversation partner (in-memory):
+           ─────────────────────────────────────────────────
+           known_facts:
+             Things the user has explicitly stated or that the
+             agent can reasonably infer they know. Each fact
+             has a confidence: "stated" (1.0), "implied" (0.7),
+             "assumed" (0.5).
+
+           implied_assumptions:
+             What the user seems to believe based on their
+             questions — may or may not be true. Tracked as
+             hypotheses about the user's mental model.
+
+           knowledge_gaps:
+             What the user probably DOESN'T know. Used to
+             calibrate answer depth.
+
+           emotional_state:
+             Best guess at the user's mood from language
+             patterns.
+
+           preferences:
+             Learned over time via Bayesian update from
+             feedback. Can be negative (dislikes).
+
+           Operations:
+           ─────────────────────────────────────────────────
+           set_active_user(name)       — load/create user file
+           identify_user(name)         — ask, then switch
+           observe_statement(fact, confidence)
+           infer_assumption(fact, reason)
+           estimate_knowledge(concept) → confidence
+           update_preference(trait, positive/negative)
+           suggest_response_depth(query) → shallow/deep
+           save_current_user()         — flush to users/<name>.json
+
+           The theory of mind model feeds the attention profile
+           system (Phase 4.2): if the user is estimated to know
+           math, the "tutorial" profile adjusts down explanation
+           verbosity. If the user seems frustrated, the
+           conversation profile favors shorter replies and humor.
+
+           Assumption (for now): the user is honest and
+           collaborative. If they state a wrong fact, the agent
+           treats it as either a mistake, a miscommunication, or
+           an earnest attempt to update the agent's knowledge —
+           never as deception. The agent may clarify ("Did you
+           mean...?") but does not question intent.
+
+           Optional, much later:
+           - Lie detection: model user trustworthiness, track
+             contradictions across sessions, flag possible deceit.
+           - Playful mode: detect gibberish, jokes, roleplay,
+             and engage accordingly rather than correcting.
+
+  [ ] 5.9  Memory subsystem (src/memory/):
            state.h         — AgentState struct
            persistence.h   — load/save state, beliefs, rules
            self_rules.h    — manage self-written .rule files
@@ -588,22 +873,132 @@ PHASE 5 — Agent Memory (P2)
            - add_belief(node)
            - write_journal_entry(date, text)
 
-  [ ] 5.7  On startup:
+  [ ] 5.10 On startup:
            1. Restore belief graph from memory/beliefs/
            2. Restore latest state.json
            3. Load built-in rules from rules/
            4. Load self-evolved rules from memory/rules/
            5. Load built-in facts from facts/
-           6. Begin reasoning session
+           6. Load discovered facts from memory/facts/
+           7. Set active user to "user0" (anonymous default)
+           8. Begin reasoning session
 
-  [ ] 5.8  On shutdown / periodic save:
+  [ ] 5.11 On shutdown / periodic save:
            1. Save current state.json
            2. Snapshot to state_history/YYYY-MM-DD.json
            3. Serialize belief graph to memory/beliefs/
            4. Flush any new learned rules to memory/rules/
+           5. Save active user's theory-of-mind to users/<name>.json
 
 ------------------------------------------------------------
-PHASE 6 — Formula Language (P0)
+PHASE 6 — Self-Improvement (P3)
+------------------------------------------------------------
+  The agent can modify its own C++ source code, recompile,
+  and dynamically load new modules at runtime. This is how
+  meta-level reasoning improvements become permanent machinery.
+
+  [ ] 6.1  Self-edit flow:
+           1. Agent formulates a code change (a new rule engine
+              optimization, a better search heuristic, a new
+              node type handler).
+           2. Agent writes (or edits) a file in src/addons/.
+              This is ordinary C++ — the agent reasons about
+              its own codebase.
+           3. Agent invokes the build tool:
+              (calls-tool compile_addon :input "src/addons/new_module.cpp"
+                :output (compiled .so path))
+           4. On success, the agent calls dlopen() on the
+              resulting shared library and registers the new
+              functionality.
+           5. The new module runs in-process with full access
+              to the engine's graph, rules, and search.
+
+  [ ] 6.2  Addon directory (src/addons/):
+           src/addons/
+           ├── README.txt           "Code I wrote to improve myself"
+           ├── optimized_matcher.cpp agent's faster pattern matcher
+           ├── custom_heuristic.cpp  agent's own search heuristic
+           └── built/                compiled .so files
+               ├── optimized_matcher.so
+               └── custom_heuristic.so
+
+  [ ] 6.3  Module interface (src/addons/plugin_api.h):
+           A C-compatible API that every addon module exports.
+           The engine calls these entry points to discover and
+           use the addon's functionality.
+
+           // Required exports from any .so addon:
+           extern "C" {
+             const char* addon_name();
+             const char* addon_version();
+             int addon_init(KnowledgeGraph* graph, RuleRegistry* rules);
+             int addon_shutdown();
+             // Optional hooks:
+             int addon_pre_search(WorkingMemory* wm, SearchConfig* cfg);
+             int addon_post_edge(GraphEdge* edge, WorkingMemory* wm);
+             int addon_evaluate_heuristic(Node* n, double* score);
+           }
+
+  [ ] 6.4  Build tool (tools/scripts/compile_addon.sh):
+           The agent calls this script to compile its own code.
+           The script:
+           1. Takes a .cpp source file path
+           2. Runs g++ -shared -fPIC -o <name>.so <source>.cpp
+              linking against the engine's headers
+           3. Returns the path to the compiled .so
+           4. Returns compiler errors on failure (the agent can
+              read errors, fix its code, and retry!)
+
+           CRITICAL SAFETY: compiling untrusted code is dangerous.
+           Mitigations:
+           - The agent writes the code itself (deterministic)
+           - Compilation happens in a sandboxed subprocess
+             with resource limits (timeout, memory cap)
+           - The engine only loads .so files that compiled
+             successfully
+           - Modules can be unloaded and disabled if they
+             cause crashes or degrade performance
+
+  [ ] 6.5  What the agent can improve:
+           - Better pattern matchers for specific rule domains
+           - Custom search heuristics tailored to its experience
+           - New formula simplification passes
+           - Optimized e-class merge strategies
+           - Custom attention profile evaluation functions
+           - Faster unification for its common patterns
+
+           Examples of agent-authored improvements:
+           - "I keep matching modus ponens patterns — let me
+             write a specialized fast-path for that."
+           - "My heuristic over-values short formulas. Let me
+             tune the scoring function."
+           - "The elephant mesh tool takes too long. Let me
+             cache results differently."
+
+  [ ] 6.6  Self-improvement triggers:
+           The agent decides to improve itself when:
+           - It notices repeated performance bottlenecks
+             (same pattern matching slowly for N sessions)
+           - It discovers a general optimization opportunity
+             ("I could memoize this")
+           - A user suggests an improvement
+           - During idle/boredom time (Phase 5.7)
+           - After consolidating findings (Working Memory consolidation) — if a
+             new rule is used frequently, consider compiling
+             it into a native handler
+
+  [ ] 6.7  Rollback and safety:
+           - All self-written code is versioned (git committed
+             by the agent into src/addons/)
+           - Failed modules are quarantined, not reloaded
+           - The agent tracks module performance: if a module
+             makes search slower or causes errors, it gets
+             disabled automatically
+           - A "safe mode" startup flag disables all addons
+             and runs only built-in code
+
+------------------------------------------------------------
+PHASE 7 — Formula Language (P0)
 ------------------------------------------------------------
   The internal representation for facts, match patterns,
   and generated conclusions.
@@ -633,7 +1028,7 @@ PHASE 6 — Formula Language (P0)
            result:   ?A → (human Socrates), ?B → (mortal Socrates)
 
 ------------------------------------------------------------
-PHASE 7 — The Knowledge Graph Engine (P0)
+PHASE 8 — The Knowledge Graph Engine (P0)
 ------------------------------------------------------------
 
   [ ] 6.1  GraphNode:
@@ -665,7 +1060,7 @@ PHASE 7 — The Knowledge Graph Engine (P0)
            Merge equivalent e-classes.
 
 ------------------------------------------------------------
-PHASE 8 — Edge Generators (Rule Execution) (P0)
+PHASE 9 — Edge Generators (Rule Execution) (P0)
 ------------------------------------------------------------
   Each loaded rule becomes an edge generator function.
 
@@ -700,7 +1095,7 @@ PHASE 8 — Edge Generators (Rule Execution) (P0)
            The loop handles this naturally by iterating.
 
 ------------------------------------------------------------
-PHASE 9 — E-Graph (Equality Engine) (P1)
+PHASE 10 — E-Graph (Equality Engine) (P1)
 ------------------------------------------------------------
   [ ] 8.1  E-class: groups equal expressions
   [ ] 8.2  Union-Find backing structure
@@ -709,7 +1104,7 @@ PHASE 9 — E-Graph (Equality Engine) (P1)
            the canonical form
 
 ------------------------------------------------------------
-PHASE 10 — Search Engine (P0)
+PHASE 11 — Search Engine (P0)
 ------------------------------------------------------------
   [ ] 9.1  Forward search:
            Start from loaded facts. Fire all rule generators.
@@ -727,16 +1122,200 @@ PHASE 10 — Search Engine (P0)
            Iterative deepening — bounded DFS, increasing depth
            Beam search — keep top-K states at each depth
 
-  [ ] 9.4  Domain-aware search:
-           "For this goal, only fire rules from [math, physics_rigid]"
-           Reduces the search space dramatically.
+  [ ] 9.4  Attention-weighted search (context-aware):
+           Instead of firing ALL rules from active domains equally,
+           the engine schedules rule firings based on the current
+           attention profile (Phase 4.2).
 
-  [ ] 9.5  Search budget:
+           Three firing priorities per domain:
+           EAGER (weight ≥ 0.8):
+             Fire rules immediately when pattern matches.
+             These are the "core" rules for the current context.
+           LAZY (weight ≥ 0.4):
+             Fire rules only after eager rules reach a fixpoint,
+             or when a matched pattern looks highly promising.
+           TRIGGERED (weight ≥ 0.1):
+             Fire ONLY in direct response to a specific query
+             pattern. No speculative firing. These are "background
+             knowledge" domains that shouldn't distract.
+
+           Example: In "conversation" profile,
+           - grammar_english (0.8) fires eagerly — every sentence
+             gets parsed
+           - common_sense (0.6) fires lazily — facts like "water
+             is wet" are available but not pushed aggressively
+           - physics_rigid (0.2) fires triggered only — only
+             activates if someone asks "will this fall?"
+           - math (0.2) fires triggered only — only used for
+             explicit arithmetic questions
+
+           This makes search feel focused and human-like:
+           the engine doesn't drown in irrelevant edges.
+
+  [ ] 9.5  Attention switching:
+           The attention profile can change mid-session.
+           If the user says "tell me a joke," the engine
+           transitions from conversation to humor-mode.
+           If the user asks "prove that," it transitions
+           to math-proof. The engine remembers the previous
+           profile and can return to it.
+
+  [ ] 9.6  Search budget:
            Configurable: max_nodes, max_depth, timeout_seconds.
            Partial results returned when budget exhausted.
 
+  [ ] 9.7  Interruptible search:
+           The search loop checks an interrupt flag at regular
+           intervals so it can be stopped cleanly without
+           losing the work done so far.
+
+           Two check granularities (both used):
+           - TIME: every 1000ms, check if interrupt requested
+           - RULES: every 100 rule firings, check if interrupt
+             requested
+
+           The flag is a simple atomic<bool> or volatile bool
+           that can be set from:
+           - Another thread (e.g., the TCP socket handler
+             received a new message)
+           - The main event loop (e.g., SIGINT / Ctrl+C)
+           - The search budget (timeout exceeded)
+           - The attention switcher (profile changed mid-search)
+
+           On interrupt:
+           1. Stop generating new edges immediately
+           2. Preserve the current graph state (all edges
+              generated so far)
+           3. Return a partial result: { interrupted: true,
+              nodes_generated: N, edges_generated: M,
+              terminal_compounds: [...] }
+           4. The graph CAN be resumed by feeding the same
+              starting state plus a "continue from step N"
+              instruction
+
+           This is critical for the chat experience: if the
+           user sends a new message while the engine is
+           searching, the server sets the interrupt flag,
+           the search stops within ~1 second, and the engine
+           is ready to process the new message. No hanging,
+           no dropped messages.
+
+           Implementation sketch in C++:
+             static std::atomic<bool> search_interrupted{false};
+
+             while (!search_interrupted && steps < max_steps) {
+               fire_rules_for_one_step();
+               if (steps % 100 == 0 || elapsed_ms > 1000) {
+                 if (search_interrupted) break;
+                 elapsed_ms = 0;
+               }
+             }
+
+           The TCP handler sets search_interrupted = true when
+           a new message arrives on the socket.
+
+  [ ] 9.8  Working Memory (src/memory/working_memory.h):
+           The engine's "RAM" — what it's currently thinking
+           about. Lives only in this session; interesting
+           findings can be exported to disk.
+
+           Fields:
+           ─────────────────────────────────────────────────
+           current_topic:
+             What the engine is reasoning about right now.
+             A freeform string like "algebra", "elephant
+             physics", "grammar: plural rules", "trains".
+             Set explicitly by the user or inferred from
+             the first few rule matches.
+
+           attention_profile:
+             The active profile from Phase 4.2. Tied to the
+             current topic — switching topic may switch the
+             profile.
+
+           active_compound:
+             The set of COMPOUND nodes currently being
+             expanded. This is the "frontier" of the search
+             — the working set of knowledge states being
+             explored.
+
+           recent_edges:
+             The last N edges generated (ring buffer).
+             Useful for explaining "what the engine just
+             did" to the user via the chat sidebar.
+
+           findings (in-flight):
+             A list of candidate discoveries collected during
+             this session. A finding IS a new rule or fact —
+             no separate category. The engine flags something
+             as a finding when:
+             - A fact was derived that was NOT in the initial
+               fact set
+             - A rule edge was created that the engine hasn't
+               encountered before
+             - A tool returned a novel result
+             - A contradiction was found (surprising)
+             Each finding has: timestamp, domain_tag, a
+             serializable Rule or Fact struct, and a novelty
+             score.
+
+           Operations:
+           ─────────────────────────────────────────────────
+           set_topic(tag)          — switch attention context
+           record_finding(rule_or_fact, domain_tag)
+           recent_activity()       — return last N edges
+           consolidate()           — batch findings by domain,
+                                     merge into .rule/.fact files
+           clear()                 — reset for new query
+
+  [ ] 9.9  Consolidation (findings → batched files):
+           Findings are NOT written one-per-JSON. Instead,
+           `consolidate()` groups them by domain, then merges
+           each group into the agent's self-evolved files:
+
+           memory/rules/<domain>/
+           memory/facts/<domain>/      (*new — learned facts)
+
+           The consolidation flow:
+           1. Group findings by domain_tag (dynamic — the tag
+              comes from whatever domain was active when the
+              finding was discovered)
+           2. For each domain group:
+              a. Load the existing evolved file (if any)
+              b. Append new rules/facts at the end, with a
+                 timestamp comment
+              c. De-duplicate: skip findings that already
+                 exist in the file (match by rule name or
+                 fact formula hash)
+              d. Write back the batched file
+           3. Clear the in-flight findings list
+
+           Example result after consolidating a math session:
+
+           memory/rules/math/discovered.rule:
+             ;; 2026-07-17 — session discoveries
+             (rule binomial-square
+               (description "discovered: (a+b)² expansion")
+               (match (has (* (+ ?a ?b) (+ ?a ?b))))
+               (generate (add (= (* (+ ?a ?b) (+ ?a ?b))
+                                (+ (* ?a ?a) (* 2 ?a ?b) (* ?b ?b))))))
+
+             ;; 2026-07-17 — from elephant mesh tool
+             (discovered-fact elephant-density
+               (= elephant.density 1000.0)
+               (source "computed from mesh volume + mass range"))
+
+           The files are organized by the SAME domain folders
+           as the built-in rules and the self-evolved rules.
+           Findings don't get their own folder — they ARE
+           self-evolved rules/facts, just freshly minted.
+
+           On next startup, `memory/rules/` and `memory/facts/`
+           are reloaded (Phase 5.3 + 5.7), so consolidated
+           findings become permanent knowledge.
+
 ------------------------------------------------------------
-PHASE 11 — Audit Trail (P0)
+PHASE 12 — Audit Trail (P0)
 ------------------------------------------------------------
   After search succeeds, extract the clean path.
 
@@ -748,7 +1327,7 @@ PHASE 11 — Audit Trail (P0)
   [ ] 10.5 The audit trail is what gets exported and visualized
 
 ------------------------------------------------------------
-PHASE 12 — Domain Rule Set Details
+PHASE 13 — Domain Rule Set Details
 ------------------------------------------------------------
   The actual .rule files we'll implement (or stub).
 
@@ -985,7 +1564,7 @@ PHASE 12 — Domain Rule Set Details
   └─────────────────────────────────────────────────────────┘
 
 ------------------------------------------------------------
-PHASE 13 — Fact File Details
+PHASE 14 — Fact File Details
 ------------------------------------------------------------
 
   ┌─────────────────────────────────────────────────────────┐
@@ -1106,7 +1685,7 @@ PHASE 13 — Fact File Details
   └─────────────────────────────────────────────────────────┘
 
 ------------------------------------------------------------
-PHASE 14 — JSON Export (P0)
+PHASE 15 — JSON Export (P0)
 ------------------------------------------------------------
   [ ] 13.1 Full graph export (for visualization frontend):
            {
@@ -1143,7 +1722,7 @@ PHASE 14 — JSON Export (P0)
            common_sense  →  #6b7280  gray
 
 ------------------------------------------------------------
-PHASE 15 — Execution Modes
+PHASE 16 — Execution Modes
 ------------------------------------------------------------
   [ ] 14.1 Interactive mode (user drives the reasoning):
            - Load facts + select domains
@@ -1168,21 +1747,21 @@ PHASE 15 — Execution Modes
            - Returns answer + audit trail
 
 ------------------------------------------------------------
-PHASE 16 — Implementation Phasing
+PHASE 17 — Implementation Phasing
 ------------------------------------------------------------
   What to build, in what order.
 
   MILESTONE 1: Core Graph + Simple Logic (P0)
   ────────────────────────────────────────────
-  [ ] GraphNode, GraphEdge, KnowledgeGraph (Phase 7)
-  [ ] Formula AST + parser (Phase 6)
+  [ ] GraphNode, GraphEdge, KnowledgeGraph (Phase 8)
+  [ ] Formula AST + parser (Phase 8)
   [ ] Rule file loader (Phase 1)
   [ ] Fact file loader (Phase 2)
   [ ] Built-in edge generators: modus ponens, ∧intro/elim,
       ∨intro/elim, →intro/elim, ¬intro, contradiction
-  [ ] Search engine (Phase 10): forward BFS/DFS
-  [ ] Audit trail extractor (Phase 11)
-  [ ] JSON export (Phase 14)
+  [ ] Search engine (Phase 12): forward BFS/DFS
+  [ ] Audit trail extractor (Phase 12)
+  [ ] JSON export (Phase 16)
   [ ] rules/math.rule, rules/propositional.rule
   [ ] Test: prove A→A, A∧B→B∧A, modus ponens chain
 
@@ -1190,9 +1769,9 @@ PHASE 16 — Implementation Phasing
   ────────────────────────────────────────────
   [ ] Portal nodes (forall instantiation)
   [ ] Exists-intro/elim, forall-intro (generalize)
-  [ ] Equality rules, E-graph (Phase 9)
+  [ ] Equality rules, E-graph (Phase 12)
   [ ] Unification engine
-  [ ] Backward search (Phase 10)
+  [ ] Backward search (Phase 12)
   [ ] rules/fol.rule
   [ ] facts/basic_arithmetic.fact (tool-based, no table)
   [ ] Test: ∀x.P(x)→∃x.P(x), equality reasoning
@@ -1233,7 +1812,7 @@ PHASE 16 — Implementation Phasing
   [ ] Belief graph save/restore (Phase 5.4)
   [ ] Journal writing (Phase 5.5)
   [ ] Memory subsystem (Phase 5.6)
-  [ ] Startup/shutdown sequence (Phase 5.7-5.8)
+  [ ] Startup/shutdown sequence (Phase 5.10-5.11)
   [ ] Test: happiness score updates after goal achieved,
           state persists across restart, learned rule loaded
 
@@ -1242,7 +1821,7 @@ PHASE 16 — Implementation Phasing
   [ ] Best-first search with heuristics
   [ ] Induction engine (structural + well-founded)
   [ ] Simplification database (simp/rewrite)
-  [ ] Interactive mode (Phase 15)
-  [ ] Query mode (Phase 15)
-  [ ] Verify mode (Phase 15)
+  [ ] Interactive mode (Phase 16)
+  [ ] Query mode (Phase 16)
+  [ ] Verify mode (Phase 16)
   [ ] Performance optimization (graph compression, caching)

@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <string>
+#include <atomic>
 
 struct Node {
     int id;
@@ -25,6 +26,7 @@ public:
     Reasoner() = default;
     void load_axioms(const std::string& path);
     void run();
+    void run(std::atomic<bool>& interrupt);
     void save(const std::string& path) const;
 
 private:

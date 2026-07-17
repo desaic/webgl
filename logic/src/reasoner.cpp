@@ -1,6 +1,7 @@
 #include "reasoner.h"
 #include <fstream>
 #include <sstream>
+#include <chrono>
 
 void Reasoner::load_axioms(const std::string& path) {
     std::ifstream file(path);
@@ -20,6 +21,29 @@ void Reasoner::run() {
     graph.nodes.push_back(placeholder);
     if (graph.nodes.size() >= 2) {
         graph.edges.push_back({0, (int)graph.nodes.size() - 1, "implies"});
+    }
+}
+
+void Reasoner::run(std::atomic<bool>& interrupt) {
+    auto last_check = std::chrono::steady_clock::now();
+    int rule_checks = 0;
+
+    while (!interrupt) {
+        // TODO: real search loop — fire rules one step at a time
+        run(); // placeholder: one step of inference
+        rule_checks++;
+
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now - last_check).count();
+
+        if (rule_checks % 100 == 0 || elapsed_ms >= 1000) {
+            if (interrupt) break;
+            last_check = now;
+        }
+
+        // stop after one step for now (stub)
+        break;
     }
 }
 
