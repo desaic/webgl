@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from robin.config import GEMINI_MODEL, logger
@@ -319,7 +319,7 @@ class GeminiClient:
                 lines.append(f"  {ts} {ttype} {sym} x{qty} @{price}")
             txn_block = "\nRecent transactions:\n" + "\n".join(lines) + "\n"
 
-        now = datetime.now().strftime("Current date and time: %Y-%m-%d %H:%M UTC\n\n")
+        now = datetime.now(timezone.utc).strftime("Current date and time: %Y-%m-%d %H:%M UTC\n\n")
         if self._msgs_since_portfolio >= self._PORTFOLIO_REFRESH_INTERVAL:
             summary = json.dumps(portfolio, default=str)
             history = self._load_chat_history()
