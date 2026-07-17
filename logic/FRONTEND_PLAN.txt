@@ -1,0 +1,452 @@
+============================================================
+IMPLEMENTATION PLAN — Frontend (logic-graph-viewer)
+============================================================
+Tech: TypeScript, Vite, Three.js (Line2, LineMaterial)
+Goal: Upload proof graph JSON → 2.5D interactive viz
+
+The backend is now a multi-domain reasoning engine that
+produces a knowledge graph with nodes of many kinds
+(FACT, COMPOUND, PORTAL, E-CLASS, RESOURCE, TOOL_RESULT)
+and edges of many kinds (RULE, HYPER, INSTANTIATE,
+REWRITE, TOOL, DOMAIN, AUDIT). The frontend visualizes
+all of this, with domain-aware coloring and resource
+previews.
+
+============================================================
+LEGEND
+  [ ]  not started
+  [~]  in progress
+  [x]  done
+  (M1) = milestone 1
+  (M2-4) = milestone 2-4
+============================================================
+
+------------------------------------------------------------
+PHASE 0 — Foundation & Project Setup
+------------------------------------------------------------
+  [x] 0.1  Vite + TypeScript + Three.js scaffold
+  [x] 0.2  Basic HTML: upload button, canvas container
+  [x] 0.3  OrbitControls integration (camera pan/zoom/rotate)
+  [x] 0.4  JSON upload handler (reads file, parses graph)
+  [ ] 0.5  Status/progress indicators, error display panel
+  [ ] 0.6  Responsive resize handling (already stubbed)
+  [ ] 0.7  Dark/light theme toggle
+  [ ] 0.8  Node.js WebSocket server (frontend/server/server.js)
+           - HTTP server on port 3001
+           - WebSocket bridge to C++ engine via stdin/stdout
+           - JSON-line protocol: send message, get JSON reply
+           - Auto-restart engine on crash
+  [x] 0.9  Chat sidebar panel (src/chat.ts)
+           - Collapsible panel on right side
+           - WebSocket connection to server
+           - Message history with user/engine styling
+           - "Chat" header + send button + Enter-to-send
+           - Auto-reconnect on disconnect
+
+------------------------------------------------------------
+PHASE 1 — Drawing Primitives (modular draw functions)
+------------------------------------------------------------
+  Each function returns a Three.js Object3D (or Group) for
+  a composable scene graph. All positions in world space.
+
+  [ ] 1.1  drawCircle(pos, radius, color, label?)
+           → SphereGeometry + optional text sprite
+           Accepts optional {segments, materialType} props.
+
+  [ ] 1.2  drawBox(pos, size, color, label?)
+           → BoxGeometry + optional text sprite
+
+  [ ] 1.3  drawText(pos, text, fontSize, color)
+           → CanvasTexture pre-rendered to sprite/quad.
+           Strategy:
+           a) TextTextureFactory: offscreen canvas rendering
+           b) LRU cache: Map<text_key, THREE.Sprite>
+           c) Key = "text|size|color|font"
+           d) Return THREE.Sprite with transparent texture
+           e) Support multi-line text (split on \n)
+
+  [ ] 1.4  drawLine(from, to, color, width, style?)
+           → Line2 + LineGeometry + LineMaterial
+           (import from three/addons/lines/)
+           style: "solid", "dashed", "dotted"
+           → LineMaterial.dashed = true for dashed
+           → LineMaterial.dashSize / gapSize for control
+
+  [ ] 1.5  drawArrow(from, to, color, width, headSize?)
+           → Line2 segment + small ConeGeometry at tip
+           Tip auto-oriented using lookAt(from.sub(to))
+
+  [ ] 1.6  drawPolyline(points[], color, width, closed?)
+           → Single Line2 with all points in LineGeometry
+
+  [ ] 1.7  drawCurvedArrow(from, to, color, width, sag?)
+           → QuadraticBezierCurve3, tessellate to points,
+           feed to Line2. Sag controls arc height.
+
+  [ ] 1.8  drawGrid(size, spacing, color, plane?)
+           → GridHelper (default XY plane, configurable)
+
+  [ ] 1.9  drawHighlight(pos1, pos2, color, pulse?)
+           → Semi-transparent cylinder between points
+           Optionally animate opacity for "pulse" effect.
+
+  [ ] 1.10 drawProofBar(start, end, color, thickness?)
+           → BoxGeometry vertical bar for Fitch subproof scope
+           (long thin box from y_start to y_end at x_offset)
+
+  [ ] 1.11 drawTableauBranch(point, children[], color)
+           → Vertical line from parent, horizontal connector,
+           then vertical down to each child. Composition of
+           drawLine calls.
+
+  [ ] 1.12 drawCircleNode(pos, radius, color, borderColor?)
+           → Flat cylinder (disc) on a plane, for 2D-look nodes
+           in a 3D scene (gives "2.5D" look when camera tilted).
+
+  [ ] 1.13 drawResourceNode(pos, size, filePath, meta?)   (M2-4)
+           → Small 3D box with file icon + filename label.
+           → Clicking opens a thumbnail or inline mesh viewer
+             (loads the .obj via OBJLoader into a preview
+             sub-scene or thumbnail sprite).
+           → Color = domain color for the fact that references it.
+
+  [ ] 1.14 drawToolEdge(from, to, toolName, width)  (M2-4)
+           → Distinct visual from rule edges: orange color,
+             dashed pattern, tool icon at midpoint.
+           → Hover shows "called: mesh_analyzer.py".
+
+  [ ] 1.15 drawEClassNode(pos, size, memberCount)  (M2-4)
+           → Rounded rectangle / pill shape.
+           → Shows count of equivalent members.
+           → Hover expands to show member list.
+
+  [ ] 1.16 drawPortalNode(pos, size, templateLabel)  (M2-4)
+           → Diamond shape or highlighted ring.
+           → Template text like "∀x. x+0=x".
+           → Edges from portal to instantiations are thin dashed.
+
+  [ ] 1.17 drawDomainRegion(center, extent, domainColor, label) (M2-4)
+           → Semi-transparent colored plane or bounding box
+             that groups nodes of the same domain.
+           → Optional: toggle domain regions on/off.
+
+------------------------------------------------------------
+PHASE 2 — Graph Layout Engine
+------------------------------------------------------------
+  [ ] 2.1  Circular layout (already stubbed)
+           - nodes on circle perimeter
+           - sorted by id / depth / cluster
+           - radius scales with node count
+           ✓ works for <~30 nodes
+
+  [ ] 2.2  Fitch-style vertical proof layout
+           - each proof line is a row, y decreasing downward
+           - hypothesis lines: x offset proportional to depth
+           - justified lines: x = base offset
+           - vertical proof bars: Line2 or BoxGeometry
+             spanning the scope vertically
+           - supports nested subproofs (indentation depth)
+
+  [ ] 2.3  Tree / DAG layout (ETPS TABLEAU style)
+           - forward: root at top/bottom, branches downward/upward
+           - backward: goal at top, subgoals branch downward
+           - horizontal spacing to avoid collisions
+           - optional orthogonal (routing with right angles)
+           - optional curved edges
+
+  [ ] 2.4  Force-directed layout (d3-force-inspired)
+           - repulsion + attraction + gravity
+           - iterate until convergence or max steps
+           - pin nodes by depth to enforce layer ordering
+           - suitable for large proof dependency graphs
+
+  [ ] 2.5  Dependency graph layout (Lean/Mathlib style)
+           - topological sort for node layers
+           - hierarchical: theorem depends on lemmas below
+           - Sugiyama-style layered layout option
+
+  [ ] 2.6  Layout manager / auto-detect
+           - "circular" for small flat graphs
+           - "fitch" for linear proofs (has HYP/PLAN/JUSTIFIED)
+           - "tree" for tableau / backward proofs
+           - "force" for large unstructured graphs
+           - user can switch via UI or keyboard
+
+  [ ] 2.7  Animated transitions between layouts
+           - lerp node positions over ~500ms
+           - optionally animate edges
+
+------------------------------------------------------------
+PHASE 3 — Graph Data Processing
+------------------------------------------------------------
+  [ ] 3.1  Validate uploaded JSON
+           - check required fields (nodes, edges)
+           - validate node fields (id, label, kind, domain)
+           - validate edge fields (from, to, kind, rule)
+
+  [ ] 3.2  Domain-based color mapping (primary scheme):
+           Domain colors per BACKEND_PLAN Phase 14:
+           math             →  #3b82f6  (blue)
+           physics_rigid    →  #ef4444  (red)
+           physics_fluid    →  #06b6d4  (cyan)
+           physics_fem      →  #8b5cf6  (violet)
+           grammar_english  →  #22c55e  (green)
+           grammar_humor    →  #f59e0b  (amber)
+           analytical       →  #ec4899  (pink)
+           survival         →  #84cc16  (lime)   program instincts
+           human_survival   →  #a3e635  (light lime)  wilderness
+           causal           →  #f97316  (orange)
+           common_sense     →  #6b7280  (gray)
+           arithmetic       →  #14b8a6  (teal)
+
+           Node SHAPE varies by kind (domain-independent):
+           FACT           → sphere
+           COMPOUND       → larger hollow ring or group outline
+           PORTAL         → diamond / hexagon
+           E-CLASS        → pill / rounded rectangle
+           CONTRADICTION  → red X or skull icon
+           GOAL           → gold star or target icon
+           RESOURCE       → cube with file icon overlay
+           TOOL_RESULT    → orange octagon
+
+  [ ] 3.3  Edge styling by kind:
+           RULE            → solid arrow, domain color
+           HYPER           → thick solid, converged lines →
+                             (visual AND-gate: multiple inputs merge)
+           INSTANTIATE     → thin dashed, portal→fact, domain color
+           REWRITE         → green dotted, connecting e-class members
+           TOOL            → orange dashed with tool icon at midpoint
+           AUDIT           → solid arrow, 0xffffff (highlighted path)
+           DOMAIN          → very thin dotted, 0x888888 (background link)
+
+  [ ] 3.3a Edge width scaling:
+           RULE and AUDIT edges use Line2 for configurable width.
+           HYPER edges use fan-in geometry (multiple thin lines
+           converging to a single thick line at the target).
+
+  [ ] 3.4  Compute bounding box, auto-scale camera
+  [ ] 3.5  Large-graph handling (>200 nodes):
+           - LOD: simplify to cluster nodes
+           - frustum culling
+           - instanced mesh for nodes
+
+------------------------------------------------------------
+PHASE 4 — Interaction Layer
+------------------------------------------------------------
+  [ ] 4.1  Node hover → tooltip (label, kind, id)
+           → Raycaster intersection test
+           → Tooltip: CSS-positioned div, or HTML overlay
+
+  [ ] 4.2  Node click → highlight + detail panel
+           Detail shows (for proof lines):
+           - wff (rendered with logic fonts / unicode)
+           - justification (rule name, references)
+           - hypothesis context
+           - substitutions applied
+
+  [ ] 4.3  Edge hover → show rule name / relation
+
+  [ ] 4.4  Double-click node → zoom to subgraph
+           Filter graph to show only ancestors + descendants
+           of this node. Show breadcrumb trail.
+
+  [ ] 4.5  Keyboard shortcuts:
+           F      = fit all in view (bounding box)
+           R      = reset camera to default
+           1-5    = switch layout (circle/fitch/tree/force/dep)
+           ESC    = clear selection / back to full graph
+           ← →    = step through proof lines
+           H      = toggle hover tooltips
+           L      = toggle legend
+
+  [ ] 4.6  Breadcrumb / navigation trail
+           Shows path when zoomed into subgraph.
+           Click breadcrumb item to zoom back to that level.
+
+------------------------------------------------------------
+PHASE 5 — Proof Visualization Modes
+------------------------------------------------------------
+  These correspond to the different proof styles in ETPS
+  and Lean/Mathlib.
+
+  [ ] 5.1  Fitch-style proof view (ETPS default)
+           - Vertical list of proof lines
+           - Horizontal axiom/hypothesis bars
+           - Vertical scope lines for subproofs
+           - Line numbers on the left
+           - Rendered as 3D geometry (boxes + lines)
+             in a tilted camera for "2.5D" look
+
+  [ ] 5.2  Tableau / tree view (ETPS TABLEAU)
+           - Root at top, branches downward
+           - Each branch is a subgoal decomposition
+           - Closed branches (marked ⊥) colored red
+           - Open branches (not yet closed) colored yellow
+           - Completed branches colored green
+
+  [ ] 5.3  Tactic proof view (Lean-style InfoView)
+           - Goal state before tactic
+           - Tactic name as edge label
+           - Goal state after tactic
+           - Subgoals fan out as children
+           - Supports sequential (linear tactic blocks)
+             and structured (case/induction with named goals)
+
+  [ ] 5.4  Dependency graph view (Mathlib-style)
+           - Nodes: theorems/lemmas/definitions
+           - Edges: "depends on" (bidirectional for usage)
+           - Layout: topological layers
+           - Zoom out to see large-scale dependency web
+           - Zoom in to see individual proof terms
+
+  [ ] 5.5  Hybrid view mode
+           - Main area: one of the above
+           - Corner inset: zoomed-out minimap of full graph
+           - Click minimap to pan
+
+  [ ] 5.6  Resource mesh preview  (M2-4)
+           - When a RESOURCE node references a .obj file:
+           - Load the mesh via OBJLoader (Three.js addon)
+           - Show a thumbnail in a small inset viewport
+           - Label with metadata (units, mass, material)
+             from the companion .meta JSON
+           - Wireframe overlay option
+           - Click to expand to full-size model viewer
+
+  [ ] 5.7  Domain-layered view  (M2-4)
+           - Nodes colored by domain
+           - Each domain in its own z-layer (offset along
+             the camera look-at axis, or color-separated)
+           - Domain toggle buttons float at the edge of
+             each layer
+           - Edges that cross domains are highlighted
+             (e.g. physics used a math result)
+
+------------------------------------------------------------
+PHASE 6 — Sidebar / Info Panel
+------------------------------------------------------------
+  [ ] 6.1  Collapsible sidebar (hidden by default)
+
+  [ ] 6.2  Summary panel:
+           - Goal statement
+           - Total nodes / edges
+           - Domains used (with color chips)
+           - Rules fired (count per rule)
+           - Tools called (list of tool invocations)
+
+  [ ] 6.3  Selected node detail:
+           - Kind (FACT / PORTAL / E-CLASS / RESOURCE / ...)
+           - Domain(s) this node belongs to
+           - Full formula / resource path / e-class members
+           - Inbound edges (what depends on this)
+           - Outbound edges (what this depends on)
+           - For RESOURCE: file path, metadata preview,
+             "open in mesh viewer" button
+
+  [ ] 6.4  Legend panel:
+           - Domain → color mapping
+           - Node shape → kind mapping
+           - Edge style → kind mapping
+
+  [ ] 6.5  Filter controls (toggle visibility):
+           Per domain:         (M2-4)
+             [✓] math     [✓] physics_rigid   [ ] physics_fluid
+             [✓] grammar  [ ] humor           [ ] common_sense
+             switches to enable/disable entire domains
+           Per node kind:
+             [✓] FACT    [✓] PORTAL   [✓] E-CLASS
+             [✓] GOAL    [ ] RESOURCE (show file nodes)
+           Per edge kind:
+             [✓] RULE    [✓] HYPER    [ ] TOOL
+             [✓] AUDIT   [ ] DOMAIN
+
+  [ ] 6.6  Search / goto:
+           - search node by label substring (across all domains)
+           - filter by domain
+           - goto node by id
+           - highlight matching nodes with glow
+
+  [ ] 6.7  Domain overview  (M2-4):
+           - Pie chart or bar chart of node counts per domain
+           - Click a domain segment to isolate that domain
+           - Shows which domains interact via cross-domain edges
+
+  [ ] 6.8  Proof / search stepper:
+           - playback controls (play/pause/step/rewind)
+           - shows proof construction in order
+           - each step reveals one new line/edge
+           - speed control slider
+
+------------------------------------------------------------
+PHASE 7 — Export & Sharing
+------------------------------------------------------------
+  [ ] 7.1  Screenshot button (renderer.domElement.toDataURL
+           → download PNG)
+  [ ] 7.2  Export current view as SVG (render via 2D projection)
+  [ ] 7.3  Export as Mermaid.js diagram (for embedding in docs)
+  [ ] 7.4  Share via URL hash (base64-encode the proof JSON,
+           store in hash fragment, decode on load)
+  [ ] 7.5  Copy selected line as Unicode/LaTeX
+
+------------------------------------------------------------
+PHASE 8 — Polish & Performance
+------------------------------------------------------------
+  [ ] 8.1  Smooth camera animation (fly-to via GSAP or
+           manual lerp / requestAnimationFrame)
+  [ ] 8.2  Fog / subtle background gradient
+  [ ] 8.3  Post-processing:
+           - UnrealBloomPass for highlighted nodes
+           - OutlinePass for selected node
+  [ ] 8.4  Instanced rendering for >500 nodes
+           (THREE.InstancedMesh for node spheres)
+  [ ] 8.5  Web Worker for layout computation
+           (force-directed is expensive; run off-thread)
+  [ ] 8.6  Loading spinner / progress bar for large JSON files
+  [ ] 8.7  Error boundary / recovery for malformed JSON
+  [ ] 8.8  Mobile-friendly: touch controls, responsive sidebar
+
+------------------------------------------------------------
+DEPENDENCIES
+  three          ^0.170+    (3D rendering, Line2, OrbitControls)
+  ws             ^8.18      (WebSocket server + client)
+  @types/three   dev        (TypeScript declarations)
+  @types/ws      dev        (WebSocket type declarations)
+  typescript     ^5.7       (language)
+  vite           ^6.0       (bundler + dev server)
+
+SERVER (Node.js, in frontend/server/)
+  ws             ^8.18      (WebSocketServer)
+  stdio bridge   0 deps     (spawn C++ engine, JSON-line protocol)
+
+ARCHITECTURE
+  Browser ←WebSocket→ Node.js server ←stdin/stdout→ C++ engine
+  Port 3001 for WS, Vite dev server on its own port
+  `npm run server` starts the Node.js bridge
+
+OPTIONAL (later phases)
+  d3-force       (force-directed layout)
+  lil-gui        (debug/control panel)
+  postprocessing (UnrealBloomPass, OutlinePass)
+  GSAP           (camera animations)
+  MathJax        (LaTeX rendering in tooltips)
+  pako           (gzip for URL-share compression)
+
+------------------------------------------------------------
+Frontend ↔ Backend Integration Note
+------------------------------------------------------------
+  The backend outputs a single JSON that contains:
+  1. The full knowledge graph (nodes + edges with domains)
+  2. An audit trail (compact winning path)
+  3. Metadata (domains_used, tools_called, stats)
+
+  The frontend renders the graph by default. The audit
+  trail is used for the proof-stepper playback view.
+  Selecting a node queries the graph for its detail.
+
+  Domain-awareness:
+  - Node colors come from the "domain" field
+  - The sidebar domain switches filter by domain
+  - Cross-domain edges are visually distinct
+  - Resource nodes show file info + optional mesh preview
+
+  JSON schema is defined in BACKEND_PLAN Phase 14.

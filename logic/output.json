@@ -1,0 +1,11 @@
+{
+  "nodes": [
+    {"id":0,"label":"All humans are mortal","kind":"axiom"},
+    {"id":1,"label":"Socrates is a human","kind":"axiom"},
+    {"id":2,"label":"All cats are mammals","kind":"axiom"},
+    {"id":3,"label":"derived: work in progress","kind":"derived"}
+  ],
+  "edges": [
+    {"from":0,"to":3,"relation":"implies"}
+  ]
+}

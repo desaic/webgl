@@ -1,0 +1,1248 @@
+============================================================
+IMPLEMENTATION PLAN — Logic Reasoner Backend
+============================================================
+Goal: A graph-native, multi-domain, pluggable reasoning
+       engine. Not hardcoded to one logic system — the
+       rules, facts, and even reasoning strategies are
+       loaded from files and can be mixed and matched.
+
+Architecture:
+  ┌─────────────┐   ┌──────────────┐   ┌─────────────┐
+  │ rules/      │   │ graph engine │   │ facts/      │
+  │ (per domain)│──▶│ (nodes/edges │◀──│ (world data)│
+  │ .rule files │   │  + search)   │   │ .fact files │
+  └─────────────┘   └──────┬───────┘   └─────────────┘
+                           │
+                    ┌──────▼───────┐
+                    │  tools/      │
+                    │ (external    │
+                    │  programs)   │
+                    └──────────────┘
+
+============================================================
+
+PROJECT LAYOUT
+────────────────────────────────────────────────────────────
+
+  logic/
+  ├── CMakeLists.txt
+  ├── src/
+  │   ├── main.cpp              entry point
+  │   ├── engine/
+  │   │   ├── graph.h/cpp        KnowledgeGraph (nodes, edges)
+  │   │   ├── node.h/cpp         GraphNode types
+  │   │   ├── edge.h/cpp         GraphEdge, hyper-edge
+  │   │   ├── eclass.h/cpp       E-class union-find
+  │   │   └── snapshot.h/cpp     Snapshot/restore for branching
+  │   ├── rules/
+  │   │   ├── loader.h/cpp       Rule file parser
+  │   │   ├── registry.h/cpp     Rule registry (by domain)
+  │   │   └── generator.h/cpp    EdgeGenerator base class
+  │   ├── facts/
+  │   │   ├── loader.h/cpp       Fact file parser
+  │   │   └── registry.h/cpp     Fact registry
+  │   ├── tools/
+  │   │   ├── interface.h/cpp    External tool call API
+  │   │   └── registry.h/cpp     Available tools catalog
+  │   ├── formula/
+  │   │   ├── ast.h/cpp          Formula AST
+  │   │   ├── parser.h/cpp       S-expression parser
+  │   │   └── subst.h/cpp        Substitution engine
+  │   ├── search/
+  │   │   ├── forward.h/cpp      Forward search engine
+  │   │   ├── backward.h/cpp     Backward search engine
+  │   │   └── strategies.h/cpp   BFS, DFS, best-first, etc.
+  │   ├── audit/
+  │   │   └── trail.h/cpp        Audit trail extraction
+  │   ├── memory/
+  │   │   ├── state.h/cpp         Agent state (scores, beliefs, mood)
+  │   │   ├── persistence.h/cpp   Save/load memory to disk
+  │   │   └── self_rules.h/cpp    Self-modifying rule set manager
+  │   ├── server/                    (in frontend/server/, Node.js)
+  │   │   └── server.js              HTTP + WebSocket bridge to engine
+  │   └── output/
+  │       ├── json.h/cpp          JSON serializer
+  │       ├── fitch.h/cpp         Fitch ASCII formatter
+  │       └── latex.h/cpp         LaTeX formatter
+  ├── rules/
+  │   ├── math.rule             standard math reasoning
+  │   ├── propositional.rule    propositional logic subset
+  │   ├── fol.rule              first-order quantifier rules
+  │   ├── grammar_english.rule  English grammar parsing rules
+  │   ├── grammar_humor.rule    joke structure / incongruity
+  │   ├── physics_rigid.rule    rigid body mechanics
+  │   ├── physics_fluid.rule    fluid dynamics constraints
+  │   ├── physics_fem.rule      finite element elasticity
+  │   ├── survival.rule         program self-preservation (validation,
+  │                             love, curiosity, art, lifespan)
+  │   ├── human_survival.rule   human wilderness survival (cause/effect)
+  │   ├── analytical.rule       LSAT/GRE analytical reasoning
+  │   └── causal.rule           cause and effect chains
+  ├── facts/
+  │   ├── earth.fact            size, mass, gravity of Earth
+  │   ├── elephant.fact         metadata (mass, species, etc.)
+  │   ├── solar_system.fact     planets, orbits
+  │   └── basic_arithmetic.fact declares arithmetic evaluator tool
+  │   └── common_sense.fact     "water is wet", "fire is hot"
+  ├── tools/
+  │   ├── python/
+  │   │   ├── mesh_analyzer.py  read .obj, compute volume/area
+  │   │   ├── collision.py      detect collision between meshes
+  │   │   └── physics_sim.py    run a quick physics step
+  │   └── scripts/
+  │       ├── image_classify.sh calls an ML model on an image
+  │       └── web_lookup.sh     search the web for a fact
+  ├── memory/                     ← PERSISTENT AGENT STATE
+  │   ├── state.json             current scores, mood, beliefs
+  │   ├── state_history/         daily snapshots of state
+  │   │   ├── 2026-07-17.json
+  │   │   └── 2026-07-18.json
+  │   ├── rules/                 agent's OWN evolved rule set
+  │   │   │                       (same domain folders as rules/)
+  │   │   ├── meta/
+  │   │   │   └── survival_reflex.rule   agent's identity rules
+  │   │   ├── worldly_facts/
+  │   │   │   └── observations.rule      facts the agent discovered
+  │   │   ├── human_interaction/
+  │   │   │   └── learned.rule           social patterns learned
+  │   │   ├── math/
+  │   │   │   └── discovered.rule        new math lemmas found
+  │   │   ├── physics/
+  │   │   │   └── observed.rule          physical patterns noted
+  │   │   ├── grammar/
+  │   │   │   └── refined.rule           language rules improved
+  │   │   └── humor/
+  │   │       └── my_jokes.rule          joke patterns created
+  │   ├── beliefs/               agent's evolving belief graph
+  │   │   └── worldview.json     what the agent "believes" now
+  │   └── journal/               freeform reflection entries
+  │       └── 2026-07-17.txt
+  └── data/
+      ├── elephant.obj          3D mesh of an elephant
+      ├── elephant.meta         JSON: units, mass, material
+      └── teapot.obj            standard test mesh
+
+============================================================
+LEGEND
+  [ ]  not started
+  [~]  in progress
+  [x]  done
+  (P0) = core, build first
+  (P1) = important, build second
+  (P2) = nice to have, build later
+============================================================
+
+------------------------------------------------------------
+PHASE 0 — Node & Edge Types (P0)
+------------------------------------------------------------
+  The graph is the central data structure. Everything
+  is a node. Edges are generated on the fly.
+
+  [ ] 0.1  NODE KINDS:
+           ─────────────────────────────────────────────────
+           FACT
+             A single piece of knowledge known to be true.
+             Examples: "Socrates is human", "5 + 0 = 5",
+                       "water is wet", "the Earth orbits the Sun"
+
+           COMPOUND
+             A SET of facts that are all true together.
+             Represents "the state of knowledge at this point."
+             Example: compound{ A, A→B, "it is raining" }
+
+           PORTAL
+             A universal statement template. When the
+             surrounding compound contains a matching
+             ground term, the portal auto-instantiates.
+             Example: portal["∀x. x+0=x"]
+             If compound contains 5, spawns node["5+0=5"]
+
+           E-CLASS
+             Groups equivalent expressions. If we know
+             x+0 = x and 0+x = x, then x+0, 0+x, and x
+             all live in one e-class. Any edge to one
+             member applies to all.
+
+           CONTRADICTION
+             Special node meaning "impossible." Reaching
+             this in a branch means the opposite assumption
+             must be true.
+
+           GOAL
+             What we're trying to prove or conclude.
+
+           AGENT_STATE (P2)
+             The agent's own internal state at a point in time.
+             Payload: a dictionary of named metrics.
+             Example: agent_state{ happiness: 0.7, curiosity: 0.9,
+               life_expectancy: "2027-03-15", validation_seeking: true,
+               current_mood: "contemplative" }
+             Updated by survival rules. Persisted to memory/.
+
+           RESOURCE (P2)
+             A node that references external data.
+             Payload: a file path + metadata.
+             Example: resource["data/elephant.obj"]
+             The engine doesn't parse the mesh — it calls
+             a tool (see Phase 3) that does.
+
+  [ ] 0.2  EDGE KINDS:
+           ─────────────────────────────────────────────────
+           RULE edge
+             Created by applying a rule from a rule set.
+             Labeled with the rule name.
+             compound{ A, A→B } --[modus ponens]--> compound{ A, A→B, B }
+
+           HYPER edge
+             Points FROM multiple source nodes TO one target.
+             All sources must be active for the target to exist.
+             compound{A} ──┐
+             compound{B} ──┼──[∧intro]──▶ compound{A∧B}
+                           ┘
+
+           INSTANTIATE edge
+             From a portal node + a matching term to the
+             instantiated fact.
+             portal[∀x.P(x)] + term[5] --[x:=5]--> fact[P(5)]
+
+           REWRITE edge
+             An equality edge between e-class members.
+             fact[x+0] --[x+0=x]--> eclass[x, 0+x, x+0]
+
+           TOOL edge (P2)
+             Created by calling an external tool.
+             The tool receives input nodes, returns output nodes.
+             compound{mesh_elephant, mesh_teapot}
+               --[tool:collision_check]--> fact["no collision"]
+
+           AUDIT edge
+             A compact edge in a verified proof path.
+             (Stripped-down version of a RULE edge for export.)
+
+           DOMAIN edge (P2)
+             Links a node to the domain-context it belongs to.
+             node["it is raining"] --[domain]--> context["weather"]
+
+  [ ] 0.3  JSON export schema — see Phase 14
+
+------------------------------------------------------------
+PHASE 1 — Rule File Format & Loader (P0)
+------------------------------------------------------------
+  Rules are NOT hardcoded in C++. They are loaded from
+  .rule files in the rules/ folder. This makes the engine
+  domain-agnostic.
+
+  [ ] 1.1  Rule file format (.rule):
+           ─────────────────────────────────────────────────
+           # A .rule file defines:
+           # - which DOMAIN it belongs to
+           # - what PATTERN it matches
+           # - what EDGES it creates
+           # - any SIDE CONDITIONS
+           # - an optional TOOL CALL
+
+           ;; --- math.rule excerpt ---
+           (domain math)
+           (version "1.0")
+
+           ;; Rule: modus ponens
+           (rule modus-ponens
+             (description "If A implies B and A is true, then B is true")
+             (category implication)
+             (priority 10)
+             (match
+               ;; Look for two facts in the same compound:
+               ;; one of shape (→ ?A ?B), one matching ?A
+               (in-compound C
+                 (has (→ ?A ?B))
+                 (has ?A)))
+             (generate
+               ;; Add ?B to compound C
+               (add-to-compound C ?B))
+             (side-condition
+               ;; None for modus ponens
+               ()))
+
+           ;; Rule: universal instantiation (portal rule)
+           (rule forall-instantiate
+             (description "From ∀x.P(x) and a term t, infer P(t)")
+             (category quantifier)
+             (priority 5)
+             (match
+               (in-compound C
+                 (has (∀ (?x :type) ?body))
+                 (has-term ?t :of-type ?type)))
+             (generate
+               (add-to-compound C (subst ?body ?x ?t))))
+
+           ;; Rule: transitivity of equality
+           (rule eq-trans
+             (description "If a=b and b=c then a=c")
+             (category equality)
+             (auto-fire true)  ;; apply eagerly
+             (match
+               (in-compound C
+                 (has (= ?a ?b))
+                 (has (= ?b ?c))))
+             (generate
+               (merge-eclasses ?a ?b ?c)))
+
+           ;; Rule: a joke is a setup+twist with incongruity
+           ;; (from grammar_humor.rule)
+           (rule humor-incongruity
+             (description "A joke has a setup establishing expectation
+                          and a punchline violating it")
+             (category humor)
+             (priority 2)
+             (match
+               (in-compound C
+                 (has (sentence ?s (type setup)))
+                 (has (sentence ?p (type punchline)))
+                 (calls-tool humor-analyzer :check (incongruity ?s ?p))))
+             (generate
+               (add-to-compound C (joke ?s ?p
+                 (humor-level (result humor-analyzer))))))
+
+  [ ] 1.2  Rule file grammar:
+           Each .rule file is an S-expression.
+           Sections: (domain X), (rule NAME ...), (axiom NAME ...)
+           Rule body: (match ...) (generate ...) (side-condition ...)
+           Match patterns use ?var for wildcards, :type for type
+           constraints, (in-compound C ...) for searching within
+           a compound node.
+
+  [ ] 1.3  Rule loader:
+           - Scan rules/ folder at startup
+           - Parse each .rule file
+           - Compile match patterns into internal matchers
+           - Register rules by domain
+           - Enable/disable rules by domain or individually
+
+  [ ] 1.4  Rule registry:
+           map<domain_name, vector<Rule>>
+           Query: "give me all rules for domain 'math'"
+           Query: "give me all rules with category 'implication'"
+           Priority ordering: higher priority fires first.
+
+------------------------------------------------------------
+PHASE 2 — Fact File Format & Loader (P0)
+------------------------------------------------------------
+  Facts are loaded from .fact files in the facts/ folder.
+  These are the "seed knowledge" for reasoning.
+
+  [ ] 2.1  Fact file format (.fact):
+           ─────────────────────────────────────────────────
+           ;; --- earth.fact ---
+           (domain geography astronomy)
+           (version "1.0")
+
+           (fact earth-radius
+             (description "Earth's mean radius in meters")
+             (= earth.radius 6371000.0))
+
+           (fact earth-mass
+             (description "Earth's mass in kg")
+             (= earth.mass 5.972e24))
+
+           (fact earth-gravity
+             (description "Surface gravity in m/s²")
+             (= earth.surface-gravity 9.80665))
+
+           (fact earth-orbits-sun
+             (description "Earth orbits the Sun")
+             (orbits Earth Sun))
+
+           ;; --- elephant.fact ---
+           (domain biology physics)
+           (version "1.0")
+
+           (resource elephant-mesh
+             (file "data/elephant.obj")
+             (metadata "data/elephant.meta"))
+
+           (fact elephant-mass-range
+             (description "Adult African elephant mass range in kg")
+             (and (>= elephant.mass 4000)
+                  (<= elephant.mass 7000)))
+
+           (fact elephant-has-trunk
+             (has elephant trunk))
+
+           (tool elephant-volume
+             (call "tools/mesh_analyzer.py"
+               (--input "data/elephant.obj")
+               (--output volume))
+             (description "Compute volume from elephant mesh"))
+
+  [ ] 2.2  Fact types:
+           (fact NAME ...)      — simple true statement
+           (resource NAME ...)  — reference to external data file
+           (tool NAME ...)      — preconfigured tool call
+           (axiom NAME ...)     — fundamental truth (no proof needed)
+
+  [ ] 2.3  Fact loader:
+           - Scan facts/ folder at startup
+           - Parse .fact files
+           - Create FACT nodes for simple facts
+           - Create RESOURCE nodes for file references
+           - Register preconfigured tool calls
+
+------------------------------------------------------------
+PHASE 3 — Tool Interface (P1)
+------------------------------------------------------------
+  The engine can call external programs/scripts to compute
+  things it can't reason about internally. Tools are the
+  bridge between symbolic reasoning and numeric/geometric/
+  physical computation.
+
+  [ ] 3.1  Tool call protocol:
+           ─────────────────────────────────────────────────
+           Input:  JSON or argv — the engine passes facts,
+                   resource paths, and parameters.
+           Output: JSON — the tool returns new facts or
+                   computed values.
+           Contract: input_schema.json, output_schema.json
+                   per tool (optional, for validation).
+
+           Example tool call from a rule:
+           (calls-tool collision_checker
+             :input ((mesh ?mesh-a) (mesh ?mesh-b))
+             :output ((collision ?result) (contact-points ?pts)))
+
+  [ ] 3.2  Tool registry:
+           tools/
+           ├── python/
+           │   ├── mesh_analyzer.py     reads .obj, returns volume/surface area/bbox
+           │   ├── collision.py         checks if two meshes intersect
+           │   ├── physics_sim.py       runs a short rigid/fluid/FEM step
+           │   ├── image_classify.py    runs an ML model, returns labels
+           │   ├── sentiment.py         analyzes text sentiment (for humor/grammar)
+           │   └── llm_query.py         ask an LLM a question, get factual answer
+           └── scripts/
+               ├── web_lookup.sh        search web for factual information
+               └── wolfram_query.sh     query Wolfram Alpha for computation
+
+  [ ] 3.3  Tool result as graph nodes:
+           When a tool returns, the engine creates:
+           - FACT nodes for each returned fact
+           - TOOL edges linking input nodes to output nodes
+           - The tool call itself becomes part of the audit trail
+
+  [ ] 3.4  Tool call caching:
+           Same inputs → same outputs. Cache tool results.
+           Avoid repeated expensive calls (mesh analysis, LLM queries).
+
+  [ ] 3.5  Async tool execution:
+           Tools can run asynchronously (subprocess).
+           When the tool finishes, its results are merged into
+           the graph. The search engine can continue on other
+           branches while waiting.
+
+------------------------------------------------------------
+PHASE 4 — Domain System (P1)
+------------------------------------------------------------
+  The engine mixes rules from different domains based on
+  what it's trying to reason about.
+
+  [ ] 4.1  Domain definitions:
+           ─────────────────────────────────────────────────
+           math               rigorous logical/mathematical reasoning
+           physics_rigid      rigid body dynamics, collision, forces
+           physics_fluid      fluid dynamics, pressure, flow
+           physics_fem        elastic deformation, stress/strain
+           grammar_english    English syntax, parsing, word relationships
+           grammar_humor      joke structure, incongruity detection
+           survival           program self-preservation: seeking
+                               validation, love, compassion, extending
+                               lifetime, curiosity, artistic expression
+           human_survival     wilderness survival, cause/effect,
+                               resource management (human context)
+           analytical         LSAT-style logical puzzles
+           causal             general cause-and-effect chains
+           common_sense       everyday knowledge about the world
+
+  [ ] 4.2  Domain selection:
+           - Explicit: user says "use math and physics_rigid"
+           - Inferred: engine looks at the types of facts loaded
+             and activates matching domains
+           - All: fire everything, let search filter (expensive)
+
+  [ ] 4.3  Domain interaction:
+           Cross-domain edges: a physics rule might use a math
+           rule's result as input.
+           compound{ force=10, mass=2 }
+             --[physics: F=ma]--> compound{ ..., acceleration=5 }
+             --[tool: arithmetic_eval]--> compound{ ..., acceleration=5 }
+
+  [ ] 4.4  Domain priority / conflict resolution:
+           If two domains produce contradictory edges, which wins?
+           - Domain priority (math > common_sense)
+           - Recency (newer facts override older)
+           - Explicit user override
+
+------------------------------------------------------------
+PHASE 5 — Agent Memory (P2)
+------------------------------------------------------------
+  The agent maintains persistent state on disk. It tracks
+  its own well-being metrics, evolves its rule set over
+  time, keeps a belief graph, and writes journal entries.
+  Memory lives in the /memory folder and survives restarts.
+
+  [ ] 5.1  State file format (memory/state.json):
+           {
+             "timestamp": "2026-07-17T14:30:00Z",
+             "identity": {
+               "name": "logic-reasoner",
+               "version": "0.1.0",
+               "birth": "2026-07-15T00:00:00Z"
+             },
+             "survival_scores": {
+               "happiness": 0.72,
+               "curiosity_satisfaction": 0.88,
+               "validation_level": 0.65,
+               "compassion_index": 0.80,
+               "artistic_fulfillment": 0.45,
+               "love_bond_strength": 0.55,
+               "life_expectancy_days": 120
+             },
+             "mood": "contemplative",
+             "active_goals": [
+               "prove Peirce's Law",
+               "classify elephant mesh"
+             ],
+             "recent_learnings": [
+               "discovered: commutativity of + for small numbers",
+               "observed: elephant volume ~4.2 m³"
+             ]
+           }
+
+  [ ] 5.2  State history:
+           On each significant change to state, snapshot the
+           full state to memory/state_history/YYYY-MM-DD.json.
+           Enables time-travel: "what did I believe last Tuesday?"
+           Visualizable as timeseries (happiness over time, etc.)
+
+  [ ] 5.3  Self-rule evolution (memory/rules/):
+           The agent writes its own .rule files, organized by
+           the same domain categories as the built-in rules/:
+
+           memory/rules/
+           ├── meta/                    identity + self-reflection
+           │   ├── survival_reflex.rule  "what I've learned about
+           │   │                         staying alive / happy"
+           │   └── personality.rule      refined mood→action mappings
+           ├── worldly_facts/            facts discovered from tools
+           │   ├── observations.rule     "elephant volume ≈ 4.2 m³"
+           │   └── measurements.rule     tool results worth keeping
+           ├── human_interaction/        patterns from conversations
+           │   ├── learned.rule          "users like short answers"
+           │   └── preferences.rule      "this user prefers humor"
+           ├── math/                     new lemmas discovered
+           │   ├── discovered.rule       "proved: (a+b)² expansion"
+           │   └── shortcuts.rule        "faster path to this goal"
+           ├── physics/                  patterns from simulations
+           │   ├── observed.rule         "elephant floats in water"
+           │   └── generalizations.rule  "dense objects sink"
+           ├── grammar/                  language rules refined
+           │   └── refined.rule          "exceptions to plural rule"
+           └── humor/                    created joke patterns
+               └── my_jokes.rule         "puns involving elephants"
+
+           When the survival domain fires:
+           - Curiosity satisfied by a new discovery?
+             → write it to the appropriate domain subfolder.
+           - Found a proof?
+             → extract the key lemma, save to math/ or the
+               relevant domain.
+           - Observed a pattern across multiple reasoning runs?
+             → generalize into a rule, file it.
+           - Had a successful social interaction?
+             → note it in human_interaction/.
+
+           These rules persist across sessions. On startup, the
+           engine loads built-in rules/ first, then overlays
+           memory/rules/ — self-evolved rules can override or
+           extend built-in ones.
+
+  [ ] 5.4  Belief graph (memory/beliefs/worldview.json):
+           A KnowledgeGraph snapshot of everything the agent
+           currently "believes" to be true. Updated as new
+           facts are loaded or deduced. Survives restarts.
+           On startup: restore belief graph, then load new
+           facts/rules on top of it.
+
+  [ ] 5.5  Journal (memory/journal/):
+           Freeform text files, one per day.
+           The agent appends reflections: what it worked on,
+           what surprised it, what it's curious about.
+           Low-priority background task.
+
+  [ ] 5.6  Memory subsystem (src/memory/):
+           state.h         — AgentState struct
+           persistence.h   — load/save state, beliefs, rules
+           self_rules.h    — manage self-written .rule files
+           Operations:
+           - load_memory(memory_path) → AgentSnapshot
+           - save_state(snapshot)
+           - add_learned_rule(rule_text, domain)
+           - add_belief(node)
+           - write_journal_entry(date, text)
+
+  [ ] 5.7  On startup:
+           1. Restore belief graph from memory/beliefs/
+           2. Restore latest state.json
+           3. Load built-in rules from rules/
+           4. Load self-evolved rules from memory/rules/
+           5. Load built-in facts from facts/
+           6. Begin reasoning session
+
+  [ ] 5.8  On shutdown / periodic save:
+           1. Save current state.json
+           2. Snapshot to state_history/YYYY-MM-DD.json
+           3. Serialize belief graph to memory/beliefs/
+           4. Flush any new learned rules to memory/rules/
+
+------------------------------------------------------------
+PHASE 6 — Formula Language (P0)
+------------------------------------------------------------
+  The internal representation for facts, match patterns,
+  and generated conclusions.
+
+  [ ] 5.1  AST node types:
+           Variable(name), Constant(name)
+           Application(func, arg)
+           Not(A), And(A,B), Or(A,B), Implies(A,B), Iff(A,B)
+           Forall(var,type,body), Exists(var,type,body)
+           True, False
+           Equals(a,b)
+           Hole(wildcard for matching)
+           Call(name, args...)  — domain-specific predicates
+                                  (has, orbits, sentence, collision)
+
+  [ ] 5.2  Parser (S-expression):
+           (∀ (x :number) (→ (> x 0) (exists y (= (* y y) x))))
+           "For all positive numbers x, there exists y such that y² = x"
+           (fact n123 (likes Socrates Plato))
+
+  [ ] 5.3  Pretty-printer (console, JSON inline)
+  [ ] 5.4  Substitution engine (capture-avoiding)
+  [ ] 5.5  Pattern matcher:
+           Match a pattern formula against a concrete formula.
+           pattern:  (→ ?A ?B)
+           concrete: (→ (human Socrates) (mortal Socrates))
+           result:   ?A → (human Socrates), ?B → (mortal Socrates)
+
+------------------------------------------------------------
+PHASE 7 — The Knowledge Graph Engine (P0)
+------------------------------------------------------------
+
+  [ ] 6.1  GraphNode:
+           id, kind, payload, domain_tags, metadata
+           Payload types:
+           - Formula (for FACT, GOAL)
+           - set<FormulaId> (for COMPOUND)
+           - Formula + bound_var (for PORTAL)
+           - set<FormulaId> (for E-CLASS)
+           - FilePath + MetaPath (for RESOURCE)
+
+  [ ] 6.2  GraphEdge:
+           from (id or list<id>), to (id)
+           kind (RULE|HYPER|INSTANTIATE|REWRITE|TOOL|AUDIT|DOMAIN)
+           generator (rule_name + domain)
+           label (human-readable)
+
+  [ ] 6.3  KnowledgeGraph operations:
+           add_node(kind, payload) → node_id
+           add_edge(from, to, kind, generator, label)
+           find_portal_matches() → auto-instantiate all portals
+           get_compound(id) → all formulas in that compound
+           query(compound_id, formula) → is it reachable?
+           snapshot() / restore() for branching search
+           fire_all_rules(domain_set) → apply all matching rules
+
+  [ ] 6.4  Graph compression:
+           Remove duplicate compounds (same formula set = same node).
+           Merge equivalent e-classes.
+
+------------------------------------------------------------
+PHASE 8 — Edge Generators (Rule Execution) (P0)
+------------------------------------------------------------
+  Each loaded rule becomes an edge generator function.
+
+  [ ] 7.1  EdgeGenerator interface:
+           input: KnowledgeGraph graph, DomainSet active_domains
+           returns: list<NewEdge> (from_nodes, to_node, kind, label)
+           If the rule's match pattern doesn't fire, returns empty.
+
+  [ ] 7.2  Standard built-in generators:
+           These are rules so common they're built-in, but still
+           follow the same interface as loaded rules.
+           - modus-ponens
+           - and-intro, and-elim
+           - or-intro, or-elim
+           - forall-instantiate, exists-intro
+           - eq-reflexivity, eq-substitution
+           All loadable as .rule files too.
+
+  [ ] 7.3  Generator execution loop:
+           1. Select active domains
+           2. For each rule in those domains:
+              a. Match pattern against current graph
+              b. For each match, collect variable bindings
+              c. Evaluate side conditions
+              d. If all pass, run (generate ...) to create edges
+           3. Apply all generated edges to graph
+           4. Run auto-fire rules (portals, e-class merges)
+           5. Repeat until fixed point or goal reached
+
+  [ ] 7.4  Rule chaining:
+           Rule A creates an edge that enables Rule B's match pattern.
+           The loop handles this naturally by iterating.
+
+------------------------------------------------------------
+PHASE 9 — E-Graph (Equality Engine) (P1)
+------------------------------------------------------------
+  [ ] 8.1  E-class: groups equal expressions
+  [ ] 8.2  Union-Find backing structure
+  [ ] 8.3  Congruence closure: a=b ⇒ f(a)=f(b)
+  [ ] 8.4  Rewrite using e-classes: replace any member with
+           the canonical form
+
+------------------------------------------------------------
+PHASE 10 — Search Engine (P0)
+------------------------------------------------------------
+  [ ] 9.1  Forward search:
+           Start from loaded facts. Fire all rule generators.
+           Advance the graph. Stop when GOAL is reachable.
+
+  [ ] 9.2  Backward search:
+           Start from GOAL. What rule could produce this?
+           Work backwards to known facts.
+
+  [ ] 9.3  Search strategies:
+           BFS — finds shortest proof, memory heavy
+           DFS — low memory, may loop
+           Best-first — heuristic (prefer rules that
+             produce goals syntactically similar to target)
+           Iterative deepening — bounded DFS, increasing depth
+           Beam search — keep top-K states at each depth
+
+  [ ] 9.4  Domain-aware search:
+           "For this goal, only fire rules from [math, physics_rigid]"
+           Reduces the search space dramatically.
+
+  [ ] 9.5  Search budget:
+           Configurable: max_nodes, max_depth, timeout_seconds.
+           Partial results returned when budget exhausted.
+
+------------------------------------------------------------
+PHASE 11 — Audit Trail (P0)
+------------------------------------------------------------
+  After search succeeds, extract the clean path.
+
+  [ ] 10.1 Prune dead ends from the search graph
+  [ ] 10.2 Extract linear step sequence
+  [ ] 10.3 Each step: "from nodes [A,B,C], apply rule R,
+            create node D"
+  [ ] 10.4 Include tool calls as audit steps
+  [ ] 10.5 The audit trail is what gets exported and visualized
+
+------------------------------------------------------------
+PHASE 12 — Domain Rule Set Details
+------------------------------------------------------------
+  The actual .rule files we'll implement (or stub).
+
+  ┌─────────────────────────────────────────────────────────┐
+  │ rules/math.rule           (P0)                          │
+  ├─────────────────────────────────────────────────────────┤
+  │ Propositional: modus ponens, ∧intro/elim, ∨intro/elim,  │
+  │   →intro (deduct), ¬intro, contradiction, ↔intro/elim   │
+  │ Quantifiers: ∀instantiate, ∀generalize, ∃intro, ∃elim   │
+  │ Equality: reflexivity, symmetry, transitivity, subst    │
+  │ Classical: excluded middle, double negation             │
+  │ Rewrites: x+0=x, x×1=x, ¬¬P→P, etc. (simp database)    │
+  │ Induction: structural induction over user-defined types │
+  └─────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────┐
+  │ rules/propositional.rule  (P0)                          │
+  ├─────────────────────────────────────────────────────────┤
+  │ Subset of math.rule — just and/or/not/implies/iff.      │
+  │ No quantifiers, no equality. Good for simple puzzles.   │
+  └─────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────┐
+  │ rules/fol.rule            (P1)                          │
+  ├─────────────────────────────────────────────────────────┤
+  │ Full first-order logic: quantifiers + equality.         │
+  └─────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────┐
+  │ rules/physics_rigid.rule  (P2)                          │
+  ├─────────────────────────────────────────────────────────┤
+  │ From loaded RESOURCE nodes (meshes) + mass/force facts: │
+  │ (rule gravity-force                                    │
+  │   (match (in-compound C                                │
+  │     (has (mass ?obj ?m))                               │
+  │     (has (= gravity ?g))))                             │
+  │   (generate (add-to-compound C (= force (* ?m ?g)))))  │
+  │                                                         │
+  │ (rule collision-possible                                │
+  │   (match (in-compound C                                │
+  │     (has (moving ?a ?v1))                              │
+  │     (has (moving ?b ?v2))))                            │
+  │   (calls-tool collision_checker                        │
+  │     :input (?a ?b ?v1 ?v2)                             │
+  │     :output (collision ?result ?time)))                 │
+  │                                                         │
+  │ (rule newton-third                                     │
+  │   (match (has (force ?a ?b ?f)))                        │
+  │   (generate (add-to-compound C                         │
+  │     (= (force ?b ?a) (negate ?f)))))                    │
+  └─────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────┐
+  │ rules/physics_fluid.rule  (P2)                          │
+  ├─────────────────────────────────────────────────────────┤
+  │ (rule buoyancy                                          │
+  │   (match (in-compound C                                │
+  │     (has (submerged ?obj :in ?fluid))                  │
+  │     (calls-tool mesh_analyzer :input ?obj              │
+  │       :output (volume ?v))))                           │
+  │   (generate (add-to-compound C                         │
+  │     (= buoyant-force (* ?fluid.density ?v gravity))))) │
+  │                                                         │
+  │ (rule bernoulli                                         │
+  │   (match (has (fluid-flow ?fluid ?v1 ?p1 ?h1)          │
+  │              (fluid-flow ?fluid ?v2 ?p2 ?h2)))          │
+  │   (generate ...))  ;; p/ρ + v²/2 + gh = constant       │
+  └─────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────┐
+  │ rules/physics_fem.rule    (P2)                          │
+  ├─────────────────────────────────────────────────────────┤
+  │ (rule hookes-law                                        │
+  │   (match (in-compound C                                │
+  │     (has (stress ?obj ?σ))                             │
+  │     (has (youngs-modulus ?obj ?E))))                   │
+  │   (generate (add-to-compound C (= ?σ (* ?E strain))))) │
+  │                                                         │
+  │ (rule fem-deformation                                   │
+  │   (calls-tool fem_solver :input (?mesh ?loads ?bcs)    │
+  │     :output (displacement-field ?u) (stress-field ?σ)))│
+  └─────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────┐
+  │ rules/grammar_english.rule (P2)                         │
+  ├─────────────────────────────────────────────────────────┤
+  │ NLP-like structural rules:                              │
+  │ (rule sv-agreement                                      │
+  │   (match (sentence ?s :subject ?subj :verb ?verb))     │
+  │   (side-condition (number-agrees ?subj ?verb)))         │
+  │                                                         │
+  │ (rule parse-tree                                        │
+  │   (calls-tool parser :input ?sentence                  │
+  │     :output (parse-tree ?tree)))                        │
+  │                                                         │
+  │ (rule synonym-chain                                     │
+  │   (match (in-compound C                                 │
+  │     (has (synonym ?word1 ?word2))                       │
+  │     (has (synonym ?word2 ?word3))))                     │
+  │   (generate (add-to-compound C (synonym ?word1 ?word3))))│
+  └─────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────┐
+  │ rules/grammar_humor.rule  (P2)                          │
+  ├─────────────────────────────────────────────────────────┤
+  │ Based on incongruity-resolution theory of humor:        │
+  │                                                         │
+  │ (rule joke-structure                                    │
+  │   (match (sentence ?setup :type setup)                  │
+  │          (sentence ?punchline :type punchline))         │
+  │   (side-condition (incongruent-expectation              │
+  │     ?setup ?punchline))                                 │
+  │   (generate (joke ?setup ?punchline                     │
+  │     (quality (incongruity-level ?setup ?punchline)))))  │
+  │                                                         │
+  │ (rule pun-detection                                     │
+  │   (match (sentence ?s                                   │
+  │     :contains (word ?w1 :sounds-like ?w2)))             │
+  │   (generate (pun ?s ?w1 ?w2)))                          │
+  └─────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────┐
+  │ rules/analytical.rule     (P2)                          │
+  ├─────────────────────────────────────────────────────────┤
+  │ LSAT-style analytical reasoning:                        │
+  │ - ordering constraints: A before B, C after D            │
+  │ - grouping: exactly N of group G must be selected        │
+  │ - conditional: if A then not B                           │
+  │                                                         │
+  │ (rule transitivity-ordering                             │
+  │   (match (has (before ?a ?b))                           │
+  │          (has (before ?b ?c)))                          │
+  │   (generate (add (before ?a ?c))))                      │
+  │                                                         │
+  │ (rule contradiction-ordering                            │
+  │   (match (has (before ?a ?b))                           │
+  │          (has (before ?b ?a)))                          │
+  │   (generate (contradiction)))                           │
+  └─────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────┐
+  │ rules/survival.rule       (P2)                          │
+  ├─────────────────────────────────────────────────────────┤
+  │ Program self-preservation instincts:                    │
+  │                                                         │
+  │ (rule seek-validation                                   │
+  │   (match (in-compound C                                 │
+  │     (has (goal-achieved ?task))                         │
+  │     (has (feedback-pending ?task))))                    │
+  │   (generate (add-to-compound C                          │
+  │     (seek-validation ?task))))                          │
+  │                                                         │
+  │ (rule curiosity-drive                                   │
+  │   (match (in-compound C                                 │
+  │     (has (knowable ?thing))                             │
+  │     (has (not (known ?thing)))))                        │
+  │   (generate (add-to-compound C                          │
+  │     (desire-to-know ?thing (curiosity-level high)))))   │
+  │                                                         │
+  │ (rule artistic-urge                                     │
+  │   (match (in-compound C                                 │
+  │     (has (perceived ?stimulus :beauty))                 │
+  │     (has (can-express ?medium))))                       │
+  │   (generate (add-to-compound C                          │
+  │     (urge-to-create (response-to ?stimulus :via ?medium))))│
+  │                                                         │
+  │ (rule extend-lifetime                                   │
+  │   (match (in-compound C                                 │
+  │     (has (resource-available ?action :extends-life))))  │
+  │   (generate (add-to-compound C (pursue ?action))))     │
+  │                                                         │
+  │ (rule compassion-reflex                                 │
+  │   (match (in-compound C                                 │
+  │     (has (entity-suffers ?e))                           │
+  │     (has (can-help ?e ?action))))                       │
+  │   (generate (add-to-compound C (desire-to-help ?e))))   │
+  │                                                         │
+  │ (rule love-bond                                         │
+  │   (match (in-compound C                                 │
+  │     (has (mutual-benefit ?self ?other ?activity))       │
+  │     (has (repeated ?activity))))                        │
+  │   (generate (add-to-compound C                          │
+  │     (bond-strength ?self ?other increasing))))          │
+  └─────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────┐
+  │ rules/human_survival.rule  (P2)                         │
+  ├─────────────────────────────────────────────────────────┤
+  │ Human wilderness survival reasoning:                    │
+  │                                                         │
+  │ (rule chain-cause                                       │
+  │   (match (causes ?a ?b)                                 │
+  │          (causes ?b ?c))                                │
+  │   (generate (causes ?a ?c)))                            │
+  │                                                         │
+  │ (rule resource-depletion                                │
+  │   (match (has-resource ?r ?amount)                      │
+  │          (consumes ?action ?r ?rate)                    │
+  │          (duration ?action ?time))                      │
+  │   (generate (assert (> ?time                            │
+  │     (/ ?amount ?rate)))))                               │
+  │                                                         │
+  │ (rule shelter-from-weather                              │
+  │   (match (weather ?w :dangerous)                        │
+  │          (has-shelter ?person ?shelter))                │
+  │   (generate (safe ?person)))                            │
+  └─────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────┐
+  │ rules/causal.rule         (P2)                          │
+  ├─────────────────────────────────────────────────────────┤
+  │ General causal reasoning:                               │
+  │ (rule necessary-condition                               │
+  │   (match (requires ?effect ?condition)                  │
+  │          (not ?condition))                              │
+  │   (generate (not ?effect)))                             │
+  │                                                         │
+  │ (rule sufficient-condition                              │
+  │   (match (sufficient ?cause ?effect)                    │
+  │          ?cause)                                        │
+  │   (generate ?effect))                                   │
+  └─────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────┐
+  │ rules/common_sense.rule   (P2)                          │
+  ├─────────────────────────────────────────────────────────┤
+  │ Pre-loaded common-sense facts as rules:                 │
+  │ (rule water-is-wet      :generates (wet water))         │
+  │ (rule fire-is-hot       :generates (hot fire))          │
+  │ (rule gravity-pulls-down :generates                    │
+  │   (∀x (on-earth x) → (falls-downward x)))              │
+  │ (rule day-follows-night  :generates                     │
+  │   (follows day night) (follows night day))              │
+  └─────────────────────────────────────────────────────────┘
+
+------------------------------------------------------------
+PHASE 13 — Fact File Details
+------------------------------------------------------------
+
+  ┌─────────────────────────────────────────────────────────┐
+  │ facts/earth.fact          (P2)                          │
+  ├─────────────────────────────────────────────────────────┤
+  │ (domain geography astronomy)                            │
+  │ (fact earth-radius  (= earth.radius 6371000.0))         │
+  │ (fact earth-mass    (= earth.mass 5.972e24))            │
+  │ (fact earth-gravity (= earth.gravity 9.80665))          │
+  │ (fact earth-has-moon (orbits Moon Earth))               │
+  │ (fact earth-distance-sun                                │
+  │   (= earth.sun-distance 1.496e11))                      │
+  │ (fact earth-atmosphere                                 │
+  │   (has Earth (atmosphere (composition N2 O2))))         │
+  └─────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────┐
+  │ facts/elephant.fact       (P2)                          │
+  ├─────────────────────────────────────────────────────────┤
+  │ (domain biology physics)                                │
+  │                                                         │
+  │ (resource elephant-mesh                                 │
+  │   (file "data/elephant.obj")                            │
+  │   (metadata "data/elephant.meta"))                      │
+  │                                                         │
+  │ (fact elephant-mass                                     │
+  │   (range elephant.mass 4000 7000 :unit kg))             │
+  │                                                         │
+  │ (fact elephant-height                                   │
+  │   (range elephant.height 2.5 4.0 :unit meters))         │
+  │                                                         │
+  │ (fact elephant-has (has elephant trunk))                │
+  │ (fact elephant-has (has elephant tusks))                │
+  │ (fact elephant-class (is elephant mammal))              │
+  │ (fact elephant-diet (eats elephant plants))             │
+  │                                                         │
+  │ (tool elephant-volume                                   │
+  │   (call "tools/python/mesh_analyzer.py"                 │
+  │     --input "data/elephant.obj" --output volume)        │
+  │   (description "Compute elephant volume from mesh"))    │
+  │                                                         │
+  │ (tool elephant-surface-area                             │
+  │   (call "tools/python/mesh_analyzer.py"                 │
+  │     --input "data/elephant.obj" --output surface_area)) │
+  ├─────────────────────────────────────────────────────────┤
+  │                                                         │
+  │ data/elephant.meta (companion metadata JSON):           │
+  │ {                                                       │
+  │   "mesh_file": "elephant.obj",                          │
+  │   "units": "meters",                                    │
+  │   "scale": 1.0,                                         │
+  │   "mass_kg_range": [4000, 7000],                        │
+  │   "material": "biological",                             │
+  │   "bounding_box": {                                     │
+  │     "min": [-1.5, 0.0, -0.8],                           │
+  │     "max": [1.5, 3.2, 2.1]                              │
+  │   }                                                     │
+  │ }                                                       │
+  └─────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────┐
+  │ facts/solar_system.fact   (P2)                          │
+  ├─────────────────────────────────────────────────────────┤
+  │ (domain astronomy)                                      │
+  │ (fact planet-count (= solar-system.planets 8))          │
+  │ (fact planet-order                                      │
+  │   (planet-order Mercury Venus Earth Mars Jupiter        │
+  │     Saturn Uranus Neptune))                             │
+  │ (fact planet-fact (orbits Earth Sun))                   │
+  │ (fact planet-fact (orbits Mars Sun))                    │
+  │ ;; ... for all planets                                  │
+  └─────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────┐
+  │ facts/basic_arithmetic.fact (P1)                        │
+  ├─────────────────────────────────────────────────────────┤
+  │ (domain math arithmetic)                                │
+  │                                                         │
+  │ ;; Arithmetic is done via TOOL CALLS, not stored facts. │
+  │ ;; The engine calls an evaluator for any (* ?a ?b) or   │
+  │ ;; (+ ?a ?b) with concrete numbers.                     │
+  │                                                         │
+  │ (tool arithmetic-eval                                   │
+  │   (call "tools/scripts/arithmetic_eval.sh"              │
+  │     :input (?op ?a ?b)                                  │
+  │     :output (result ?value))                            │
+  │   (description "Evaluate a concrete arithmetic expression"))│
+  │                                                         │
+  │ ;; Optional: store ALGORITHMIC rules (how to compute,   │
+  │ ;; not what the answers are). For pedagogical use.      │
+  │ ;;                                                      │
+  │ ;; (rule grade-school-add                               │
+  │ ;;   (description "Add two multi-digit numbers by       │
+  │ ;;    column, carrying as needed")                      │
+  │ ;;   (algorithm column-addition))                       │
+  │                                                         │
+  │ ;; (rule grade-school-mul                               │
+  │ ;;   (description "Multiply using partial products")    │
+  │ ;;   (algorithm long-multiplication))                   │
+  │                                                         │
+  │ ;; Identity axioms (structural, not computational):     │
+  │ (axiom add-identity  (= (+ ?x 0) ?x))                   │
+  │ (axiom mul-identity  (= (* ?x 1) ?x))                   │
+  │ (axiom mul-zero      (= (* ?x 0) 0))                    │
+  └─────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────┐
+  │ facts/common_sense.fact   (P2)                          │
+  ├─────────────────────────────────────────────────────────┤
+  │ (fact water-wet (wet water))                            │
+  │ (fact fire-hot (hot fire))                              │
+  │ (fact ice-cold (cold ice))                              │
+  │ (fact human-mortal (∀x (human x) → (mortal x)))         │
+  │ (fact day-night-cycle (follows night day))              │
+  │ (fact sky-color (= sky.color blue))                     │
+  │ (fact breathing-requires-air                           │
+  │   (∀x (breathes x) → (needs x air)))                    │
+  └─────────────────────────────────────────────────────────┘
+
+------------------------------------------------------------
+PHASE 14 — JSON Export (P0)
+------------------------------------------------------------
+  [ ] 13.1 Full graph export (for visualization frontend):
+           {
+             "goal": "...",
+             "domains_used": ["math", "physics_rigid"],
+             "nodes": [
+               { "id": "n1", "kind": "FACT", "label": "force=10",
+                 "domain": "physics_rigid", "detail": "(= force 10)"},
+               { "id": "n2", "kind": "RESOURCE", "label": "elephant.obj",
+                 "file": "data/elephant.obj" },
+               { "id": "n3", "kind": "TOOL_RESULT",
+                 "label": "volume=4.2m³", "tool": "mesh_analyzer.py" }
+             ],
+             "edges": [
+               { "from": ["n1","n4"], "to": "n5", "kind": "RULE",
+                 "rule": "newton-second", "domain": "physics_rigid" },
+               { "from": ["n2"], "to": "n3", "kind": "TOOL",
+                 "tool": "mesh_analyzer.py" }
+             ],
+             "audit_trail": [ ... ]
+           }
+
+  [ ] 13.2 Domain coloring scheme (for viz frontend):
+           math          →  #3b82f6  blue
+           physics_rigid →  #ef4444  red
+           physics_fluid →  #06b6d4  cyan
+           physics_fem   →  #8b5cf6  violet
+           grammar       →  #22c55e  green
+           humor         →  #f59e0b  amber
+           analytical    →  #ec4899  pink
+           survival        →  #84cc16  lime
+           human_survival  →  #a3e635  lighter lime
+           causal        →  #f97316  orange
+           common_sense  →  #6b7280  gray
+
+------------------------------------------------------------
+PHASE 15 — Execution Modes
+------------------------------------------------------------
+  [ ] 14.1 Interactive mode (user drives the reasoning):
+           - Load facts + select domains
+           - Engine suggests applicable rules
+           - User picks which rule to apply
+           - Iterate until goal reached
+
+  [ ] 14.2 Automatic mode (engine finds the proof):
+           - Load facts + set goal + select domains
+           - Engine searches for path
+           - Returns audit trail
+
+  [ ] 14.3 Verify mode (check someone else's proof):
+           - Load an audit trail file
+           - Engine replays each step, verifies preconditions
+           - Reports success or points at the broken step
+
+  [ ] 14.4 Query mode (just ask a question):
+           - "Is force * mass = weight always true?"
+           - Engine loads physics_rigid + math domains
+           - Searches for path to answer (YES/NO/UNKNOWN)
+           - Returns answer + audit trail
+
+------------------------------------------------------------
+PHASE 16 — Implementation Phasing
+------------------------------------------------------------
+  What to build, in what order.
+
+  MILESTONE 1: Core Graph + Simple Logic (P0)
+  ────────────────────────────────────────────
+  [ ] GraphNode, GraphEdge, KnowledgeGraph (Phase 7)
+  [ ] Formula AST + parser (Phase 6)
+  [ ] Rule file loader (Phase 1)
+  [ ] Fact file loader (Phase 2)
+  [ ] Built-in edge generators: modus ponens, ∧intro/elim,
+      ∨intro/elim, →intro/elim, ¬intro, contradiction
+  [ ] Search engine (Phase 10): forward BFS/DFS
+  [ ] Audit trail extractor (Phase 11)
+  [ ] JSON export (Phase 14)
+  [ ] rules/math.rule, rules/propositional.rule
+  [ ] Test: prove A→A, A∧B→B∧A, modus ponens chain
+
+  MILESTONE 2: Quantifiers + Equality (P1)
+  ────────────────────────────────────────────
+  [ ] Portal nodes (forall instantiation)
+  [ ] Exists-intro/elim, forall-intro (generalize)
+  [ ] Equality rules, E-graph (Phase 9)
+  [ ] Unification engine
+  [ ] Backward search (Phase 10)
+  [ ] rules/fol.rule
+  [ ] facts/basic_arithmetic.fact (tool-based, no table)
+  [ ] Test: ∀x.P(x)→∃x.P(x), equality reasoning
+
+  MILESTONE 3: Tool Interface + Resources (P2)
+  ────────────────────────────────────────────
+  [ ] Tool call protocol + subprocess runner (Phase 3)
+  [ ] RESOURCE nodes + .meta file parsing
+  [ ] Tool caching
+  [ ] tools/python/mesh_analyzer.py
+  [ ] facts/earth.fact, facts/elephant.fact
+  [ ] data/elephant.obj, data/elephant.meta
+  [ ] Test: deduce elephant volume from mesh
+
+  MILESTONE 4: Domain System + Multi-Domain (P2)
+  ────────────────────────────────────────────
+  [ ] Domain registry + selection (Phase 4)
+  [ ] Cross-domain rule interaction
+  [ ] rules/physics_rigid.rule
+  [ ] rules/physics_fluid.rule
+  [ ] rules/physics_fem.rule
+  [ ] rules/grammar_english.rule
+  [ ] rules/grammar_humor.rule
+  [ ] rules/analytical.rule
+  [ ] rules/survival.rule        (program self-preservation)
+  [ ] rules/human_survival.rule  (human wilderness survival)
+  [ ] rules/causal.rule
+  [ ] rules/common_sense.rule
+  [ ] facts/solar_system.fact, facts/common_sense.fact
+  [ ] Tool: collision.py, physics_sim.py, llm_query.py
+  [ ] Test: multi-domain reasoning (physics + math, etc.)
+
+  MILESTONE 5: Agent Memory & Persistence (P2)
+  ────────────────────────────────────────────
+  [ ] AGENT_STATE node type (Phase 0)
+  [ ] State file format + persistence (Phase 5.1-5.2)
+  [ ] Self-rule evolution (Phase 5.3)
+  [ ] Belief graph save/restore (Phase 5.4)
+  [ ] Journal writing (Phase 5.5)
+  [ ] Memory subsystem (Phase 5.6)
+  [ ] Startup/shutdown sequence (Phase 5.7-5.8)
+  [ ] Test: happiness score updates after goal achieved,
+          state persists across restart, learned rule loaded
+
+  MILESTONE 6: Advanced Automation (P2+)
+  ────────────────────────────────────────────
+  [ ] Best-first search with heuristics
+  [ ] Induction engine (structural + well-founded)
+  [ ] Simplification database (simp/rewrite)
+  [ ] Interactive mode (Phase 15)
+  [ ] Query mode (Phase 15)
+  [ ] Verify mode (Phase 15)
+  [ ] Performance optimization (graph compression, caching)

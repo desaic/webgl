@@ -1,0 +1,4 @@
+# Sample axioms — one per line, blank lines and #comments ignored
+All humans are mortal
+Socrates is a human
+All cats are mammals
