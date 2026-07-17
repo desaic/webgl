@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import time
+from datetime import datetime
 from typing import Any
 
 from robin.config import GEMINI_MODEL, logger
@@ -318,6 +319,7 @@ class GeminiClient:
                 lines.append(f"  {ts} {ttype} {sym} x{qty} @{price}")
             txn_block = "\nRecent transactions:\n" + "\n".join(lines) + "\n"
 
+        now = datetime.now().strftime("Current date and time: %Y-%m-%d %H:%M UTC\n\n")
         if self._msgs_since_portfolio >= self._PORTFOLIO_REFRESH_INTERVAL:
             summary = json.dumps(portfolio, default=str)
             history = self._load_chat_history()
@@ -325,12 +327,13 @@ class GeminiClient:
                 f"\n\nPrevious chat history (for context):\n{history}\n" if history else ""
             )
             full = (
+                f"{now}"
                 f"Portfolio snapshot (holdings, prices, gain/loss):\n{summary}"
                 f"{txn_block}{history_block}\n\n{_ASK_NEWS_INSTR}\n\nUser question: {prompt}"
             )
             self._msgs_since_portfolio = 0
         else:
-            full = f"{_ASK_NEWS_INSTR}\n\nUser question: {prompt}"
+            full = f"{now}{_ASK_NEWS_INSTR}\n\nUser question: {prompt}"
         self._msgs_since_portfolio += 1
 
         resp1 = self._send_chat(full)
