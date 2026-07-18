@@ -46,7 +46,6 @@ static std::vector<LinearCurve> LoadCurves(const std::string& filename) {
   }
   return curves;
 }
-
 static void WriteTubeCurve(std::ofstream& out, const LinearCurve& curve, float radius, int radialSegments, size_t& globalVertBase) { 
     if (curve.points.size() < 2) { return; } 
     
@@ -62,7 +61,6 @@ static void WriteTubeCurve(std::ofstream& out, const LinearCurve& curve, float r
     for (size_t i = 0; i < numPath; i++) {
         Vec3f t(0.0f, 0.0f, 0.0f);
         if (curve.isLoop) {
-            // For loops, wrap around smoothly to avoid tangent seam pops
             size_t prevIdx = (i == 0) ? (numPath - 2) : (i - 1);
             size_t nextIdx = (i == numPath - 1) ? 1 : (i + 1);
             t = t + (path[i] - path[prevIdx]).normalizedCopy();
@@ -80,8 +78,8 @@ static void WriteTubeCurve(std::ofstream& out, const LinearCurve& curve, float r
 
     Vec3f t0 = tangents[0];
     Vec3f up(0.0f, 1.0f, 0.0f);
-    if (std::abs(t0[0]) > 0.9f) {
-        up = Vec3f(0.0f, 0.0f, 1.0f); // Fallback to Z-axis if tangent is aligned with X
+    if (std::abs(t0[1]) > 0.9f) {
+        up = Vec3f(0.0f, 0.0f, 1.0f);
     }
     
     normals[0] = t0.cross(up).normalizedCopy();
@@ -90,34 +88,62 @@ static void WriteTubeCurve(std::ofstream& out, const LinearCurve& curve, float r
     // 3. Discrete Parallel Transport via Frame Projection
     for (size_t i = 1; i < numPath; i++) { 
         Vec3f t = tangents[i];
-        
-        // Project the previous normal onto the plane perpendicular to the current tangent
         Vec3f n = normals[i - 1] - t * t.dot(normals[i - 1]);
         normals[i] = n.normalizedCopy(); 
-        
-        // Recompute binormal to guarantee perfect orthogonality
         binormals[i] = t.cross(normals[i]).normalizedCopy(); 
     } 
 
-    // 4. Generate & write vertices
+    // 4. If it's a loop, calculate and distribute the correction angle to match the seam
+    std::vector<float> twistAngles(numPath, 0.0f);
+    if (curve.isLoop && numPath > 1) {
+        // Find the angle error between the very last propagated frame and the first frame
+        Vec3f nStart = normals[0];
+        Vec3f bStart = binormals[0];
+        Vec3f nEnd = normals[numPath - 1];
+        
+        // Project nEnd onto the start frame to find the exact 2D rotation offset
+        float cosTheta = nEnd.dot(nStart);
+        float sinTheta = nEnd.dot(bStart);
+        
+        // Clamp cosTheta safely to avoid NaN issues with acos
+        if (cosTheta > 1.0f) cosTheta = 1.0f;
+        if (cosTheta < -1.0f) cosTheta = -1.0f;
+        
+        float totalTwistError = std::atan2(sinTheta, cosTheta);
+        
+        // Linearly distribute the opposite angle to slowly unwind the twist across all segments
+        for (size_t i = 0; i < numPath; i++) {
+            float factor = float(i) / float(numPath - 1);
+            twistAngles[i] = -totalTwistError * factor;
+        }
+    }
+
+    // 5. Generate & write vertices with localized twist correction
     size_t ringsToWrite = curve.isLoop ? (numPath - 1) : numPath; 
     const float tau = 6.28318530f; 
     
     for (size_t i = 0; i < ringsToWrite; i++) { 
+        float twist = twistAngles[i];
+        float cosTwist = std::cos(twist);
+        float sinTwist = std::sin(twist);
+
+        // Apply correction to keep the frames seamlessly oriented
+        Vec3f correctedNormal = normals[i] * cosTwist - binormals[i] * sinTwist;
+        Vec3f correctedBinormal = normals[i] * sinTwist + binormals[i] * cosTwist;
+
         for (int j = 0; j <= radialSegments; j++) { 
             float angle = tau * float(j) / float(radialSegments); 
             float ca = std::cos(angle); 
             float sa = std::sin(angle); 
             
-            // Normals and binormals are now perfectly orthogonal and uniform
-            Vec3f n = normals[i] * ca + binormals[i] * sa; 
+            Vec3f n = correctedNormal * ca + correctedBinormal * sa; 
             Vec3f pos = path[i] + n * radius; 
             
             out << "v " << pos[0] << " " << pos[1] << " " << pos[2] << "\n"; 
         } 
     } 
 
-    // 5. Connect Quad Faces
+    // 6. Connect Quad Faces
     size_t facesBeg = ringsToWrite - 1; 
     if (curve.isLoop && ringsToWrite >= 2) { 
         facesBeg = ringsToWrite; 
@@ -135,7 +161,6 @@ static void WriteTubeCurve(std::ofstream& out, const LinearCurve& curve, float r
             unsigned c = nxtBase + j; 
             unsigned d = nxtBase + j + 1; 
 
-            // Standard CCW Winding Order
             out << "f " << a + 1 << " " << c + 1 << " " << b + 1 << "\n"; 
             out << "f " << b + 1 << " " << c + 1 << " " << d + 1 << "\n"; 
         } 
