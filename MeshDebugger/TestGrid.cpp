@@ -9,7 +9,7 @@
 #include "MarchingCubes.h"
 #include "MeshOptimization.h"
 #include "VoxIO.h"
-#include "MeshUtil.h"
+#include "meshutil.h"
 #include "ZRaycast.h"
 #include <deque>
 #include <iostream>
@@ -606,7 +606,7 @@ void TestVoxelizer() {
   };
   cpu_voxelize_mesh(conf, &mesh, callback);
   SaveVolAsObjMesh("F:/meshes/shellVar/debugVox_out.obj", voxGrid,
-                   (float*)(&conf.unit), (float*)(&conf.origin),1);
+                   conf.unit, conf.origin, 1);
 }
 
 void VolToMesh(const std::string &volFile) {

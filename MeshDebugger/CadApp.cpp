@@ -4,6 +4,7 @@
 #include "imgui.h"
 #include "MakeHelix.h"
 #include <algorithm>
+#include <cctype>
 
 class HelixWidget : public UIWidget {
  public:
@@ -111,7 +112,7 @@ void CadApp::OnChangeDir(std::string dir) {
 static int LoadMeshFile(const std::string& path, TrigMesh& mesh) {
   std::string suffix = get_suffix(path);
   std::transform(suffix.begin(), suffix.end(), suffix.begin(),
-                        std::tolower);
+                        [](unsigned char c) { return std::tolower(c); });
   if(suffix=="obj"){
     mesh.LoadObj(path);
     return 0;

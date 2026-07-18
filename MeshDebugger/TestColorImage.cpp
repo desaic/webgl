@@ -5,7 +5,7 @@
 #include "Array3D.h"
 #include "BBox.h"
 #include "Matrix3f.h"
-#include "MeshUtil.h"
+#include "meshutil.h"
 #include "Grid3DfIO.h"
 
 #include <fstream>
@@ -210,8 +210,8 @@ void AvgValPerPix() {
 
 struct SimpleVoxCb : public VoxCallback {
   SimpleVoxCb(Array3D8u& grid, uint8_t matId) : _grid(grid), _matId(matId) {}
-  virtual void operator()(unsigned x, unsigned y, unsigned z,
-                          size_t trigIdx) override {
+  void operator()(unsigned x, unsigned y, unsigned z,
+                  unsigned long long trigIdx) override {
     _grid(x, y, z) = _matId;
   }
   Array3D8u& _grid;

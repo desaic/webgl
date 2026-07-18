@@ -260,7 +260,7 @@ int main(int argc, char** argv) {
   // CombineLattice();
   // MoveFiles();
   // RunUVApp();
-  // RunCanvasApp();
+  RunCanvasApp();
   // RunInflateApp();
   // RunPackApp();
   // VoxApp();
@@ -284,6 +284,6 @@ int main(int argc, char** argv) {
   //TestBLD();
   //VolToMesh("F:/meshes/siena/siena_0.512.vol");
   //MakeRhombicLattice();
-  TestSDF();
+//  TestSDF();
   return 0;
 }

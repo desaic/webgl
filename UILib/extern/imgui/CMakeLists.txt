@@ -9,5 +9,9 @@ add_library(${LIB}
   "backends/imgui_impl_glfw.cpp"
 )
 
-target_link_libraries(${LIB} opengl32)
+if(WIN32)
+  target_link_libraries(${LIB} opengl32)
+else()
+  target_link_libraries(${LIB} GL)
+endif()
 target_include_directories(${LIB} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

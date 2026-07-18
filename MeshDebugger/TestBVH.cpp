@@ -3,7 +3,7 @@
 #define TINYBVH_IMPLEMENTATION
 #include "tiny_bvh.h"
 #include "TrigMesh.h"
-#include "MeshUtil.h"
+#include "meshutil.h"
 #include "ImageIO.h"
 #include "BBox.h"
 #include "AdapSDF.h"

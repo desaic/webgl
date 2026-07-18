@@ -187,11 +187,11 @@ uint64_t NextNum(uint64_t num) {
   }
 
   uint64_t n = num + 1;
-  int a = std::_Countr_zero(n);
+  int a = std::countr_zero(n);
   n = n >> a;
   n = n * pow3(a);
   n = n - 1;
-  int b = std::_Countr_zero(n);
+  int b = std::countr_zero(n);
   n = n >> b;
   return n;
 }

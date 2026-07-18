@@ -7,12 +7,13 @@
 #include "FastSweep.h"
 #include "FloodOutside.h"
 #include "HalfEdgeMesh.h"
-#include "MeshUtil.h"
+#include "meshutil.h"
 #include "MeshOptimization.h"
 #include "VoxIO.h"
 #include "Array3D.h"
 #include "Array2D.h"
 #include "ImageIO.h"
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iostream>

@@ -5,7 +5,7 @@
 
 #include "Array2D.h"
 #include "Array3D.h"
-#include "MeshUtil.h"
+#include "meshutil.h"
 #include "RasterizeTrig.h"
 #include "ThreadPool.h"
 #include "Stopwatch.h"

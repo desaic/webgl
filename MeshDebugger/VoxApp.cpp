@@ -2,7 +2,7 @@
 #include "StringUtil.h"
 #include "Stopwatch.h"
 #include "BBox.h"
-#include "MeshUtil.h"
+#include "meshutil.h"
 #include "cpu_voxelizer.h"
 #include "RaycastConf.h"
 #include "VoxIO.h"
@@ -54,7 +54,7 @@ void ConnectorVox::LoadMeshes() {
 struct SimpleVoxCb : public VoxCallback {
   SimpleVoxCb(Array3D8u& grid, uint8_t matId) : _grid(grid), _matId(matId) {}
   virtual void operator()(unsigned x, unsigned y, unsigned z,
-                          size_t trigIdx) override {
+                          unsigned long long trigIdx) override {
     _grid(x, y, z) = _matId;
   }  
   Array3D8u& _grid;
