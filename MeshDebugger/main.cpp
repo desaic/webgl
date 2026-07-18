@@ -256,11 +256,12 @@ void CombineLattice() {
 extern void VolToMesh(const std::string &volFile);
 extern void MakeRhombicLattice();
 extern void TestSDF();
+extern void CurvesToObj(const std::string& inFile, const std::string& outFile);
 int main(int argc, char** argv) {
   // CombineLattice();
   // MoveFiles();
   // RunUVApp();
-  RunCanvasApp();
+  // RunCanvasApp();
   // RunInflateApp();
   // RunPackApp();
   // VoxApp();
@@ -285,5 +286,7 @@ int main(int argc, char** argv) {
   //VolToMesh("F:/meshes/siena/siena_0.512.vol");
   //MakeRhombicLattice();
 //  TestSDF();
+  CurvesToObj("/media/desaic/WD/meshes/hacky/meshes/longCurves.txt",
+              "/media/desaic/WD/meshes/hacky/meshes/longCurves.obj");
   return 0;
 }
