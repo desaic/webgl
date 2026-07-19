@@ -346,6 +346,7 @@ PackingPlan PlanPackingSteps(const std::string & meshDir){
     plan.steps.push_back(step);    
   }
 
+  Vec3f finalForce(-0.1f, 0, 0);
   // pack small fruits towards inside of container.
   // add inner container to prevent wasting fruit near center of container.
   PackingStep lastStep;
@@ -353,7 +354,7 @@ PackingPlan PlanPackingSteps(const std::string & meshDir){
   lastStep.outwards = false;
   lastStep.useInnerContainer = true;
   lastStep.count = 1000000;
-
+  lastStep.force = finalForce;
   plan.steps.push_back(lastStep);
 
   // pack medium small fruits towards center instead of outwards.
@@ -361,6 +362,8 @@ PackingPlan PlanPackingSteps(const std::string & meshDir){
   if(numSteps > 2){
     PackingStep & smallMedium = plan.steps[numSteps - 2];
     smallMedium.outwards = false;
+    // almost no force towards left
+    smallMedium.force = finalForce;
   }
 
   return plan;

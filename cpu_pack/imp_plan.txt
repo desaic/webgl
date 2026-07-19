@@ -1,0 +1,205 @@
+# FindSpotSubgrid Implementation Plan
+
+## Problem
+FindSpot does FFT convolution over the full container voxel grid (bg.vox).
+For small meshes (e.g., 3cm items in a 60cm container), the FFT is wasteful -
+FFT cost scales with container size, not item size. Scoring also iterates millions of voxels.
+
+## Approach
+Divide the container into a 3D regular grid of fixed-size subgrid cells.
+Each cell has a configurable world-space extent (default 10cm per axis).
+Items with max side length > cellSize fall back to normal FindSpot.
+For eligible items, extract the bg.vox region of one cell (padded by item extent),
+run FindSpot on that smaller region, and return the first valid spot found.
+Each item tracks its current cell index. Cells are processed in sweep order
+(left-to-right, bottom-to-top). Once an item exhausts all cells, it is marked noMoreFit.
+
+## Changes Overview
+- PackingOps.h:    declare FindSpotSubgrid
+- PackingOps.cpp:  implement FindSpotSubgrid + helpers (crop vox, world-to-vox, cell ordering)
+- MeshInfo.h:      add unsigned nextCellIdx field
+- main.cpp:        modify PackStep to call FindSpotSubgrid for small items
+
+## Implementation Checklist
+
+### [x] 1. Add nextCellIdx to MeshInfo
+File: MeshInfo.h
+- Add field: unsigned nextCellIdx = 0;
+- Used to track which subgrid cell to try next for this item type.
+- Advances when a cell is exhausted (all rotation trials fail).
+- When nextCellIdx >= totalCells in scene, item.noMoreFit = true.
+
+### [x] 2. Declare FindSpotSubgrid in PackingOps.h
+Declaration:
+  bool FindSpotSubgrid(MeshConvo &bg, const TrigMesh &part, Vec3f &pos,
+                       const Vec3f &rot, std::shared_ptr<AdapSDF> sdf,
+                       float factor, float cellSize, unsigned cellIdx,
+                       Vec3u numCells);
+
+Parameters:
+- bg:           full container voxel grid (not modified - we crop from it)
+- part:         item mesh in inertia frame
+- pos:          output world-space position
+- rot:          euler rotation angles
+- sdf:          container SDF for scoring
+- factor:       +1 outwards, -1 inwards
+- cellSize:     world-space extent of each subgrid cell (e.g., 10.0f cm)
+- cellIdx:      which cell to process (0..numCells.x*numCells.y*numCells.z - 1)
+- numCells:     total subgrid cell count along (x, y, z)
+
+Returns true if a valid non-colliding position is found within the cell.
+
+### [ ] 3. Implement FindSpotSubgrid in PackingOps.cpp
+Steps:
+  a. Compute item extent from unrotated mesh bounding box (small meshes ~spherical)
+  b. Convert cellIdx to 3D cell index (i,j,k) - sweep order: x-major, then y, then z
+  c. Compute world-space box of cell i,j,k:
+       cellOrigin[i] = containerOrigin[i] + i * cellSize
+       cellBox = [cellOrigin, cellOrigin + cellSize]
+  d. Pad cellBox by itemExtent on all sides to create cropBox
+       cropBox.vmin = cellOrigin - itemExtent
+       cropBox.vmax = cellOrigin + cellSize + itemExtent
+  e. Clamp cropBox to container box bounds
+  f. Convert cropBox to voxel indices in bg.vox:
+       voxMin[i] = round((cropBox.vmin[i] - bg.box.vmin[i]) / bg.dx)
+       voxMax[i] = round((cropBox.vmax[i] - bg.box.vmin[i]) / bg.dx)
+  g. Crop voxel sub-region from bg.vox into temp Array3D8u subVox
+       subVox size = voxMax - voxMin, Fill:0
+       Copy from bg.vox(voxMin..voxMax) into subVox
+  h. Create temp MeshConvo:
+       temp.vox = subVox (move)
+       temp.box.vmin = cropBox.vmin
+       temp.dx = bg.dx
+  i. Call existing FindSpot(temp, rotatedPart, pos, rot, sdf, factor)
+       - FindSpot runs FFT on temp, mutates it (safe since temp is a copy)
+       - pos returned is in world coordinates because temp.box.vmin = cropBox.vmin
+       - GetDisplacement uses bg.GetOrigin() == box.vmin, so computes world coords
+  j. If FindSpot succeeds:
+       - Check that pos falls within the CELL's own bounds (not padding region)
+         cellMin <= pos + meshCenter <= cellMax
+       - If valid: return true
+       - If in padding only: treat as failure, continue
+  k. Return false
+
+Helpers needed:
+  - CropVox:    copy rectangular region from source Array3D8u into destination
+  - CellIdxTo3D: convert linear index to (i,j,k) triple
+  - VoxelIndex:  Vec3i roundToInt((world - origin) / dx)
+
+### [ ] 4. Add subgrid configuration to PackingScene
+File: PackingScene.h
+- Add: float subgridCellSize = 10.0f;  // cm
+- Add: Vec3u numSubgridCells;          // computed at init
+
+File: PackingScene.cpp InitDataStructures()
+- Compute numSubgridCells from container box and subgridCellSize:
+    numCells[i] = max(1u, unsigned(ceil(containerExtent[i] / subgridCellSize)))
+- Store total for MeshInfo tracking
+
+### [ ] 5. Modify PackStep in main.cpp
+In the trial loop (main.cpp PackStep, around line 115):
+
+  unsigned itemIndex = scene.GetItemIndex(name);
+  MeshInfo &item = scene.items[itemIndex];
+  if (item.noMoreFit) continue;
+
+  unsigned totalCells = scene.numSubgridCells[0] *
+                        scene.numSubgridCells[1] *
+                        scene.numSubgridCells[2];
+
+  // Only use subgrid routing for small items (extent < threshold)
+  Vec3f itemExtent = item.box.vmax - item.box.vmin;
+  float itemMaxExtent = max(itemExtent[0], max(itemExtent[1], itemExtent[2]));
+  // fall back to normal FindSpot if item is larger than a subgrid cell
+  bool useSubgrid = (itemMaxExtent < scene.subgridCellSize);
+
+  bool itemPlaced = false;
+  if (useSubgrid) {
+    // Try cells starting from nextCellIdx
+    while (item.nextCellIdx < totalCells) {
+      bool cellSuccess = false;
+      for (unsigned trial = 0; trial < MAX_TRIAL_COUNT; trial++) {
+        Vec3f pos;
+        Vec3f rot = scene.randAngles[angleIndex];
+        angleIndex = (angleIndex + 1) % scene.randAngles.size();
+        if (FindSpotSubgrid(scene.bg, item.mesh, pos, rot, scene.sdf,
+                            sdfFactor, scene.subgridCellSize,
+                            item.nextCellIdx, scene.numSubgridCells)) {
+          // commit placement, nudge, put (same as existing logic)
+          RigidTransform tran;
+          tran.position = pos;
+          tran.rotation = RotationMatrixRad(rot[0], rot[1], rot[2]);
+          Vec3f pushDir = scene.ForceDirection(itemIndex, step.force, sdfFactor, tran);
+          std::vector<RigidTransform> trajectory;
+          RigidTransform newTran = scene.Nudge(itemIndex, tran, pushDir, trajectory);
+          unsigned instanceId = scene.Put(itemIndex, newTran);
+          scene.instances[instanceId].trajectory = trajectory;
+          itemPlaced = true;
+          packSuccess = true;
+          cellSuccess = true;
+          break;
+        }
+      }
+      if (cellSuccess) break;
+      item.nextCellIdx++;  // cell exhausted, move to next
+    }
+    if (!itemPlaced) {
+      item.noMoreFit = true;
+    }
+  } else {
+    // Original FindSpot logic for large/medium items (unchanged)
+    // ...
+  }
+
+### [ ] 6. Test
+- Run full fruit packing workflow
+- Verify small items are placed correctly (no overlaps)
+- Compare total packing time vs baseline
+- Check visual output for placement quality
+
+## Design Details
+
+### Subgrid cell configuration
+- Fixed cell size: 10cm per axis (configurable via PackingScene::subgridCellSize)
+- For 60cm container: 6 x 3 x 3 = 54 cells (if container is 60x30x30cm)
+- For 10cm cell size, each cell FFT size: ~33x33x33 padded to 40x40x40 = 64K voxels
+  vs full container FFT: ~200x100x100 padded to 208x104x104 = 2.2M voxels
+  Single cell FFT is ~34x smaller
+
+### Item extent computation
+- Use unrotated mesh bounding box (item.box from MeshInfo)
+- Small meshes are approximately spherical, so unrotated extents are good enough
+- This avoids computing the rotated bbox for every subgrid cell
+
+### Per-item cell tracking
+- MeshInfo.nextCellIdx starts at 0, only advances when a cell is exhausted
+  (all rotation trials fail for that cell)
+- When an item is placed successfully, nextCellIdx stays the same
+  (more room may exist in the same cell)
+- When an item's nextCellIdx reaches totalCells, item.noMoreFit = true
+- This naturally sweeps items through cells in order, favoring leftmost regions
+
+### Coordinate handling
+- Temp MeshConvo.box.vmin = cropBox.vmin (world-space)
+- FindSpot calls bg.GetOrigin() which returns box.vmin
+- GetDisplacement computes world position from grid index and origin
+- No manual coordinate conversion needed - pos is in world coords
+
+### Overlap between subgrid scans
+- Adjacent cells' cropBoxes overlap by itemExtent on shared boundaries
+- Items are accepted only if center falls within the cell itself (not padding)
+- This ensures each placement is attributed to exactly one cell
+- No risk of duplicate placement in overlap regions
+
+### Fallback for large items
+- Items with max extent >= subgridCellSize use normal FindSpot on the full container
+- No per-cell tracking for large items (nextCellIdx not used)
+- This is checked via: if (itemMaxExtent >= scene.subgridCellSize) use normal FindSpot
+
+### Non-goals (unchanged)
+- Nudge step
+- Inner container
+- FindSpotConstrained
+- BroadPhase, TrigGrid, other spatial structures
+- Packing plan generation
+- Container SDF computation
