@@ -104,48 +104,107 @@ void PackStep(PackingScene & scene, const PackingStep & step){
       if (item.noMoreFit) {
         continue;
       }
-      bool itemPlaced = false;
-      for (unsigned trial = 0; trial < MAX_TRIAL_COUNT; trial++) {
-        Vec3f pos;
-        Vec3f rot = scene.randAngles[angleIndex];
-        angleIndex++;
-        if (angleIndex >= scene.randAngles.size()) {
-          angleIndex = 0;
+      Vec3f itemExtent = item.box.vmax - item.box.vmin;
+      float itemMaxExtent = std::max({itemExtent[0], itemExtent[1], itemExtent[2]});
+      unsigned totalCells = scene.numSubgridCells[0] * scene.numSubgridCells[1]
+                            * scene.numSubgridCells[2];
+      bool useSubgrid = (totalCells > 0 && itemMaxExtent < scene.subgridCellSize);
+      bool ignoreCellBoundary = false;
+
+      auto placeItem = [&](const Vec3f &p, const Vec3f &r) {
+        packSuccess = true;
+        RigidTransform tran;
+        tran.position = p;
+        tran.rotation = RotationMatrixRad(r[0], r[1], r[2]);
+        Vec3f pushDir = scene.ForceDirection(itemIndex, step.force, sdfFactor, tran);
+        std::cout << scene.items[itemIndex].name << " " << pushDir[0] << " "
+                  << pushDir[1] << " " << pushDir[2] << "\n";
+        std::vector<RigidTransform> trajectory;
+        RigidTransform newTran = scene.Nudge(itemIndex, tran, pushDir, trajectory);
+        unsigned instanceId = scene.Put(itemIndex, newTran);
+        scene.instances[instanceId].trajectory = trajectory;
+        if (count % 10 == 0 && count > 0) {
+          std::string trajFile =
+              scene.trajFile + std::to_string(int(count / 10) % 10) + ".txt";
+          scene.SaveTrajectories(trajFile);
         }
-        bool success = FindSpot(scene.bg, item.mesh, pos, rot, scene.sdf, sdfFactor);
-        if (success) {
-          packSuccess = true;
-          itemPlaced = true;
-          RigidTransform tran;
-          tran.position = pos;
-          tran.rotation = RotationMatrixRad(rot[0], rot[1], rot[2]);
-          Vec3f pushDir = scene.ForceDirection(itemIndex, step.force, sdfFactor, tran);
-          std::cout << scene.items[itemIndex].name <<" " <<pushDir[0] <<" "<<pushDir[1]<<" "<<pushDir[2]<<"\n";
-          std::vector<RigidTransform> trajectory;
-          RigidTransform newTran = scene.Nudge(itemIndex,tran,pushDir, trajectory);
-          unsigned instanceId = scene.Put(itemIndex, newTran);
-          scene.instances[instanceId].trajectory = trajectory;
-          // debug save trajectory progress
-          if(count % 10 == 0 && count > 0){
-            std::string trajFile = scene.trajFile + std::to_string(int(count/10) % 10) + ".txt";
-            scene.SaveTrajectories(trajFile);
+        if (count % 20 == 0 && count > 0) {
+          std::string packFile =
+              scene.packFile + std::to_string(int(count / 20) % 10) + ".txt";
+          std::ofstream out(packFile);
+          scene.SaveInstances(packFile);
+        }
+        count++;
+      };
+
+      bool itemPlaced = false;
+      if (useSubgrid) {
+        const unsigned MAX_CELLS_PER_ITEM = 30;
+        unsigned cellsTried = 0;
+        while (!itemPlaced && item.nextCellIdx < totalCells
+               && cellsTried < MAX_CELLS_PER_ITEM) {
+          // stride through cells to cover the container evenly
+          unsigned cellIdx = item.nextCellIdx;
+          item.nextCellIdx++;
+          cellsTried++;
+          bool cellSuccess = false;
+          for (unsigned trial = 0; trial < MAX_TRIAL_COUNT; trial++) {
+            Vec3f pos;
+            Vec3f rot = scene.randAngles[angleIndex];
+            angleIndex++;
+            if (angleIndex >= scene.randAngles.size()) {
+              angleIndex = 0;
+            }
+            if (FindSpotSubgrid(scene.bg, item.mesh, pos, rot, scene.sdf,
+                                sdfFactor, scene.subgridCellSize,
+                                cellIdx, scene.numSubgridCells,
+                                ignoreCellBoundary)) {
+              placeItem(pos, rot);
+              itemPlaced = true;
+              cellSuccess = true;
+              break;
+            }
           }
-          // debug save instances progress
-          if( count % 20 == 0 && count > 0){
-            std::string packFile = scene.packFile + std::to_string(int(count/20) % 10) + ".txt";
-            std::ofstream out(packFile);
-            scene.SaveInstances(packFile);
+          if (cellSuccess) break;
+        }
+        if (!itemPlaced && item.nextCellIdx >= totalCells) {
+          item.noMoreFit = true;
+        }
+      } else {
+        for (unsigned trial = 0; trial < MAX_TRIAL_COUNT; trial++) {
+          Vec3f pos;
+          Vec3f rot = scene.randAngles[angleIndex];
+          angleIndex++;
+          if (angleIndex >= scene.randAngles.size()) {
+            angleIndex = 0;
           }
-          count ++;
-          break;
+          if (FindSpot(scene.bg, item.mesh, pos, rot, scene.sdf, sdfFactor)) {
+            placeItem(pos, rot);
+            itemPlaced = true;
+            break;
+          }
         }
       }
-      if(!itemPlaced){
+      if (!itemPlaced && (!useSubgrid || item.nextCellIdx >= totalCells)) {
         item.noMoreFit = true;
       }
     }
     if (!packSuccess) {
-      break;
+      bool anySubgridRemaining = false;
+      unsigned tCells = scene.numSubgridCells[0] * scene.numSubgridCells[1]
+                        * scene.numSubgridCells[2];
+      for (unsigned nameIndex = 0; nameIndex < numItems; nameIndex++) {
+        unsigned itemIdx = scene.GetItemIndex(step.names[nameIndex]);
+        MeshInfo &it = scene.items[itemIdx];
+        if (tCells > 0 && it.nextCellIdx < tCells) {
+          anySubgridRemaining = true;
+          break;
+        }
+      }
+      if (!anySubgridRemaining) {
+        break;
+      }
+      packSuccess = true;
     }
     startNameIndex = (startNameIndex + 1) % numItems;
   }
@@ -168,10 +227,10 @@ void PackScene(PackingScene & scene, const PackingPlan & plan) {
   scene.placed.resize(scene.items.size());
 
   // debug. load pack progress.
-  // LoadPack(scene, "/media/desaic/WD/meshes/fruit_hand/pack5.txt");
+  LoadPack(scene, "/media/desaic/WD/meshes/fruit_hand/pack1_0719.txt");
 
   scene.trajFile = scene.outputFolder + "/traj";
-  const unsigned DEBUG_STEP = 0;
+  const unsigned DEBUG_STEP = 4;
   for(size_t i = DEBUG_STEP;i<plan.steps.size(); i++){
     PackStep(scene, plan.steps[i]);
   } 
@@ -191,11 +250,6 @@ void PackFruits(const PackingPlan & plan, const std::string & dataDir) {
   scene.broadPhase.Init(containerBox ,broadPhaseDx);
 
   scene.outputFolder = dataDir + "/out/";
-  // std::string packedFile = dataDir + "pack0.txt";
-  //LoadPack(scene, packedFile);
-  //for(unsigned i = 0;i<scene.items.size();i++){
-    //SavePackedMesh(scene, i);
-  //}
   scene.InitDataStructures();  
   PackScene(scene, plan);
 }

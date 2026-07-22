@@ -22,7 +22,8 @@ bool FindSpotSubgrid(MeshConvo &bg,
                      float factor,
                      float cellSize,
                      unsigned cellIdx,
-                     Vec3u numCells);
+                     Vec3u numCells,
+                     bool ignoreCellBoundary = false);
 
 // find candidate location subject to DOF constraints.
 bool FindSpotConstrained(MeshConvo &bg,

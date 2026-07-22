@@ -104,6 +104,9 @@ class PackingScene {
     TrigGrid containerInnerGrid;
 
     std::vector<Vec3f> randAngles;
+    // subgrid for FindSpot on small items
+    float subgridCellSize = 20.0f;
+    Vec3u numSubgridCells;
     // progress saving
     std::string trajFile;
     unsigned trajFileIndex = 0;

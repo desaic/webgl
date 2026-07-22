@@ -103,6 +103,16 @@ void PackingScene::InitDataStructures() {
     items[i].mesh.ComputeTrigNormals();
     items[i].mesh.ComputeVertNormals();
   }
+
+  Vec3f containerExtent = container.box.vmax - container.box.vmin;
+  numSubgridCells = Vec3u(
+      std::max(1u, (unsigned)std::ceil(containerExtent[0] / subgridCellSize)),
+      std::max(1u, (unsigned)std::ceil(containerExtent[1] / subgridCellSize)),
+      std::max(1u, (unsigned)std::ceil(containerExtent[2] / subgridCellSize)));
+  unsigned totalCells = numSubgridCells[0] * numSubgridCells[1] * numSubgridCells[2];
+  std::cout << "subgrid " << numSubgridCells[0] << "x" << numSubgridCells[1] << "x"
+            << numSubgridCells[2] << " (" << totalCells << " cells)"
+            << " cellSize=" << subgridCellSize << "\n";
 }
 
 void PackingScene::InitRigidBodies() {
@@ -605,10 +615,34 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   float eps = ds * 0.1f;
   float activeBuffer = ds;
 
-  // Simulation parameters
-  size_t maxOptimizationSteps = 100; // Might need slightly more steps for settling
+  // Simulation parameters -- scaled by fruit size.
+  // Small fruits need fewer steps to settle and coarser approximation is fine.
+  size_t maxOptimizationSteps;
+  float damping;
+  float pgsPasses;
+  float earlyExitVelSq;
+  if (minExtent < 3.0f) {
+    maxOptimizationSteps = 12;
+    damping = 0.75f;
+    pgsPasses = 3;
+    earlyExitVelSq = 5e-2f;
+  } else if (minExtent < 5.0f) {
+    maxOptimizationSteps = 35;
+    damping = 0.82f;
+    pgsPasses = 5;
+    earlyExitVelSq = 1e-3f;
+  } else if (minExtent < 10.0f) {
+    maxOptimizationSteps = 60;
+    damping = 0.84f;
+    pgsPasses = 6;
+    earlyExitVelSq = 1e-3f;
+  } else {
+    maxOptimizationSteps = 100;
+    damping = 0.85f;
+    pgsPasses = 8;
+    earlyExitVelSq = 1e-4f;
+  }
   float dt = 1.0f / 60.0f;          // Fixed time step
-  float damping = 0.85f;            // Velocity damping to simulate friction/air resistance
   float nudgeAcceleration = 200.0f; // Accelerate at 200 cm/s^2 (which is 2 m/s^2)
   // attraction towards contacting object.
   Vec3f attractionDir(-1,0,0);
@@ -617,12 +651,23 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   std::vector<SamplePoint> samples;
   if (meshInfo.samples.empty()) {
     std::vector<SamplePoint> allFineSamples;
-    float sampleSpacing = std::max(0.1f, std::min(ds, minExtent * 0.1f));
+    float sampleSpacing;
+    float maxOverlap;
+    if (minExtent < 3.0f) {
+      sampleSpacing = std::max(0.2f, minExtent * 0.15f);
+      maxOverlap = 0.0f;
+    } else if (minExtent < 5.0f) {
+      sampleSpacing = std::max(0.15f, minExtent * 0.12f);
+      maxOverlap = 0.1f;
+    } else {
+      sampleSpacing = std::max(0.1f, std::min(ds, minExtent * 0.1f));
+      maxOverlap = MAX_OVERLAP;
+    }
     SamplePoints(meshInfo.mesh, sampleSpacing, allFineSamples);
     samples = DownsamplePoints(allFineSamples, sampleSpacing);
     std::cout<<"sample spacing " << sampleSpacing <<" num samples " << samples.size()<<"\n";
     meshInfo.ComputeSDFCached();
-    MovePointsInward(samples, MAX_OVERLAP, meshInfo.sdf);
+    MovePointsInward(samples, maxOverlap, meshInfo.sdf);
     meshInfo.samples = samples;
   } else {
     samples = meshInfo.samples;
@@ -644,8 +689,11 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
 
   Utils::Stopwatch nudgeTotal;
   nudgeTotal.Start();
+  double gatherTime = 0, pgsTime = 0, broadTime = 0;
 
   for (size_t step = 0; step < maxOptimizationSteps; step++) {
+    Utils::Stopwatch swStep;
+    swStep.Start();
     Matrix3f currentRotMat = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
     auto Rinv = currentRotMat.transposed();
 
@@ -656,6 +704,8 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     linearVel += (forceDir * nudgeAcceleration) * dt;
 
     // 2. DYNAMIC BROADPHASE STEP
+    Utils::Stopwatch swBroad;
+    swBroad.Start();
     auto corners = TransformPoints(BoxCorners(localBox), currentRotMat, currentT);
     Box3f instBox = ComputeBBox(corners);
     float stepQueryDist = eps + activeBuffer;
@@ -687,10 +737,14 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     if (innerContainerEnabled) {
       accGrids.push_back(&containerInnerGrid);
     }
+    broadTime += swBroad.ElapsedMS();
 
     // 3. Narrow Phase Contact Gathering
+    Utils::Stopwatch swGather;
+    swGather.Start();
     std::vector<Contact> contacts = GatherActiveContacts(
         samples, accGrids, currentRotMat, currentT, eps, activeBuffer, CONTACT_ANGLE_THRESH_DEG);
+    gatherTime += swGather.ElapsedMS();
     float minX = 1e30f;
     int attractItem = -1;
     // pick contacting object with min x coord.
@@ -710,8 +764,11 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
       attractionDir.normalize();
     }
     // 4. PGS Solver Passes (Modifies Velocities)
-    int pgsPasses = 8;
-    SolveContactConstraintsPGS(contacts, currentT, currentRotMat, Rinv, invMass, invI_local, eps, pgsPasses, dt, linearVel, angularVel);
+    Utils::Stopwatch swPGS;
+    swPGS.Start();
+    SolveContactConstraintsPGS(contacts, currentT, currentRotMat, Rinv, invMass, invI_local,
+                                eps, (int)pgsPasses, dt, linearVel, angularVel);
+    pgsTime += swPGS.ElapsedMS();
 
     // 5. Integrate Velocities to Positions
     currentT += linearVel * dt;
@@ -738,7 +795,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     trajectory.push_back(RigidTransform(currentT, Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w())));
     
     // Early exit if the fruit has completely settled into a snug spot
-    if (linearVel.dot(linearVel) < 1e-4f && angularVel.dot(angularVel) < 1e-4f) {
+    if (linearVel.dot(linearVel) < earlyExitVelSq && angularVel.dot(angularVel) < earlyExitVelSq) {
         break; 
     }
   }
@@ -757,7 +814,18 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   tOut.position = currentT;
   tOut.rotation = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
 
-  std::cout << "Nudge total " << nudgeTotal.ElapsedMS() << " ms\n";
+  double total = nudgeTotal.ElapsedMS();
+  std::cout << "Nudge " << items[itemIdx].name
+            << " total=" << total << "ms"
+            << " steps=" << trajectory.size()
+            << " samples=" << samples.size()
+            << " extent=" << minExtent
+            << " broad=" << broadTime << "ms"
+            << " gather=" << gatherTime << "ms"
+            << " pgs=" << pgsTime << "ms"
+            << " pos=(" << currentT[0] << "," << currentT[1] << "," << currentT[2] << ")"
+            << " start=(" << tran.position[0] << "," << tran.position[1] << "," << tran.position[2] << ")"
+            << "\n";
   return tOut;
 }
 
