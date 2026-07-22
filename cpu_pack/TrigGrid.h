@@ -23,6 +23,11 @@ class TrigGrid {
     /// @param maxDist 
     /// @return 
     ContactInfo NearestTriangle(const Vec3f &point, float maxDist) const ;
+    bool InRange(const Vec3f &pt, float margin) const {
+      return pt[0] >= origin[0] - margin && pt[0] <= box.vmax[0] + margin &&
+             pt[1] >= origin[1] - margin && pt[1] <= box.vmax[1] + margin &&
+             pt[2] >= origin[2] - margin && pt[2] <= box.vmax[2] + margin;
+    }
     //dx will be reduced if grid is too large
     static const int MAX_GRID_SIZE = 1000;
 

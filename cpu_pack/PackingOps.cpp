@@ -273,6 +273,24 @@ bool FindSpotSubgrid(MeshConvo &bg,
                      bool ignoreCellBoundary) {
   Box3f itemBox = ComputeBBox(part.v);
   Vec3f itemExtent = itemBox.vmax - itemBox.vmin;
+  float maxExtent = std::max({itemExtent[0], itemExtent[1], itemExtent[2]});
+
+  // Shrink small fruits by 0.5cm for FFT to find spots more easily.
+  TrigMesh const *partPtr = &part;
+  TrigMesh shrunk;
+  if (maxExtent < 5.0f && maxExtent > 0.5f) {
+    float scale = (maxExtent - 0.5f) / maxExtent;
+    Vec3f center = 0.5f * (itemBox.vmin + itemBox.vmax);
+    shrunk = part;
+    for (size_t i = 0; i < shrunk.v.size(); i += 3) {
+      shrunk.v[i]   = center[0] + (shrunk.v[i]   - center[0]) * scale;
+      shrunk.v[i+1] = center[1] + (shrunk.v[i+1] - center[1]) * scale;
+      shrunk.v[i+2] = center[2] + (shrunk.v[i+2] - center[2]) * scale;
+    }
+    partPtr = &shrunk;
+    itemBox = ComputeBBox(shrunk.v);
+    itemExtent = itemBox.vmax - itemBox.vmin;
+  }
 
   Vec3u cell3D = CellIndexTo3D(cellIdx, numCells);
   Vec3f containerOrigin = bg.box.vmin;
@@ -337,15 +355,15 @@ bool FindSpotSubgrid(MeshConvo &bg,
   tempConv.dx = dx;
 
   Vec3f foundPos;
-  bool found = FindSpot(tempConv, part, foundPos, rot, sdf, factor);
+  bool found = FindSpot(tempConv, *partPtr, foundPos, rot, sdf, factor);
   if (!found) {
     return false;
   }
 
   // Verify the entire rotated fruit fits inside the container.
   Matrix3f rotMat = RotationMatrixRad(rot[0], rot[1], rot[2]);
-  TrigMesh rotated = part;
-  TransformVerts(part.v, rotated.v, rotMat);
+  TrigMesh rotated = *partPtr;
+  TransformVerts(partPtr->v, rotated.v, rotMat);
   Box3f rotBox = ComputeBBox(rotated.v);
   Vec3f fruitMin = foundPos + rotBox.vmin;
   Vec3f fruitMax = foundPos + rotBox.vmax;

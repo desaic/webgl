@@ -134,19 +134,13 @@ void PackStep(PackingScene & scene, const PackingStep & step){
           std::ofstream out(packFile);
           scene.SaveInstances(packFile);
         }
-        count++;
       };
 
       bool itemPlaced = false;
       if (useSubgrid) {
-        const unsigned MAX_CELLS_PER_ITEM = 30;
-        unsigned cellsTried = 0;
-        while (!itemPlaced && item.nextCellIdx < totalCells
-               && cellsTried < MAX_CELLS_PER_ITEM) {
-          // stride through cells to cover the container evenly
+        while (!itemPlaced && item.nextCellIdx < totalCells) {
           unsigned cellIdx = item.nextCellIdx;
           item.nextCellIdx++;
-          cellsTried++;
           bool cellSuccess = false;
           for (unsigned trial = 0; trial < MAX_TRIAL_COUNT; trial++) {
             Vec3f pos;
@@ -227,10 +221,10 @@ void PackScene(PackingScene & scene, const PackingPlan & plan) {
   scene.placed.resize(scene.items.size());
 
   // debug. load pack progress.
-  LoadPack(scene, "/media/desaic/WD/meshes/fruit_hand/pack1_0719.txt");
+  LoadPack(scene, "/media/desaic/WD/meshes/fruit_hand/pack_944_0721.txt");
 
   scene.trajFile = scene.outputFolder + "/traj";
-  const unsigned DEBUG_STEP = 4;
+  const unsigned DEBUG_STEP = 3;
   for(size_t i = DEBUG_STEP;i<plan.steps.size(); i++){
     PackStep(scene, plan.steps[i]);
   } 

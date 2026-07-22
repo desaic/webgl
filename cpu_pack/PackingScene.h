@@ -13,6 +13,8 @@
 #include <iostream>
 #include <filesystem>
 #include <map>
+#include <memory>
+#include <unordered_map>
 
 class AdapSDF;
 
@@ -102,6 +104,9 @@ class PackingScene {
     // container acceleration grid for collission.
     TrigGrid containerGrid;
     TrigGrid containerInnerGrid;
+    // cache of TrigGrid per instance, built once and reused across Nudge calls.
+    std::unordered_map<unsigned, std::shared_ptr<TrigMesh>> instanceMeshCache;
+    std::unordered_map<unsigned, std::shared_ptr<TrigGrid>> instanceGrids;
 
     std::vector<Vec3f> randAngles;
     // subgrid for FindSpot on small items

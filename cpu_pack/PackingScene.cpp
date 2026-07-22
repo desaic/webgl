@@ -63,10 +63,10 @@ Vec3f PackingScene::ForceDirection(unsigned itemIdx,
                                    const RigidTransform &tran) {
   Vec3f dir0 = gravity;
   // (0, 1)
-  float dir0Weight = 0.5f;
+  float dir0Weight = dir0.norm();
   // assume object is centered at origin in reference space.
   Vec3f sdfDir = sdf->GetCoarseGrad(tran.position);
-  Vec3f dir = dir0Weight * dir0 + (1 - dir0Weight) * (sdfFactor * sdfDir);
+  Vec3f dir = dir0 + (1 - dir0Weight) * (sdfFactor * sdfDir);
   dir.normalize();
   return dir;
 }
@@ -433,6 +433,9 @@ static std::vector<Contact> GatherActiveContacts(
     Vec3f worldPt = currentRotMat * fineSamples[s].x + currentT;
     
     for (unsigned m = 0; m < accGrids.size(); m++) {
+      if (!accGrids[m]->InRange(worldPt, queryRadius)) {
+        continue;
+      }
       ContactInfo info = accGrids[m]->NearestTriangle(worldPt, queryRadius);
       
       // We only care about points within our interaction radius
@@ -612,6 +615,11 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   Vec3f fruitExtent = fruitBox.vmax - fruitBox.vmin;
   float minExtent = std::min({fruitExtent[0], fruitExtent[1], fruitExtent[2]});
   float ds = 0.5f;
+  if (minExtent < 3.0f) {
+    ds = 0.2f;
+  } else if (minExtent < 5.0f) {
+    ds = 0.3f;
+  }
   float eps = ds * 0.1f;
   float activeBuffer = ds;
 
@@ -621,26 +629,31 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   float damping;
   float pgsPasses;
   float earlyExitVelSq;
+  unsigned contactGatherInterval;
   if (minExtent < 3.0f) {
-    maxOptimizationSteps = 12;
-    damping = 0.75f;
-    pgsPasses = 3;
-    earlyExitVelSq = 5e-2f;
-  } else if (minExtent < 5.0f) {
-    maxOptimizationSteps = 35;
+    maxOptimizationSteps = 30;
     damping = 0.82f;
     pgsPasses = 5;
     earlyExitVelSq = 1e-3f;
-  } else if (minExtent < 10.0f) {
-    maxOptimizationSteps = 60;
+    contactGatherInterval = 1;
+  } else if (minExtent < 5.0f) {
+    maxOptimizationSteps = 50;
     damping = 0.84f;
     pgsPasses = 6;
     earlyExitVelSq = 1e-3f;
+    contactGatherInterval = 2;
+  } else if (minExtent < 10.0f) {
+    maxOptimizationSteps = 80;
+    damping = 0.85f;
+    pgsPasses = 7;
+    earlyExitVelSq = 1e-3f;
+    contactGatherInterval = 1;
   } else {
     maxOptimizationSteps = 100;
     damping = 0.85f;
     pgsPasses = 8;
     earlyExitVelSq = 1e-4f;
+    contactGatherInterval = 1;
   }
   float dt = 1.0f / 60.0f;          // Fixed time step
   float nudgeAcceleration = 200.0f; // Accelerate at 200 cm/s^2 (which is 2 m/s^2)
@@ -683,13 +696,12 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
 
   Vec3f linearVel(0.0f);
   Vec3f angularVel(0.0f);
-
-  std::unordered_map<unsigned, std::shared_ptr<TrigGrid>> persistentNeighborGrids;
-  std::vector<std::shared_ptr<TrigMesh> > nbrMeshes;
+  std::vector<Contact> prevContacts;
 
   Utils::Stopwatch nudgeTotal;
   nudgeTotal.Start();
   double gatherTime = 0, pgsTime = 0, broadTime = 0;
+  unsigned maxGrids = 0;
 
   for (size_t step = 0; step < maxOptimizationSteps; step++) {
     Utils::Stopwatch swStep;
@@ -717,16 +729,16 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
 
     for (size_t i = 0; i < intersectingInstances.size(); i++) {
       unsigned instIdx = intersectingInstances[i];
-      auto it = persistentNeighborGrids.find(instIdx);
-      if (it == persistentNeighborGrids.end()) {
+      auto it = instanceGrids.find(instIdx);
+      if (it == instanceGrids.end()) {
         InstanceInfo inst = instances[instIdx];
         auto nbrMesh = std::make_shared<TrigMesh>();
         *nbrMesh = MakeTransformedMesh(items[inst.itemId].mesh, inst.tran);
-        nbrMeshes.push_back(nbrMesh);
+        instanceMeshCache[instIdx] = nbrMesh;
         
         auto newGrid = std::make_shared<TrigGrid>();
         newGrid->Build(*nbrMesh, gridDx);
-        persistentNeighborGrids[instIdx] = newGrid;
+        instanceGrids[instIdx] = newGrid;
         accGrids.push_back(newGrid.get());
       } else {
         accGrids.push_back(it->second.get());
@@ -738,13 +750,20 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
       accGrids.push_back(&containerInnerGrid);
     }
     broadTime += swBroad.ElapsedMS();
+    maxGrids = std::max(maxGrids, (unsigned)accGrids.size());
 
-    // 3. Narrow Phase Contact Gathering
-    Utils::Stopwatch swGather;
-    swGather.Start();
-    std::vector<Contact> contacts = GatherActiveContacts(
-        samples, accGrids, currentRotMat, currentT, eps, activeBuffer, CONTACT_ANGLE_THRESH_DEG);
-    gatherTime += swGather.ElapsedMS();
+    // 3. Narrow Phase Contact Gathering (throttled for small fruits)
+    std::vector<Contact> contacts;
+    if (step % contactGatherInterval == 0) {
+      Utils::Stopwatch swGather;
+      swGather.Start();
+      contacts = GatherActiveContacts(
+          samples, accGrids, currentRotMat, currentT, eps, activeBuffer, CONTACT_ANGLE_THRESH_DEG);
+      gatherTime += swGather.ElapsedMS();
+    } else {
+      contacts = prevContacts;
+    }
+    prevContacts = contacts;
     float minX = 1e30f;
     int attractItem = -1;
     // pick contacting object with min x coord.
@@ -820,9 +839,10 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
             << " steps=" << trajectory.size()
             << " samples=" << samples.size()
             << " extent=" << minExtent
-            << " broad=" << broadTime << "ms"
+             << " broad=" << broadTime << "ms"
             << " gather=" << gatherTime << "ms"
             << " pgs=" << pgsTime << "ms"
+            << " grids=" << maxGrids
             << " pos=(" << currentT[0] << "," << currentT[1] << "," << currentT[2] << ")"
             << " start=(" << tran.position[0] << "," << tran.position[1] << "," << tran.position[2] << ")"
             << "\n";
