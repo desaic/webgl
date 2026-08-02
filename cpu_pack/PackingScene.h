@@ -104,9 +104,14 @@ class PackingScene {
     // container acceleration grid for collission.
     TrigGrid containerGrid;
     TrigGrid containerInnerGrid;
-    // cache of TrigGrid per instance, built once and reused across Nudge calls.
-    std::unordered_map<unsigned, std::shared_ptr<TrigMesh>> instanceMeshCache;
-    std::unordered_map<unsigned, std::shared_ptr<TrigGrid>> instanceGrids;
+    // cache of TrigGrid per item KIND, built once in the item's local frame
+    // and shared by every instance of that kind. keyed by item index, so it
+    // is bounded by the item catalogue (~100) rather than by the placement
+    // count (thousands). queries transform the point into grid local space.
+    //
+    // the grids hold a non-owning pointer to items[i].mesh, which is assigned
+    // once at load and never reallocated, so the grids stay valid for the run.
+    std::unordered_map<unsigned, std::shared_ptr<TrigGrid>> kindGrids;
 
     std::vector<Vec3f> randAngles;
     // subgrid for FindSpot on small items

@@ -23,7 +23,12 @@ struct PackingConfig {
     // broad phase cell size.
     float broadPhaseDx = 2.0f;
     // cell size for the TrigGrid narrow phase acceleration grids.
-    float gridDx = 1.0f;
+    // a contact query costs one closestPointTriangle per triangle in the
+    // cells it touches, and the fruit meshes carry a few hundred triangles
+    // per square cm, so this is the dominant term in narrow phase time.
+    // measured on the 6k berry case: 1.0 -> 124 ms per placement, 0.5 -> 67,
+    // 0.25 -> 57 but with grids at 400 MB. 0.5 is the knee.
+    float gridDx = 0.5f;
     // subgrid cell size used by FindSpotSubgrid for small items.
     float subgridCellSize = 20.0f;
 
@@ -60,9 +65,25 @@ struct PackingConfig {
     std::string OutputFolder() const;
     std::string ResumePackPath() const;
 
-    /// reads dataDir from argv[1] if given, else the FRUIT_HAND_DIR env var,
-    /// else leaves the default. keeps the per-machine paths out of the source.
+    /// argv[1] is taken as a config file if it names a regular file, as
+    /// dataDir if it names a directory. "--config <file>" also works, and is
+    /// what the benchmark binary uses since it has its own flags. Falls back
+    /// to the FRUIT_HAND_DIR env var, then the defaults above. Keeps the
+    /// per-machine paths out of the source.
     void ParseArgs(int argc, char **argv);
+
+    /// reads "key value" lines, ignoring blank lines and # comments.
+    /// unknown keys are reported and skipped rather than being fatal, so an
+    /// old config file still runs after a field is renamed.
+    /// see pack_fruits.cfg for the template.
+    bool LoadFromFile(const std::string &path);
+
+    /// startStep comes from a hand written file, so it is clamped rather than
+    /// trusted. out of range means the last step, and an empty plan is the
+    /// caller's problem. returns true if the value was changed.
+    /// startItem is clamped in PackStep instead, because the valid range is
+    /// the kind count of whichever step is running, not a property of cfg.
+    bool ClampStartStep(size_t numSteps);
 
     std::string toString() const;
 };

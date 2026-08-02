@@ -103,13 +103,8 @@ void BenchRegion::Finish(const PackingScene *scene) {
     res.sceneMemory.push_back({"item.sdfs", m.itemSdfs});
     res.sceneMemory.push_back({"item.samples", m.itemSamples});
     res.sceneMemory.push_back(
-        {"instanceMeshCache (" + std::to_string(m.instanceMeshCacheCount)
-             + " entries)",
-         m.instanceMeshCache});
-    res.sceneMemory.push_back(
-        {"instanceGrids (" + std::to_string(m.instanceGridsCount)
-             + " entries)",
-         m.instanceGrids});
+        {"kindGrids (" + std::to_string(m.kindGridsCount) + " entries)",
+         m.kindGrids});
     res.sceneMemory.push_back({"trajectories", m.trajectories});
     res.sceneMemory.push_back({"broadPhase", m.broadPhase});
     res.sceneMemory.push_back({"total", m.Total()});

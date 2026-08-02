@@ -14,6 +14,7 @@ void BenchPutScaling(BenchContext &ctx);
 void BenchEndToEnd(BenchContext &ctx);
 void BenchValidateSelfTest(BenchContext &ctx);
 void BenchSmallFruitBatch(BenchContext &ctx);
+void BenchSmallFruitPackStep(BenchContext &ctx);
 
 const std::vector<Bench> &AllBenches() {
   static const std::vector<Bench> benches = {
@@ -36,6 +37,9 @@ const std::vector<Bench> &AllBenches() {
       {"smallfruit_batch",
        "bulk placement of the smallest berry, with the FFT shrink reported",
        BenchSmallFruitBatch},
+      {"smallfruit_packstep",
+       "bulk small placement through the real PackStep control flow",
+       BenchSmallFruitPackStep},
       {"cache_growth", "per placement memory growth of the instance caches",
        BenchCacheGrowth},
       {"put_scaling", "Put cost as instance count rises", BenchPutScaling},

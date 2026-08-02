@@ -136,6 +136,11 @@ int main(int argc, char *argv[]) {
       csvPath = argv[++i];
     } else if (a == "--budget" && i + 1 < argc) {
       ctx.budgetSec = float(std::atof(argv[++i]));
+    } else if (a == "--griddx" && i + 1 < argc) {
+      // narrow phase cell size. the cost of a contact query is the number
+      // of triangles in the cells it touches, so this is the knob that
+      // trades narrow phase time against grid memory.
+      ctx.cfg.gridDx = float(std::atof(argv[++i]));
     }
   }
   if (ctx.itemCount == 0) {

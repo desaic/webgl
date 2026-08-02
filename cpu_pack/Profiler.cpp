@@ -46,6 +46,13 @@ void Profiler::Add(ProfileId id, double ms) {
   c.calls++;
 }
 
+void Profiler::AddCount(ProfileId id, unsigned long n) {
+  if (!g_enabled || id < 0 || size_t(id) >= Store().size()) {
+    return;
+  }
+  Store()[size_t(id)].calls += n;
+}
+
 void Profiler::SetEnabled(bool on) {
   g_enabled = on;
 }

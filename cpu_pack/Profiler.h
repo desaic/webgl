@@ -29,6 +29,10 @@ class Profiler {
     /// interns a counter name. call once per site via the macro below.
     static ProfileId GetId(const char *name);
     static void Add(ProfileId id, double ms);
+    /// pure tally, no time. adds n to the call count and leaves totalMs at 0.
+    /// for "how many grid queries did that cost" questions, where wrapping
+    /// each event in a timer would cost more than the event.
+    static void AddCount(ProfileId id, unsigned long n);
 
     static void SetEnabled(bool on);
     static bool Enabled();
@@ -85,3 +89,12 @@ class ProfileScope {
       Profiler::GetId(name);                                            \
   ProfileScope PROFILE_CONCAT(pfScope_, __LINE__)(                      \
       PROFILE_CONCAT(pfId_, __LINE__))
+
+/// tallies n events under 'name'. no timing.
+#define PROFILE_COUNT(name, n)                                          \
+  do {                                                                  \
+    static const ProfileId PROFILE_CONCAT(pfCntId_, __LINE__) =         \
+        Profiler::GetId(name);                                          \
+    Profiler::AddCount(PROFILE_CONCAT(pfCntId_, __LINE__),              \
+                       (unsigned long)(n));                             \
+  } while (0)

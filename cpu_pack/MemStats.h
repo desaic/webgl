@@ -24,11 +24,10 @@ struct SceneMemory {
     size_t itemMeshes = 0;
     size_t itemSdfs = 0;
     size_t itemSamples = 0;
-    // the two unbounded caches populated by Nudge.
-    size_t instanceMeshCache = 0;
-    size_t instanceGrids = 0;
-    unsigned instanceMeshCacheCount = 0;
-    unsigned instanceGridsCount = 0;
+    // narrow phase TrigGrids, one per item kind, so bounded by the
+    // catalogue rather than by the placement count.
+    size_t kindGrids = 0;
+    unsigned kindGridsCount = 0;
     // grows with every placement.
     size_t trajectories = 0;
     size_t broadPhase = 0;

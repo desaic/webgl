@@ -69,6 +69,16 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
   const unsigned MAX_TRIAL_COUNT = cfg.maxTrialCount;
   unsigned angleIndex = 0;
   unsigned numItems = step.names.size();
+
+  // a previous step packed with a different force direction and left the
+  // container at a different occupancy, so "no more fit" from back then is
+  // not evidence about this step. medium items appear in two steps.
+  for (unsigned i = 0; i < numItems; i++) {
+    MeshInfo &it = scene.items[scene.GetItemIndex(step.names[i])];
+    it.noMoreFit = false;
+    it.nextCellIdx = 0;
+  }
+
   float sdfFactor = step.outwards ? 1.0f : -1.0f;
   if (step.useInnerContainer) {
     AddInnerContainer(scene);
@@ -79,6 +89,63 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
   Utils::Stopwatch stepClock;
   stepClock.Start();
   bool outOfTime = false;
+
+  unsigned totalStepCells = scene.numSubgridCells[0] * scene.numSubgridCells[1]
+                            * scene.numSubgridCells[2];
+  LOGI("pack step: " << numItems << " kinds, target " << step.count
+                     << ", force " << step.force[0] << " " << step.force[1]
+                     << " " << step.force[2] << ", outwards " << step.outwards
+                     << ", innerContainer " << step.useInnerContainer << "\n");
+  if (numItems <= 16) {
+    LOGI("  kinds:");
+    for (unsigned i = 0; i < numItems; i++) {
+      LOGI(" " << step.names[i]);
+    }
+    LOGI("\n");
+  }
+
+  // steps hold different numbers of kinds, so a startItem that is valid for
+  // one step can be past the end of another. left unclamped the item loop
+  // body never runs and the step spins through step.count rounds placing
+  // nothing.
+  unsigned startItem = cfg.startItem;
+  if (startItem >= numItems) {
+    LOGI("  startItem " << startItem << " past the last of " << numItems
+                        << " kinds in this step, clamped to "
+                        << (numItems - 1) << "\n");
+    startItem = numItems - 1;
+  }
+
+  // a saturated container burns thousands of failed searches without a
+  // single placement, and the only output used to come from placeItem, so
+  // that case looked exactly like a hang. these counters print regardless
+  // of whether anything is being placed.
+  unsigned long searches = 0;
+  unsigned placedCount = 0;
+  double lastReportMs = 0.0;
+  const double REPORT_INTERVAL_MS = 2000.0;
+  auto report = [&](const char *tag) {
+    unsigned retired = 0, cursorSum = 0;
+    for (unsigned i = 0; i < numItems; i++) {
+      const MeshInfo &it = scene.items[scene.GetItemIndex(step.names[i])];
+      if (it.noMoreFit) {
+        retired++;
+      }
+      cursorSum += it.nextCellIdx;
+    }
+    LOGI("  " << tag << " " << (stepClock.ElapsedMS() / 1000.0) << " s, "
+              << searches << " searches, " << placedCount << " placed, "
+              << retired << "/" << numItems << " kinds retired, "
+              << cursorSum << "/" << (numItems * totalStepCells)
+              << " cell slots walked, " << scene.instances.size()
+              << " instances\n");
+    lastReportMs = stepClock.ElapsedMS();
+  };
+  auto heartbeat = [&]() {
+    if (stepClock.ElapsedMS() - lastReportMs > REPORT_INTERVAL_MS) {
+      report("progress");
+    }
+  };
   auto timeUp = [&]() {
     if (cfg.maxSecondsPerStep <= 0.0f) {
       return false;
@@ -92,7 +159,7 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
 
   for (; count < step.count && !outOfTime; count++) {
     bool packSuccess = false;
-    for (unsigned i = cfg.startItem; i < numItems && !timeUp(); i++) {
+    for (unsigned i = startItem; i < numItems && !timeUp(); i++) {
       unsigned nameIndex = (i + startNameIndex) % numItems;
       std::string name = step.names[nameIndex];
 
@@ -114,12 +181,23 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
         tran.position = p;
         tran.rotation = RotationMatrixRad(r[0], r[1], r[2]);
         Vec3f pushDir = scene.ForceDirection(itemIndex, step.force, sdfFactor, tran);
-        LOGI(scene.items[itemIndex].name << " " << pushDir[0] << " " << pushDir[1]
-                                        << " " << pushDir[2] << "\n");
+        double settleStartMs = stepClock.ElapsedMS();
         std::vector<RigidTransform> trajectory;
         RigidTransform newTran = scene.Nudge(itemIndex, tran, pushDir, trajectory);
         unsigned instanceId = scene.Put(itemIndex, newTran);
         scene.instances[instanceId].trajectory = trajectory;
+        placedCount++;
+        // the found spot and the settled spot both matter: a large gap
+        // between them means the search is aiming at places the nudge has
+        // to drag the item out of.
+        Vec3f moved = newTran.position - p;
+        LOGI("  placed " << scene.items[itemIndex].name << " instance "
+                         << instanceId << " cell " << item.nextCellIdx
+                         << " at " << newTran.position[0] << " "
+                         << newTran.position[1] << " " << newTran.position[2]
+                         << ", settled " << moved.norm() << " cm in "
+                         << (stepClock.ElapsedMS() - settleStartMs) << " ms, "
+                         << placedCount << " this step\n");
         if (cfg.trajSaveInterval > 0 && count % cfg.trajSaveInterval == 0 && count > 0) {
           std::string trajFile = scene.trajFile
                                  + std::to_string(int(count / cfg.trajSaveInterval) % 10)
@@ -140,7 +218,6 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
         // loop needs its own check or a single item could blow the budget.
         while (!itemPlaced && item.nextCellIdx < totalCells && !timeUp()) {
           unsigned cellIdx = item.nextCellIdx;
-          item.nextCellIdx++;
           bool cellSuccess = false;
           for (unsigned trial = 0; trial < MAX_TRIAL_COUNT; trial++) {
             Vec3f pos;
@@ -149,6 +226,8 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
             if (angleIndex >= scene.randAngles.size()) {
               angleIndex = 0;
             }
+            searches++;
+            heartbeat();
             if (FindSpotSubgrid(scene.bg, item.mesh, pos, rot, scene.sdf,
                                 sdfFactor, scene.subgridCellSize,
                                 cellIdx, scene.numSubgridCells,
@@ -159,11 +238,17 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
               break;
             }
           }
-          if (cellSuccess) break;
+          if (cellSuccess) {
+            // stay on this cell. a 20cm cell holds many small items, so
+            // advancing on success would cap the run at one placement per
+            // (item, cell) pair, i.e. 90 per kind.
+            break;
+          }
+          // only a cell that failed every trial is retired.
+          item.nextCellIdx++;
         }
-        if (!itemPlaced && item.nextCellIdx >= totalCells) {
-          item.noMoreFit = true;
-        }
+        // the retirement test below covers this path identically, so the
+        // duplicate that used to sit here was removed.
       } else {
         for (unsigned trial = 0; trial < MAX_TRIAL_COUNT; trial++) {
           Vec3f pos;
@@ -172,6 +257,8 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
           if (angleIndex >= scene.randAngles.size()) {
             angleIndex = 0;
           }
+          searches++;
+          heartbeat();
           if (FindSpot(scene.bg, item.mesh, pos, rot, scene.sdf, sdfFactor)) {
             placeItem(pos, rot);
             itemPlaced = true;
@@ -180,6 +267,12 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
         }
       }
       if (!itemPlaced && (!useSubgrid || item.nextCellIdx >= totalCells)) {
+        if (!item.noMoreFit) {
+          LOGI("  retired " << item.name << ": no fit in "
+                            << (useSubgrid ? totalCells : 1u)
+                            << (useSubgrid ? " cells" : " full container search")
+                            << " after " << searches << " searches this step\n");
+        }
         item.noMoreFit = true;
       }
     }
@@ -196,12 +289,32 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
         }
       }
       if (!anySubgridRemaining) {
+        LOGI("  every kind is out of cells to try\n");
         break;
       }
       packSuccess = true;
     }
     startNameIndex = (startNameIndex + 1) % numItems;
   }
+
+  // exit reason, so a short step and an exhausted step are told apart.
+  const char *why = "all kinds retired";
+  if (outOfTime) {
+    why = "step time limit";
+  } else if (count >= step.count) {
+    why = "target count reached";
+  }
+  report("step done");
+  LOGI("  reason: " << why << ", " << count << " of " << step.count
+                    << " rounds, " << placedCount << " placed, "
+                    << (placedCount > 0
+                            ? (stepClock.ElapsedMS() / double(placedCount))
+                            : 0.0)
+                    << " ms per placement, "
+                    << (placedCount > 0
+                            ? (double(searches) / double(placedCount))
+                            : 0.0)
+                    << " searches per placement\n");
 }
 
 void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig &cfg) {
@@ -216,11 +329,22 @@ void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig
   }
 
   for (size_t i = cfg.startStep; i < plan.steps.size(); i++) {
+    LOGI("=== step " << i << " of " << (plan.steps.size() - 1) << " ===\n");
+    Utils::Stopwatch clock;
+    clock.Start();
+    size_t before = scene.instances.size();
     PackStep(scene, plan.steps[i], cfg);
+    LOGI("=== step " << i << " took " << (clock.ElapsedMS() / 1000.0) << " s, "
+                     << (scene.instances.size() - before) << " placed, "
+                     << scene.instances.size() << " instances total ===\n");
   }
 }
 
-void PackFruits(const PackingPlan &plan, const PackingConfig &cfg) {
+void PackFruits(const PackingPlan &plan, const PackingConfig &cfgIn) {
+  // the plan is only known here, so this is the first point at which
+  // startStep can be checked against something real.
+  PackingConfig cfg = cfgIn;
+  cfg.ClampStartStep(plan.steps.size());
   PackingScene scene;
   if (!BuildScene(scene, cfg)) {
     return;

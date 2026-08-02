@@ -424,25 +424,46 @@ static Quat4f IntegrateAngularVelocity(Vec3f angVel, float dt) {
 
 static std::vector<Contact> GatherActiveContacts(
     const std::vector<SamplePoint> &fineSamples,
-    const std::vector<const TrigGrid*> &accGrids,
+    const std::vector<GridInstance> &accGrids,
     const Matrix3f &currentRotMat,
     const Vec3f &currentT,
     float eps,
     float activeBuffer,
     float contactAngleThreshDeg) {
-    
+
   std::vector<Contact> activeContacts;
   float queryRadius = eps + activeBuffer;
-  
+
+  {
+  // the grid queries and the manifold reduction are measured apart because
+  // together they were 85% of a small-item pack with nothing to aim at.
+  PROFILE_SCOPE("nudge.grid_query");
+  PROFILE_COUNT("count.gather_samples", fineSamples.size());
+  PROFILE_COUNT("count.gather_grids", accGrids.size());
+  unsigned long nearestCalls = 0;
   for (size_t s = 0; s < fineSamples.size(); s++) {
     Vec3f worldPt = currentRotMat * fineSamples[s].x + currentT;
-    
+
     for (unsigned m = 0; m < accGrids.size(); m++) {
-      if (!accGrids[m]->InRange(worldPt, queryRadius)) {
+      const GridInstance &gi = accGrids[m];
+      // neighbor grids live in their item's local frame, so the query point
+      // comes to them rather than the grid being rebuilt in world space.
+      // a uniform scale also scales distances, hence the radius division.
+      Vec3f queryPt = gi.worldSpace ? worldPt : gi.ToLocal(worldPt);
+      float localRadius =
+          gi.worldSpace ? queryRadius : queryRadius * gi.invScale;
+      if (!gi.grid->InRange(queryPt, localRadius)) {
         continue;
       }
-      ContactInfo info = accGrids[m]->NearestTriangle(worldPt, queryRadius);
-      
+      nearestCalls++;
+      ContactInfo info = gi.grid->NearestTriangle(queryPt, localRadius);
+      if (!gi.worldSpace && info.dist < 1e29f) {
+        // back to world: distances scale, normals only rotate.
+        info.dist *= gi.scale;
+        info.closestPt = gi.ToWorldPoint(info.closestPt);
+        info.normal = gi.ToWorldDir(info.normal);
+      }
+
       // We only care about points within our interaction radius
       if (info.dist >= 0.0f && info.dist < queryRadius) {
         // Compute signed distance using the face normal. All grids now
@@ -462,6 +483,12 @@ static std::vector<Contact> GatherActiveContacts(
       }
     }
   }
+  // in-range pairs only. samples x grids is the upper bound, this is the
+  // number that actually walks a grid.
+  PROFILE_COUNT("count.nearest_trig", nearestCalls);
+  PROFILE_COUNT("count.raw_contacts", activeContacts.size());
+  }
+  PROFILE_SCOPE("nudge.manifold_reduce");
   return reduceContactManifold(activeContacts, contactAngleThreshDeg);
 }
 
@@ -736,32 +763,30 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
 
     // must be ordered by the intersectingInstances than 1-2 container meshes
     // for active contacts to return correct indices
-    std::vector<const TrigGrid*> accGrids;
+    std::vector<GridInstance> accGrids;
 
     for (size_t i = 0; i < intersectingInstances.size(); i++) {
       unsigned instIdx = intersectingInstances[i];
-      auto it = instanceGrids.find(instIdx);
-      if (it == instanceGrids.end()) {
-        // first contact with this neighbor. builds a full transformed mesh
-        // copy plus a TrigGrid and caches both forever.
+      const InstanceInfo &inst = instances[instIdx];
+      auto it = kindGrids.find(inst.itemId);
+      if (it == kindGrids.end()) {
+        // first contact with this KIND anywhere. built in the item's local
+        // frame from items[].mesh, so no transformed mesh copy is needed and
+        // every later instance of the kind reuses this grid.
         PROFILE_SCOPE("nudge.triggrid_build");
-        InstanceInfo inst = instances[instIdx];
-        auto nbrMesh = std::make_shared<TrigMesh>();
-        *nbrMesh = MakeTransformedMesh(items[inst.itemId].mesh, inst.tran);
-        instanceMeshCache[instIdx] = nbrMesh;
-
         auto newGrid = std::make_shared<TrigGrid>();
-        newGrid->Build(*nbrMesh, gridDx);
-        instanceGrids[instIdx] = newGrid;
-        accGrids.push_back(newGrid.get());
-      } else {
-        accGrids.push_back(it->second.get());
+        newGrid->Build(items[inst.itemId].mesh, gridDx);
+        it = kindGrids.emplace(inst.itemId, newGrid).first;
       }
+      accGrids.push_back(GridInstance::Local(it->second.get(),
+                                            inst.tran.rotation,
+                                            inst.tran.position,
+                                            inst.tran.scale));
     }
 
-    accGrids.push_back(&containerGrid);
+    accGrids.push_back(GridInstance::World(&containerGrid));
     if (innerContainerEnabled) {
-      accGrids.push_back(&containerInnerGrid);
+      accGrids.push_back(GridInstance::World(&containerInnerGrid));
     }
     broadTime += swBroad.ElapsedMS();
     maxGrids = std::max(maxGrids, (unsigned)accGrids.size());
@@ -1037,9 +1062,6 @@ RigidTransform PackingScene::NudgeConstrained(unsigned itemIdx,
   Vec3f linearVel(0.0f);
   Vec3f angularVel(0.0f);
 
-  std::unordered_map<unsigned, std::shared_ptr<TrigGrid>> persistentNeighborGrids;
-  std::vector<std::shared_ptr<TrigMesh>> nbrMeshes;
-
   Utils::Stopwatch nudgeTotal;
   nudgeTotal.Start();
 
@@ -1065,26 +1087,27 @@ RigidTransform PackingScene::NudgeConstrained(unsigned itemIdx,
     float stepQueryDist = eps + activeBuffer;
     std::vector<unsigned> intersectingInstances = broadPhase.GetNearby(instBox, stepQueryDist);
 
-    std::vector<const TrigGrid*> accGrids;
+    // shares the scene wide per kind grid cache with Nudge, so neighbors
+    // cost one transform per query instead of a mesh copy plus a grid.
+    std::vector<GridInstance> accGrids;
     for (size_t i = 0; i < intersectingInstances.size(); i++) {
       unsigned instIdx = intersectingInstances[i];
-      auto it = persistentNeighborGrids.find(instIdx);
-      if (it == persistentNeighborGrids.end()) {
-        InstanceInfo inst = instances[instIdx];
-        auto nbrMesh = std::make_shared<TrigMesh>();
-        *nbrMesh = MakeTransformedMesh(items[inst.itemId].mesh, inst.tran);
-        nbrMeshes.push_back(nbrMesh);
+      const InstanceInfo &inst = instances[instIdx];
+      auto it = kindGrids.find(inst.itemId);
+      if (it == kindGrids.end()) {
+        PROFILE_SCOPE("nudge.triggrid_build");
         auto newGrid = std::make_shared<TrigGrid>();
-        newGrid->Build(*nbrMesh, gridDx);
-        persistentNeighborGrids[instIdx] = newGrid;
-        accGrids.push_back(newGrid.get());
-      } else {
-        accGrids.push_back(it->second.get());
+        newGrid->Build(items[inst.itemId].mesh, gridDx);
+        it = kindGrids.emplace(inst.itemId, newGrid).first;
       }
+      accGrids.push_back(GridInstance::Local(it->second.get(),
+                                            inst.tran.rotation,
+                                            inst.tran.position,
+                                            inst.tran.scale));
     }
-    accGrids.push_back(&containerGrid);
+    accGrids.push_back(GridInstance::World(&containerGrid));
     if (innerContainerEnabled) {
-      accGrids.push_back(&containerInnerGrid);
+      accGrids.push_back(GridInstance::World(&containerInnerGrid));
     }
 
     std::vector<Contact> contacts = GatherActiveContacts(

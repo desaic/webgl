@@ -82,7 +82,7 @@ static size_t SdfBytes(const AdapSDF *sdf) {
 
 size_t SceneMemory::Total() const {
   return bgVox + bgFft + containerSdf + containerGrids + itemMeshes + itemSdfs
-         + itemSamples + instanceMeshCache + instanceGrids + trajectories
+         + itemSamples + kindGrids + trajectories
          + broadPhase;
 }
 
@@ -99,12 +99,9 @@ std::string SceneMemory::toString() const {
   row("item.meshes", itemMeshes);
   row("item.sdfs", itemSdfs);
   row("item.samples", itemSamples);
-  oss << "  " << std::left << std::setw(20) << "instanceMeshCache"
-      << std::right << std::setw(12) << FormatBytes(instanceMeshCache) << "  ("
-      << instanceMeshCacheCount << " entries)\n";
-  oss << "  " << std::left << std::setw(20) << "instanceGrids" << std::right
-      << std::setw(12) << FormatBytes(instanceGrids) << "  ("
-      << instanceGridsCount << " entries)\n";
+  oss << "  " << std::left << std::setw(20) << "kindGrids" << std::right
+      << std::setw(12) << FormatBytes(kindGrids) << "  ("
+      << kindGridsCount << " entries)\n";
   row("trajectories", trajectories);
   row("broadPhase", broadPhase);
   row("total", Total());
@@ -128,18 +125,12 @@ SceneMemory MeasureSceneMemory(const PackingScene &scene) {
   m.itemMeshes += MeshBytes(scene.container.mesh);
   m.itemMeshes += MeshBytes(scene.containerInner.mesh);
 
-  for (const auto &kv : scene.instanceMeshCache) {
+  for (const auto &kv : scene.kindGrids) {
     if (kv.second) {
-      m.instanceMeshCache += MeshBytes(*kv.second);
+      m.kindGrids += kv.second->MemoryBytes();
     }
   }
-  m.instanceMeshCacheCount = unsigned(scene.instanceMeshCache.size());
-  for (const auto &kv : scene.instanceGrids) {
-    if (kv.second) {
-      m.instanceGrids += kv.second->MemoryBytes();
-    }
-  }
-  m.instanceGridsCount = unsigned(scene.instanceGrids.size());
+  m.kindGridsCount = unsigned(scene.kindGrids.size());
 
   for (size_t i = 0; i < scene.instances.size(); i++) {
     m.trajectories +=

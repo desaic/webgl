@@ -3,6 +3,7 @@
 #include "Benchmark.h"
 #include "MemStats.h"
 #include "MeshOps.h"
+#include "PackValidate.h"
 #include "PackingDriver.h"
 #include "PackingOps.h"
 #include "Profiler.h"
@@ -10,6 +11,7 @@
 #include <algorithm>
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <ostream>
 #include <sstream>
 
@@ -18,17 +20,16 @@ namespace {
 void GrowthHeader() {
   std::cout << "  " << std::left << std::setw(9) << "placed" << std::right
             << std::setw(12) << "wall_ms" << std::setw(12) << "rss"
-            << std::setw(12) << "meshCache" << std::setw(12) << "trigGrids"
-            << std::setw(8) << "entries" << std::setw(12) << "traj" << "\n";
+            << std::setw(12) << "kindGrids" << std::setw(8) << "entries"
+            << std::setw(12) << "traj" << "\n";
 }
 
 void GrowthRow(unsigned placed, double wallMs, const SceneMemory &m) {
   std::cout << "  " << std::left << std::setw(9) << placed << std::right
             << std::fixed << std::setprecision(1) << std::setw(12) << wallMs
             << std::setw(12) << FormatBytes(RssBytes()) << std::setw(12)
-            << FormatBytes(m.instanceMeshCache) << std::setw(12)
-            << FormatBytes(m.instanceGrids) << std::setw(8)
-            << m.instanceGridsCount << std::setw(12)
+            << FormatBytes(m.kindGrids) << std::setw(8)
+            << m.kindGridsCount << std::setw(12)
             << FormatBytes(m.trajectories) << "\n";
   std::cout.unsetf(std::ios::floatfield);
 }
@@ -36,8 +37,9 @@ void GrowthRow(unsigned placed, double wallMs, const SceneMemory &m) {
 } // namespace
 
 // places itemCount small items into a partly full container one at a time,
-// printing memory after each. instanceMeshCache and instanceGrids are never
-// cleared, so both columns should only ever climb.
+// printing memory after each. kindGrids is keyed by item kind and never
+// cleared, so it climbs only until each kind has been met once, then flattens.
+// before the grids were keyed by kind this column grew per placement.
 void BenchCacheGrowth(BenchContext &ctx) {
   BenchScene bs = MakeBenchScene(ctx.cfg, true);
   if (!bs.ok) {
@@ -198,4 +200,144 @@ void BenchEndToEnd(BenchContext &ctx) {
   }
   r.Note(eff.str());
   r.Finish(bs.scene.get());
+}
+
+// the 6k-blueberry feasibility check, through the real PackStep.
+//
+// PackStep retires a subgrid cell for an item as soon as that item has been
+// placed in it, so before this was fixed each kind could be placed at most
+// once per cell. with 90 cells and ~10 small kinds the whole run capped out
+// near 900 blueberries against a target of 6000+. the ceiling is reported
+// next to the actual count so a regression shows up as a number, not a
+// vague slowdown.
+void BenchSmallFruitPackStep(BenchContext &ctx) {
+  BenchScene bs = MakeBenchScene(ctx.cfg, true);
+  if (!bs.ok) {
+    return;
+  }
+  PackingScene &scene = *bs.scene;
+  if (ctx.plan.steps.empty()) {
+    return;
+  }
+  // the last plan step is the small group, i.e. the blueberries.
+  PackingStep step = ctx.plan.steps.back();
+  step.count = 1000000u;
+
+  PackingConfig local = ctx.cfg;
+  local.trajSaveInterval = 0;
+  local.packSaveInterval = 0;
+  local.startItem = 0;
+  float budget = ctx.RemainingSec();
+  local.maxSecondsPerStep = budget < 60.0f ? budget : 60.0f;
+  if (local.maxSecondsPerStep < 5.0f) {
+    BenchSkip("smallfruit_packstep",
+              "bulk small placement through the real PackStep control flow",
+              "not enough time budget left");
+    return;
+  }
+
+  unsigned totalCells = scene.numSubgridCells[0] * scene.numSubgridCells[1]
+                        * scene.numSubgridCells[2];
+  size_t before = scene.instances.size();
+
+  BenchRegion r("smallfruit_packstep");
+  PackStep(scene, step, local);
+  size_t placed = scene.instances.size() - before;
+
+  // per kind counts, to compare against the one-per-cell ceiling.
+  std::map<unsigned, unsigned> perKind;
+  for (size_t i = before; i < scene.instances.size(); i++) {
+    perKind[scene.instances[i].itemId]++;
+  }
+  unsigned worstKind = 0;
+  for (auto &kv : perKind) {
+    if (kv.second > worstKind) {
+      worstKind = kv.second;
+    }
+  }
+
+  std::ostringstream oss;
+  oss << placed << " placed onto " << before << " existing in "
+      << local.maxSecondsPerStep << " s, " << step.names.size()
+      << " kinds in the step, " << perKind.size() << " kinds used";
+  r.Note(oss.str());
+
+  // cursor sum is the direct evidence. cells are only retired on a cell
+  // that failed every trial, so with the fix in place the cursors advance
+  // far less than the placement count. if a placement still retired its
+  // cell, cursorSum would be >= placed.
+  unsigned cursorSum = 0;
+  for (unsigned i = 0; i < step.names.size(); i++) {
+    cursorSum += scene.items[scene.GetItemIndex(step.names[i])].nextCellIdx;
+  }
+
+  std::ostringstream cap;
+  cap << totalCells << " subgrid cells per kind, ceiling "
+      << (totalCells * step.names.size()) << " placements if cells retire on"
+      << " success; most placements of one kind " << worstKind;
+  r.Note(cap.str());
+
+  std::ostringstream cur;
+  cur << "cell cursors advanced " << cursorSum << " total for " << placed
+      << " placements";
+  if (placed > 0 && cursorSum < placed) {
+    cur << " -- cells are being reused, cap is lifted";
+  } else {
+    cur << " -- cells still retire per placement, cap is NOT lifted";
+  }
+  r.Note(cur.str());
+
+  if (placed > 0) {
+    std::ostringstream rate;
+    rate << (r.ElapsedMS() / double(placed)) << " ms per placement, "
+         << (double(Profiler::Calls("findspot_subgrid.total")) / double(placed))
+         << " subgrid searches per placement";
+    r.Note(rate.str());
+  }
+
+  // any speedup in the narrow phase has to be paid for in overlap, so the
+  // whole batch is re-checked here rather than trusting the 3-placement
+  // nudge scenarios. each new berry is validated against the container and
+  // against everything placed before it, in placement order, so this is the
+  // same test smallfruit_batch runs inline.
+  if (ctx.validate && placed > 0) {
+    PackValidator validator;
+    validator.Init(scene, ctx.cfg);
+    for (size_t i = 0; i < before; i++) {
+      validator.AddPlaced(scene, scene.instances[i].itemId,
+                          scene.instances[i].tran);
+    }
+    unsigned failures = 0, deepish = 0;
+    float worstOverlap = 0.0f, worstOutside = 0.0f, overlapSum = 0.0f;
+    for (size_t i = before; i < scene.instances.size(); i++) {
+      const InstanceInfo &inst = scene.instances[i];
+      ValidationResult vr =
+          validator.ValidatePlacement(scene, inst.itemId, inst.tran);
+      if (!vr.Ok()) {
+        failures++;
+      }
+      if (vr.maxOverlapDepth > 0.5f * validator.allowedDepth) {
+        deepish++;
+      }
+      overlapSum += vr.maxOverlapDepth;
+      worstOverlap = std::max(worstOverlap, vr.maxOverlapDepth);
+      worstOutside = std::max(worstOutside, vr.maxOutsideDepth);
+      validator.AddPlaced(scene, inst.itemId, inst.tran);
+    }
+    std::ostringstream val;
+    val << "validated " << placed << " new placements, " << failures
+        << " failures, worst overlap " << worstOverlap << " cm, worst outside "
+        << worstOutside << " cm, mean per-placement overlap "
+        << (overlapSum / double(placed)) << " cm, " << deepish << " deeper than "
+        << (0.5f * validator.allowedDepth) << " cm";
+    r.Note(val.str());
+
+    // written so the pack can actually be looked at. a number saying the
+    // overlap is small does not show whether the berries ended up spread
+    // over the surface or piled in one corner.
+    std::string dump = "smallfruit_packstep_pack.txt";
+    scene.SaveInstances(dump);
+    r.Note("pack written to " + dump + " for visual inspection");
+  }
+  r.Finish(&scene);
 }

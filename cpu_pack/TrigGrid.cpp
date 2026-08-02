@@ -1,6 +1,9 @@
 #include "TrigGrid.h"
+#include "Profiler.h"
 #include "TrigMesh.h"
 #include "cpu_voxelizer.h"
+
+#include <cmath>
 
 float dot(const Vec3f &a, const Vec3f &b) {
   return a.dot(b);
@@ -94,6 +97,23 @@ size_t TrigGrid::MemoryBytes() const {
   return bytes;
 }
 
+// 0, -1, +1, -2, +2, ... so a cell walk starts at the centre and works
+// outward, which lets minDist shrink before the far cells are tested.
+static inline int CenterOutOffset(int i) {
+  return (i % 2 == 0) ? (i / 2) : -((i + 1) / 2);
+}
+
+// distance from p to the interval [lo, hi], 0 if inside.
+static inline float AxisGap(float p, float lo, float hi) {
+  if (p < lo) {
+    return lo - p;
+  }
+  if (p > hi) {
+    return p - hi;
+  }
+  return 0.0f;
+}
+
 ContactInfo TrigGrid::NearestTriangle(const Vec3f &point, float maxDist) const{
 // Convert point to grid coordinates
   Vec3f gridCoord = (point - origin) * (1.0f / voxelSize);
@@ -101,20 +121,56 @@ ContactInfo TrigGrid::NearestTriangle(const Vec3f &point, float maxDist) const{
   ContactInfo info;
   float minDist = maxDist;
   Vec3u gridSize = grid.GetSize();
-  // Search 3x3x3 neighborhood
-  for (int dz = -1; dz <= 1; dz++) {
-    int gz = gridIdx[2] + dz;
+  unsigned long cellsScanned = 0, trigTests = 0;
+  // Walk the cells around the query point, skipping any cell whose box is
+  // already farther than the best distance so far. maxDist is the sample
+  // spacing (0.22 cm for a berry) while a cell is voxelSize (1 cm) across, so the
+  // plain 27-cell walk was scanning a 3 cm cube to answer a 0.22 cm
+  // question. culling is exact: a triangle whose nearest point lies in a
+  // culled cell is farther than minDist by construction, and the voxelizer
+  // registers a triangle in every cell it overlaps, so a triangle reaching
+  // into a kept cell is still found through that cell.
+  //
+  // the center cell comes first so minDist shrinks before the neighbors are
+  // tested, which culls more of them.
+  //
+  // the window is sized from maxDist rather than fixed at 3x3x3: a cell
+  // holds triangles that overlap it, so a triangle within maxDist of the
+  // query can sit up to ceil(maxDist / voxelSize) cells away. at
+  // maxDist <= voxelSize this is the same 3x3x3 as before, and it stays
+  // correct if the grid is ever built finer than the query radius.
+  int reach = int(std::ceil(maxDist / voxelSize));
+  if (reach < 1) {
+    reach = 1;
+  }
+  int span = 2 * reach + 1;
+  for (int iz = 0; iz < span; iz++) {
+    int gz = gridIdx[2] + CenterOutOffset(iz);
     if (gz < 0 || gz >= int(gridSize[2]))
       continue;
+    float loZ = origin[2] + float(gz) * voxelSize;
+    float gapZ = AxisGap(point[2], loZ, loZ + voxelSize);
+    float d2Z = gapZ * gapZ;
+    if (d2Z >= minDist * minDist)
+      continue;
 
-    for (int dy = -1; dy <= 1; dy++) {
-      int gy = gridIdx[1] + dy;
+    for (int iy = 0; iy < span; iy++) {
+      int gy = gridIdx[1] + CenterOutOffset(iy);
       if (gy < 0 || gy >= int(gridSize[1]))
         continue;
+      float loY = origin[1] + float(gy) * voxelSize;
+      float gapY = AxisGap(point[1], loY, loY + voxelSize);
+      float d2ZY = d2Z + gapY * gapY;
+      if (d2ZY >= minDist * minDist)
+        continue;
 
-      for (int dx_iter = -1; dx_iter <= 1; dx_iter++) {
-        int gx = gridIdx[0] + dx_iter;
+      for (int ix = 0; ix < span; ix++) {
+        int gx = gridIdx[0] + CenterOutOffset(ix);
         if (gx < 0 || gx >= int(gridSize[0]))
+          continue;
+        float loX = origin[0] + float(gx) * voxelSize;
+        float gapX = AxisGap(point[0], loX, loX + voxelSize);
+        if (d2ZY + gapX * gapX >= minDist * minDist)
           continue;
 
         uint32_t listIdx = grid(gx, gy, gz);
@@ -122,6 +178,8 @@ ContactInfo TrigGrid::NearestTriangle(const Vec3f &point, float maxDist) const{
           continue; // Empty voxel
 
         const std::vector<unsigned> &trigList = tLists[listIdx];
+        cellsScanned++;
+        trigTests += trigList.size();
 
         // Check distance to each triangle in this voxel
         for (unsigned tIdx : trigList) {
@@ -134,10 +192,14 @@ ContactInfo TrigGrid::NearestTriangle(const Vec3f &point, float maxDist) const{
           c = Vec3f(mesh->v[3 * vIdx2], mesh->v[3 * vIdx2 + 1], mesh->v[3 * vIdx2 + 2]);
 
           Vec3f closestPt = closestPointTriangle(point, a, b, c);
-          info.closestPt = closestPt;
           float dist = (point - closestPt).norm();
           if (dist < minDist) {
             minDist = dist;
+            // was assigned for every triangle, so the returned point came
+            // from the last one tested rather than the nearest. the caller
+            // takes the sign of the contact from it, so a mismatched point
+            // and normal could flip a contact's sign.
+            info.closestPt = closestPt;
             // Compute triangle normal
             Vec3f ab = b - a;
             Vec3f ac = c - a;
@@ -152,6 +214,8 @@ ContactInfo TrigGrid::NearestTriangle(const Vec3f &point, float maxDist) const{
       }
     }
   }
+  PROFILE_COUNT("count.grid_cells_scanned", cellsScanned);
+  PROFILE_COUNT("count.grid_trig_tests", trigTests);
   info.dist = minDist;
   return info;
 }
