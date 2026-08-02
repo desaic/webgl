@@ -1,7 +1,13 @@
 cmake_minimum_required(VERSION 3.16)
 set(BIN "cpu_pack")
+set(BENCH_BIN "cpu_pack_bench")
 PROJECT (CpuPack)
-FILE(GLOB EXE_SRC "*.cpp" "*.c" "quickhull/*.cpp")
+FILE(GLOB CORE_SRC CONFIGURE_DEPENDS "*.cpp" "*.c" "quickhull/*.cpp")
+# main.cpp and benchmarks.cpp each define main(), so they stay out of the
+# shared library and link into their own executable.
+list(REMOVE_ITEM CORE_SRC
+  "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks.cpp")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_CXX_STANDARD 20)
 
@@ -48,5 +54,15 @@ include_directories("../SparseSDF")
 include_directories("../MeshSimplification")
 include_directories("./quickhull")
 
-add_executable(${BIN} ${EXE_SRC})
-target_link_libraries(${BIN} Mesh MathLib ImageIO SparseSDF Util MeshSimplification)
+add_library(pack_core STATIC ${CORE_SRC})
+target_include_directories(pack_core PUBLIC
+  "${CMAKE_CURRENT_SOURCE_DIR}"
+  "${CMAKE_CURRENT_SOURCE_DIR}/pocketfft"
+  "${CMAKE_CURRENT_SOURCE_DIR}/quickhull")
+target_link_libraries(pack_core Mesh MathLib ImageIO SparseSDF Util MeshSimplification)
+
+add_executable(${BIN} main.cpp)
+target_link_libraries(${BIN} pack_core)
+
+add_executable(${BENCH_BIN} benchmarks.cpp)
+target_link_libraries(${BENCH_BIN} pack_core)

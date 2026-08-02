@@ -58,6 +58,12 @@ class MeshConvo {
     // some distance metric.
     Array3D8u dist;
 
+    /// bytes held by the voxel grid, fft coefficients and dist grid.
+    size_t MemoryBytes() const {
+      return vox.GetData().size() + dist.GetData().size()
+             + fft.GetData().size() * sizeof(std::complex<float>);
+    }
+
   private:
     TrigMesh *mesh = nullptr;
 };

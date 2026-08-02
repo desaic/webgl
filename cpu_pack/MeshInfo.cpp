@@ -1,4 +1,5 @@
 #include "MeshInfo.h"
+#include "Log.h"
 #include "Matrix4f.h"
 
 #include <AdapSDF.h>
@@ -52,9 +53,8 @@ std::vector<MeshInfo> LoadAllMeshInfo(const std::string &meshDir) {
       continue;
     }
     fs::path p = entry.path();
-    std::cout << "Filename: " << p.filename() << " | ";
-    std::cout << p.stem() << " | ";
-    std::cout << p.extension() << "\n";
+    LOGD("Filename: " << p.filename() << " | " << p.stem() << " | "
+                      << p.extension() << "\n");
 
     std::string stem = p.stem().string();
     if (stem.ends_with("_m")) {
@@ -66,7 +66,7 @@ std::vector<MeshInfo> LoadAllMeshInfo(const std::string &meshDir) {
         return std::tolower(c);
     });
     if(ext != ".obj" && ext != ".stl"){
-      std::cout <<"unknown extension " << ext <<" skip\n";
+      LOGD("unknown extension " << ext << " skip\n");
       continue;
     }
     MeshInfo info;

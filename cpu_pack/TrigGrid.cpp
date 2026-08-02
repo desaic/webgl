@@ -85,6 +85,15 @@ void TrigGrid::Build(const TrigMesh &m, float voxSize) {
   });
 }
 
+size_t TrigGrid::MemoryBytes() const {
+  size_t bytes = grid.GetData().size() * sizeof(uint32_t);
+  bytes += tLists.capacity() * sizeof(std::vector<unsigned>);
+  for (const auto &list : tLists) {
+    bytes += list.capacity() * sizeof(unsigned);
+  }
+  return bytes;
+}
+
 ContactInfo TrigGrid::NearestTriangle(const Vec3f &point, float maxDist) const{
 // Convert point to grid coordinates
   Vec3f gridCoord = (point - origin) * (1.0f / voxelSize);

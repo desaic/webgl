@@ -31,6 +31,12 @@ class TrigGrid {
     //dx will be reduced if grid is too large
     static const int MAX_GRID_SIZE = 1000;
 
+    /// bytes held by the voxel grid and the per-cell triangle lists,
+    /// including the per-vector header overhead.
+    size_t MemoryBytes() const;
+    /// number of non-empty cells.
+    size_t NumCellLists() const { return tLists.size(); }
+
   private:
     Array3D<uint32_t> grid;
     // tlists can be compressed to remove std::vector overhead 24bytes/cell

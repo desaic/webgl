@@ -1,0 +1,427 @@
+dataDir /media/desaic/WD/meshes/fruit_hand/
+meshDir /media/desaic/WD/meshes/fruit_hand/fruits_1/
+container /media/desaic/WD/meshes/fruit_hand/hands/finger4.8m.stl
+innerContainer /media/desaic/WD/meshes/fruit_hand/hands/finger_4.8m_inner.stl
+output /media/desaic/WD/meshes/fruit_hand/out/
+dx 0.3 containerSDFDx 2 broadPhaseDx 2 subgridCellSize 20
+maxTrialCount 10 startStep 3 startItem 0
+resume 1 /media/desaic/WD/meshes/fruit_hand/pack_944_0721.txt
+trajSaveInterval 0 packSaveInterval 0
+items per scenario 3
+validation on
+wall budget 300 s
+transcript /home/desaic/github/webgl/cpu_pack/build/results.txt
+
+========== load_meshes ==========
+read every item mesh from disk
+  wall 1371.3 ms (1.37 s)
+  rss 136.75 MB (delta +132.51 MB, peak 136.75 MB)
+  95 items, 2088877 verts, 4190911 trigs
+--- load_meshes breakdown ---
+  no counters recorded
+
+
+========== container_setup ==========
+container sdf, TrigGrids and bg occupancy grid
+  wall 2108.1 ms (2.11 s)
+  rss 187.89 MB (delta +183.00 MB, peak 187.89 MB)
+  bg grid 616x192x192 at dx 0.3
+--- container_setup breakdown ---
+  counter                 total_ms    calls    mean_ms     max_ms     pct
+  init.load_items          1367.08        1   1367.076   1367.076   64.8%
+  init.container_sdf        167.05        1    167.054    167.054    7.9%
+  init.container_grids       21.81        1     21.812     21.812    1.0%
+  init.bg_voxelize          198.86        1    198.858    198.858    9.4%
+--- container_setup scene memory ---
+  bg.vox                  21.66 MB
+  bg.fft                    0.00 B
+  container.sdf          872.12 KB
+  container.grids          7.47 MB
+  item.meshes            129.40 MB
+  item.sdfs                 0.00 B
+  item.samples              0.00 B
+  instanceMeshCache         0.00 B  (0 entries)
+  instanceGrids             0.00 B  (0 entries)
+  trajectories              0.00 B
+  broadPhase               1.59 MB
+  total                  160.97 MB
+  process rss            187.89 MB
+  process peak rss       187.89 MB
+
+
+========== load_pack ==========
+replay a saved pack file, one Put per line
+  wall 4360.9 ms (4.36 s)
+  rss 197.82 MB (delta +9.40 MB, peak 197.82 MB)
+  944 instances from /media/desaic/WD/meshes/fruit_hand/pack_944_0721.txt
+--- load_pack breakdown ---
+  counter           total_ms    calls    mean_ms     max_ms     pct
+  loadpack.total     4360.86        1   4360.865   4360.865  100.0%
+  put.total          4353.35      944      4.612     39.549   99.8%
+--- load_pack scene memory ---
+  bg.vox                  21.66 MB
+  bg.fft                    0.00 B
+  container.sdf          872.12 KB
+  container.grids          7.47 MB
+  item.meshes            129.40 MB
+  item.sdfs                 0.00 B
+  item.samples              0.00 B
+  instanceMeshCache         0.00 B  (0 entries)
+  instanceGrids             0.00 B  (0 entries)
+  trajectories            69.52 KB
+  broadPhase               2.12 MB
+  total                  161.56 MB
+  process rss            197.82 MB
+  process peak rss       197.82 MB
+
+
+========== findspot_big ==========
+full container FFT search for the largest items
+  wall 1437.3 ms (1.44 s)
+  rss 301.59 MB (delta +103.78 MB, peak 562.98 MB)
+  3 items, 3 FindSpot calls, 3 found
+--- findspot_big breakdown ---
+  counter                 total_ms    calls    mean_ms     max_ms     pct
+  findspot.total           1437.27        3    479.090    498.223  100.0%
+  findspot.fg_voxelize       42.57        3     14.191     17.802    3.0%
+  findspot.bg_fft           237.81        3     79.272    105.674   16.5%
+  findspot.fg_fft           295.15        3     98.384     99.473   20.5%
+  findspot.dot               53.84        3     17.947     17.971    3.7%
+  findspot.ifft             476.84        3    158.945    161.871   33.2%
+  findspot.quantize         107.87        3     35.958     36.423    7.5%
+  findspot.score_scan       185.92        3     61.975     69.830   12.9%
+--- findspot_big scene memory ---
+  bg.vox                  21.66 MB
+  bg.fft                  87.53 MB
+  container.sdf          872.12 KB
+  container.grids          7.47 MB
+  item.meshes            129.40 MB
+  item.sdfs                 0.00 B
+  item.samples              0.00 B
+  instanceMeshCache         0.00 B  (0 entries)
+  instanceGrids             0.00 B  (0 entries)
+  trajectories              0.00 B
+  broadPhase               1.59 MB
+  total                  248.50 MB
+  process rss            301.59 MB
+  process peak rss       562.98 MB
+
+
+========== findspot_small ==========
+cropped subgrid FFT search for the smallest items
+  wall 24.7 ms (0.02 s)
+  rss 214.13 MB (delta +0.00 B, peak 562.98 MB)
+  3 items, 3 FindSpot calls, 3 found
+--- findspot_small breakdown ---
+  counter                   total_ms    calls    mean_ms     max_ms     pct
+  findspot.total               22.78        3      7.593      7.665   92.1%
+  findspot.fg_voxelize          2.23        3      0.744      0.951    9.0%
+  findspot.bg_fft               5.39        3      1.798      1.943   21.8%
+  findspot.fg_fft               4.89        3      1.632      1.717   19.8%
+  findspot.dot                  0.79        3      0.264      0.283    3.2%
+  findspot.ifft                 5.78        3      1.927      1.976   23.4%
+  findspot.quantize             1.69        3      0.563      0.573    6.8%
+  findspot.score_scan           1.75        3      0.583      0.627    7.1%
+  findspot_subgrid.total       24.73        3      8.242      8.383  100.0%
+  findspot_subgrid.crop         1.50        3      0.500      0.544    6.1%
+--- findspot_small scene memory ---
+  bg.vox                  21.66 MB
+  bg.fft                    0.00 B
+  container.sdf          872.12 KB
+  container.grids          7.47 MB
+  item.meshes            129.40 MB
+  item.sdfs                 0.00 B
+  item.samples              0.00 B
+  instanceMeshCache         0.00 B  (0 entries)
+  instanceGrids             0.00 B  (0 entries)
+  trajectories              0.00 B
+  broadPhase               1.59 MB
+  total                  160.97 MB
+  process rss            214.13 MB
+  process peak rss       562.98 MB
+
+
+========== findspot_partial ==========
+subgrid search against a partly full container
+  wall 24.5 ms (0.02 s)
+  rss 214.20 MB (delta +0.00 B, peak 562.98 MB)
+  944 items already placed
+  3 items, 3 FindSpot calls, 3 found
+--- findspot_partial breakdown ---
+  counter                   total_ms    calls    mean_ms     max_ms     pct
+  findspot.total               22.66        3      7.555      8.062   92.5%
+  findspot.fg_voxelize          2.20        3      0.734      0.962    9.0%
+  findspot.bg_fft               5.89        3      1.962      2.214   24.0%
+  findspot.fg_fft               4.94        3      1.645      1.781   20.1%
+  findspot.dot                  0.79        3      0.262      0.277    3.2%
+  findspot.ifft                 5.86        3      1.954      2.087   23.9%
+  findspot.quantize             1.70        3      0.565      0.591    6.9%
+  findspot.score_scan           1.06        3      0.353      0.363    4.3%
+  findspot_subgrid.total       24.49        3      8.163      8.740   99.9%
+  findspot_subgrid.crop         1.41        3      0.469      0.508    5.7%
+--- findspot_partial scene memory ---
+  bg.vox                  21.66 MB
+  bg.fft                    0.00 B
+  container.sdf          872.12 KB
+  container.grids          7.47 MB
+  item.meshes            129.40 MB
+  item.sdfs                 0.00 B
+  item.samples              0.00 B
+  instanceMeshCache         0.00 B  (0 entries)
+  instanceGrids             0.00 B  (0 entries)
+  trajectories            69.52 KB
+  broadPhase               2.12 MB
+  total                  161.56 MB
+  process rss            214.20 MB
+  process peak rss       562.98 MB
+
+
+========== nudge_big ==========
+settle large items in an empty container
+  wall 5171.5 ms (5.17 s)
+  rss 384.93 MB (delta +150.77 MB, peak 646.07 MB)
+  3 placed of 3 attempts
+  validated 3, failures 0, worst outside 0.3 cm, worst overlap 0.3 cm
+--- nudge_big breakdown ---
+  counter                 total_ms    calls    mean_ms     max_ms     pct
+  put.total                  42.24        3     14.079     17.671    0.8%
+  findspot.total           1399.55        3    466.516    498.629   27.1%
+  findspot.fg_voxelize       41.87        3     13.956     17.723    0.8%
+  findspot.bg_fft           237.57        3     79.190     96.708    4.6%
+  findspot.fg_fft           291.41        3     97.136    107.469    5.6%
+  findspot.dot               56.19        3     18.730     20.378    1.1%
+  findspot.ifft             458.56        3    152.854    158.763    8.9%
+  findspot.quantize         104.91        3     34.970     35.260    2.0%
+  findspot.score_scan       172.55        3     57.516     60.792    3.3%
+  nudge.total              3684.65        3   1228.216   1609.618   71.2%
+  nudge.sample_gen         2133.28        3    711.092    791.567   41.3%
+  nudge.broadphase            8.78      300      0.029      0.092    0.2%
+  nudge.narrowphase        1523.48      300      5.078     10.971   29.5%
+  nudge.pgs_solve             0.43      300      0.001      0.003    0.0%
+  nudge.triggrid_build       18.07        2      9.033      9.234    0.3%
+--- nudge_big scene memory ---
+  bg.vox                  21.66 MB
+  bg.fft                  87.53 MB
+  container.sdf          872.12 KB
+  container.grids          7.47 MB
+  item.meshes            129.40 MB
+  item.sdfs               20.01 MB
+  item.samples           321.56 KB
+  instanceMeshCache        4.08 MB  (2 entries)
+  instanceGrids            1.57 MB  (2 entries)
+  trajectories            15.39 KB
+  broadPhase               1.62 MB
+  total                  274.52 MB
+  process rss            384.93 MB
+  process peak rss       646.07 MB
+
+
+========== nudge_small ==========
+settle small items in an empty container
+  wall 123.8 ms (0.12 s)
+  rss 297.41 MB (delta +8.00 KB, peak 646.07 MB)
+  3 placed of 3 attempts
+  validated 3, failures 0, worst outside 0.6 cm, worst overlap 0.3 cm
+--- nudge_small breakdown ---
+  counter                   total_ms    calls    mean_ms     max_ms     pct
+  put.total                     2.41        3      0.803      1.012    1.9%
+  findspot.total               23.32        3      7.772      8.434   18.8%
+  findspot.fg_voxelize          2.13        3      0.711      0.903    1.7%
+  findspot.bg_fft               5.43        3      1.811      1.853    4.4%
+  findspot.fg_fft               5.66        3      1.885      2.315    4.6%
+  findspot.dot                  0.78        3      0.259      0.274    0.6%
+  findspot.ifft                 5.67        3      1.891      2.008    4.6%
+  findspot.quantize             1.74        3      0.580      0.590    1.4%
+  findspot.score_scan           1.69        3      0.563      0.577    1.4%
+  findspot_subgrid.total       25.15        3      8.385      9.066   20.3%
+  findspot_subgrid.crop         1.42        3      0.472      0.500    1.1%
+  nudge.total                  93.72        3     31.239     39.058   75.7%
+  nudge.sample_gen             48.92        3     16.306     19.419   39.5%
+  nudge.broadphase              0.03       90      0.000      0.001    0.0%
+  nudge.narrowphase            43.24       90      0.480      3.155   34.9%
+  nudge.pgs_solve               0.05       90      0.001      0.002    0.0%
+  nudge.triggrid_build          1.39        2      0.694      0.865    1.1%
+--- nudge_small scene memory ---
+  bg.vox                  21.66 MB
+  bg.fft                    0.00 B
+  container.sdf          872.12 KB
+  container.grids          7.47 MB
+  item.meshes            129.40 MB
+  item.sdfs              314.23 KB
+  item.samples             4.05 KB
+  instanceMeshCache      362.21 KB  (2 entries)
+  instanceGrids           68.62 KB  (2 entries)
+  trajectories             4.72 KB
+  broadPhase               1.59 MB
+  total                  161.71 MB
+  process rss            297.41 MB
+  process peak rss       646.07 MB
+
+
+========== nudge_partial ==========
+settle small items with real neighbors present
+  wall 470.4 ms (0.47 s)
+  rss 297.41 MB (delta +4.00 KB, peak 646.07 MB)
+  944 items already placed
+  3 placed of 3 attempts
+  validated 3, failures 0, worst outside 0.3 cm, worst overlap 0.3 cm
+--- nudge_partial breakdown ---
+  counter                   total_ms    calls    mean_ms     max_ms     pct
+  put.total                     2.38        3      0.795      1.005    0.5%
+  findspot.total               23.76        3      7.919      9.257    5.0%
+  findspot.fg_voxelize          2.11        3      0.703      0.899    0.4%
+  findspot.bg_fft               5.40        3      1.801      1.882    1.1%
+  findspot.fg_fft               5.76        3      1.920      2.444    1.2%
+  findspot.dot                  0.77        3      0.257      0.276    0.2%
+  findspot.ifft                 6.55        3      2.184      2.746    1.4%
+  findspot.quantize             1.73        3      0.578      0.630    0.4%
+  findspot.score_scan           1.20        3      0.402      0.439    0.3%
+  findspot_subgrid.total       25.58        3      8.527      9.877    5.4%
+  findspot_subgrid.crop         1.41        3      0.470      0.499    0.3%
+  nudge.total                 439.99        3    146.664    218.582   93.5%
+  nudge.sample_gen             49.40        3     16.467     19.408   10.5%
+  nudge.broadphase              0.08       90      0.001      0.002    0.0%
+  nudge.narrowphase           358.93       90      3.988     14.211   76.3%
+  nudge.pgs_solve               0.06       90      0.001      0.002    0.0%
+  nudge.triggrid_build         31.38       13      2.414      4.785    6.7%
+--- nudge_partial scene memory ---
+  bg.vox                  21.66 MB
+  bg.fft                    0.00 B
+  container.sdf          872.12 KB
+  container.grids          7.47 MB
+  item.meshes            129.40 MB
+  item.sdfs              314.23 KB
+  item.samples             4.05 KB
+  instanceMeshCache        7.43 MB  (13 entries)
+  instanceGrids            1.94 MB  (13 entries)
+  trajectories            74.24 KB
+  broadPhase               2.12 MB
+  total                  171.25 MB
+  process rss            297.41 MB
+  process peak rss       646.07 MB
+
+
+========== cache_growth ==========
+per placement memory growth of the instance caches
+  baseline before any placement:
+  placed        wall_ms         rss   meshCache   trigGrids entries        traj
+  0                 0.0   297.41 MB      0.00 B      0.00 B       0    69.52 KB
+  1               233.5   297.41 MB     3.04 MB   871.99 KB       5    71.09 KB
+  2               112.6   297.41 MB     6.92 MB     1.86 MB      11    72.67 KB
+  3               114.4   297.41 MB    12.10 MB     3.07 MB      17    74.24 KB
+  wall 460.8 ms (0.46 s)
+  rss 297.41 MB (delta +4.00 KB, peak 646.07 MB)
+  3 placed
+--- cache_growth breakdown ---
+  counter                   total_ms    calls    mean_ms     max_ms     pct
+  put.total                     2.49        3      0.829      1.027    0.5%
+  findspot.total               25.62        3      8.540      9.749    5.6%
+  findspot.fg_voxelize          2.21        3      0.738      0.946    0.5%
+  findspot.bg_fft               6.69        3      2.231      2.884    1.5%
+  findspot.fg_fft               5.17        3      1.723      2.043    1.1%
+  findspot.dot                  0.90        3      0.299      0.377    0.2%
+  findspot.ifft                 6.85        3      2.284      2.927    1.5%
+  findspot.quantize             1.98        3      0.661      0.697    0.4%
+  findspot.score_scan           1.55        3      0.518      0.953    0.3%
+  findspot_subgrid.total       27.43        3      9.142     10.356    6.0%
+  findspot_subgrid.crop         1.36        3      0.452      0.475    0.3%
+  nudge.total                 429.93        3    143.308    224.531   93.3%
+  nudge.sample_gen             50.18        3     16.727     19.757   10.9%
+  nudge.broadphase              0.10       90      0.001      0.003    0.0%
+  nudge.narrowphase           328.28       90      3.648      9.164   71.2%
+  nudge.pgs_solve               0.05       90      0.001      0.001    0.0%
+  nudge.triggrid_build         51.13       17      3.007      5.225   11.1%
+--- cache_growth scene memory ---
+  bg.vox                  21.66 MB
+  bg.fft                    0.00 B
+  container.sdf          872.12 KB
+  container.grids          7.47 MB
+  item.meshes            129.40 MB
+  item.sdfs              314.23 KB
+  item.samples             4.05 KB
+  instanceMeshCache       12.10 MB  (17 entries)
+  instanceGrids            3.07 MB  (17 entries)
+  trajectories            74.24 KB
+  broadPhase               2.12 MB
+  total                  177.05 MB
+  process rss            297.41 MB
+  process peak rss       646.07 MB
+
+
+========== put_scaling ==========
+Put cost as instance count rises
+  wall 13.0 ms (0.01 s)
+  rss 297.41 MB (delta +0.00 B, peak 646.07 MB)
+  24 Puts, first quarter mean 0.553571 ms, last quarter mean 0.539355 ms
+--- put_scaling breakdown ---
+  counter         total_ms    calls    mean_ms     max_ms     pct
+  put.total          12.98       24      0.541      0.603   99.9%
+--- put_scaling scene memory ---
+  bg.vox                  21.66 MB
+  bg.fft                    0.00 B
+  container.sdf          872.12 KB
+  container.grids          7.47 MB
+  item.meshes            129.40 MB
+  item.sdfs                 0.00 B
+  item.samples              0.00 B
+  instanceMeshCache         0.00 B  (0 entries)
+  instanceGrids             0.00 B  (0 entries)
+  trajectories            71.14 KB
+  broadPhase               2.12 MB
+  total                  161.56 MB
+  process rss            297.41 MB
+  process peak rss       646.07 MB
+
+
+========== end_to_end ==========
+one plan step through the real PackStep control flow
+  wall 90192.3 ms (90.19 s)
+  rss 297.41 MB (delta +0.00 B, peak 646.07 MB)
+  step 3, time cap 90 s, 0 newly placed onto 944 existing
+  5890 spot searches (5890 subgrid, 0 full container) for 0 placements -- container is saturated at this fill level, the whole budget went to failed searches
+--- end_to_end breakdown ---
+  counter                   total_ms    calls    mean_ms     max_ms     pct
+  findspot.total            84810.02     5890     14.399     48.388   94.0%
+  findspot.fg_voxelize      19766.24     5890      3.356     11.192   21.9%
+  findspot.bg_fft           16116.96     5890      2.736     13.489   17.9%
+  findspot.fg_fft           15265.57     5890      2.592     10.737   16.9%
+  findspot.dot               3623.74     5890      0.615      1.625    4.0%
+  findspot.ifft             19540.96     5890      3.318     12.609   21.7%
+  findspot.quantize          6933.12     5890      1.177      2.164    7.7%
+  findspot.score_scan        1683.80     5890      0.286      0.708    1.9%
+  findspot_subgrid.total    90189.02     5890     15.312     51.455  100.0%
+  findspot_subgrid.crop      4850.09     5890      0.823      2.918    5.4%
+--- end_to_end scene memory ---
+  bg.vox                  21.66 MB
+  bg.fft                    0.00 B
+  container.sdf          872.12 KB
+  container.grids          7.47 MB
+  item.meshes            129.40 MB
+  item.sdfs                 0.00 B
+  item.samples              0.00 B
+  instanceMeshCache         0.00 B  (0 entries)
+  instanceGrids             0.00 B  (0 entries)
+  trajectories            69.52 KB
+  broadPhase               2.12 MB
+  total                  161.56 MB
+  process rss            297.41 MB
+  process peak rss       646.07 MB
+
+
+========== validate_selftest ==========
+confirm the validator flags known bad placements
+  pass  pushed through container wall  expected violation, got FAIL samples 20288 outside 11420 overlap 0 offGrid 5220 (deeper than 1.2 cm) worstOutside 2.7 worstOverlap 0
+  pass  far outside the grid  expected violation, got FAIL samples 20288 outside 0 overlap 0 offGrid 20288 (deeper than 1.2 cm) worstOutside 0 worstOverlap 0
+  pass  exact duplicate of placed item  expected violation, got FAIL samples 20288 outside 0 overlap 2 (deeper than 1.2 cm) worstOutside 0.6 worstOverlap 1.5
+  pass  shifted halfway into placed item  expected violation, got FAIL samples 20288 outside 0 overlap 2203 (deeper than 1.2 cm) worstOutside 0 worstOverlap 2.7
+  pass  real placement from pack file  expected OK, got OK samples 20288 outside 0 overlap 0 (deeper than 1.2 cm) worstOutside 0.6 worstOverlap 0.9
+  wall 0.0 ms (0.00 s)
+  rss 309.91 MB (delta +0.00 B, peak 646.07 MB)
+  5 of 5 expectations met
+  validator grids 43 MB
+--- validate_selftest breakdown ---
+  no counters recorded
+
+
+ran 13 scenarios. total 168.5 s of 300.0 s budget, peak rss 646.07 MB
+summary /home/desaic/github/webgl/cpu_pack/build/summary.html

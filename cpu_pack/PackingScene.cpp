@@ -1,12 +1,14 @@
 #include "PackingScene.h"
 #include "AdapSDF.h"
 #include "FastSweep.h"
+#include "Log.h"
 #include "FloodOutside.h"
 #include "GridUtils.h"
 #include "MarchingCubes.h"
 #include "MeshConvo.h"
 #include "MeshOps.h"
 #include "PointSample.h"
+#include "Profiler.h"
 #include "Quat4f.h"
 #include "Stopwatch.h"
 #include "TrigGrid.h"
@@ -25,6 +27,7 @@ Vec3i roundf(const Vec3f &fvec) {
 }
 
 unsigned PackingScene::Put(unsigned itemIdx, const RigidTransform &tran) {
+  PROFILE_SCOPE("put.total");
   TrigMesh inst = MakeTransformedMesh(items[itemIdx].mesh, tran);
   Box3f bbox = ComputeBBox(inst.v);
   // saved for broad phase.
@@ -110,9 +113,9 @@ void PackingScene::InitDataStructures() {
       std::max(1u, (unsigned)std::ceil(containerExtent[1] / subgridCellSize)),
       std::max(1u, (unsigned)std::ceil(containerExtent[2] / subgridCellSize)));
   unsigned totalCells = numSubgridCells[0] * numSubgridCells[1] * numSubgridCells[2];
-  std::cout << "subgrid " << numSubgridCells[0] << "x" << numSubgridCells[1] << "x"
-            << numSubgridCells[2] << " (" << totalCells << " cells)"
-            << " cellSize=" << subgridCellSize << "\n";
+  LOGI("subgrid " << numSubgridCells[0] << "x" << numSubgridCells[1] << "x"
+       << numSubgridCells[2] << " (" << totalCells << " cells)"
+       << " cellSize=" << subgridCellSize << "\n");
 }
 
 void PackingScene::InitRigidBodies() {
@@ -123,6 +126,7 @@ void PackingScene::InitRigidBodies() {
 }
 
 void PackingScene::InitContainerGrids() {
+  PROFILE_SCOPE("init.container_grids");
   containerGrid.Build(container.mesh, gridDx);
   if (!containerInner.mesh.v.empty()) {
     containerInnerGrid.Build(containerInner.mesh, gridDx);
@@ -147,8 +151,9 @@ std::shared_ptr<AdapSDF> ComputeSDF(float distUnit, float h, TrigMesh &mesh) {
 }
 
 void PackingScene::ComputeContainerSDF() {
+  PROFILE_SCOPE("init.container_sdf");
   float distUnit = 0.001f * containerSDFDx;
-  std::cout << "computing container sdf \n";
+  LOGI("computing container sdf \n");
   sdf = ComputeSDF(distUnit, containerSDFDx, container.mesh);
 
   // Array3D<Vec3f> gradients = ComputeSDFGradient(*sdf, distUnit, containerSDFDx);
@@ -601,6 +606,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
                                    const RigidTransform &tran,
                                    const Vec3f &dir0,
                                    std::vector<RigidTransform> &trajectory) {
+  PROFILE_SCOPE("nudge.total");
   RigidTransform tOut = tran;
 
   std::vector<RigidBodyState> debugSteps;
@@ -663,6 +669,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
 
   std::vector<SamplePoint> samples;
   if (meshInfo.samples.empty()) {
+    PROFILE_SCOPE("nudge.sample_gen");
     std::vector<SamplePoint> allFineSamples;
     float sampleSpacing;
     float maxOverlap;
@@ -678,7 +685,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     }
     SamplePoints(meshInfo.mesh, sampleSpacing, allFineSamples);
     samples = DownsamplePoints(allFineSamples, sampleSpacing);
-    std::cout<<"sample spacing " << sampleSpacing <<" num samples " << samples.size()<<"\n";
+    LOGI("sample spacing " << sampleSpacing << " num samples " << samples.size() << "\n");
     meshInfo.ComputeSDFCached();
     MovePointsInward(samples, maxOverlap, meshInfo.sdf);
     meshInfo.samples = samples;
@@ -718,10 +725,14 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     // 2. DYNAMIC BROADPHASE STEP
     Utils::Stopwatch swBroad;
     swBroad.Start();
-    auto corners = TransformPoints(BoxCorners(localBox), currentRotMat, currentT);
-    Box3f instBox = ComputeBBox(corners);
-    float stepQueryDist = eps + activeBuffer;
-    std::vector<unsigned> intersectingInstances = broadPhase.GetNearby(instBox, stepQueryDist);
+    std::vector<unsigned> intersectingInstances;
+    {
+      PROFILE_SCOPE("nudge.broadphase");
+      auto corners = TransformPoints(BoxCorners(localBox), currentRotMat, currentT);
+      Box3f instBox = ComputeBBox(corners);
+      float stepQueryDist = eps + activeBuffer;
+      intersectingInstances = broadPhase.GetNearby(instBox, stepQueryDist);
+    }
 
     // must be ordered by the intersectingInstances than 1-2 container meshes
     // for active contacts to return correct indices
@@ -731,11 +742,14 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
       unsigned instIdx = intersectingInstances[i];
       auto it = instanceGrids.find(instIdx);
       if (it == instanceGrids.end()) {
+        // first contact with this neighbor. builds a full transformed mesh
+        // copy plus a TrigGrid and caches both forever.
+        PROFILE_SCOPE("nudge.triggrid_build");
         InstanceInfo inst = instances[instIdx];
         auto nbrMesh = std::make_shared<TrigMesh>();
         *nbrMesh = MakeTransformedMesh(items[inst.itemId].mesh, inst.tran);
         instanceMeshCache[instIdx] = nbrMesh;
-        
+
         auto newGrid = std::make_shared<TrigGrid>();
         newGrid->Build(*nbrMesh, gridDx);
         instanceGrids[instIdx] = newGrid;
@@ -757,6 +771,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     if (step % contactGatherInterval == 0) {
       Utils::Stopwatch swGather;
       swGather.Start();
+      PROFILE_SCOPE("nudge.narrowphase");
       contacts = GatherActiveContacts(
           samples, accGrids, currentRotMat, currentT, eps, activeBuffer, CONTACT_ANGLE_THRESH_DEG);
       gatherTime += swGather.ElapsedMS();
@@ -785,8 +800,11 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     // 4. PGS Solver Passes (Modifies Velocities)
     Utils::Stopwatch swPGS;
     swPGS.Start();
-    SolveContactConstraintsPGS(contacts, currentT, currentRotMat, Rinv, invMass, invI_local,
-                                eps, (int)pgsPasses, dt, linearVel, angularVel);
+    {
+      PROFILE_SCOPE("nudge.pgs_solve");
+      SolveContactConstraintsPGS(contacts, currentT, currentRotMat, Rinv, invMass, invI_local,
+                                  eps, (int)pgsPasses, dt, linearVel, angularVel);
+    }
     pgsTime += swPGS.ElapsedMS();
 
     // 5. Integrate Velocities to Positions
@@ -834,6 +852,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   tOut.rotation = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
 
   double total = nudgeTotal.ElapsedMS();
+  if (LogEnabled(LOG_INFO)) {
   std::cout << "Nudge " << items[itemIdx].name
             << " total=" << total << "ms"
             << " steps=" << trajectory.size()
@@ -846,6 +865,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
             << " pos=(" << currentT[0] << "," << currentT[1] << "," << currentT[2] << ")"
             << " start=(" << tran.position[0] << "," << tran.position[1] << "," << tran.position[2] << ")"
             << "\n";
+  }
   return tOut;
 }
 
@@ -1116,7 +1136,7 @@ RigidTransform PackingScene::NudgeConstrained(unsigned itemIdx,
   tOut.position = currentT;
   tOut.rotation = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
 
-  std::cout << "NudgeConstrained total " << nudgeTotal.ElapsedMS() << " ms\n";
+  LOGI("NudgeConstrained total " << nudgeTotal.ElapsedMS() << " ms\n");
   return tOut;
 }
 
@@ -1131,6 +1151,7 @@ static bool ReadMatrix3f(std::istream &in, Matrix3f &m) {
 }
 
 void LoadPack(PackingScene &scene, const std::string &packFile) {
+  PROFILE_SCOPE("loadpack.total");
   std::ifstream in(packFile);
   if (!in.good()) {
     return;
@@ -1171,9 +1192,10 @@ void LoadPack(PackingScene &scene, const std::string &packFile) {
   // Print summary
   for (size_t i = 0; i < scene.items.size(); i++) {
     if (!scene.placed[i].empty()) {
-      std::cout << "Loaded " << scene.placed[i].size() << " placements for " << scene.items[i].name << "\n";
+      LOGD("Loaded " << scene.placed[i].size() << " placements for " << scene.items[i].name << "\n");
     }
   }
+  LOGI("LoadPack " << scene.instances.size() << " instances from " << packFile << "\n");
 }
 
 void PackingScene::SaveTrajectories(const std::string &filename) const {

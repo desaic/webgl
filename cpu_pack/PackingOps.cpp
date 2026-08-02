@@ -5,6 +5,7 @@
 #include "Array2D.h"
 #include "ImageIO.h"
 #include "PackingScene.h"
+#include "Profiler.h"
 #include "Stopwatch.h"
 
 #include <algorithm>
@@ -20,8 +21,9 @@ Vec3f GetDisplacement(Vec3u gridIdx, float dx, Vec3u fgSize, Vec3f fgOrigin, Vec
   return disp;
 }
 
-bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot, 
+bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot,
   std::shared_ptr<AdapSDF> sdf, float factor) {
+  PROFILE_SCOPE("findspot.total");
   Matrix3f rotMat = RotationMatrixRad(rot[0], rot[1], rot[2]);
   TrigMesh rotated = part;
   TransformVerts(part.v, rotated.v, rotMat);
@@ -29,9 +31,12 @@ bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot,
 
   MeshConvo fg;
   fg.SetMeshPtr(&rotated);
-  fg.Voxelize(dx);
-  // makes values in convo smaller.
-  ThreshInPlace(fg.vox, 1);
+  {
+    PROFILE_SCOPE("findspot.fg_voxelize");
+    fg.Voxelize(dx);
+    // makes values in convo smaller.
+    ThreshInPlace(fg.vox, 1);
+  }
   const unsigned FFT_ALIGNMENT = 8;
   Vec3u bgSize = bg.GridSize();
   Vec3u fgSize = fg.GridSize();
@@ -40,21 +45,34 @@ bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot,
   //+fgSize;
   Vec3u gridSize = PadSizes(totalSize, FFT_ALIGNMENT);
 
-  Utils::Stopwatch fftTimer;
-  fftTimer.Start();
-  bg.FFT(gridSize);
+  {
+    // recomputed on every trial even though bg only changes after a Put.
+    PROFILE_SCOPE("findspot.bg_fft");
+    bg.FFT(gridSize);
+  }
 
-  fftTimer.Start();
-  Reverse(fg.vox);
-  fg.gridReversed = true;
-  fg.FFT(gridSize);
+  {
+    PROFILE_SCOPE("findspot.fg_fft");
+    Reverse(fg.vox);
+    fg.gridReversed = true;
+    fg.FFT(gridSize);
+  }
 
-  fftTimer.Start();
-  Dot(bg.fft, fg.fft);
+  {
+    PROFILE_SCOPE("findspot.dot");
+    Dot(bg.fft, fg.fft);
+  }
 
-  fftTimer.Start();
-  Array3Df conv = IFFT(fg.fft);
-  Array3D8u collision = Quantize(conv);
+  Array3Df conv;
+  {
+    PROFILE_SCOPE("findspot.ifft");
+    conv = IFFT(fg.fft);
+  }
+  Array3D8u collision;
+  {
+    PROFILE_SCOPE("findspot.quantize");
+    collision = Quantize(conv);
+  }
   const float score0 = -1e6f;
   
   float highScore = score0;
@@ -70,6 +88,7 @@ bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot,
   // add a little attraction towards bottom left.
   // using normalized x y z coordinate .
   float positionWeight = -1.0f;
+  PROFILE_SCOPE("findspot.score_scan");
   for (unsigned z = fgSize[2] - 1; z < gridSize[2]; z++) {
     for (unsigned y = fgSize[1] - 1; y < gridSize[1]; y++) {
       for (unsigned x = fgSize[0] - 1; x < gridSize[0]; x++) {
@@ -271,6 +290,7 @@ bool FindSpotSubgrid(MeshConvo &bg,
                      unsigned cellIdx,
                      Vec3u numCells,
                      bool ignoreCellBoundary) {
+  PROFILE_SCOPE("findspot_subgrid.total");
   Box3f itemBox = ComputeBBox(part.v);
   Vec3f itemExtent = itemBox.vmax - itemBox.vmin;
   float maxExtent = std::max({itemExtent[0], itemExtent[1], itemExtent[2]});
@@ -336,6 +356,8 @@ bool FindSpotSubgrid(MeshConvo &bg,
 
   Array3D8u subVox;
   subVox.Allocate(subSize, 0);
+  {
+  PROFILE_SCOPE("findspot_subgrid.crop");
   for (unsigned z = 0; z < subSize[2]; z++) {
     for (unsigned y = 0; y < subSize[1]; y++) {
       for (unsigned x = 0; x < subSize[0]; x++) {
@@ -346,6 +368,7 @@ bool FindSpotSubgrid(MeshConvo &bg,
         );
       }
     }
+  }
   }
 
   MeshConvo tempConv;
