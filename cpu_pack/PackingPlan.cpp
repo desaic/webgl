@@ -233,14 +233,6 @@ PackingPlan PlanPackingSteps(const std::string &meshDir) {
   lastStep.force = finalForce;
   plan.steps.push_back(lastStep);
 
-  // pack medium small fruits towards center instead of outwards.
-  size_t numSteps = plan.steps.size();
-  if (numSteps > 2) {
-    PackingStep &smallMedium = plan.steps[numSteps - 2];
-    smallMedium.outwards = false;
-    // almost no force towards left
-    smallMedium.force = finalForce;
-  }
 
   return plan;
 }
