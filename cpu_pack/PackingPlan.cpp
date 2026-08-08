@@ -12,6 +12,10 @@
 
 namespace fs = std::filesystem;
 
+static const char *FillModeName(FillMode m) {
+  return m == FillMode::FillSurface ? "fillSurface" : "fillVolume";
+}
+
 std::string PackingStep::toString() const {
   std::ostringstream oss;
   oss << "names " << names.size() << " ";
@@ -21,6 +25,7 @@ std::string PackingStep::toString() const {
   oss << " force " << force[0] << " " << force[1] << " " << force[2] << " ";
   oss << "count " << count;
   oss << " outwards " << outwards << " useInnerContainer " << useInnerContainer;
+  oss << " fillMode " << FillModeName(fillMode);
   return oss.str();
 }
 
@@ -41,6 +46,25 @@ void PackingStep::Load(std::istream &in) {
   in >> outwards;
   in >> token; // "useInnerContainer"
   in >> useInnerContainer;
+
+  // optional trailing token: absent in plans saved before H5, and also
+  // absent here at the very last step of the file, where the next read
+  // hits eof rather than the next step's "names" token.
+  fillMode = FillMode::FillVolume;
+  std::streampos pos = in.tellg();
+  std::string maybeKey;
+  if (in >> maybeKey) {
+    if (maybeKey == "fillMode") {
+      std::string modeStr;
+      in >> modeStr;
+      fillMode = (modeStr == "fillSurface") ? FillMode::FillSurface : FillMode::FillVolume;
+    } else {
+      in.seekg(pos);
+    }
+  } else {
+    in.clear();
+    in.seekg(pos);
+  }
 }
 
 void PackingPlan::Save(std::ostream &out) const {
@@ -223,14 +247,25 @@ PackingPlan PlanPackingSteps(const std::string &meshDir) {
   }
 
   Vec3f finalForce(-0.1f, 0, 0);
-  // pack small fruits towards inside of container.
-  // add inner container to prevent wasting fruit near center of container.
+  // pack small fruits into surface pockets (heuristic_plan.md H2 onward).
+  // useInnerContainer was true here for the old lattice-walk fill, which
+  // needed it to stop wasting trials deep in the middle of the container.
+  // Pocket targeting never searches there in the first place (it only
+  // aims at rays cast a bounded depth in from the real surface), and
+  // measured with it on anyway: invalid rays 78 -> 893 and several open
+  // ray depth buckets collapsed to a fraction of their size, because the
+  // inner shell reads as a hit in the very class grid pocket targeting
+  // marches through -- it hides real pockets behind a wall that will not
+  // exist in the printed/milled part. Visible berry fraction was a wash
+  // (0.773 vs 0.766 in a 20s A/B on the same resumed pack), so there is no
+  // upside to offset that. Left off.
   PackingStep lastStep;
   lastStep.names = plan.groups.back();
   lastStep.outwards = false;
-  lastStep.useInnerContainer = true;
+  lastStep.useInnerContainer = false;
   lastStep.count = LARGE_INT;
   lastStep.force = finalForce;
+  lastStep.fillMode = FillMode::FillSurface;
   plan.steps.push_back(lastStep);
 
 

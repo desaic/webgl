@@ -37,6 +37,16 @@ struct PackingConstraints {
   int xSign = 0;
 };
 
+// contact state at the end of a Nudge call, for callers that need to know
+// whether the settle actually found real support (heuristic_plan.md H3): a
+// part resting only on the container is floating relative to every other
+// placed part, which matters once the container itself is not the final
+// physical object.
+struct NudgeResult {
+  unsigned contactCount = 0;
+  unsigned itemContactCount = 0; // subset of contactCount that are with other items, not the container.
+};
+
 class PackingScene {
   public:
 
@@ -59,7 +69,7 @@ class PackingScene {
     /// @param itemIdx 
     /// @param tran 
     /// @return 
-    RigidTransform Nudge(unsigned itemIdx, const RigidTransform & tran, const Vec3f & dir, std::vector<RigidTransform> & trajectory);
+    RigidTransform Nudge(unsigned itemIdx, const RigidTransform & tran, const Vec3f & dir, std::vector<RigidTransform> & trajectory, NudgeResult *out = nullptr);
 
     RigidTransform NudgeConstrained(unsigned itemIdx, const RigidTransform & tran,
                                     const Vec3f & dir0, const PackingConstraints & constraints,
@@ -99,6 +109,10 @@ class PackingScene {
     std::string outputFolder;
     float dx = 1.0f;
     MeshConvo bg;
+    // one byte per voxel, same size and origin as bg.vox: what occupies a
+    // voxel (VoxClass.h), not just whether it is free. Metadata only, read
+    // by SurfaceCoverage; bg.vox stays the source of truth for collision.
+    Array3D8u classGrid;
     float gridDx = 1.0f;
     BroadPhaseGrid broadPhase;
     // container acceleration grid for collission.

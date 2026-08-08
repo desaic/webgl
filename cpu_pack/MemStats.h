@@ -19,6 +19,7 @@ std::string FormatBytes(size_t bytes);
 struct SceneMemory {
     size_t bgVox = 0;
     size_t bgFft = 0;
+    size_t classGrid = 0;
     size_t containerSdf = 0;
     size_t containerGrids = 0;
     size_t itemMeshes = 0;

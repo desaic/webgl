@@ -112,6 +112,20 @@ bool PackingConfig::LoadFromFile(const std::string &path) {
       computeStats = ParseBool(value);
     } else if (key == "maxSecondsPerStep") {
       maxSecondsPerStep = float(std::atof(value.c_str()));
+    } else if (key == "surfaceRaySpacing") {
+      surfaceRaySpacing = float(std::atof(value.c_str()));
+    } else if (key == "patchSize") {
+      patchSize = float(std::atof(value.c_str()));
+    } else if (key == "holeDepth") {
+      holeDepth = float(std::atof(value.c_str()));
+    } else if (key == "deepPocketThreshold") {
+      deepPocketThreshold = float(std::atof(value.c_str()));
+    } else if (key == "maxProbeDepth") {
+      maxProbeDepth = float(std::atof(value.c_str()));
+    } else if (key == "patchMaxFails") {
+      patchMaxFails = unsigned(std::atoi(value.c_str()));
+    } else if (key == "pocketTrialCount") {
+      pocketTrialCount = unsigned(std::atoi(value.c_str()));
     } else {
       std::cout << path << ":" << lineNum << " unknown key " << key << "\n";
       unknown++;
@@ -188,5 +202,10 @@ std::string PackingConfig::toString() const {
   if (maxSecondsPerStep > 0.0f) {
     oss << "maxSecondsPerStep " << maxSecondsPerStep << "\n";
   }
+  oss << "surfaceRaySpacing " << surfaceRaySpacing << " patchSize " << patchSize
+      << " holeDepth " << holeDepth << " deepPocketThreshold " << deepPocketThreshold
+      << " maxProbeDepth " << maxProbeDepth << "\n";
+  oss << "patchMaxFails " << patchMaxFails << " pocketTrialCount " << pocketTrialCount
+      << "\n";
   return oss.str();
 }

@@ -15,6 +15,8 @@ void BenchEndToEnd(BenchContext &ctx);
 void BenchValidateSelfTest(BenchContext &ctx);
 void BenchSmallFruitBatch(BenchContext &ctx);
 void BenchSmallFruitPackStep(BenchContext &ctx);
+void BenchCoverageBaseline(BenchContext &ctx);
+void BenchPocketFill(BenchContext &ctx);
 
 const std::vector<Bench> &AllBenches() {
   static const std::vector<Bench> benches = {
@@ -48,6 +50,12 @@ const std::vector<Bench> &AllBenches() {
       {"validate_selftest",
        "confirm the validator flags known bad placements",
        BenchValidateSelfTest},
+      {"coverage_baseline",
+       "H1: surface coverage metric on a loaded pack, no placement changes",
+       BenchCoverageBaseline},
+      {"pocket_fill",
+       "H2/H3: pocket-driven small-item placement, coverage delta vs. before",
+       BenchPocketFill},
   };
   return benches;
 }

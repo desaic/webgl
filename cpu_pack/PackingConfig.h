@@ -56,7 +56,27 @@ struct PackingConfig {
     // once the container is nearly full a single placement can cost
     // thousands of failed spot searches, so a benchmark needs a way to
     // stop mid step. production runs leave this at 0.
+    // also the safety backstop for a fillSurface step (PocketDriver);
+    // its actual stop condition is running out of eligible pockets.
     float maxSecondsPerStep = 0.0f;
+
+    // fillSurface step tuning (PocketDriver / heuristic_plan.md H2-H4).
+    // container surface sample spacing, cm.
+    float surfaceRaySpacing = 1.0f;
+    // spatial hash cell size for grouping surface rays into patches, cm.
+    float patchSize = 4.0f;
+    // a ray deeper than this is "open" for rim/mouth-diameter targeting.
+    float holeDepth = 1.5f;
+    // a patch needs some ray open past this to be worth visiting at all;
+    // short of it is a shallow slope, left as terrain.
+    float deepPocketThreshold = 3.0f;
+    // surface ray march cap, cm.
+    float maxProbeDepth = 12.0f;
+    // consecutive fails before a patch is permanently excluded -- the
+    // mechanism behind H4's "every deep pocket filled or unfillable" stop.
+    unsigned patchMaxFails = 6;
+    // spot search trials per pocket placement attempt.
+    unsigned pocketTrialCount = 3;
 
     // path helpers. all return absolute paths.
     std::string MeshDir() const;

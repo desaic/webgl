@@ -16,3 +16,8 @@ void DebugPointSampling(MeshInfo &meshInfo, const std::string &outputFolder);
 
 /// drops a single item into the container and saves its trajectory.
 void DebugNudge(const PackingConfig &cfg);
+
+/// resumes cfg's pack file, builds the H1 coverage ray field over it, prints
+/// the report, and dumps the open ray mouths plus a couple of classGrid
+/// slices for inspection. Same role as DebugPointSampling / DebugNudge.
+void DebugCoverage(const PackingConfig &cfg);

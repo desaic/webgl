@@ -21,8 +21,25 @@ Vec3f GetDisplacement(Vec3u gridIdx, float dx, Vec3u fgSize, Vec3f fgOrigin, Vec
   return disp;
 }
 
+// DEFAULT: sdf distance plus the fixed corner pull, exactly as before.
+// POCKET: whatever the caller's scorer says, disp/coord folded into one
+// comparable float (FindSpot's scan only tracks a single running best).
+static float ScoreCandidate(const Vec3f &disp, const Vec3f &coord, const SpotScore &score) {
+  if (score.mode == SpotScoreMode::POCKET) {
+    if (!score.scorer) {
+      return -1e6f;
+    }
+    return score.scorer(disp, coord);
+  }
+  float dist = score.sdf->GetCoarseDist(coord);
+  if (dist >= 32766) {
+    dist = -dist;
+  }
+  return score.factor * dist + score.positionWeight * (coord[0] + coord[1] + coord[2]);
+}
+
 bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot,
-  std::shared_ptr<AdapSDF> sdf, float factor) {
+             const SpotScore &score) {
   PROFILE_SCOPE("findspot.total");
   Matrix3f rotMat = RotationMatrixRad(rot[0], rot[1], rot[2]);
   TrigMesh rotated = part;
@@ -85,9 +102,6 @@ bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot,
   Array2D8u collSlice (gridSize[0], gridSize[1]);
 
   unsigned debugZ = (fgSize[2] + gridSize[2] - 1)/2;
-  // add a little attraction towards bottom left.
-  // using normalized x y z coordinate .
-  float positionWeight = -1.0f;
   PROFILE_SCOPE("findspot.score_scan");
   for (unsigned z = fgSize[2] - 1; z < gridSize[2]; z++) {
     for (unsigned y = fgSize[1] - 1; y < gridSize[1]; y++) {
@@ -100,17 +114,13 @@ bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot,
         }
         Vec3f disp = GetDisplacement(Vec3u(x,y,z), dx, fgSize, fg.GetOrigin(), bg.GetOrigin());
         Vec3f coord = disp + meshCenter;
-    
-        float dist = sdf->GetCoarseDist(coord);
-        if (dist >= 32766) {
-          dist = -dist;
-        }
-        float score = factor * dist + positionWeight * (coord[0]+ coord[1]+ coord[2]);
+
+        float s = ScoreCandidate(disp, coord, score);
         if(z == debugZ){
-          debugSlice(x,y) = uint8_t(score * 10);
+          debugSlice(x,y) = uint8_t(s * 10);
         }
-        if (score > highScore) {
-          highScore = score;
+        if (s > highScore) {
+          highScore = s;
           bestPos = Vec3u(x, y, z);
         }
       }
@@ -120,10 +130,19 @@ bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot,
   (void)debugSlice;
   (void)collSlice;
   bool found = (highScore > score0);
-  if (found) {    
+  if (found) {
     pos = GetDisplacement(bestPos, dx, fg.vox.GetSize(), fg.GetOrigin(), bg.GetOrigin());
   }
   return found;
+}
+
+bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot,
+             std::shared_ptr<AdapSDF> sdf, float factor) {
+  SpotScore score;
+  score.mode = SpotScoreMode::DEFAULT;
+  score.sdf = sdf;
+  score.factor = factor;
+  return FindSpot(bg, part, pos, rot, score);
 }
 
 struct CollisionGridResult {
@@ -280,26 +299,27 @@ static Vec3u CellIndexTo3D(unsigned cellIdx, Vec3u numCells) {
   return Vec3u(x, y, z);
 }
 
-bool FindSpotSubgrid(MeshConvo &bg,
-                     const TrigMesh &part,
-                     Vec3f &pos,
-                     const Vec3f &rot,
-                     std::shared_ptr<AdapSDF> sdf,
-                     float factor,
-                     float cellSize,
-                     unsigned cellIdx,
-                     Vec3u numCells,
-                     bool ignoreCellBoundary) {
-  PROFILE_SCOPE("findspot_subgrid.total");
+bool FindSpotBox(MeshConvo &bg,
+                 const TrigMesh &part,
+                 Vec3f &pos,
+                 const Vec3f &rot,
+                 const SpotScore &score,
+                 const Box3f &searchBox,
+                 float shrink,
+                 Vec3f *outCenter) {
+  PROFILE_SCOPE("findspot_box.total");
   Box3f itemBox = ComputeBBox(part.v);
   Vec3f itemExtent = itemBox.vmax - itemBox.vmin;
   float maxExtent = std::max({itemExtent[0], itemExtent[1], itemExtent[2]});
 
-  // Shrink small fruits by 0.5cm for FFT to find spots more easily.
+  // Shrink small fruits for the FFT to find spots more easily. shrink=0.5
+  // matches the historical FindSpotSubgrid behavior; the pocket path uses
+  // a smaller value since this reports a fit the real (unshrunk) berry may
+  // not have.
   TrigMesh const *partPtr = &part;
   TrigMesh shrunk;
-  if (maxExtent < 5.0f && maxExtent > 0.5f) {
-    float scale = (maxExtent - 0.5f) / maxExtent;
+  if (maxExtent < 5.0f && maxExtent > shrink) {
+    float scale = (maxExtent - shrink) / maxExtent;
     Vec3f center = 0.5f * (itemBox.vmin + itemBox.vmax);
     shrunk = part;
     for (size_t i = 0; i < shrunk.v.size(); i += 3) {
@@ -312,16 +332,11 @@ bool FindSpotSubgrid(MeshConvo &bg,
     itemExtent = itemBox.vmax - itemBox.vmin;
   }
 
-  Vec3u cell3D = CellIndexTo3D(cellIdx, numCells);
   Vec3f containerOrigin = bg.box.vmin;
   float dx = bg.dx;
 
-  Vec3f cellSize3(cellSize);
-  Vec3f cellMin = containerOrigin + cell3D.cast<float>() * cellSize3;
-  Vec3f cellMax = cellMin + cellSize3;
-
-  Vec3f cropMin = cellMin - itemExtent;
-  Vec3f cropMax = cellMax + itemExtent;
+  Vec3f cropMin = searchBox.vmin - itemExtent;
+  Vec3f cropMax = searchBox.vmax + itemExtent;
   cropMin[0] = std::max(cropMin[0], bg.box.vmin[0]);
   cropMin[1] = std::max(cropMin[1], bg.box.vmin[1]);
   cropMin[2] = std::max(cropMin[2], bg.box.vmin[2]);
@@ -357,7 +372,7 @@ bool FindSpotSubgrid(MeshConvo &bg,
   Array3D8u subVox;
   subVox.Allocate(subSize, 0);
   {
-  PROFILE_SCOPE("findspot_subgrid.crop");
+  PROFILE_SCOPE("findspot_box.crop");
   for (unsigned z = 0; z < subSize[2]; z++) {
     for (unsigned y = 0; y < subSize[1]; y++) {
       for (unsigned x = 0; x < subSize[0]; x++) {
@@ -378,7 +393,7 @@ bool FindSpotSubgrid(MeshConvo &bg,
   tempConv.dx = dx;
 
   Vec3f foundPos;
-  bool found = FindSpot(tempConv, *partPtr, foundPos, rot, sdf, factor);
+  bool found = FindSpot(tempConv, *partPtr, foundPos, rot, score);
   if (!found) {
     return false;
   }
@@ -400,13 +415,52 @@ bool FindSpotSubgrid(MeshConvo &bg,
     return false;
   }
 
-  if (!ignoreCellBoundary) {
+  if (outCenter) {
     Vec3f rotCenter = 0.5f * (rotBox.vmin + rotBox.vmax);
-    Vec3f placedCenter = foundPos + rotCenter;
+    *outCenter = foundPos + rotCenter;
+  }
+
+  pos = foundPos;
+  return true;
+}
+
+bool FindSpotSubgrid(MeshConvo &bg,
+                     const TrigMesh &part,
+                     Vec3f &pos,
+                     const Vec3f &rot,
+                     std::shared_ptr<AdapSDF> sdf,
+                     float factor,
+                     float cellSize,
+                     unsigned cellIdx,
+                     Vec3u numCells,
+                     bool ignoreCellBoundary) {
+  PROFILE_SCOPE("findspot_subgrid.total");
+  Vec3u cell3D = CellIndexTo3D(cellIdx, numCells);
+  Vec3f containerOrigin = bg.box.vmin;
+
+  Vec3f cellSize3(cellSize);
+  Vec3f cellMin = containerOrigin + cell3D.cast<float>() * cellSize3;
+  Vec3f cellMax = cellMin + cellSize3;
+
+  Box3f searchBox;
+  searchBox.vmin = cellMin;
+  searchBox.vmax = cellMax;
+
+  SpotScore score;
+  score.mode = SpotScoreMode::DEFAULT;
+  score.sdf = sdf;
+  score.factor = factor;
+
+  Vec3f foundPos, settledCenter;
+  if (!FindSpotBox(bg, part, foundPos, rot, score, searchBox, 0.5f, &settledCenter)) {
+    return false;
+  }
+
+  if (!ignoreCellBoundary) {
     const float MARGIN = 0.0f;
-    if (placedCenter[0] < cellMin[0] - MARGIN || placedCenter[0] > cellMax[0] + MARGIN ||
-        placedCenter[1] < cellMin[1] - MARGIN || placedCenter[1] > cellMax[1] + MARGIN ||
-        placedCenter[2] < cellMin[2] - MARGIN || placedCenter[2] > cellMax[2] + MARGIN) {
+    if (settledCenter[0] < cellMin[0] - MARGIN || settledCenter[0] > cellMax[0] + MARGIN ||
+        settledCenter[1] < cellMin[1] - MARGIN || settledCenter[1] > cellMax[1] + MARGIN ||
+        settledCenter[2] < cellMin[2] - MARGIN || settledCenter[2] > cellMax[2] + MARGIN) {
       return false;
     }
   }

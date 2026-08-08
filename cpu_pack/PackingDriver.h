@@ -17,6 +17,10 @@ void PrepareBackground(PackingScene &scene, const PackingConfig &cfg);
 /// runs one step of the plan: repeatedly find a spot and nudge an item in.
 void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig &cfg);
 
+/// runs one FillMode::FillSurface step: PocketDriver's pocket-targeted pass
+/// (heuristic_plan.md H2 onward) instead of PackStep's lattice walk.
+void PackSurfaceStep(PackingScene &scene, const PackingStep &step, const PackingConfig &cfg);
+
 /// prepares the background, optionally resumes from a pack file,
 /// then runs plan steps starting at cfg.startStep.
 void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig &cfg);
