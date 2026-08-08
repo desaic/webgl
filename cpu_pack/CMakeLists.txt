@@ -66,3 +66,15 @@ target_link_libraries(${BIN} pack_core)
 
 add_executable(${BENCH_BIN} benchmarks.cpp)
 target_link_libraries(${BENCH_BIN} pack_core)
+
+# ad hoc dev/validation programs (e.g. heuristic_plan.md's melon test
+# harness) -- gitignored, not part of the shipped binaries. Each cpp under
+# scratch/ becomes its own executable linked against pack_core, so one-off
+# checks build with plain cmake instead of a hand-assembled g++ invocation
+# against build/'s library layout.
+file(GLOB SCRATCH_SRC CONFIGURE_DEPENDS "scratch/*.cpp")
+foreach(scratch_file ${SCRATCH_SRC})
+  get_filename_component(scratch_name ${scratch_file} NAME_WE)
+  add_executable(scratch_${scratch_name} ${scratch_file})
+  target_link_libraries(scratch_${scratch_name} pack_core)
+endforeach()

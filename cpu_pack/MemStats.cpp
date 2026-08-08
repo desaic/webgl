@@ -81,8 +81,8 @@ static size_t SdfBytes(const AdapSDF *sdf) {
 }
 
 size_t SceneMemory::Total() const {
-  return bgVox + bgFft + containerSdf + containerGrids + itemMeshes + itemSdfs
-         + itemSamples + kindGrids + trajectories
+  return bgVox + bgFft + classGrid + containerSdf + containerGrids + itemMeshes
+         + itemSdfs + itemSamples + kindGrids + trajectories
          + broadPhase;
 }
 
@@ -94,6 +94,7 @@ std::string SceneMemory::toString() const {
   };
   row("bg.vox", bgVox);
   row("bg.fft", bgFft);
+  row("classGrid", classGrid);
   row("container.sdf", containerSdf);
   row("container.grids", containerGrids);
   row("item.meshes", itemMeshes);
@@ -112,6 +113,7 @@ SceneMemory MeasureSceneMemory(const PackingScene &scene) {
   SceneMemory m;
   m.bgVox = scene.bg.vox.GetData().size();
   m.bgFft = scene.bg.fft.GetData().size() * sizeof(std::complex<float>);
+  m.classGrid = scene.classGrid.GetData().size();
   m.containerSdf = SdfBytes(scene.sdf.get());
   m.containerGrids =
       scene.containerGrid.MemoryBytes() + scene.containerInnerGrid.MemoryBytes();

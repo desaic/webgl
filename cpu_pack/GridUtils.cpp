@@ -135,6 +135,46 @@ void InvertContainer(Array3D8u &vox, uint8_t boundaryVal) {
   }
 }
 
+void ClassFromBinary(const Array3D8u &vox, Array3D8u &cls, uint8_t classVal) {
+  const auto &src = vox.GetData();
+  auto &dst = cls.GetData();
+  for (size_t i = 0; i < src.size(); i++) {
+    if (src[i] != 0) {
+      dst[i] = classVal;
+    }
+  }
+}
+
+void StampClass(Array3D8u &dst, Vec3i offset, const Array3D8u &mask,
+                uint8_t cls, uint32_t overwriteMask) {
+  Vec3u size = mask.GetSize();
+  Vec3u dstSize = dst.GetSize();
+  for (unsigned z = 0; z < size[2]; z++) {
+    int dstz = int(z) + offset[2];
+    if (dstz < 0 || dstz >= int(dstSize[2])) {
+      continue;
+    }
+    for (unsigned y = 0; y < size[1]; y++) {
+      int dsty = int(y) + offset[1];
+      if (dsty < 0 || dsty >= int(dstSize[1])) {
+        continue;
+      }
+      for (unsigned x = 0; x < size[0]; x++) {
+        int dstx = int(x) + offset[0];
+        if (dstx < 0 || dstx >= int(dstSize[0])) {
+          continue;
+        }
+        if (mask(x, y, z) > 0) {
+          uint8_t &c = dst(dstx, dsty, dstz);
+          if ((overwriteMask >> c) & 1u) {
+            c = cls;
+          }
+        }
+      }
+    }
+  }
+}
+
 
 // assumes input size is even.
 Array3Df IFFT(const Array3D<std::complex<float>> &coeff) {

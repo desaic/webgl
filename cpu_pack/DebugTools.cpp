@@ -1,11 +1,13 @@
 #include "DebugTools.h"
 
 #include "AdapSDF.h"
+#include "GridUtils.h"
 #include "MarchingCubes.h"
 #include "MeshOps.h"
 #include "PackingDriver.h"
 #include "PackingScene.h"
 #include "PointSample.h"
+#include "SurfaceCoverage.h"
 
 #include <filesystem>
 #include <iostream>
@@ -65,4 +67,30 @@ void DebugNudge(const PackingConfig &cfg) {
   std::string trajFile = scene.outputFolder + "traj_debug.txt";
   scene.SaveTrajectories(trajFile);
   std::cout << "saved " << trajFile << "\n";
+}
+
+void DebugCoverage(const PackingConfig &cfg) {
+  PackingScene scene;
+  if (!BuildScene(scene, cfg)) {
+    return;
+  }
+  PrepareBackground(scene, cfg);
+  LoadPack(scene, cfg.ResumePackPath());
+
+  CoverageParams params;
+  params.dx = scene.dx;
+  CoverageField field = BuildCoverageField(scene.container.mesh, scene.classGrid,
+                                           scene.WorldOrigin(), params);
+  CoverageReport rep = BuildCoverageReport(field);
+  std::cout << rep.toString();
+
+  std::string mouthsFile = scene.outputFolder + "coverage_open_mouths.obj";
+  SaveOpenMouthsObj(mouthsFile, field);
+  std::cout << "saved " << mouthsFile << "\n";
+
+  Vec3u gsize = scene.classGrid.GetSize();
+  SaveSlice(scene.outputFolder + "coverage_class_z1.png", scene.classGrid,
+           gsize[2] / 3, 60.0f);
+  SaveSlice(scene.outputFolder + "coverage_class_z2.png", scene.classGrid,
+           2 * gsize[2] / 3, 60.0f);
 }

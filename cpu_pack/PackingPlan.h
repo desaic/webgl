@@ -8,6 +8,16 @@
 #include <sstream>
 #include <vector>
 
+// FillVolume: the original lattice-walk search (PackStep), aimed by
+// step.force/outwards. FillSurface: the pocket-targeted pass
+// (PocketDriver's PackPocketStep) for the final small-item step, aimed at
+// deep pockets found by ray marching from the container surface instead of
+// a fixed direction. See heuristic_plan.md H2 onward.
+enum class FillMode {
+    FillVolume,
+    FillSurface,
+};
+
 struct PackingStep {
 
     std::vector<std::string> names;
@@ -19,11 +29,15 @@ struct PackingStep {
     bool outwards = true;
     // prevent packing at center of container
     bool useInnerContainer = false;
+    FillMode fillMode = FillMode::FillVolume;
 
     PackingStep() : force(-1, 0, 0) {}
-    
+
     std::string toString() const;
-    
+
+    // fillMode is read as an optional trailing token: a plan saved before
+    // H5 has nothing after useInnerContainer, and a missing token must mean
+    // FillVolume rather than a parse error.
     void Load(std::istream &in);
 };
 

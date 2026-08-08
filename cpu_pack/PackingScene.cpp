@@ -12,8 +12,10 @@
 #include "Quat4f.h"
 #include "Stopwatch.h"
 #include "TrigGrid.h"
+#include "VoxClass.h"
 #include "cpu_voxelizer.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -47,6 +49,15 @@ unsigned PackingScene::Put(unsigned itemIdx, const RigidTransform &tran) {
   // e.g. if item origin is same as world origin, then offset is 0.
   Vec3i offset = roundf((1.0f / dx) * (conf.origin - WorldOrigin()));
   Union(bg, offset, vox);
+
+  if (classGrid.GetSize() == bg.GridSize()) {
+    Vec3f itemExtent = items[itemIdx].box.vmax - items[itemIdx].box.vmin;
+    float itemMaxExtent = std::max({itemExtent[0], itemExtent[1], itemExtent[2]});
+    uint8_t itemClass = VoxClassOfExtent(itemMaxExtent, VOX_SMALL_THRESH_CM);
+    // last writer wins: an item's voxels overwrite whatever class was there
+    // before, container/inner-shell included.
+    StampClass(classGrid, offset, vox, itemClass, ~0u);
+  }
 
   unsigned instId = instances.size();
   if (placed.size() != items.size()) {
@@ -632,9 +643,12 @@ std::string RigidBodyStateToString(const std::vector<RigidBodyState> & debugStep
 RigidTransform PackingScene::Nudge(unsigned itemIdx,
                                    const RigidTransform &tran,
                                    const Vec3f &dir0,
-                                   std::vector<RigidTransform> &trajectory) {
+                                   std::vector<RigidTransform> &trajectory,
+                                   NudgeResult *out) {
   PROFILE_SCOPE("nudge.total");
   RigidTransform tOut = tran;
+  unsigned finalContactCount = 0;
+  unsigned finalItemContactCount = 0;
 
   std::vector<RigidBodyState> debugSteps;
 
@@ -804,6 +818,13 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
       contacts = prevContacts;
     }
     prevContacts = contacts;
+    finalContactCount = unsigned(contacts.size());
+    finalItemContactCount = 0;
+    for (const Contact &c : contacts) {
+      if (c.meshIndex >= 0 && unsigned(c.meshIndex) < intersectingInstances.size()) {
+        finalItemContactCount++;
+      }
+    }
     float minX = 1e30f;
     int attractItem = -1;
     // pick contacting object with min x coord.
@@ -890,6 +911,10 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
             << " pos=(" << currentT[0] << "," << currentT[1] << "," << currentT[2] << ")"
             << " start=(" << tran.position[0] << "," << tran.position[1] << "," << tran.position[2] << ")"
             << "\n";
+  }
+  if (out) {
+    out->contactCount = finalContactCount;
+    out->itemContactCount = finalItemContactCount;
   }
   return tOut;
 }
@@ -1284,6 +1309,11 @@ void AddInnerContainer(PackingScene &scene) {
   FloodOutside8u(vox, 1, 2);
   ThreshInPlace(vox, 1);
   Union(scene.bg, Vec3i(0), vox);
+  if (scene.classGrid.GetSize() == scene.bg.GridSize()) {
+    // only claim voxels nothing has been placed in yet: an item placed by
+    // an earlier step must stay classified as that item, not as inner shell.
+    StampClass(scene.classGrid, Vec3i(0), vox, VOX_INNER, 1u << VOX_FREE);
+  }
   scene.innerContainerEnabled = true;
 }
 

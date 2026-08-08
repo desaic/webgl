@@ -5,8 +5,10 @@
 #include "MeshInfo.h"
 #include "MeshOps.h"
 #include "PackingOps.h"
+#include "PocketDriver.h"
 #include "Profiler.h"
 #include "Stopwatch.h"
+#include "VoxClass.h"
 
 #include <filesystem>
 #include <fstream>
@@ -56,6 +58,8 @@ void PrepareBackground(PackingScene &scene, const PackingConfig &cfg) {
   scene.bg.SetMeshPtr(&scene.container.mesh);
   scene.bg.Voxelize(scene.dx);
   InvertContainer(scene.bg.vox, 1);
+  scene.classGrid.Allocate(scene.bg.GridSize(), VOX_FREE);
+  ClassFromBinary(scene.bg.vox, scene.classGrid, VOX_CONTAINER);
 }
 
 void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig &cfg) {
@@ -317,6 +321,56 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
                     << " searches per placement\n");
 }
 
+void PackSurfaceStep(PackingScene &scene, const PackingStep &step, const PackingConfig &cfg) {
+  if (step.names.empty()) {
+    return;
+  }
+  // same call PackStep makes for a fillVolume step -- kept symmetric so
+  // useInnerContainer means the same thing regardless of fillMode.
+  if (step.useInnerContainer && !scene.innerContainerEnabled) {
+    AddInnerContainer(scene);
+  }
+
+  PocketStepConfig pcfg;
+  pcfg.coverage.raySpacing = cfg.surfaceRaySpacing;
+  pcfg.coverage.dx = cfg.dx;
+  pcfg.coverage.patchSize = cfg.patchSize;
+  pcfg.coverage.holeDepth = cfg.holeDepth;
+  pcfg.coverage.maxProbeDepth = cfg.maxProbeDepth;
+  pcfg.planner.deepPocketThreshold = cfg.deepPocketThreshold;
+  pcfg.planner.patchMaxFails = cfg.patchMaxFails;
+  pcfg.pocketTrialCount = cfg.pocketTrialCount;
+  // cfg.maxSecondsPerStep's "0 means no limit" (PackingConfig.h) has no
+  // equivalent in PocketStepConfig -- its own check is unconditional, so
+  // passing 0 through would trip the instant any time at all had elapsed,
+  // not run forever. Leaving pcfg.maxSecondsPerStep at its own default
+  // (60 s) in that case would silently apply a limit cfg never asked for,
+  // so map "no limit" to a value large enough to never matter instead.
+  pcfg.maxSecondsPerStep =
+      cfg.maxSecondsPerStep > 0.0f ? cfg.maxSecondsPerStep : 1.0e9f;
+
+  LOGI("pack surface step: " << step.names.size() << " kinds, innerContainer "
+                             << step.useInnerContainer << "\n");
+  PocketStepResult result = PackPocketStep(scene, step, pcfg);
+  LOGI("  reason: " << result.exitReason << ", " << result.placed << " placed in "
+                    << result.attempts << " attempts, rejects: no item contact "
+                    << result.rejectedNoContact << ", inward sink "
+                    << result.rejectedInwardSink << ", left patch "
+                    << result.rejectedLeftPatch << ", still open (approx) "
+                    << result.rejectedStillOpen << "\n");
+
+  // one save at the end of the step. unlike PackStep's placeItem loop this
+  // has no per-placement hook to save at trajSaveInterval/packSaveInterval
+  // granularity, so a crash mid-step loses more than a fillVolume step
+  // would -- acceptable for now since this is the last step in every plan.
+  if (cfg.trajSaveInterval > 0) {
+    scene.SaveTrajectories(scene.trajFile + "_surface.txt");
+  }
+  if (cfg.packSaveInterval > 0) {
+    scene.SaveInstances(scene.packFile + "_surface.txt");
+  }
+}
+
 void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig &cfg) {
   PrepareBackground(scene, cfg);
 
@@ -333,7 +387,11 @@ void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig
     Utils::Stopwatch clock;
     clock.Start();
     size_t before = scene.instances.size();
-    PackStep(scene, plan.steps[i], cfg);
+    if (plan.steps[i].fillMode == FillMode::FillSurface) {
+      PackSurfaceStep(scene, plan.steps[i], cfg);
+    } else {
+      PackStep(scene, plan.steps[i], cfg);
+    }
     LOGI("=== step " << i << " took " << (clock.ElapsedMS() / 1000.0) << " s, "
                      << (scene.instances.size() - before) << " placed, "
                      << scene.instances.size() << " instances total ===\n");
