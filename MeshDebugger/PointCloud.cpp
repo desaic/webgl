@@ -5,6 +5,7 @@
 #include "ImageIO.h"
 #include "ImageUtils.h"
 #include "StringUtil.h"
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iostream>

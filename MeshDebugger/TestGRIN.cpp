@@ -3,6 +3,7 @@
 #include "Vec2.h"
 #include "BBox.h"
 
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 #include <iostream>

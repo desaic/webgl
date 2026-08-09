@@ -1,0 +1,185 @@
+Robin — Implementation Steps
+=============================
+A read-only Robinhood portfolio monitor that uses your Google account to talk
+to Gemini, polls prices every minute, and uses an LLM to AUTHOR small Python
+check-scripts (stop-loss, trailing stop, concentration, large move) that run
+locally every poll. Gemini is only called when a script fires an event, so the
+vast majority of polls spend zero LLM tokens. Backend: Python (FastAPI)
+serving HTML/JS to the browser. Read-only by design: no order-placement code
+is imported anywhere.
+
+Legend:  [x] done      [ ] pending / needs your credentials or external setup
+
+
+1. Project & environment
+   [x] Scaffold package layout (robin/, static/, tests/, data/, scripts/)
+   [x] pixi + pyproject.toml + uv (pixi resolves PyPI deps with a uv-based solver; uv also installed in the env)
+   [x] .gitignore for tokens, pickles, generated scripts, client_secret
+   [x] ruff + pytest dev environment
+
+2. Security & auth (the "account security" core)
+   [x] config.py: paths, settings, READ_ONLY=True guard, env overrides
+   [x] Robinhood login via JSON session file (NOT pickle):
+       - First login: we make the OAuth POST directly (capturing access_token,
+         refresh_token, token_type, device_token), then store them as JSON at
+         data/rh_session.json. No pickle file is ever created
+       - Later starts: load JSON, set the Authorization header via
+         robin_stocks' session helpers, verify with a GET. If the access token
+         is expired, we refresh it using the refresh_token. No MFA, no password
+         re-entry
+       - Security: JSON cannot execute code on load (unlike pickle), so a
+         tampered session file cannot compromise the app
+   [x] Gemini API key (simple, no OAuth, no Google account access):
+       - Read from a plain text file at ~/gemini_free_api_key/key.txt (or
+         override path via GEMINI_KEY_FILE env var, or set key via
+         GEMINI_API_KEY env var). The key stays in your folder, never copied
+         into the repo
+       - UI "Set Gemini Key" writes to that same file so the key remains
+         outside the project tree
+       - Uses google-genai SDK with genai.Client(api_key=...) -- free tier
+         models like gemini-2.5-flash work
+       - No Google Cloud project, no OAuth consent screen, no Drive/Email
+         access -- just an API key from Google AI Studio
+   [x] Logout All: deletes the Gemini key file + Robinhood session file
+
+3. Robinhood data (read-only) + public prices
+   [x] rh_client.RobinhoodClient: real mode pulls POSITIONS + cost basis only
+       from robin_stocks (get_open_stock_positions, get_instrument_by_url,
+        load_portfolio_profile), cached for 5 min so Robinhood is touched
+        ~once per 5 min, never per poll
+   [x] prices.PublicPriceSource: pulls current price, prev close, day high/low,
+       and 5-min history from Yahoo Finance's public chart endpoint
+       (query1/query2.finance.yahoo.com) -- NO account, NO API key. One call
+       per symbol per 5-min poll. This is what avoids flagging your Robinhood
+       account as a bot: prices never come from Robinhood
+   [x] Google Finance fallback: if Yahoo rate-limits (429) or is unreachable,
+       the price source falls back to scraping Google Finance's quote page
+       (current price only; NASDAQ then NYSE). Yahoo is always preferred
+   [x] Browser-like User-Agent + 0.5s inter-symbol stagger + 429 retry/backoff
+       + query2 host fallback, to be polite to the public source
+   [x] 20s response cache so rapid UI refreshes don't re-hit Yahoo
+   [x] Simulate mode: synthesizes a 5-stock portfolio with a random-walk price
+       so the UI/strategy/poller run with no credentials and no network
+   [x] "auto" mode: real if a Robinhood session pickle exists, else simulate
+       (switches to real automatically after you log in)
+   [x] Portfolio math: per-holding market value, total cost, unrealized P/L $
+       and %, day P/L, equity weight; portfolio totals; unit-tested for
+       internal consistency
+   [x] Account info: buying power, cash, unsettled funds from
+       load_account_profile + load_portfolio_profile
+   [x] Option positions: fetches open options from Robinhood (symbol, type,
+       strike, expiration, qty, avg cost, mark price, market value, G/L $/%,
+       day P/L); cached 30 min
+   [x] Test: real-mode price poll imports no robin_stocks (prices come from
+       public source only)
+
+4. Gemini integration (token-saving design)
+4. Gemini integration (token-saving design + internet access)
+   [x] gemini.GeminiClient built from API key via
+       genai.Client(api_key=...) -- no OAuth, no Google account access
+   [x] Google Search tool enabled on ask() and reason_on_event() so Gemini
+       can look up latest news, earnings, analyst ratings for context
+   [x] Chat history: ask() uses SDK chat session (client.chats.create) so
+       Gemini remembers conversation context across messages
+   [x] Portfolio snapshot (holdings, prices, gain/loss, buying power, options)
+       passed to every Gemini call
+   [x] generate_check_scripts(): sends portfolio summary + a conservative,
+       low-frequency directive; model returns STRICT JSON of scripts
+   [x] reason_on_event(): only called when a script fires; returns a short
+       hold/review/sell/rebalance recommendation as JSON
+   [x] ask(): free-form portfolio question (on demand, costs tokens)
+   [ ] Verify model name (GEMINI_MODEL, default gemini-2.5-flash) works with
+       your OAuth scopes; override via env if needed (your action)
+
+5. Strategy engine
+   [x] strategy.StrategyEngine: loads LLM-authored .py files from scripts/
+   [x] Sandboxed exec: restricted __builtins__ (no open/exec/eval/__import__/
+       getattr), only math/statistics/datetime exposed; scripts define
+       TARGETS=[] and check(ctx)->dict|None
+   [x] Per-holding ctx dict (price, cost, P/L, weight, history, portfolio totals)
+   [x] evaluate(): runs applicable scripts each poll, normalizes results to
+       Events, converts script exceptions into script_error events (never
+       crashes the poller); unit-tested incl. sandbox-blocks-import/open
+   [x] generate_with_llm(): writes new scripts to disk and hot-reloads
+   [x] Security note documented: restricted builtins are defense-in-depth, not
+       a full sandbox; treat scripts/ as trusted local state
+
+6. Polling & notifications
+   [x] poller.Poller: async loop every 5 min (ROBIN_POLL_INTERVAL env, default
+       300s). Prices from public source; Robinhood holdings cached 30 min
+       (ROBIN_POSITIONS_TTL env, default 1800s) so Robinhood sees ~1 request
+       per 30 min, public source sees N per 5 min (N = #holdings)
+   [x] Market hours awareness: no polling on weekends, outside 9:30 AM - 4:00 PM
+       ET, or on NYSE holidays (New Year, MLK, Presidents, Good Friday, Memorial,
+       Juneteenth, July 4, Labor, Thanksgiving, Christmas). When closed, the
+       poller logs and sleeps until the next market open. US only, no crypto
+   [x] Manual refresh: POST /api/refresh busts the holdings cache and re-polls
+       immediately (use after placing a trade); "Refresh" button in the UI
+   [x] Runs strategy scripts; for each fired event, calls Gemini to reason
+       (only on events -> token-saving), then publishes to the event bus
+   [x] Publishes portfolio snapshots to SSE for live UI updates
+   [x] Errors caught per-tick and surfaced as events (loop never dies)
+   [x] notifier.EventBus: in-memory event log + SSE subscriber queues
+   [ ] Out-of-app notifications (email / desktop) -- not built; in-app feed only
+
+7. Web backend
+   [x] FastAPI app with lifespan startup/shutdown (starts poller)
+   [x] GET  /                  -> index.html
+   [x] GET  /api/status        -> auth + mode + gemini + scripts + last_tick
+   [x] GET  /api/portfolio     -> latest snapshot (fetches on demand if empty)
+   [x] GET  /api/holdings      -> holdings list
+   [x] GET  /api/events        -> recent events
+   [x] GET  /api/scripts       -> generated check scripts
+   [x] POST /api/auth/robinhood-> username/password/mfa login (read-only)
+   [x] POST /api/auth/gemini   -> set Gemini API key (stored as JSON)
+   [x] POST /api/strategy/refresh -> ask Gemini to (re)write check scripts
+   [x] POST /api/refresh       -> bust holdings cache + re-poll now (post-trade)
+   [x] POST /api/llm/ask       -> free-form Gemini question
+   [x] GET  /api/stream        -> SSE: live portfolio frames + events + keepalive
+   [x] Static files mounted at /static
+
+8. Web UI (what you asked to see)
+   [x] Status chips: Robinhood, mode (live/simulated), Market (open/closed),
+       Gemini, scripts, model
+   [x] Summary cards: Total Holdings (market value), Total Cost Basis,
+       Total Gain/Loss ($ and %), Day Change, Buying Power, Unsettled Funds
+   [x] Holdings table: symbol, name, qty, avg cost, CURRENT PRICE, market
+       value, day %, total G/L $, total G/L %, weight -- color-coded
+   [x] Option positions table: symbol, type, strike, expiration, qty, avg
+       cost, mark, market value, G/L $/%, day P/L
+   [x] Live updates via SSE (portfolio frames) + 15s polling fallback
+   [x] Events & alerts feed with Gemini's action/message appended
+   [x] Actions: Set Gemini Key, Connect Robinhood, Logout All, Regenerate
+       Strategy, Refresh (manual post-trade holdings update)
+   [x] Ask Gemini box
+   [x] Strategy scripts list
+
+9. Tests & quality
+   [x] tests: portfolio math, stop-loss, target filter, sandbox blocks,
+       JSON session, auto-login, key manager, public price caching,
+       real-mode no-RH-for-prices, refresh cache bust, Google fallback,
+       Yahoo preferred, weekends not trading days, 2026 NYSE holidays,
+       market open/closed before/after hours, market closed on holiday,
+       next market open from weekend/after close/skips holiday
+   [x] ruff clean, all tests pass (27/27)
+
+10. Run it
+    pixi install                  # one-time
+    pixi run serve                # http://127.0.0.1:8000
+    pixi run dev                  # with reload
+    pixi run test                 # pytest
+    pixi run lint                 # ruff
+
+    First-time setup:
+      1. Get a free Gemini API key from Google AI Studio (aistudio.google.com),
+         save it as plain text at ~/gemini_free_api_key/key.txt (or paste it
+         into the UI box and click "Set Gemini Key" -- it writes to that file)
+      2. In the UI click "Connect Robinhood", enter username/password/MFA
+      3. Click "Regenerate Strategy Scripts" -- Gemini writes check scripts
+         to scripts/ and they run every poll; you only get notified on events
+
+11. Not implemented / future
+   [ ] Out-of-app notifications (email/desktop push)
+   [ ] Backtesting strategy scripts on historical data
+   [ ] Optional trade placement (intentionally omitted; read-only build)
+   [ ] Multi-account / options positions

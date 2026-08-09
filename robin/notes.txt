@@ -1,0 +1,2 @@
+convert to tauri app?
+track watch list as potential buys.

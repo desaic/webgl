@@ -1,6 +1,7 @@
 #include "GLTex.h"
 #include "GLFW/glfw3.h"
-
+#include <stdint.h>
+#include <cstring>
 #include <iostream>
 
 void GLTex::UpdateTextureData() {

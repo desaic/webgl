@@ -5,8 +5,11 @@
 #include "Array2D.h"
 #include "ImageIO.h"
 #include "PackingScene.h"
+#include "Profiler.h"
 #include "Stopwatch.h"
 
+#include <algorithm>
+#include <cmath>
 #include <iostream>
 
 // from x y z index in convolved image to translation for fg mesh.
@@ -18,8 +21,9 @@ Vec3f GetDisplacement(Vec3u gridIdx, float dx, Vec3u fgSize, Vec3f fgOrigin, Vec
   return disp;
 }
 
-bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot, 
+bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot,
   std::shared_ptr<AdapSDF> sdf, float factor) {
+  PROFILE_SCOPE("findspot.total");
   Matrix3f rotMat = RotationMatrixRad(rot[0], rot[1], rot[2]);
   TrigMesh rotated = part;
   TransformVerts(part.v, rotated.v, rotMat);
@@ -27,53 +31,54 @@ bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot,
 
   MeshConvo fg;
   fg.SetMeshPtr(&rotated);
-  fg.Voxelize(dx);
-  // makes values in convo smaller.
-  ThreshInPlace(fg.vox, 1);
+  {
+    PROFILE_SCOPE("findspot.fg_voxelize");
+    fg.Voxelize(dx);
+    // makes values in convo smaller.
+    ThreshInPlace(fg.vox, 1);
+  }
   const unsigned FFT_ALIGNMENT = 8;
   Vec3u bgSize = bg.GridSize();
   Vec3u fgSize = fg.GridSize();
   // use circular fft/ntt. no need to pad with fg size.
   Vec3u totalSize = bgSize;
   //+fgSize;
-  std::cout << "total grid size " << totalSize[0] << " " << totalSize[1] << " " << totalSize[2] << "\n";
   Vec3u gridSize = PadSizes(totalSize, FFT_ALIGNMENT);
 
-  Utils::Stopwatch fftTimer;
-  fftTimer.Start();
-  bg.FFT(gridSize);
-  std::cout << "bg FFT " << fftTimer.ElapsedMS() << " ms\n";
+  {
+    // recomputed on every trial even though bg only changes after a Put.
+    PROFILE_SCOPE("findspot.bg_fft");
+    bg.FFT(gridSize);
+  }
 
-  fftTimer.Start();
-  Reverse(fg.vox);
-  fg.gridReversed = true;
-  fg.FFT(gridSize);
-  std::cout << "fg FFT " << fftTimer.ElapsedMS() << " ms\n";
+  {
+    PROFILE_SCOPE("findspot.fg_fft");
+    Reverse(fg.vox);
+    fg.gridReversed = true;
+    fg.FFT(gridSize);
+  }
 
-  fftTimer.Start();
-  Dot(bg.fft, fg.fft);
-  std::cout << "Dot " << fftTimer.ElapsedMS() << " ms\n";
+  {
+    PROFILE_SCOPE("findspot.dot");
+    Dot(bg.fft, fg.fft);
+  }
 
-  fftTimer.Start();
-  Array3Df conv = IFFT(fg.fft);
-  std::cout << "IFFT " << fftTimer.ElapsedMS() << " ms\n";
-  Array3D8u collision = Quantize(conv);
+  Array3Df conv;
+  {
+    PROFILE_SCOPE("findspot.ifft");
+    conv = IFFT(fg.fft);
+  }
+  Array3D8u collision;
+  {
+    PROFILE_SCOPE("findspot.quantize");
+    collision = Quantize(conv);
+  }
   const float score0 = -1e6f;
   
   float highScore = score0;
   Vec3u bestPos(0);
 
-  Vec3f center = (gridSize.cast<float>() + fgSize.cast<float>());
-  center = 0.5f * center - Vec3f(1);
-  float maxDist = gridSize.cast<float>().norm();
-  // index from 0 to fgSize-2 are outside of the container.
-  // fgSize -1 is inside the container.
-    
-  Vec3f vmin = fg.meshBox.vmin;
-  Vec3f vmax = fg.meshBox.vmax;  
   Vec3f meshCenter = fg.GetMeshCenter();
-  std::cout<<"fg grid size "<<fg.GridSize()[0]<<" "<<fg.GridSize()[1]<<" "<<fg.GridSize()[2]<<"\n";
-  std::cout<<"fg origin " <<fg.GetOrigin()[0]<<" "<<fg.GetOrigin()[1] <<" "<<fg.GetOrigin()[2] <<"\n";
 
   Array2D8u debugSlice (gridSize[0], gridSize[1]);
   debugSlice.Fill(0);
@@ -83,6 +88,7 @@ bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot,
   // add a little attraction towards bottom left.
   // using normalized x y z coordinate .
   float positionWeight = -1.0f;
+  PROFILE_SCOPE("findspot.score_scan");
   for (unsigned z = fgSize[2] - 1; z < gridSize[2]; z++) {
     for (unsigned y = fgSize[1] - 1; y < gridSize[1]; y++) {
       for (unsigned x = fgSize[0] - 1; x < gridSize[0]; x++) {
@@ -111,10 +117,8 @@ bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot,
     }
   }
 
-  float voxRes[3]={dx,dx,dx};
-  // SavePngGrey("F:/meshes/fruit_hand/colli_slice.png", collSlice);
-  // SavePngGrey("F:/meshes/fruit_hand/score_slice.png", debugSlice);
-  std::cout << "high score " << highScore << "\n" ;
+  (void)debugSlice;
+  (void)collSlice;
   bool found = (highScore > score0);
   if (found) {    
     pos = GetDisplacement(bestPos, dx, fg.vox.GetSize(), fg.GetOrigin(), bg.GetOrigin());
@@ -267,4 +271,146 @@ bool FindSpotConstrained(MeshConvo &bg,
                          float factor,
                          const PackingConstraints &constraints) {
   return FindSpotConstrainedImpl(bg, part, pos, rot, sdf, factor, constraints);
+}
+
+static Vec3u CellIndexTo3D(unsigned cellIdx, Vec3u numCells) {
+  unsigned x = cellIdx % numCells[0];
+  unsigned y = (cellIdx / numCells[0]) % numCells[1];
+  unsigned z = cellIdx / (numCells[0] * numCells[1]);
+  return Vec3u(x, y, z);
+}
+
+bool FindSpotSubgrid(MeshConvo &bg,
+                     const TrigMesh &part,
+                     Vec3f &pos,
+                     const Vec3f &rot,
+                     std::shared_ptr<AdapSDF> sdf,
+                     float factor,
+                     float cellSize,
+                     unsigned cellIdx,
+                     Vec3u numCells,
+                     bool ignoreCellBoundary) {
+  PROFILE_SCOPE("findspot_subgrid.total");
+  Box3f itemBox = ComputeBBox(part.v);
+  Vec3f itemExtent = itemBox.vmax - itemBox.vmin;
+  float maxExtent = std::max({itemExtent[0], itemExtent[1], itemExtent[2]});
+
+  // Shrink small fruits by 0.5cm for FFT to find spots more easily.
+  TrigMesh const *partPtr = &part;
+  TrigMesh shrunk;
+  if (maxExtent < 5.0f && maxExtent > 0.5f) {
+    float scale = (maxExtent - 0.5f) / maxExtent;
+    Vec3f center = 0.5f * (itemBox.vmin + itemBox.vmax);
+    shrunk = part;
+    for (size_t i = 0; i < shrunk.v.size(); i += 3) {
+      shrunk.v[i]   = center[0] + (shrunk.v[i]   - center[0]) * scale;
+      shrunk.v[i+1] = center[1] + (shrunk.v[i+1] - center[1]) * scale;
+      shrunk.v[i+2] = center[2] + (shrunk.v[i+2] - center[2]) * scale;
+    }
+    partPtr = &shrunk;
+    itemBox = ComputeBBox(shrunk.v);
+    itemExtent = itemBox.vmax - itemBox.vmin;
+  }
+
+  Vec3u cell3D = CellIndexTo3D(cellIdx, numCells);
+  Vec3f containerOrigin = bg.box.vmin;
+  float dx = bg.dx;
+
+  Vec3f cellSize3(cellSize);
+  Vec3f cellMin = containerOrigin + cell3D.cast<float>() * cellSize3;
+  Vec3f cellMax = cellMin + cellSize3;
+
+  Vec3f cropMin = cellMin - itemExtent;
+  Vec3f cropMax = cellMax + itemExtent;
+  cropMin[0] = std::max(cropMin[0], bg.box.vmin[0]);
+  cropMin[1] = std::max(cropMin[1], bg.box.vmin[1]);
+  cropMin[2] = std::max(cropMin[2], bg.box.vmin[2]);
+  cropMax[0] = std::min(cropMax[0], bg.box.vmax[0]);
+  cropMax[1] = std::min(cropMax[1], bg.box.vmax[1]);
+  cropMax[2] = std::min(cropMax[2], bg.box.vmax[2]);
+
+  Vec3u bgSize = bg.GridSize();
+  Vec3i voxMin(
+    (int)std::round((cropMin[0] - containerOrigin[0]) / dx),
+    (int)std::round((cropMin[1] - containerOrigin[1]) / dx),
+    (int)std::round((cropMin[2] - containerOrigin[2]) / dx)
+  );
+  Vec3i voxMax(
+    (int)std::round((cropMax[0] - containerOrigin[0]) / dx),
+    (int)std::round((cropMax[1] - containerOrigin[1]) / dx),
+    (int)std::round((cropMax[2] - containerOrigin[2]) / dx)
+  );
+  for (int d = 0; d < 3; d++) {
+    voxMin[d] = std::max(0, std::min(voxMin[d], (int)bgSize[d] - 1));
+    voxMax[d] = std::max(0, std::min(voxMax[d], (int)bgSize[d] - 1));
+  }
+
+  Vec3u subSize(
+    (unsigned)(voxMax[0] - voxMin[0] + 1),
+    (unsigned)(voxMax[1] - voxMin[1] + 1),
+    (unsigned)(voxMax[2] - voxMin[2] + 1)
+  );
+  if (subSize[0] < 4 || subSize[1] < 4 || subSize[2] < 4) {
+    return false;
+  }
+
+  Array3D8u subVox;
+  subVox.Allocate(subSize, 0);
+  {
+  PROFILE_SCOPE("findspot_subgrid.crop");
+  for (unsigned z = 0; z < subSize[2]; z++) {
+    for (unsigned y = 0; y < subSize[1]; y++) {
+      for (unsigned x = 0; x < subSize[0]; x++) {
+        subVox(x, y, z) = bg.vox(
+          (unsigned)(voxMin[0] + (int)x),
+          (unsigned)(voxMin[1] + (int)y),
+          (unsigned)(voxMin[2] + (int)z)
+        );
+      }
+    }
+  }
+  }
+
+  MeshConvo tempConv;
+  tempConv.box.vmin = cropMin;
+  tempConv.box.vmax = cropMax;
+  tempConv.vox = subVox;
+  tempConv.dx = dx;
+
+  Vec3f foundPos;
+  bool found = FindSpot(tempConv, *partPtr, foundPos, rot, sdf, factor);
+  if (!found) {
+    return false;
+  }
+
+  // Verify the entire rotated fruit fits inside the container.
+  Matrix3f rotMat = RotationMatrixRad(rot[0], rot[1], rot[2]);
+  TrigMesh rotated = *partPtr;
+  TransformVerts(partPtr->v, rotated.v, rotMat);
+  Box3f rotBox = ComputeBBox(rotated.v);
+  Vec3f fruitMin = foundPos + rotBox.vmin;
+  Vec3f fruitMax = foundPos + rotBox.vmax;
+  const float BOUNDARY_MARGIN = 0.5f;
+  if (fruitMin[0] < bg.box.vmin[0] - BOUNDARY_MARGIN ||
+      fruitMin[1] < bg.box.vmin[1] - BOUNDARY_MARGIN ||
+      fruitMin[2] < bg.box.vmin[2] - BOUNDARY_MARGIN ||
+      fruitMax[0] > bg.box.vmax[0] + BOUNDARY_MARGIN ||
+      fruitMax[1] > bg.box.vmax[1] + BOUNDARY_MARGIN ||
+      fruitMax[2] > bg.box.vmax[2] + BOUNDARY_MARGIN) {
+    return false;
+  }
+
+  if (!ignoreCellBoundary) {
+    Vec3f rotCenter = 0.5f * (rotBox.vmin + rotBox.vmax);
+    Vec3f placedCenter = foundPos + rotCenter;
+    const float MARGIN = 0.0f;
+    if (placedCenter[0] < cellMin[0] - MARGIN || placedCenter[0] > cellMax[0] + MARGIN ||
+        placedCenter[1] < cellMin[1] - MARGIN || placedCenter[1] > cellMax[1] + MARGIN ||
+        placedCenter[2] < cellMin[2] - MARGIN || placedCenter[2] > cellMax[2] + MARGIN) {
+      return false;
+    }
+  }
+
+  pos = foundPos;
+  return true;
 }

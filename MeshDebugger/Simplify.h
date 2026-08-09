@@ -15,6 +15,7 @@
 #include <vector>
 #include <string>
 #include <math.h>
+#include <cstring>
 #include <float.h> //FLT_EPSILON, DBL_EPSILON
 
 #define loopi(start_l,end_l) for ( int i=start_l;i<end_l;++i )

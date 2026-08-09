@@ -3,7 +3,7 @@
 #include "Stopwatch.h"
 #include "BBox.h"
 #include "AdapUDF.h"
-#include "MeshUtil.h"
+#include "meshutil.h"
 #include "Inflate.h"
 #include "cpu_voxelizer.h"
 #include "RaycastConf.h"
@@ -14,7 +14,7 @@
 #include <filesystem>
 #include <sstream>
 
-static Array3D8u FloodOutside(const Array3D<short>& dist, float distThresh) ;
+//static Array3D8u FloodOutside(const Array3D<short>& dist, float distThresh) ;
 
 //info for voxelizing
 //multi-material interface connector designs

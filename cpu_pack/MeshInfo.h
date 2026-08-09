@@ -23,6 +23,7 @@ class MeshInfo {
     std::shared_ptr<AdapSDF> sdf;
     std::vector<SamplePoint> samples;
     bool noMoreFit = false;
+    unsigned nextCellIdx = 0;
     float BoxDiagonal() const {
       return (box.vmax - box.vmin).norm();
     }

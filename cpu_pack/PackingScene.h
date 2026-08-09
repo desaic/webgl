@@ -13,6 +13,8 @@
 #include <iostream>
 #include <filesystem>
 #include <map>
+#include <memory>
+#include <unordered_map>
 
 class AdapSDF;
 
@@ -102,8 +104,19 @@ class PackingScene {
     // container acceleration grid for collission.
     TrigGrid containerGrid;
     TrigGrid containerInnerGrid;
+    // cache of TrigGrid per item KIND, built once in the item's local frame
+    // and shared by every instance of that kind. keyed by item index, so it
+    // is bounded by the item catalogue (~100) rather than by the placement
+    // count (thousands). queries transform the point into grid local space.
+    //
+    // the grids hold a non-owning pointer to items[i].mesh, which is assigned
+    // once at load and never reallocated, so the grids stay valid for the run.
+    std::unordered_map<unsigned, std::shared_ptr<TrigGrid>> kindGrids;
 
     std::vector<Vec3f> randAngles;
+    // subgrid for FindSpot on small items
+    float subgridCellSize = 20.0f;
+    Vec3u numSubgridCells;
     // progress saving
     std::string trajFile;
     unsigned trajFileIndex = 0;

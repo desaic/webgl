@@ -9,12 +9,18 @@ include_directories("../Mesh/inc")
 include_directories("extern/imgui")
 include_directories("extern/glfw3.3.8")
 include_directories("extern/glew-2.1.0")
-link_directories("extern/glew-2.1.0")
+if(WIN32)
+  link_directories("extern/glew-2.1.0")
+  link_directories("extern/glfw3.3.8")
+endif()
 add_subdirectory("extern/imgui")
 include_directories("extern/imgui/backends")
-link_directories("extern/glfw3.3.8")
-add_compile_options("/std:c++latest")
 include_directories("inc")
+
+if(NOT WIN32)
+  find_package(glfw3 REQUIRED)
+  find_package(GLEW REQUIRED)
+endif()
 
 list(FILTER SRC EXCLUDE REGEX "[.+/]?main.cpp")
 
@@ -38,7 +44,11 @@ add_executable(${BIN}
   resource/icons.rc
 )
   
-target_link_libraries(${BIN} UILib imgui glfw3 opengl32 glew32s ImageIO Mesh MathLib Util)
+if(WIN32)
+  target_link_libraries(${BIN} UILib imgui glfw3 opengl32 glew32s ImageIO Mesh MathLib Util)
+else()
+  target_link_libraries(${BIN} UILib imgui glfw GLEW::GLEW GL ImageIO Mesh MathLib Util)
+endif()
 
 # copy fonts over
 # @todo(mike) more consistent place for all this kind of stuff

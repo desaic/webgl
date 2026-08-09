@@ -2,7 +2,7 @@
 #include "StringUtil.h"
 #include "Stopwatch.h"
 #include "BBox.h"
-#include "MeshUtil.h"
+#include "meshutil.h"
 #include "cpu_voxelizer.h"
 #include "RaycastConf.h"
 #include "VoxIO.h"

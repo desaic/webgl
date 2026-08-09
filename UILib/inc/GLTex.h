@@ -1,5 +1,6 @@
 #pragma once
 #include <vector>
+#include <stdint.h>
 
 struct GLTex{
   /// only supports 1 or 4 channel images because

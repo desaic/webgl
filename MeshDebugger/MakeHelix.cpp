@@ -5,7 +5,7 @@
 
 #include "FramedCurve.h"
 #include "MakeHelix.h"
-#include "MeshUtil.h"
+#include "meshutil.h"
 #include "TriangulateContour.h"
 #include <algorithm>
 #include <fstream>

@@ -9,6 +9,9 @@ lerna-debug.log*
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
+#vim swap file
+*.swp
+
 # Runtime data
 pids
 *.pid
@@ -118,3 +121,5 @@ dist
 
 .vscode/ddddddd
 package-lock.json
+UILib/extern/glfw3.3.8/glfw_src/
+UILib/extern/glew-2.1.0/glew_src/

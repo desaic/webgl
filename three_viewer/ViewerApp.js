@@ -1,5 +1,8 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { Line2 } from "three/examples/jsm/lines/Line2.js";
+import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
+import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
 import { ViewCube } from "./ViewCube.js";
 
 export class ViewerApp {
@@ -48,6 +51,8 @@ export class ViewerApp {
     this._addLights();
     this._addHelpers();
 
+    this._addLine2Demo();
+
     // Size the renderer to the canvas's current CSS size, then keep it in
     // sync via ResizeObserver so sidebar drags / window resizes all flow
     // through one path.
@@ -75,6 +80,41 @@ export class ViewerApp {
     // plane so it sits on the ground with Z as the up axis.
     grid.rotation.x = -Math.PI / 2;
     this.scene.add(grid);
+  }
+
+  _addLine2Demo() {
+    const positions = [];
+    const segments = 20;
+    const curveSize = 0.1;
+    for (let i = 0; i <= segments; i++) {
+      
+      const t = (i / segments) * Math.PI * 8;
+      const x = Math.cos(t) * curveSize;
+      const y = Math.sin(t) * curveSize;
+      const z = t * curveSize ;
+      positions.push(x, y, z);
+    }
+
+    const geometry = new LineGeometry();
+    geometry.setPositions(positions);
+
+    this._lineMaterial = new LineMaterial({
+      color: 0xff8800,
+      linewidth: 0.01,
+      worldUnits: true,
+      dashed: true,
+      dashSize: 0.02,
+      gapSize: 0.01,
+      dashScale: 1,
+      resolution: new THREE.Vector2(
+        this.canvas.clientWidth,
+        this.canvas.clientHeight
+      ),
+    });
+
+    const line = new Line2(geometry, this._lineMaterial);
+    line.computeLineDistances();
+    this.scene.add(line);
   }
 
   clearModel() {
@@ -125,6 +165,9 @@ export class ViewerApp {
     // Resizing the drawing buffer clears it to black; re-render immediately
     // so the browser never composites an empty buffer (prevents flicker).
     this.renderer.render(this.scene, this.camera);
+    if (this._lineMaterial) {
+      this._lineMaterial.resolution.set(w, h);
+    }
   }
 
   start() {

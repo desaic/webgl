@@ -1,12 +1,14 @@
 #include "PackingScene.h"
 #include "AdapSDF.h"
 #include "FastSweep.h"
+#include "Log.h"
 #include "FloodOutside.h"
 #include "GridUtils.h"
 #include "MarchingCubes.h"
 #include "MeshConvo.h"
 #include "MeshOps.h"
 #include "PointSample.h"
+#include "Profiler.h"
 #include "Quat4f.h"
 #include "Stopwatch.h"
 #include "TrigGrid.h"
@@ -25,6 +27,7 @@ Vec3i roundf(const Vec3f &fvec) {
 }
 
 unsigned PackingScene::Put(unsigned itemIdx, const RigidTransform &tran) {
+  PROFILE_SCOPE("put.total");
   TrigMesh inst = MakeTransformedMesh(items[itemIdx].mesh, tran);
   Box3f bbox = ComputeBBox(inst.v);
   // saved for broad phase.
@@ -63,10 +66,10 @@ Vec3f PackingScene::ForceDirection(unsigned itemIdx,
                                    const RigidTransform &tran) {
   Vec3f dir0 = gravity;
   // (0, 1)
-  float dir0Weight = 0.5f;
+  float dir0Weight = dir0.norm();
   // assume object is centered at origin in reference space.
   Vec3f sdfDir = sdf->GetCoarseGrad(tran.position);
-  Vec3f dir = dir0Weight * dir0 + (1 - dir0Weight) * (sdfFactor * sdfDir);
+  Vec3f dir = dir0 + (1 - dir0Weight) * (sdfFactor * sdfDir);
   dir.normalize();
   return dir;
 }
@@ -103,6 +106,16 @@ void PackingScene::InitDataStructures() {
     items[i].mesh.ComputeTrigNormals();
     items[i].mesh.ComputeVertNormals();
   }
+
+  Vec3f containerExtent = container.box.vmax - container.box.vmin;
+  numSubgridCells = Vec3u(
+      std::max(1u, (unsigned)std::ceil(containerExtent[0] / subgridCellSize)),
+      std::max(1u, (unsigned)std::ceil(containerExtent[1] / subgridCellSize)),
+      std::max(1u, (unsigned)std::ceil(containerExtent[2] / subgridCellSize)));
+  unsigned totalCells = numSubgridCells[0] * numSubgridCells[1] * numSubgridCells[2];
+  LOGI("subgrid " << numSubgridCells[0] << "x" << numSubgridCells[1] << "x"
+       << numSubgridCells[2] << " (" << totalCells << " cells)"
+       << " cellSize=" << subgridCellSize << "\n");
 }
 
 void PackingScene::InitRigidBodies() {
@@ -113,6 +126,7 @@ void PackingScene::InitRigidBodies() {
 }
 
 void PackingScene::InitContainerGrids() {
+  PROFILE_SCOPE("init.container_grids");
   containerGrid.Build(container.mesh, gridDx);
   if (!containerInner.mesh.v.empty()) {
     containerInnerGrid.Build(containerInner.mesh, gridDx);
@@ -137,8 +151,9 @@ std::shared_ptr<AdapSDF> ComputeSDF(float distUnit, float h, TrigMesh &mesh) {
 }
 
 void PackingScene::ComputeContainerSDF() {
+  PROFILE_SCOPE("init.container_sdf");
   float distUnit = 0.001f * containerSDFDx;
-  std::cout << "computing container sdf \n";
+  LOGI("computing container sdf \n");
   sdf = ComputeSDF(distUnit, containerSDFDx, container.mesh);
 
   // Array3D<Vec3f> gradients = ComputeSDFGradient(*sdf, distUnit, containerSDFDx);
@@ -409,22 +424,46 @@ static Quat4f IntegrateAngularVelocity(Vec3f angVel, float dt) {
 
 static std::vector<Contact> GatherActiveContacts(
     const std::vector<SamplePoint> &fineSamples,
-    const std::vector<const TrigGrid*> &accGrids,
+    const std::vector<GridInstance> &accGrids,
     const Matrix3f &currentRotMat,
     const Vec3f &currentT,
     float eps,
     float activeBuffer,
     float contactAngleThreshDeg) {
-    
+
   std::vector<Contact> activeContacts;
   float queryRadius = eps + activeBuffer;
-  
+
+  {
+  // the grid queries and the manifold reduction are measured apart because
+  // together they were 85% of a small-item pack with nothing to aim at.
+  PROFILE_SCOPE("nudge.grid_query");
+  PROFILE_COUNT("count.gather_samples", fineSamples.size());
+  PROFILE_COUNT("count.gather_grids", accGrids.size());
+  unsigned long nearestCalls = 0;
   for (size_t s = 0; s < fineSamples.size(); s++) {
     Vec3f worldPt = currentRotMat * fineSamples[s].x + currentT;
-    
+
     for (unsigned m = 0; m < accGrids.size(); m++) {
-      ContactInfo info = accGrids[m]->NearestTriangle(worldPt, queryRadius);
-      
+      const GridInstance &gi = accGrids[m];
+      // neighbor grids live in their item's local frame, so the query point
+      // comes to them rather than the grid being rebuilt in world space.
+      // a uniform scale also scales distances, hence the radius division.
+      Vec3f queryPt = gi.worldSpace ? worldPt : gi.ToLocal(worldPt);
+      float localRadius =
+          gi.worldSpace ? queryRadius : queryRadius * gi.invScale;
+      if (!gi.grid->InRange(queryPt, localRadius)) {
+        continue;
+      }
+      nearestCalls++;
+      ContactInfo info = gi.grid->NearestTriangle(queryPt, localRadius);
+      if (!gi.worldSpace && info.dist < 1e29f) {
+        // back to world: distances scale, normals only rotate.
+        info.dist *= gi.scale;
+        info.closestPt = gi.ToWorldPoint(info.closestPt);
+        info.normal = gi.ToWorldDir(info.normal);
+      }
+
       // We only care about points within our interaction radius
       if (info.dist >= 0.0f && info.dist < queryRadius) {
         // Compute signed distance using the face normal. All grids now
@@ -444,6 +483,12 @@ static std::vector<Contact> GatherActiveContacts(
       }
     }
   }
+  // in-range pairs only. samples x grids is the upper bound, this is the
+  // number that actually walks a grid.
+  PROFILE_COUNT("count.nearest_trig", nearestCalls);
+  PROFILE_COUNT("count.raw_contacts", activeContacts.size());
+  }
+  PROFILE_SCOPE("nudge.manifold_reduce");
   return reduceContactManifold(activeContacts, contactAngleThreshDeg);
 }
 
@@ -588,6 +633,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
                                    const RigidTransform &tran,
                                    const Vec3f &dir0,
                                    std::vector<RigidTransform> &trajectory) {
+  PROFILE_SCOPE("nudge.total");
   RigidTransform tOut = tran;
 
   std::vector<RigidBodyState> debugSteps;
@@ -602,13 +648,47 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   Vec3f fruitExtent = fruitBox.vmax - fruitBox.vmin;
   float minExtent = std::min({fruitExtent[0], fruitExtent[1], fruitExtent[2]});
   float ds = 0.5f;
+  if (minExtent < 3.0f) {
+    ds = 0.2f;
+  } else if (minExtent < 5.0f) {
+    ds = 0.3f;
+  }
   float eps = ds * 0.1f;
   float activeBuffer = ds;
 
-  // Simulation parameters
-  size_t maxOptimizationSteps = 100; // Might need slightly more steps for settling
+  // Simulation parameters -- scaled by fruit size.
+  // Small fruits need fewer steps to settle and coarser approximation is fine.
+  size_t maxOptimizationSteps;
+  float damping;
+  float pgsPasses;
+  float earlyExitVelSq;
+  unsigned contactGatherInterval;
+  if (minExtent < 3.0f) {
+    maxOptimizationSteps = 30;
+    damping = 0.82f;
+    pgsPasses = 5;
+    earlyExitVelSq = 1e-3f;
+    contactGatherInterval = 1;
+  } else if (minExtent < 5.0f) {
+    maxOptimizationSteps = 50;
+    damping = 0.84f;
+    pgsPasses = 6;
+    earlyExitVelSq = 1e-3f;
+    contactGatherInterval = 2;
+  } else if (minExtent < 10.0f) {
+    maxOptimizationSteps = 80;
+    damping = 0.85f;
+    pgsPasses = 7;
+    earlyExitVelSq = 1e-3f;
+    contactGatherInterval = 1;
+  } else {
+    maxOptimizationSteps = 100;
+    damping = 0.85f;
+    pgsPasses = 8;
+    earlyExitVelSq = 1e-4f;
+    contactGatherInterval = 1;
+  }
   float dt = 1.0f / 60.0f;          // Fixed time step
-  float damping = 0.85f;            // Velocity damping to simulate friction/air resistance
   float nudgeAcceleration = 200.0f; // Accelerate at 200 cm/s^2 (which is 2 m/s^2)
   // attraction towards contacting object.
   Vec3f attractionDir(-1,0,0);
@@ -616,13 +696,25 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
 
   std::vector<SamplePoint> samples;
   if (meshInfo.samples.empty()) {
+    PROFILE_SCOPE("nudge.sample_gen");
     std::vector<SamplePoint> allFineSamples;
-    float sampleSpacing = std::max(0.1f, std::min(ds, minExtent * 0.1f));
+    float sampleSpacing;
+    float maxOverlap;
+    if (minExtent < 3.0f) {
+      sampleSpacing = std::max(0.2f, minExtent * 0.15f);
+      maxOverlap = 0.0f;
+    } else if (minExtent < 5.0f) {
+      sampleSpacing = std::max(0.15f, minExtent * 0.12f);
+      maxOverlap = 0.1f;
+    } else {
+      sampleSpacing = std::max(0.1f, std::min(ds, minExtent * 0.1f));
+      maxOverlap = MAX_OVERLAP;
+    }
     SamplePoints(meshInfo.mesh, sampleSpacing, allFineSamples);
     samples = DownsamplePoints(allFineSamples, sampleSpacing);
-    std::cout<<"sample spacing " << sampleSpacing <<" num samples " << samples.size()<<"\n";
+    LOGI("sample spacing " << sampleSpacing << " num samples " << samples.size() << "\n");
     meshInfo.ComputeSDFCached();
-    MovePointsInward(samples, MAX_OVERLAP, meshInfo.sdf);
+    MovePointsInward(samples, maxOverlap, meshInfo.sdf);
     meshInfo.samples = samples;
   } else {
     samples = meshInfo.samples;
@@ -638,14 +730,16 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
 
   Vec3f linearVel(0.0f);
   Vec3f angularVel(0.0f);
-
-  std::unordered_map<unsigned, std::shared_ptr<TrigGrid>> persistentNeighborGrids;
-  std::vector<std::shared_ptr<TrigMesh> > nbrMeshes;
+  std::vector<Contact> prevContacts;
 
   Utils::Stopwatch nudgeTotal;
   nudgeTotal.Start();
+  double gatherTime = 0, pgsTime = 0, broadTime = 0;
+  unsigned maxGrids = 0;
 
   for (size_t step = 0; step < maxOptimizationSteps; step++) {
+    Utils::Stopwatch swStep;
+    swStep.Start();
     Matrix3f currentRotMat = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
     auto Rinv = currentRotMat.transposed();
 
@@ -656,41 +750,60 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     linearVel += (forceDir * nudgeAcceleration) * dt;
 
     // 2. DYNAMIC BROADPHASE STEP
-    auto corners = TransformPoints(BoxCorners(localBox), currentRotMat, currentT);
-    Box3f instBox = ComputeBBox(corners);
-    float stepQueryDist = eps + activeBuffer;
-    std::vector<unsigned> intersectingInstances = broadPhase.GetNearby(instBox, stepQueryDist);
+    Utils::Stopwatch swBroad;
+    swBroad.Start();
+    std::vector<unsigned> intersectingInstances;
+    {
+      PROFILE_SCOPE("nudge.broadphase");
+      auto corners = TransformPoints(BoxCorners(localBox), currentRotMat, currentT);
+      Box3f instBox = ComputeBBox(corners);
+      float stepQueryDist = eps + activeBuffer;
+      intersectingInstances = broadPhase.GetNearby(instBox, stepQueryDist);
+    }
 
     // must be ordered by the intersectingInstances than 1-2 container meshes
     // for active contacts to return correct indices
-    std::vector<const TrigGrid*> accGrids;
+    std::vector<GridInstance> accGrids;
 
     for (size_t i = 0; i < intersectingInstances.size(); i++) {
       unsigned instIdx = intersectingInstances[i];
-      auto it = persistentNeighborGrids.find(instIdx);
-      if (it == persistentNeighborGrids.end()) {
-        InstanceInfo inst = instances[instIdx];
-        auto nbrMesh = std::make_shared<TrigMesh>();
-        *nbrMesh = MakeTransformedMesh(items[inst.itemId].mesh, inst.tran);
-        nbrMeshes.push_back(nbrMesh);
-        
+      const InstanceInfo &inst = instances[instIdx];
+      auto it = kindGrids.find(inst.itemId);
+      if (it == kindGrids.end()) {
+        // first contact with this KIND anywhere. built in the item's local
+        // frame from items[].mesh, so no transformed mesh copy is needed and
+        // every later instance of the kind reuses this grid.
+        PROFILE_SCOPE("nudge.triggrid_build");
         auto newGrid = std::make_shared<TrigGrid>();
-        newGrid->Build(*nbrMesh, gridDx);
-        persistentNeighborGrids[instIdx] = newGrid;
-        accGrids.push_back(newGrid.get());
-      } else {
-        accGrids.push_back(it->second.get());
+        newGrid->Build(items[inst.itemId].mesh, gridDx);
+        it = kindGrids.emplace(inst.itemId, newGrid).first;
       }
+      accGrids.push_back(GridInstance::Local(it->second.get(),
+                                            inst.tran.rotation,
+                                            inst.tran.position,
+                                            inst.tran.scale));
     }
 
-    accGrids.push_back(&containerGrid);
+    accGrids.push_back(GridInstance::World(&containerGrid));
     if (innerContainerEnabled) {
-      accGrids.push_back(&containerInnerGrid);
+      accGrids.push_back(GridInstance::World(&containerInnerGrid));
     }
+    broadTime += swBroad.ElapsedMS();
+    maxGrids = std::max(maxGrids, (unsigned)accGrids.size());
 
-    // 3. Narrow Phase Contact Gathering
-    std::vector<Contact> contacts = GatherActiveContacts(
-        samples, accGrids, currentRotMat, currentT, eps, activeBuffer, CONTACT_ANGLE_THRESH_DEG);
+    // 3. Narrow Phase Contact Gathering (throttled for small fruits)
+    std::vector<Contact> contacts;
+    if (step % contactGatherInterval == 0) {
+      Utils::Stopwatch swGather;
+      swGather.Start();
+      PROFILE_SCOPE("nudge.narrowphase");
+      contacts = GatherActiveContacts(
+          samples, accGrids, currentRotMat, currentT, eps, activeBuffer, CONTACT_ANGLE_THRESH_DEG);
+      gatherTime += swGather.ElapsedMS();
+    } else {
+      contacts = prevContacts;
+    }
+    prevContacts = contacts;
     float minX = 1e30f;
     int attractItem = -1;
     // pick contacting object with min x coord.
@@ -710,8 +823,14 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
       attractionDir.normalize();
     }
     // 4. PGS Solver Passes (Modifies Velocities)
-    int pgsPasses = 8;
-    SolveContactConstraintsPGS(contacts, currentT, currentRotMat, Rinv, invMass, invI_local, eps, pgsPasses, dt, linearVel, angularVel);
+    Utils::Stopwatch swPGS;
+    swPGS.Start();
+    {
+      PROFILE_SCOPE("nudge.pgs_solve");
+      SolveContactConstraintsPGS(contacts, currentT, currentRotMat, Rinv, invMass, invI_local,
+                                  eps, (int)pgsPasses, dt, linearVel, angularVel);
+    }
+    pgsTime += swPGS.ElapsedMS();
 
     // 5. Integrate Velocities to Positions
     currentT += linearVel * dt;
@@ -738,7 +857,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     trajectory.push_back(RigidTransform(currentT, Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w())));
     
     // Early exit if the fruit has completely settled into a snug spot
-    if (linearVel.dot(linearVel) < 1e-4f && angularVel.dot(angularVel) < 1e-4f) {
+    if (linearVel.dot(linearVel) < earlyExitVelSq && angularVel.dot(angularVel) < earlyExitVelSq) {
         break; 
     }
   }
@@ -757,7 +876,21 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   tOut.position = currentT;
   tOut.rotation = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
 
-  std::cout << "Nudge total " << nudgeTotal.ElapsedMS() << " ms\n";
+  double total = nudgeTotal.ElapsedMS();
+  if (LogEnabled(LOG_INFO)) {
+  std::cout << "Nudge " << items[itemIdx].name
+            << " total=" << total << "ms"
+            << " steps=" << trajectory.size()
+            << " samples=" << samples.size()
+            << " extent=" << minExtent
+             << " broad=" << broadTime << "ms"
+            << " gather=" << gatherTime << "ms"
+            << " pgs=" << pgsTime << "ms"
+            << " grids=" << maxGrids
+            << " pos=(" << currentT[0] << "," << currentT[1] << "," << currentT[2] << ")"
+            << " start=(" << tran.position[0] << "," << tran.position[1] << "," << tran.position[2] << ")"
+            << "\n";
+  }
   return tOut;
 }
 
@@ -929,9 +1062,6 @@ RigidTransform PackingScene::NudgeConstrained(unsigned itemIdx,
   Vec3f linearVel(0.0f);
   Vec3f angularVel(0.0f);
 
-  std::unordered_map<unsigned, std::shared_ptr<TrigGrid>> persistentNeighborGrids;
-  std::vector<std::shared_ptr<TrigMesh>> nbrMeshes;
-
   Utils::Stopwatch nudgeTotal;
   nudgeTotal.Start();
 
@@ -957,26 +1087,27 @@ RigidTransform PackingScene::NudgeConstrained(unsigned itemIdx,
     float stepQueryDist = eps + activeBuffer;
     std::vector<unsigned> intersectingInstances = broadPhase.GetNearby(instBox, stepQueryDist);
 
-    std::vector<const TrigGrid*> accGrids;
+    // shares the scene wide per kind grid cache with Nudge, so neighbors
+    // cost one transform per query instead of a mesh copy plus a grid.
+    std::vector<GridInstance> accGrids;
     for (size_t i = 0; i < intersectingInstances.size(); i++) {
       unsigned instIdx = intersectingInstances[i];
-      auto it = persistentNeighborGrids.find(instIdx);
-      if (it == persistentNeighborGrids.end()) {
-        InstanceInfo inst = instances[instIdx];
-        auto nbrMesh = std::make_shared<TrigMesh>();
-        *nbrMesh = MakeTransformedMesh(items[inst.itemId].mesh, inst.tran);
-        nbrMeshes.push_back(nbrMesh);
+      const InstanceInfo &inst = instances[instIdx];
+      auto it = kindGrids.find(inst.itemId);
+      if (it == kindGrids.end()) {
+        PROFILE_SCOPE("nudge.triggrid_build");
         auto newGrid = std::make_shared<TrigGrid>();
-        newGrid->Build(*nbrMesh, gridDx);
-        persistentNeighborGrids[instIdx] = newGrid;
-        accGrids.push_back(newGrid.get());
-      } else {
-        accGrids.push_back(it->second.get());
+        newGrid->Build(items[inst.itemId].mesh, gridDx);
+        it = kindGrids.emplace(inst.itemId, newGrid).first;
       }
+      accGrids.push_back(GridInstance::Local(it->second.get(),
+                                            inst.tran.rotation,
+                                            inst.tran.position,
+                                            inst.tran.scale));
     }
-    accGrids.push_back(&containerGrid);
+    accGrids.push_back(GridInstance::World(&containerGrid));
     if (innerContainerEnabled) {
-      accGrids.push_back(&containerInnerGrid);
+      accGrids.push_back(GridInstance::World(&containerInnerGrid));
     }
 
     std::vector<Contact> contacts = GatherActiveContacts(
@@ -1028,7 +1159,7 @@ RigidTransform PackingScene::NudgeConstrained(unsigned itemIdx,
   tOut.position = currentT;
   tOut.rotation = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
 
-  std::cout << "NudgeConstrained total " << nudgeTotal.ElapsedMS() << " ms\n";
+  LOGI("NudgeConstrained total " << nudgeTotal.ElapsedMS() << " ms\n");
   return tOut;
 }
 
@@ -1043,6 +1174,7 @@ static bool ReadMatrix3f(std::istream &in, Matrix3f &m) {
 }
 
 void LoadPack(PackingScene &scene, const std::string &packFile) {
+  PROFILE_SCOPE("loadpack.total");
   std::ifstream in(packFile);
   if (!in.good()) {
     return;
@@ -1083,9 +1215,10 @@ void LoadPack(PackingScene &scene, const std::string &packFile) {
   // Print summary
   for (size_t i = 0; i < scene.items.size(); i++) {
     if (!scene.placed[i].empty()) {
-      std::cout << "Loaded " << scene.placed[i].size() << " placements for " << scene.items[i].name << "\n";
+      LOGD("Loaded " << scene.placed[i].size() << " placements for " << scene.items[i].name << "\n");
     }
   }
+  LOGI("LoadPack " << scene.instances.size() << " instances from " << packFile << "\n");
 }
 
 void PackingScene::SaveTrajectories(const std::string &filename) const {

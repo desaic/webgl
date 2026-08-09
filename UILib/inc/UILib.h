@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstring>
 #include <deque>
 #include <functional>
 #include <memory>
@@ -22,7 +23,7 @@ struct GLFWwindow;
 class UIWidget {
  public:
   virtual void Draw() {}
-  int GetIndex() const {}
+  int GetIndex() const { return -1;}
 
  private:
   ///widgets are drawn in order indicated by index_
@@ -293,7 +294,7 @@ class UILib {
 
   int _initImagePosX = 20;
   int _initImagePosY = 0;
-  std::atomic<float> _fps = 0;
+  float _fps = 0;
   mutable std::mutex _widgetsLock;
   std::vector<std::shared_ptr<UIWidget> > uiWidgets_;
 

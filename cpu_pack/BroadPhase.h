@@ -55,4 +55,14 @@ class BroadPhaseGrid {
     }
 
     void SaveDebugMesh(const std::string & outFile) const;
+
+    /// bytes held by the cell grid, including per-vector header overhead.
+    size_t MemoryBytes() const {
+      const auto &cells = m_cells.GetData();
+      size_t bytes = cells.capacity() * sizeof(std::vector<unsigned>);
+      for (const auto &c : cells) {
+        bytes += c.capacity() * sizeof(unsigned);
+      }
+      return bytes;
+    }
 };
