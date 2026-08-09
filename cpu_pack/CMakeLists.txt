@@ -1,13 +1,15 @@
 cmake_minimum_required(VERSION 3.16)
 set(BIN "cpu_pack")
 set(BENCH_BIN "cpu_pack_bench")
+set(MELONE_TEST_BIN "melone_test")
 PROJECT (CpuPack)
 FILE(GLOB CORE_SRC CONFIGURE_DEPENDS "*.cpp" "*.c" "quickhull/*.cpp")
-# main.cpp and benchmarks.cpp each define main(), so they stay out of the
-# shared library and link into their own executable.
+# main.cpp, benchmarks.cpp, and melone_test.cpp each define main(), so they
+# stay out of the shared library and link into their own executable.
 list(REMOVE_ITEM CORE_SRC
   "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp"
-  "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks.cpp")
+  "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/melone_test.cpp")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_CXX_STANDARD 20)
 
@@ -66,3 +68,8 @@ target_link_libraries(${BIN} pack_core)
 
 add_executable(${BENCH_BIN} benchmarks.cpp)
 target_link_libraries(${BENCH_BIN} pack_core)
+
+# melone_two.obj test case: packs fruits_1 into a ~14 cm melon container
+# using medium large, medium small, and small groups.
+add_executable(${MELONE_TEST_BIN} melone_test.cpp)
+target_link_libraries(${MELONE_TEST_BIN} pack_core)
