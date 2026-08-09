@@ -1,4 +1,13 @@
 {
     "C_Cpp.default.compilerPath": "/usr/bin/g++",
-    "editor.rename.enablePreview": false
+    "editor.rename.enablePreview": false,
+    "editor.formatOnType": true,
+    "C_Cpp.formatting": "clangFormat",
+    "editor.tabSize": 2,
+    "editor.detectIndentation": false,
+    "editor.autoIndent": "keep",
+    "[cpp]": {
+        "editor.autoIndent": "keep",
+        "editor.tabSize": 2
+    }
 }
