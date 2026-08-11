@@ -6,11 +6,6 @@
 #include <iostream>
 
 int main(int argc, char *argv[]) {
-  // a pack run lasts minutes to hours and is usually killed rather than
-  // allowed to finish. redirected stdout is fully buffered, so without
-  // this everything printed before the kill is lost and the run looks
-  // like it produced no output at all.
-  std::cout.setf(std::ios::unitbuf);
 
   PackingConfig cfg;
   cfg.ParseArgs(argc, argv);

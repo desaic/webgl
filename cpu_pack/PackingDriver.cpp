@@ -317,6 +317,14 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
                     << " searches per placement\n");
 }
 
+// sample points on container surface, cast rays inward to gather depths
+void ComputeSurfaceDepths(PackingScene &scene){
+  const float SAMPLE_EPS = 0.3f;
+  std::vector<SamplePoint> points;
+  SamplePoints(scene.container.mesh, SAMPLE_EPS, points);
+  SavePointsObj("/media/desaic/WD/meshes/fruit_hand/out_melone_test/container_points.obj", points);
+}
+
 void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig &cfg) {
   PrepareBackground(scene, cfg);
 
@@ -327,7 +335,7 @@ void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig
   if (cfg.resume) {
     LoadPack(scene, cfg.ResumePackPath());
   }
-
+  ComputeSurfaceDepths(scene);
   for (size_t i = cfg.startStep; i < plan.steps.size(); i++) {
     LOGI("=== step " << i << " of " << (plan.steps.size() - 1) << " ===\n");
     Utils::Stopwatch clock;

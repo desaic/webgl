@@ -22,7 +22,9 @@ int main() {
   std::cout.setf(std::ios::unitbuf);
 
   PackingConfig cfg;
-  cfg.dataDir = "/media/desaic/ssd2/meshes/fruit_hand/";
+  // cfg.dataDir = "/media/desaic/ssd2/meshes/fruit_hand/";
+  //desktop
+  cfg.dataDir = "/media/desaic/WD/meshes/fruit_hand/";
   cfg.fruitSubdir = "fruits_1";
   cfg.containerFile = "fruits_1/melone_two.obj";
   cfg.innerContainerFile = "hands/finger_inner4.8m.stl";
@@ -38,7 +40,8 @@ int main() {
   cfg.startStep = 0;
   cfg.startItem = 0;
 
-  cfg.resume = false;
+  cfg.resume = true;
+  cfg.resumePackFile = "melon_pack_0810.txt";
   cfg.trajSaveInterval = 10;
   cfg.packSaveInterval = 20;
 
