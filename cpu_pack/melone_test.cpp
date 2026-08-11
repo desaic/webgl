@@ -41,7 +41,7 @@ int main() {
   cfg.startItem = 0;
 
   cfg.resume = true;
-  cfg.resumePackFile = "melon_pack_0810.txt";
+  cfg.resumePackFile = "melone_pack7.txt";
   cfg.trajSaveInterval = 10;
   cfg.packSaveInterval = 20;
 

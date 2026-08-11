@@ -1,11 +1,42 @@
 {
     "version": "0.2.0",
     "configurations": [
+    
         {
             "name": "(gdb) Launch",
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/cpu_pack",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb",
+            "preLaunchTask": "cmake: build",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set debuginfod off",
+                    "text": "set debuginfod enabled off",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set print elements",
+                    "text": "set print elements 200",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "(gdb) melon",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/melone_test",
             "args": [],
             "cwd": "${workspaceFolder}",
             "environment": [],

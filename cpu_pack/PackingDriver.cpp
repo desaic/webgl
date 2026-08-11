@@ -8,6 +8,8 @@
 #include "Profiler.h"
 #include "Stopwatch.h"
 
+#include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 
@@ -318,11 +320,220 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
 }
 
 // sample points on container surface, cast rays inward to gather depths
-void ComputeSurfaceDepths(PackingScene &scene){
+
+namespace {
+
+bool RayAABB(const Vec3f &origin, const Vec3f &dir, const Box3f &box,
+             float maxT, float &tmin) {
+  float t0 = 0.0f;
+  float t1 = maxT;
+  for (int i = 0; i < 3; i++) {
+    if (std::fabs(dir[i]) < 1e-8f) {
+      if (origin[i] < box.vmin[i] || origin[i] > box.vmax[i]) {
+        return false;
+      }
+    } else {
+      float invD = 1.0f / dir[i];
+      float tn = (box.vmin[i] - origin[i]) * invD;
+      float tf = (box.vmax[i] - origin[i]) * invD;
+      if (invD < 0.0f) {
+        std::swap(tn, tf);
+      }
+      t0 = std::max(t0, tn);
+      t1 = std::min(t1, tf);
+      if (t0 > t1) {
+        return false;
+      }
+    }
+  }
+  tmin = t0;
+  return true;
+}
+
+Box3f WorldBox(const Box3f &localBox, const Matrix3f &rot, const Vec3f &pos) {
+  Vec3f corners[8] = {
+    localBox.vmin,
+    Vec3f(localBox.vmax[0], localBox.vmin[1], localBox.vmin[2]),
+    Vec3f(localBox.vmin[0], localBox.vmax[1], localBox.vmin[2]),
+    Vec3f(localBox.vmax[0], localBox.vmax[1], localBox.vmin[2]),
+    Vec3f(localBox.vmin[0], localBox.vmin[1], localBox.vmax[2]),
+    Vec3f(localBox.vmax[0], localBox.vmin[1], localBox.vmax[2]),
+    Vec3f(localBox.vmin[0], localBox.vmax[1], localBox.vmax[2]),
+    localBox.vmax
+  };
+  Box3f wb;
+  wb.vmin = rot * corners[0] + pos;
+  wb.vmax = wb.vmin;
+  for (int i = 1; i < 8; i++) {
+    Vec3f w = rot * corners[i] + pos;
+    for (int k = 0; k < 3; k++) {
+      wb.vmin[k] = std::min(wb.vmin[k], w[k]);
+      wb.vmax[k] = std::max(wb.vmax[k], w[k]);
+    }
+  }
+  return wb;
+}
+
+struct InstanceAccel {
+  Box3f worldBox;
+  GridInstance gridInst;
+};
+
+std::vector<InstanceAccel> BuildInstanceAccel(PackingScene &scene) {
+  std::vector<InstanceAccel> accel(scene.instances.size());
+  for (size_t i = 0; i < scene.instances.size(); i++) {
+    const InstanceInfo &inst = scene.instances[i];
+    unsigned itemId = inst.itemId;
+    auto it = scene.kindGrids.find(itemId);
+    if (it == scene.kindGrids.end()) {
+      auto g = std::make_shared<TrigGrid>();
+      g->Build(scene.items[itemId].mesh, scene.gridDx);
+      it = scene.kindGrids.emplace(itemId, g).first;
+    }
+    accel[i].gridInst = GridInstance::Local(it->second.get(), inst.tran.rotation,
+                                             inst.tran.position, inst.tran.scale);
+    accel[i].worldBox = WorldBox(scene.items[itemId].box, inst.tran.rotation,
+                                  inst.tran.position);
+  }
+  return accel;
+}
+
+// Casts a world-space ray against one instance's TrigGrid. Returns world-
+// space distance of nearest hit, or -1 if no hit within worldMaxT.
+float RayInstanceHit(const GridInstance &gi, const Vec3f &worldOrigin,
+                     const Vec3f &worldDir, float worldMaxT) {
+  Vec3f localOrigin = gi.ToLocal(worldOrigin);
+  Vec3f localDir = gi.rotInv * worldDir;
+  localDir.normalize();
+  float localMaxT = worldMaxT * gi.invScale;
+  float localT = localMaxT;
+  if (gi.grid->RayHit(localOrigin, localDir, localMaxT, localT)) {
+    return localT * gi.scale;
+  }
+  return -1.0f;
+}
+
+void SaveDepthRaysObj(const std::string &filename,
+                      const std::vector<Vec3f> &origins,
+                      const std::vector<Vec3f> &ends) {
+  std::ofstream out(filename);
+  for (size_t i = 0; i < origins.size(); i++) {
+    out << "v " << origins[i][0] << " " << origins[i][1] << " " << origins[i][2] << "\n";
+    out << "v " << ends[i][0] << " " << ends[i][1] << " " << ends[i][2] << "\n";
+    out << "l " << (2 * i + 1) << " " << (2 * i + 2) << "\n";
+  }
+}
+
+}  // namespace
+
+void ComputeSurfaceDepths(PackingScene &scene) {
   const float SAMPLE_EPS = 0.3f;
+  Vec3f containerExtent = scene.container.box.vmax - scene.container.box.vmin;
+  float maxDepth = std::min({containerExtent[0], containerExtent[1],
+                             containerExtent[2]});
+
+  float missedDepth = 0.1f;
   std::vector<SamplePoint> points;
   SamplePoints(scene.container.mesh, SAMPLE_EPS, points);
-  SavePointsObj("/media/desaic/WD/meshes/fruit_hand/out_melone_test/container_points.obj", points);
+
+  // some parts can stick out of container  a little.
+  float containerSlack = 0.5f;
+  // Debug check: the melon container is centered near the origin, so every
+  // surface normal should roughly point toward the origin. Count and report
+  // any that don't.
+  unsigned wrongDir = 0;
+  unsigned checked = 0;
+  unsigned shownBad = 0;
+  for (size_t i = 0; i < points.size(); i++) {
+    Vec3f toOrigin = -points[i].x;
+    if (toOrigin.norm() < 1e-6f) {
+      continue;
+    }
+    toOrigin.normalize();
+    Vec3f n = points[i].n;
+    if (n.norm() < 1e-6f) {
+      continue;
+    }
+    n.normalize();
+    checked++;
+    float d = n.dot(toOrigin);
+    if (d < 0.0f) {
+      wrongDir++;
+      if (shownBad < 5) {
+        std::cout << "[surface depths] bad normal at point ("
+                  << points[i].x[0] << " " << points[i].x[1] << " "
+                  << points[i].x[2] << ") normal (" << n[0] << " " << n[1]
+                  << " " << n[2] << ") dot_to_origin=" << d << "\n";
+        shownBad++;
+      }
+    }
+  }
+  std::cout << "[surface depths] normal direction check: " << wrongDir << "/"
+            << checked << " normals point away from origin\n";
+
+  std::vector<InstanceAccel> accel = BuildInstanceAccel(scene);
+
+  std::vector<Vec3f> origins(points.size());
+  std::vector<Vec3f> ends(points.size());
+  unsigned debugFlips = 0;
+  unsigned hitCount = 0;
+  for (size_t i = 0; i < points.size(); i++) {    
+    Vec3f O = points[i].x;
+    Vec3f dir = points[i].n;
+    if (dir.norm() < 1e-6f) {
+      ends[i] = points[i].x;
+      continue;
+    }
+    dir.normalize();
+    // Pick the normal direction that points toward the origin.
+    // only works for debugging a centered melon, not a hand.
+    Vec3f toOrigin = -points[i].x;
+    if (toOrigin.norm() > 1e-6f) {
+      toOrigin.normalize();
+      if (dir.dot(toOrigin) < 0.0f) {
+        dir = -dir;
+        debugFlips++;
+      }
+    }
+
+    // account for parts to stick out of container a little.
+    O += -containerSlack * dir;
+    Box3f rayBox;
+    rayBox.vmin = O;
+    rayBox.vmax = O + maxDepth * dir;
+    for (int k = 0; k < 3; k++) {
+      if (rayBox.vmin[k] > rayBox.vmax[k]) {
+        std::swap(rayBox.vmin[k], rayBox.vmax[k]);
+      }
+    }
+
+    std::vector<unsigned> candidates = scene.broadPhase.GetNearby(rayBox, 0.0f);
+
+    float bestT = maxDepth;
+    bool hit = false;
+    for (unsigned instId : candidates) {
+      float tmin;
+      if (!RayAABB(O, dir, accel[instId].worldBox, bestT, tmin)) {
+        continue;
+      }
+      float t = RayInstanceHit(accel[instId].gridInst, O, dir, bestT);
+      if (t > 0.0f && t < bestT) {
+        bestT = t;
+        hit = true;
+      }
+    }
+    origins[i] = O;
+    ends[i] = O + (hit ? bestT : missedDepth) * dir;
+    if (hit) {
+      hitCount++;
+    }
+  }
+
+  std::string depthFile = scene.outputFolder + "/surface_depths.obj";
+  SaveDepthRaysObj(depthFile, origins, ends);
+  LOGI("surface depths: " << hitCount << "/" << points.size()
+                          << " rays hit an item, saved " << depthFile << "\n");
+  LOGI("flips : " << debugFlips << "/" << points.size());
 }
 
 void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig &cfg) {

@@ -24,6 +24,11 @@ class TrigGrid {
     /// @param maxDist 
     /// @return 
     ContactInfo NearestTriangle(const Vec3f &point, float maxDist) const ;
+    /// DDA march through grid cells along the ray, testing triangles in each
+    /// cell. origin and dir are in the grid's local frame, dir must be
+    /// normalized. Updates t (local-space distance) and returns true if a
+    /// closer hit than the incoming t is found.
+    bool RayHit(const Vec3f &origin, const Vec3f &dir, float maxT, float &t) const;
     bool InRange(const Vec3f &pt, float margin) const {
       return pt[0] >= origin[0] - margin && pt[0] <= box.vmax[0] + margin &&
              pt[1] >= origin[1] - margin && pt[1] <= box.vmax[1] + margin &&

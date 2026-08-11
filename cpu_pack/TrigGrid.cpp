@@ -3,6 +3,7 @@
 #include "TrigMesh.h"
 #include "cpu_voxelizer.h"
 
+#include <algorithm>
 #include <cmath>
 
 float dot(const Vec3f &a, const Vec3f &b) {
@@ -226,4 +227,149 @@ float TrigGrid::NearestTriangle(const Vec3f &point, float maxDist, Vec3f& normal
     normal = info.normal;
   }
   return info.dist;
+}
+
+static bool RayTriangleIntersect(const Vec3f &origin, const Vec3f &dir,
+                                 const Vec3f &v0, const Vec3f &v1,
+                                 const Vec3f &v2, float maxT, float &t) {
+  Vec3f e1 = v1 - v0;
+  Vec3f e2 = v2 - v0;
+  Vec3f h = dir.cross(e2);
+  float a = e1.dot(h);
+  if (std::fabs(a) < 1e-8f) {
+    return false;
+  }
+  float f = 1.0f / a;
+  Vec3f s = origin - v0;
+  float u = f * s.dot(h);
+  if (u < 0.0f || u > 1.0f) {
+    return false;
+  }
+  Vec3f q = s.cross(e1);
+  float v = f * dir.dot(q);
+  if (v < 0.0f || u + v > 1.0f) {
+    return false;
+  }
+  t = f * e2.dot(q);
+  return t > 1e-6f && t <= maxT;
+}
+
+bool TrigGrid::RayHit(const Vec3f &ro, const Vec3f &rd, float maxT,
+                      float &bestT) const {
+  Vec3u gsize = grid.GetSize();
+  Vec3f start = ro;
+
+  // If origin is outside the grid box, advance to the entry point via a
+  // slab test. The ray may start on the container surface, far from any
+  // item, so this is the common case.
+  bool outside = ro[0] < box.vmin[0] || ro[0] > box.vmax[0] ||
+                 ro[1] < box.vmin[1] || ro[1] > box.vmax[1] ||
+                 ro[2] < box.vmin[2] || ro[2] > box.vmax[2];
+  if (outside) {
+    float t0 = 0.0f;
+    float t1 = bestT;
+    for (int i = 0; i < 3; i++) {
+      if (std::fabs(rd[i]) < 1e-8f) {
+        if (ro[i] < box.vmin[i] || ro[i] > box.vmax[i]) {
+          return false;
+        }
+      } else {
+        float invD = 1.0f / rd[i];
+        float tn = (box.vmin[i] - ro[i]) * invD;
+        float tf = (box.vmax[i] - ro[i]) * invD;
+        if (invD < 0.0f) {
+          std::swap(tn, tf);
+        }
+        t0 = std::max(t0, tn);
+        t1 = std::min(t1, tf);
+        if (t0 > t1) {
+          return false;
+        }
+      }
+    }
+    if (t0 > bestT) {
+      return false;
+    }
+    start = ro + t0 * rd;
+  }
+
+  Vec3f fc = (start - origin) * (1.0f / voxelSize);
+  int cx = int(std::floor(fc[0]));
+  int cy = int(std::floor(fc[1]));
+  int cz = int(std::floor(fc[2]));
+
+  if (cx < 0 || cx >= int(gsize[0]) || cy < 0 || cy >= int(gsize[1]) ||
+      cz < 0 || cz >= int(gsize[2])) {
+    return false;
+  }
+
+  int stepX = (rd[0] >= 0.0f) ? 1 : -1;
+  int stepY = (rd[1] >= 0.0f) ? 1 : -1;
+  int stepZ = (rd[2] >= 0.0f) ? 1 : -1;
+
+  float tDeltaX = (rd[0] != 0.0f) ? voxelSize / std::fabs(rd[0]) : 1e30f;
+  float tDeltaY = (rd[1] != 0.0f) ? voxelSize / std::fabs(rd[1]) : 1e30f;
+  float tDeltaZ = (rd[2] != 0.0f) ? voxelSize / std::fabs(rd[2]) : 1e30f;
+
+  float tMaxX, tMaxY, tMaxZ;
+  if (rd[0] > 0.0f) {
+    tMaxX = (float(cx + 1) - fc[0]) * tDeltaX;
+  } else if (rd[0] < 0.0f) {
+    tMaxX = (fc[0] - float(cx)) * tDeltaX;
+  } else {
+    tMaxX = 1e30f;
+  }
+  if (rd[1] > 0.0f) {
+    tMaxY = (float(cy + 1) - fc[1]) * tDeltaY;
+  } else if (rd[1] < 0.0f) {
+    tMaxY = (fc[1] - float(cy)) * tDeltaY;
+  } else {
+    tMaxY = 1e30f;
+  }
+  if (rd[2] > 0.0f) {
+    tMaxZ = (float(cz + 1) - fc[2]) * tDeltaZ;
+  } else if (rd[2] < 0.0f) {
+    tMaxZ = (fc[2] - float(cz)) * tDeltaZ;
+  } else {
+    tMaxZ = 1e30f;
+  }
+
+  bool hit = false;
+  while (cx >= 0 && cx < int(gsize[0]) && cy >= 0 && cy < int(gsize[1]) &&
+         cz >= 0 && cz < int(gsize[2])) {
+    uint32_t listIdx = grid(cx, cy, cz);
+    if (listIdx != 0) {
+      const std::vector<unsigned> &trigList = tLists[listIdx];
+      for (unsigned tIdx : trigList) {
+        Vec3f v0 = mesh->Vert(mesh->t[3 * tIdx]);
+        Vec3f v1 = mesh->Vert(mesh->t[3 * tIdx + 1]);
+        Vec3f v2 = mesh->Vert(mesh->t[3 * tIdx + 2]);
+        float tt;
+        if (RayTriangleIntersect(ro, rd, v0, v1, v2, bestT, tt)) {
+          bestT = tt;
+          hit = true;
+        }
+      }
+    }
+    if (tMaxX < tMaxY && tMaxX < tMaxZ) {
+      if (tMaxX > bestT) {
+        break;
+      }
+      cx += stepX;
+      tMaxX += tDeltaX;
+    } else if (tMaxY < tMaxZ) {
+      if (tMaxY > bestT) {
+        break;
+      }
+      cy += stepY;
+      tMaxY += tDeltaY;
+    } else {
+      if (tMaxZ > bestT) {
+        break;
+      }
+      cz += stepZ;
+      tMaxZ += tDeltaZ;
+    }
+  }
+  return hit;
 }
