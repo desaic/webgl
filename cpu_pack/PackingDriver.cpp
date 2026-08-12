@@ -398,8 +398,6 @@ std::vector<InstanceAccel> BuildInstanceAccel(PackingScene &scene) {
   return accel;
 }
 
-// Casts a world-space ray against one instance's TrigGrid. Returns world-
-// space distance of nearest hit, or -1 if no hit within worldMaxT.
 float RayInstanceHit(const GridInstance &gi, const Vec3f &worldOrigin,
                      const Vec3f &worldDir, float worldMaxT) {
   Vec3f localOrigin = gi.ToLocal(worldOrigin);
@@ -413,345 +411,6 @@ float RayInstanceHit(const GridInstance &gi, const Vec3f &worldOrigin,
   return -1.0f;
 }
 
-// Brute-force ray-triangle test against an instance's full mesh in world
-// space. Returns world-space distance of nearest hit, or -1.
-float RayInstanceHitBrute(const PackingScene &scene, unsigned instId,
-                           const Vec3f &worldOrigin, const Vec3f &worldDir,
-                           float worldMaxT) {
-  const InstanceInfo &inst = scene.instances[instId];
-  const TrigMesh &mesh = scene.items[inst.itemId].mesh;
-  float bestT = worldMaxT;
-  bool hit = false;
-  for (size_t ti = 0; ti < mesh.GetNumTrigs(); ti++) {
-    Vec3f v0 = inst.tran.rotation * mesh.Vert(mesh.t[3 * ti]) + inst.tran.position;
-    Vec3f v1 = inst.tran.rotation * mesh.Vert(mesh.t[3 * ti + 1]) + inst.tran.position;
-    Vec3f v2 = inst.tran.rotation * mesh.Vert(mesh.t[3 * ti + 2]) + inst.tran.position;
-    float t;
-    Vec3f e1 = v1 - v0;
-    Vec3f e2 = v2 - v0;
-    Vec3f h = worldDir.cross(e2);
-    float a = e1.dot(h);
-    if (std::fabs(a) < 1e-8f) continue;
-    float f = 1.0f / a;
-    Vec3f s = worldOrigin - v0;
-    float u = f * s.dot(h);
-    if (u < 0.0f || u > 1.0f) continue;
-    Vec3f q = s.cross(e1);
-    float v = f * worldDir.dot(q);
-    if (v < 0.0f || u + v > 1.0f) continue;
-    t = f * e2.dot(q);
-    if (t > 1e-6f && t <= bestT) {
-      bestT = t;
-      hit = true;
-    }
-  }
-  return hit ? bestT : -1.0f;
-}
-
-void DebugTraceRay(PackingScene &scene, const std::vector<InstanceAccel> &accel,
-                   const Vec3f &targetOrigin, float maxDepth,
-                   float containerSlack) {
-  std::cout << "\n=== DEBUG TRACE RAY from (" << targetOrigin[0] << " "
-            << targetOrigin[1] << " " << targetOrigin[2] << ") ===\n";
-
-  // Reconstruct the ray direction the same way ComputeSurfaceDepths does:
-  // find the closest sample point to targetOrigin, use its normal, flip
-  // toward origin.
-  std::vector<SamplePoint> points;
-  SamplePoints(scene.container.mesh, 0.3f, points);
-  int bestIdx = -1;
-  float bestDist = 1e30f;
-  for (size_t i = 0; i < points.size(); i++) {
-    float d = (points[i].x - targetOrigin).norm2();
-    if (d < bestDist) {
-      bestDist = d;
-      bestIdx = int(i);
-    }
-  }
-  if (bestIdx < 0) {
-    std::cout << "  no sample points found\n";
-    return;
-  }
-  Vec3f O = points[bestIdx].x;
-  Vec3f dir = points[bestIdx].n;
-  dir.normalize();
-  Vec3f toOrigin = -O;
-  if (toOrigin.norm() > 1e-6f) {
-    toOrigin.normalize();
-    if (dir.dot(toOrigin) < 0.0f) dir = -dir;
-  }
-  O += -containerSlack * dir;
-
-  std::cout << "  sample idx=" << bestIdx << " dist_to_target=" << std::sqrt(bestDist) << "\n";
-  std::cout << "  adjusted origin (" << O[0] << " " << O[1] << " " << O[2] << ")\n";
-  std::cout << "  dir (" << dir[0] << " " << dir[1] << " " << dir[2] << ")\n";
-  std::cout << "  maxDepth=" << maxDepth << " slack=" << containerSlack << "\n";
-
-  Box3f rayBox;
-  rayBox.vmin = O;
-  rayBox.vmax = O + maxDepth * dir;
-  for (int k = 0; k < 3; k++) {
-    if (rayBox.vmin[k] > rayBox.vmax[k]) std::swap(rayBox.vmin[k], rayBox.vmax[k]);
-  }
-  std::cout << "  rayBox min(" << rayBox.vmin[0] << " " << rayBox.vmin[1] << " " << rayBox.vmin[2] << ")";
-  std::cout << " max(" << rayBox.vmax[0] << " " << rayBox.vmax[1] << " " << rayBox.vmax[2] << ")\n";
-
-  std::vector<unsigned> candidates = scene.broadPhase.GetNearby(rayBox, 0.0f);
-  std::cout << "  broadphase candidates: " << candidates.size() << "\n";
-  for (unsigned instId : candidates) {
-    std::cout << "    inst " << instId << " item=" << scene.items[scene.instances[instId].itemId].name;
-    std::cout << " box min(" << accel[instId].worldBox.vmin[0] << " " << accel[instId].worldBox.vmin[1] << " " << accel[instId].worldBox.vmin[2] << ")";
-    std::cout << " max(" << accel[instId].worldBox.vmax[0] << " " << accel[instId].worldBox.vmax[1] << " " << accel[instId].worldBox.vmax[2] << ")\n";
-  }
-
-  float gridBestT = maxDepth;
-  float bruteBestT = maxDepth;
-  int gridHitInst = -1;
-  int bruteHitInst = -1;
-
-  for (unsigned instId : candidates) {
-    float tmin;
-    bool aabbHit = RayAABB(O, dir, accel[instId].worldBox, maxDepth, tmin);
-    if (!aabbHit) {
-      std::cout << "  inst " << instId << ": RayAABB MISS\n";
-      continue;
-    }
-    std::cout << "  inst " << instId << ": RayAABB hit tmin=" << tmin << "\n";
-
-    // Grid-based test
-    float gridT = RayInstanceHit(accel[instId].gridInst, O, dir, maxDepth);
-    if (gridT > 0.0f) {
-      std::cout << "    grid HIT t=" << gridT << " at (" << (O + gridT * dir)[0] << " " << (O + gridT * dir)[1] << " " << (O + gridT * dir)[2] << ")\n";
-      if (gridT < gridBestT) {
-        gridBestT = gridT;
-        gridHitInst = int(instId);
-      }
-    } else {
-      std::cout << "    grid MISS\n";
-    }
-
-    // Brute-force test
-    float bruteT = RayInstanceHitBrute(scene, instId, O, dir, maxDepth);
-    if (bruteT > 0.0f) {
-      std::cout << "    brute HIT t=" << bruteT << " at (" << (O + bruteT * dir)[0] << " " << (O + bruteT * dir)[1] << " " << (O + bruteT * dir)[2] << ")\n";
-      if (bruteT < bruteBestT) {
-        bruteBestT = bruteT;
-        bruteHitInst = int(instId);
-      }
-    } else {
-      std::cout << "    brute MISS\n";
-    }
-
-    if (bruteT > 0.0f && gridT < 0.0f) {
-      std::cout << "    *** DISCREPANCY: brute hit but grid missed on inst " << instId << " ***\n";
-      // Dig into the TrigGrid: transform to local and check which cell
-      // the brute-force hit point falls in, and whether that cell has
-      // the triangle registered.
-      const GridInstance &gi = accel[instId].gridInst;
-      Vec3f localOrigin = gi.ToLocal(O);
-      Vec3f localDir = gi.rotInv * dir;
-      localDir.normalize();
-      Vec3f localHit = localOrigin + bruteT * gi.invScale * localDir;
-      std::cout << "    local hit (" << localHit[0] << " " << localHit[1] << " " << localHit[2] << ")\n";
-      // Find which triangle was hit in brute force
-      const InstanceInfo &inst = scene.instances[instId];
-      const TrigMesh &mesh = scene.items[inst.itemId].mesh;
-      for (size_t ti = 0; ti < mesh.GetNumTrigs(); ti++) {
-        Vec3f v0 = inst.tran.rotation * mesh.Vert(mesh.t[3 * ti]) + inst.tran.position;
-        Vec3f v1 = inst.tran.rotation * mesh.Vert(mesh.t[3 * ti + 1]) + inst.tran.position;
-        Vec3f v2 = inst.tran.rotation * mesh.Vert(mesh.t[3 * ti + 2]) + inst.tran.position;
-        Vec3f e1 = v1 - v0;
-        Vec3f e2 = v2 - v0;
-        Vec3f h = dir.cross(e2);
-        float a = e1.dot(h);
-        if (std::fabs(a) < 1e-8f) continue;
-        float f = 1.0f / a;
-        Vec3f s = O - v0;
-        float u = f * s.dot(h);
-        if (u < 0.0f || u > 1.0f) continue;
-        Vec3f q = s.cross(e1);
-        float v = f * dir.dot(q);
-        if (v < 0.0f || u + v > 1.0f) continue;
-        float t = f * e2.dot(q);
-        if (t > 1e-6f && t <= bruteT + 1e-4f) {
-          std::cout << "    brute hit trig " << ti << " at t=" << t << "\n";
-          // Check local-space triangle vertices
-          Vec3f lv0 = gi.ToLocal(v0);
-          Vec3f lv1 = gi.ToLocal(v1);
-          Vec3f lv2 = gi.ToLocal(v2);
-          std::cout << "    local trig verts: (" << lv0[0] << " " << lv0[1] << " " << lv0[2] << ")";
-          std::cout << " (" << lv1[0] << " " << lv1[1] << " " << lv1[2] << ")";
-          std::cout << " (" << lv2[0] << " " << lv2[1] << " " << lv2[2] << ")\n";
-          // Check which grid cells this triangle overlaps
-          Vec3f tmin3, tmax3;
-          tmin3[0] = std::min({lv0[0], lv1[0], lv2[0]});
-          tmin3[1] = std::min({lv0[1], lv1[1], lv2[1]});
-          tmin3[2] = std::min({lv0[2], lv1[2], lv2[2]});
-          tmax3[0] = std::max({lv0[0], lv1[0], lv2[0]});
-          tmax3[1] = std::max({lv0[1], lv1[1], lv2[1]});
-          tmax3[2] = std::max({lv0[2], lv1[2], lv2[2]});
-          Vec3f gridOrigin = gi.grid->GetOrigin();
-          float vs = gi.grid->GetVoxelSize();
-          Vec3u gsize = gi.grid->GridSize();
-          int cx0 = int(std::floor((tmin3[0] - gridOrigin[0]) / vs));
-          int cy0 = int(std::floor((tmin3[1] - gridOrigin[1]) / vs));
-          int cz0 = int(std::floor((tmin3[2] - gridOrigin[2]) / vs));
-          int cx1 = int(std::floor((tmax3[0] - gridOrigin[0]) / vs));
-          int cy1 = int(std::floor((tmax3[1] - gridOrigin[1]) / vs));
-          int cz1 = int(std::floor((tmax3[2] - gridOrigin[2]) / vs));
-          std::cout << "    trig bbox cells: (" << cx0 << "," << cy0 << "," << cz0 << ") to (" << cx1 << "," << cy1 << "," << cz1 << ")\n";
-          std::cout << "    grid origin (" << gridOrigin[0] << " " << gridOrigin[1] << " " << gridOrigin[2] << ") vs=" << vs << " size(" << gsize[0] << " " << gsize[1] << " " << gsize[2] << ")\n";
-          // Check which cells actually have this triangle registered
-          int registeredIn = 0;
-          for (int cz = cz0; cz <= cz1; cz++) {
-            for (int cy = cy0; cy <= cy1; cy++) {
-              for (int cx = cx0; cx <= cx1; cx++) {
-                if (cx < 0 || cy < 0 || cz < 0 || cx >= int(gsize[0]) || cy >= int(gsize[1]) || cz >= int(gsize[2])) continue;
-                uint32_t listIdx = gi.grid->CellList(cx, cy, cz);
-                if (listIdx == 0) continue;
-                const std::vector<unsigned> &tl = gi.grid->CellTrigs(listIdx);
-                for (unsigned t : tl) {
-                  if (t == ti) { registeredIn++; break; }
-                }
-              }
-            }
-          }
-          std::cout << "    trig " << ti << " registered in " << registeredIn << " cells\n";
-          // Check which cell the hit point is in and whether it has the triangle
-          int hx = int(std::floor((localHit[0] - gridOrigin[0]) / vs));
-          int hy = int(std::floor((localHit[1] - gridOrigin[1]) / vs));
-          int hz = int(std::floor((localHit[2] - gridOrigin[2]) / vs));
-          std::cout << "    hit point cell: (" << hx << "," << hy << "," << hz << ")\n";
-          if (hx >= 0 && hy >= 0 && hz >= 0 && hx < int(gsize[0]) && hy < int(gsize[1]) && hz < int(gsize[2])) {
-            uint32_t hlist = gi.grid->CellList(hx, hy, hz);
-            std::cout << "    hit cell listIdx=" << hlist;
-            if (hlist != 0) {
-              const std::vector<unsigned> &htl = gi.grid->CellTrigs(hlist);
-              std::cout << " trigCount=" << htl.size();
-              bool found = false;
-              for (unsigned t : htl) if (t == ti) { found = true; break; }
-              std::cout << " hasHitTrig=" << found << "\n";
-            } else {
-              std::cout << " EMPTY\n";
-            }
-          }
-
-          // Step-by-step DDA trace to see which cells are actually visited
-          std::cout << "    --- DDA TRACE ---\n";
-          float gridBestT = bruteT * gi.invScale + 0.01f;
-          Vec3f start = localOrigin;
-          bool outside = localOrigin[0] < gridOrigin[0] || localOrigin[0] > gridOrigin[0] + float(gsize[0]) * vs ||
-                         localOrigin[1] < gridOrigin[1] || localOrigin[1] > gridOrigin[1] + float(gsize[1]) * vs ||
-                         localOrigin[2] < gridOrigin[2] || localOrigin[2] > gridOrigin[2] + float(gsize[2]) * vs;
-          float entryT = 0.0f;
-          if (outside) {
-            Vec3f gmin = gridOrigin;
-            Vec3f gmax = gmin + Vec3f(float(gsize[0]) * vs, float(gsize[1]) * vs, float(gsize[2]) * vs);
-            float t0 = 0.0f, t1 = gridBestT;
-            bool ok = true;
-            for (int i = 0; i < 3; i++) {
-              if (std::fabs(localDir[i]) < 1e-8f) {
-                if (localOrigin[i] < gmin[i] || localOrigin[i] > gmax[i]) { ok = false; break; }
-              } else {
-                float invD = 1.0f / localDir[i];
-                float tn = (gmin[i] - localOrigin[i]) * invD;
-                float tf = (gmax[i] - localOrigin[i]) * invD;
-                if (invD < 0.0f) std::swap(tn, tf);
-                t0 = std::max(t0, tn);
-                t1 = std::min(t1, tf);
-                if (t0 > t1) { ok = false; break; }
-              }
-            }
-            if (!ok || t0 > gridBestT) {
-              std::cout << "    DDA: slab test failed, ray never enters grid\n";
-              break;
-            }
-            entryT = t0;
-            start = localOrigin + t0 * localDir;
-            std::cout << "    DDA: entry t=" << entryT << " start(" << start[0] << " " << start[1] << " " << start[2] << ")\n";
-          } else {
-            std::cout << "    DDA: origin inside grid\n";
-          }
-          Vec3f fc = (start - gridOrigin) * (1.0f / vs);
-          int dcx = int(std::floor(fc[0]));
-          int dcy = int(std::floor(fc[1]));
-          int dcz = int(std::floor(fc[2]));
-          std::cout << "    DDA: start cell (" << dcx << "," << dcy << "," << dcz << ")\n";
-          if (dcx < 0 || dcx >= int(gsize[0]) || dcy < 0 || dcy >= int(gsize[1]) || dcz < 0 || dcz >= int(gsize[2])) {
-            std::cout << "    DDA: start cell OUT OF BOUNDS\n";
-            break;
-          }
-          int stepX = (localDir[0] >= 0.0f) ? 1 : -1;
-          int stepY = (localDir[1] >= 0.0f) ? 1 : -1;
-          int stepZ = (localDir[2] >= 0.0f) ? 1 : -1;
-          float tDeltaX = (localDir[0] != 0.0f) ? vs / std::fabs(localDir[0]) : 1e30f;
-          float tDeltaY = (localDir[1] != 0.0f) ? vs / std::fabs(localDir[1]) : 1e30f;
-          float tDeltaZ = (localDir[2] != 0.0f) ? vs / std::fabs(localDir[2]) : 1e30f;
-          float dtMaxX, dtMaxY, dtMaxZ;
-          if (localDir[0] > 0.0f) dtMaxX = (float(dcx + 1) - fc[0]) * tDeltaX;
-          else if (localDir[0] < 0.0f) dtMaxX = (fc[0] - float(dcx)) * tDeltaX;
-          else dtMaxX = 1e30f;
-          if (localDir[1] > 0.0f) dtMaxY = (float(dcy + 1) - fc[1]) * tDeltaY;
-          else if (localDir[1] < 0.0f) dtMaxY = (fc[1] - float(dcy)) * tDeltaY;
-          else dtMaxY = 1e30f;
-          if (localDir[2] > 0.0f) dtMaxZ = (float(dcz + 1) - fc[2]) * tDeltaZ;
-          else if (localDir[2] < 0.0f) dtMaxZ = (fc[2] - float(dcz)) * tDeltaZ;
-          else dtMaxZ = 1e30f;
-          std::cout << "    DDA: step(" << stepX << "," << stepY << "," << stepZ << ")";
-          std::cout << " tDelta(" << tDeltaX << "," << tDeltaY << "," << tDeltaZ << ")";
-          std::cout << " tMax(" << dtMaxX << "," << dtMaxY << "," << dtMaxZ << ")\n";
-          int ddaSteps = 0;
-          int maxDdaSteps = 300;
-          bool reachedHitCell = false;
-          while (dcx >= 0 && dcx < int(gsize[0]) && dcy >= 0 && dcy < int(gsize[1]) &&
-                 dcz >= 0 && dcz < int(gsize[2]) && ddaSteps < maxDdaSteps) {
-            uint32_t listIdx = gi.grid->CellList(dcx, dcy, dcz);
-            int trigCount = (listIdx != 0) ? int(gi.grid->CellTrigs(listIdx).size()) : 0;
-            bool isHitCell = (dcx == hx && dcy == hy && dcz == hz);
-            if (isHitCell) reachedHitCell = true;
-            if (trigCount > 0 || isHitCell || ddaSteps % 20 == 0) {
-              std::cout << "    DDA step " << ddaSteps << " cell(" << dcx << "," << dcy << "," << dcz << ")";
-              std::cout << " trigs=" << trigCount;
-              std::cout << " tMax(" << dtMaxX << "," << dtMaxY << "," << dtMaxZ << ")";
-              if (isHitCell) std::cout << " <-- HIT CELL";
-              std::cout << "\n";
-            }
-            if (dtMaxX < dtMaxY && dtMaxX < dtMaxZ) {
-              if (dtMaxX > gridBestT) break;
-              dcx += stepX;
-              dtMaxX += tDeltaX;
-            } else if (dtMaxY < dtMaxZ) {
-              if (dtMaxY > gridBestT) break;
-              dcy += stepY;
-              dtMaxY += tDeltaY;
-            } else {
-              if (dtMaxZ > gridBestT) break;
-              dcz += stepZ;
-              dtMaxZ += tDeltaZ;
-            }
-            ddaSteps++;
-          }
-          std::cout << "    DDA: " << ddaSteps << " steps, reachedHitCell=" << reachedHitCell << "\n";
-          if (!reachedHitCell) {
-            std::cout << "    *** DDA NEVER REACHED THE HIT CELL ***\n";
-          }
-          std::cout << "    --- END DDA TRACE ---\n";
-          break;
-        }
-      }
-    }
-  }
-
-  std::cout << "  RESULT: grid hit inst=" << gridHitInst << " t=" << gridBestT;
-  std::cout << "  brute hit inst=" << bruteHitInst << " t=" << bruteBestT << "\n";
-  if (bruteHitInst >= 0 && gridHitInst < 0) {
-    std::cout << "  *** GRID MISSED A HIT THAT BRUTE FOUND ***\n";
-  } else if (bruteHitInst >= 0 && gridHitInst >= 0 && std::fabs(gridBestT - bruteBestT) > 0.01f) {
-    std::cout << "  *** GRID AND BRUTE DISAGREE ON DISTANCE ***\n";
-  }
-  std::cout << "=== END DEBUG TRACE ===\n\n";
-}
-
 void SaveDepthRaysObj(const std::string &filename,
                       const std::vector<Vec3f> &origins,
                       const std::vector<Vec3f> &ends) {
@@ -763,6 +422,104 @@ void SaveDepthRaysObj(const std::string &filename,
   }
 }
 
+// Uniform grid for point neighbors. Cell size matches the query radius
+// so a 3x3x3 neighborhood covers all candidates.
+struct PointGrid {
+  float cellSize = 1.0f;
+  Vec3f origin;
+  Vec3u dims;
+  Array3D<std::vector<unsigned>> cells;
+
+  void Build(const std::vector<Vec3f> &points, float radius) {
+    cellSize = radius;
+    if (points.empty()) {
+      dims = Vec3u(0, 0, 0);
+      return;
+    }
+    Box3f box = ComputeBBox(points);
+    origin = box.vmin;
+    Vec3f extent = box.vmax - box.vmin;
+    dims[0] = unsigned(std::floor(extent[0] / cellSize)) + 1;
+    dims[1] = unsigned(std::floor(extent[1] / cellSize)) + 1;
+    dims[2] = unsigned(std::floor(extent[2] / cellSize)) + 1;
+    cells.Allocate(dims, {});
+    for (size_t i = 0; i < points.size(); i++) {
+      unsigned cx, cy, cz;
+      PosToCell(points[i], cx, cy, cz);
+      cells(cx, cy, cz).push_back(unsigned(i));
+    }
+  }
+
+  void PosToCell(const Vec3f &p, unsigned &cx, unsigned &cy, unsigned &cz) const {
+    cx = unsigned(std::floor((p[0] - origin[0]) / cellSize));
+    cy = unsigned(std::floor((p[1] - origin[1]) / cellSize));
+    cz = unsigned(std::floor((p[2] - origin[2]) / cellSize));
+    cx = std::min(cx, dims[0] - 1);
+    cy = std::min(cy, dims[1] - 1);
+    cz = std::min(cz, dims[2] - 1);
+  }
+
+  std::vector<unsigned> Neighbors(const Vec3f &p, float radius) const {
+    std::vector<unsigned> result;
+    int cx, cy, cz;
+    cx = int(std::floor((p[0] - origin[0]) / cellSize));
+    cy = int(std::floor((p[1] - origin[1]) / cellSize));
+    cz = int(std::floor((p[2] - origin[2]) / cellSize));
+    int reach = int(std::ceil(radius / cellSize));
+    float r2 = radius * radius;
+    for (int dz = -reach; dz <= reach; dz++) {
+      int gz = cz + dz;
+      if (gz < 0 || gz >= int(dims[2])) continue;
+      for (int dy = -reach; dy <= reach; dy++) {
+        int gy = cy + dy;
+        if (gy < 0 || gy >= int(dims[1])) continue;
+        for (int dx = -reach; dx <= reach; dx++) {
+          int gx = cx + dx;
+          if (gx < 0 || gx >= int(dims[0])) continue;
+          for (unsigned idx : cells(gx, gy, gz)) {
+            result.push_back(idx);
+          }
+        }
+      }
+    }
+    return result;
+  }
+};
+
+// Extract rays whose depth exceeds the median depth of their neighbors
+// by more than deepThreshold. Returns indices of deep rays.
+std::vector<unsigned> FindDeepRays(const std::vector<Vec3f> &origins,
+                                   const std::vector<float> &depths,
+                                   float neighborRadius,
+                                   float deepThreshold) {
+  PointGrid grid;
+  grid.Build(origins, neighborRadius);
+  std::vector<unsigned> deepRays;
+  for (size_t i = 0; i < origins.size(); i++) {
+    std::vector<unsigned> neighbors = grid.Neighbors(origins[i], neighborRadius);
+    if (neighbors.size() < 3) {
+      continue;
+    }
+    std::vector<float> neighborDepths;
+    neighborDepths.reserve(neighbors.size());
+    float r2 = neighborRadius * neighborRadius;
+    for (unsigned idx : neighbors) {
+      if (idx == i) continue;
+      if ((origins[idx] - origins[i]).norm2() > r2) continue;
+      neighborDepths.push_back(depths[idx]);
+    }
+    if (neighborDepths.size() < 3) {
+      continue;
+    }
+    std::sort(neighborDepths.begin(), neighborDepths.end());
+    float median = neighborDepths[neighborDepths.size() / 2];
+    if (depths[i] - median > deepThreshold) {
+      deepRays.push_back(unsigned(i));
+    }
+  }
+  return deepRays;
+}
+
 }  // namespace
 
 void ComputeSurfaceDepths(PackingScene &scene) {
@@ -772,73 +529,34 @@ void ComputeSurfaceDepths(PackingScene &scene) {
                              containerExtent[2]});
 
   float missedDepth = 0.1f;
+  float containerSlack = 0.5f;
+
   std::vector<SamplePoint> points;
   SamplePoints(scene.container.mesh, SAMPLE_EPS, points);
 
-  // some parts can stick out of container  a little.
-  float containerSlack = 0.5f;
-  // Debug check: the melon container is centered near the origin, so every
-  // surface normal should roughly point toward the origin. Count and report
-  // any that don't.
-  unsigned wrongDir = 0;
-  unsigned checked = 0;
-  unsigned shownBad = 0;
-  for (size_t i = 0; i < points.size(); i++) {
-    Vec3f toOrigin = -points[i].x;
-    if (toOrigin.norm() < 1e-6f) {
-      continue;
-    }
-    toOrigin.normalize();
-    Vec3f n = points[i].n;
-    if (n.norm() < 1e-6f) {
-      continue;
-    }
-    n.normalize();
-    checked++;
-    float d = n.dot(toOrigin);
-    if (d < 0.0f) {
-      wrongDir++;
-      if (shownBad < 5) {
-        std::cout << "[surface depths] bad normal at point ("
-                  << points[i].x[0] << " " << points[i].x[1] << " "
-                  << points[i].x[2] << ") normal (" << n[0] << " " << n[1]
-                  << " " << n[2] << ") dot_to_origin=" << d << "\n";
-        shownBad++;
-      }
-    }
-  }
-  std::cout << "[surface depths] normal direction check: " << wrongDir << "/"
-            << checked << " normals point away from origin\n";
-
   std::vector<InstanceAccel> accel = BuildInstanceAccel(scene);
-
-  DebugTraceRay(scene, accel, Vec3f(4.87042f, 4.63346f, 3.63689f),
-                maxDepth, containerSlack);
 
   std::vector<Vec3f> origins(points.size());
   std::vector<Vec3f> ends(points.size());
-  unsigned debugFlips = 0;
+  std::vector<float> depths(points.size(), 0.0f);
   unsigned hitCount = 0;
-  for (size_t i = 0; i < points.size(); i++) {    
+  for (size_t i = 0; i < points.size(); i++) {
     Vec3f O = points[i].x;
     Vec3f dir = points[i].n;
     if (dir.norm() < 1e-6f) {
+      origins[i] = points[i].x;
       ends[i] = points[i].x;
       continue;
     }
     dir.normalize();
-    // Pick the normal direction that points toward the origin.
-    // only works for debugging a centered melon, not a hand.
     Vec3f toOrigin = -points[i].x;
     if (toOrigin.norm() > 1e-6f) {
       toOrigin.normalize();
       if (dir.dot(toOrigin) < 0.0f) {
         dir = -dir;
-        debugFlips++;
       }
     }
 
-    // account for parts to stick out of container a little.
     O += -containerSlack * dir;
     Box3f rayBox;
     rayBox.vmin = O;
@@ -865,7 +583,9 @@ void ComputeSurfaceDepths(PackingScene &scene) {
       }
     }
     origins[i] = O;
-    ends[i] = O + (hit ? bestT : missedDepth) * dir;
+    float depth = hit ? bestT : missedDepth;
+    depths[i] = depth;
+    ends[i] = O + depth * dir;
     if (hit) {
       hitCount++;
     }
@@ -875,7 +595,21 @@ void ComputeSurfaceDepths(PackingScene &scene) {
   SaveDepthRaysObj(depthFile, origins, ends);
   LOGI("surface depths: " << hitCount << "/" << points.size()
                           << " rays hit an item, saved " << depthFile << "\n");
-  LOGI("flips : " << debugFlips << "/" << points.size());
+
+  const float neighborRadius = 1.0f;
+  const float deepThreshold = 0.5f;
+  std::vector<unsigned> deepRays = FindDeepRays(origins, depths,
+                                                neighborRadius, deepThreshold);
+  std::vector<Vec3f> deepOrigins(deepRays.size());
+  std::vector<Vec3f> deepEnds(deepRays.size());
+  for (size_t i = 0; i < deepRays.size(); i++) {
+    deepOrigins[i] = origins[deepRays[i]];
+    deepEnds[i] = ends[deepRays[i]];
+  }
+  std::string deepFile = scene.outputFolder + "/deep_rays.obj";
+  SaveDepthRaysObj(deepFile, deepOrigins, deepEnds);
+  LOGI("deep rays: " << deepRays.size() << " rays exceed neighbor median by "
+                     << deepThreshold << " cm, saved " << deepFile << "\n");
 }
 
 void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig &cfg) {
