@@ -298,10 +298,14 @@ bool TrigGrid::RayHit(const Vec3f &ro, const Vec3f &rd, float maxT,
   int cy = int(std::floor(fc[1]));
   int cz = int(std::floor(fc[2]));
 
-  if (cx < 0 || cx >= int(gsize[0]) || cy < 0 || cy >= int(gsize[1]) ||
-      cz < 0 || cz >= int(gsize[2])) {
-    return false;
-  }
+  // The slab-test entry point can land slightly outside the grid due to
+  // floating-point rounding (e.g. z = origin - 1e-7 gives cell -1), which
+  // would silently abort the walk. Clamp to the valid range -- the entry
+  // point is on the box boundary by construction, so the correct cell is
+  // the boundary cell or the first cell inside.
+  cx = std::max(0, std::min(cx, int(gsize[0]) - 1));
+  cy = std::max(0, std::min(cy, int(gsize[1]) - 1));
+  cz = std::max(0, std::min(cz, int(gsize[2]) - 1));
 
   int stepX = (rd[0] >= 0.0f) ? 1 : -1;
   int stepY = (rd[1] >= 0.0f) ? 1 : -1;

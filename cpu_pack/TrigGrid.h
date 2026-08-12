@@ -38,10 +38,20 @@ class TrigGrid {
     static const int MAX_GRID_SIZE = 1000;
 
     /// bytes held by the voxel grid and the per-cell triangle lists,
-    /// including the per-vector header overhead.
+    /// including per-vector header overhead.
     size_t MemoryBytes() const;
     /// number of non-empty cells.
     size_t NumCellLists() const { return tLists.size(); }
+
+    // debug accessors
+    Vec3f GetOrigin() const { return origin; }
+    float GetVoxelSize() const { return voxelSize; }
+    Vec3u GridSize() const { return grid.GetSize(); }
+    uint32_t CellList(int x, int y, int z) const { return grid(x, y, z); }
+    const std::vector<unsigned> &CellTrigs(uint32_t listIdx) const {
+      return tLists[listIdx];
+    }
+    const TrigMesh *GetMesh() const { return mesh; }
 
   private:
     Array3D<uint32_t> grid;
