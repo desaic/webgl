@@ -23,3 +23,18 @@ void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig
 
 /// end to end: build the scene then pack it.
 void PackFruits(const PackingPlan &plan, const PackingConfig &cfg);
+
+/// casts one inward ray per container surface sample point against all
+/// placed instances, saves surface_depths.obj and deep_rays.obj under
+/// scene.outputFolder, and returns the deep ray origins/ends. does not
+/// place or settle anything, so it is safe to call without running any
+/// packing steps.
+void ComputeAndSaveSurfaceDepths(PackingScene &scene,
+                                 std::vector<Vec3f> &deepOrigins,
+                                 std::vector<Vec3f> &deepEnds);
+
+/// debug helper: finds the container-surface ray closest to targetPos and
+/// prints its depth plus every neighbor ray within the same radius
+/// FindDeepRays uses, so a spurious "deep ray" flag on a curved surface
+/// can be diagnosed without running the packing steps.
+void DebugDeepRayNeighbors(PackingScene &scene, const Vec3f &targetPos);

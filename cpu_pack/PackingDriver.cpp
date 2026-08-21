@@ -317,6 +317,21 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
                             ? (double(searches) / double(placedCount))
                             : 0.0)
                     << " searches per placement\n");
+
+  // The interval saves above only fire when the round counter crosses a
+  // multiple of trajSaveInterval/packSaveInterval, so a step that places
+  // items but never reaches that many rounds (e.g. a nearly full
+  // container that retires every kind within a handful of rounds) never
+  // saves anything. Do one unconditional save of the current state here
+  // so a step's progress is never silently lost.
+  if (placedCount > 0) {
+    if (cfg.trajSaveInterval > 0) {
+      scene.SaveTrajectories(scene.trajFile + "_final.txt");
+    }
+    if (cfg.packSaveInterval > 0) {
+      scene.SaveInstances(scene.packFile + "_final.txt");
+    }
+  }
 }
 
 // sample points on container surface, cast rays inward to gather depths
@@ -422,6 +437,86 @@ void SaveDepthRaysObj(const std::string &filename,
   }
 }
 
+// Casts one inward ray per container surface sample point against all
+// placed instances (broadphase + TrigGrid narrow phase). Records the
+// origin (pulled back by containerSlack), the hit end point, the hit
+// depth, and which instance (if any) was hit.
+struct RayDepthResult {
+  std::vector<Vec3f> origins;
+  std::vector<Vec3f> ends;
+  std::vector<float> depths;
+  // -1 if the ray missed everything within maxDepth.
+  std::vector<int> hitInstance;
+  unsigned hitCount = 0;
+};
+
+RayDepthResult ComputeRayDepths(PackingScene &scene,
+                                const std::vector<SamplePoint> &points,
+                                const std::vector<InstanceAccel> &accel,
+                                float maxDepth, float missedDepth,
+                                float containerSlack) {
+  RayDepthResult result;
+  result.origins.resize(points.size());
+  result.ends.resize(points.size());
+  result.depths.resize(points.size(), 0.0f);
+  result.hitInstance.assign(points.size(), -1);
+  for (size_t i = 0; i < points.size(); i++) {
+    Vec3f O = points[i].x;
+    Vec3f dir = points[i].n;
+    if (dir.norm() < 1e-6f) {
+      result.origins[i] = points[i].x;
+      result.ends[i] = points[i].x;
+      continue;
+    }
+    dir.normalize();
+    Vec3f toOrigin = -points[i].x;
+    if (toOrigin.norm() > 1e-6f) {
+      toOrigin.normalize();
+      if (dir.dot(toOrigin) < 0.0f) {
+        dir = -dir;
+      }
+    }
+
+    O += -containerSlack * dir;
+    Box3f rayBox;
+    rayBox.vmin = O;
+    rayBox.vmax = O + maxDepth * dir;
+    for (int k = 0; k < 3; k++) {
+      if (rayBox.vmin[k] > rayBox.vmax[k]) {
+        std::swap(rayBox.vmin[k], rayBox.vmax[k]);
+      }
+    }
+
+    std::vector<unsigned> candidates = scene.broadPhase.GetNearby(rayBox, 0.0f);
+
+    float bestT = maxDepth;
+    bool hit = false;
+    int bestInst = -1;
+    for (unsigned instId : candidates) {
+      float tmin;
+      if (!RayAABB(O, dir, accel[instId].worldBox, bestT, tmin)) {
+        continue;
+      }
+      float t = RayInstanceHit(accel[instId].gridInst, O, dir, bestT);
+      if (t > 0.0f && t < bestT) {
+        bestT = t;
+        hit = true;
+        bestInst = int(instId);
+      }
+    }
+    result.origins[i] = O;
+    float depth = hit ? bestT : missedDepth;
+    result.depths[i] = depth;
+    result.ends[i] = O + depth * dir;
+    result.hitInstance[i] = bestInst;
+    if (hit) {
+      result.hitCount++;
+    }
+  }
+  return result;
+}
+
+
 // Uniform grid for point neighbors. Cell size matches the query radius
 // so a 3x3x3 neighborhood covers all candidates.
 struct PointGrid {
@@ -488,10 +583,28 @@ struct PointGrid {
 
 // Extract rays whose depth exceeds the median depth of their neighbors
 // by more than deepThreshold. Returns indices of deep rays.
+//
+// A raw median-vs-neighbors test misfires next to a smooth, big, convex
+// surface (e.g. a kiwi) that already has small fruit seeded against part
+// of it: samples right behind the small fruit are shallow (blocked by
+// it), while samples just past its silhouette see straight through to
+// the big surface and read a much larger, but perfectly normal, depth.
+// That forms two separate populations in one 1 cm neighborhood, and the
+// shallow one drags the median down enough to flag the far population as
+// "deep" even though it is not an isolated pocket -- several neighbors
+// share essentially the same depth, i.e. it is a broad patch of the big
+// surface, not a narrow crevice. A genuine crevice bottom is a local
+// outlier: few or no neighbors share its depth, since the pocket is
+// narrow and most surrounding rays stop at the pocket's (shallower)
+// walls. So a ray is only flagged when it clears the neighbor median by
+// deepThreshold AND is not corroborated by at least minPatchNeighbors
+// other rays within patchDepthTol of its own depth.
 std::vector<unsigned> FindDeepRays(const std::vector<Vec3f> &origins,
                                    const std::vector<float> &depths,
                                    float neighborRadius,
-                                   float deepThreshold) {
+                                   float deepThreshold,
+                                   float patchDepthTol = 0.3f,
+                                   unsigned minPatchNeighbors = 3) {
   PointGrid grid;
   grid.Build(origins, neighborRadius);
   std::vector<unsigned> deepRays;
@@ -503,12 +616,21 @@ std::vector<unsigned> FindDeepRays(const std::vector<Vec3f> &origins,
     std::vector<float> neighborDepths;
     neighborDepths.reserve(neighbors.size());
     float r2 = neighborRadius * neighborRadius;
+    unsigned patchNeighbors = 0;
     for (unsigned idx : neighbors) {
       if (idx == i) continue;
       if ((origins[idx] - origins[i]).norm2() > r2) continue;
       neighborDepths.push_back(depths[idx]);
+      if (std::fabs(depths[idx] - depths[i]) <= patchDepthTol) {
+        patchNeighbors++;
+      }
     }
     if (neighborDepths.size() < 3) {
+      continue;
+    }
+    if (patchNeighbors >= minPatchNeighbors) {
+      // corroborated by a broad patch at roughly the same depth: this is
+      // a smoothly varying surface, not an isolated crevice.
       continue;
     }
     std::sort(neighborDepths.begin(), neighborDepths.end());
@@ -520,9 +642,72 @@ std::vector<unsigned> FindDeepRays(const std::vector<Vec3f> &origins,
   return deepRays;
 }
 
+// Shoots one instance along each deep ray direction, starting at the ray
+// origin (outside the container by containerSlack), and settles it with
+// the rigid body solver. Cycles round robin through itemIndices so the
+// seeded fruits are a mix of kinds, not just the smallest one. Skips a
+// ray if it lands too close to an already-seeded position, to avoid
+// stacking many fruits into one mouth of a crevice. Returns the number
+// of instances placed.
+unsigned SeedDeepCrevices(PackingScene &scene, const std::vector<Vec3f> &origins,
+                          const std::vector<Vec3f> &ends,
+                          const std::vector<unsigned> &itemIndices) {
+  if (itemIndices.empty()) {
+    return 0;
+  }
+  std::vector<Vec3f> seededPos;
+  unsigned angleIndex = 0;
+  unsigned itemCursor = 0;
+  unsigned seeded = 0;
+  for (size_t i = 0; i < origins.size(); i++) {
+    const Vec3f &O = origins[i];
+    unsigned itemIdx = itemIndices[itemCursor % itemIndices.size()];
+    MeshInfo &item = scene.items[itemIdx];
+    float exclusionDist = item.BoxDiagonal();
+    bool tooClose = false;
+    for (const Vec3f &p : seededPos) {
+      if ((p - O).norm() < exclusionDist) {
+        tooClose = true;
+        break;
+      }
+    }
+    if (tooClose) {
+      continue;
+    }
+    Vec3f dir = ends[i] - O;
+    if (dir.norm() < 1e-6f) {
+      continue;
+    }
+    dir.normalize();
+
+    RigidTransform tran;
+    tran.position = O;
+    Vec3f rot = scene.randAngles[angleIndex];
+    angleIndex = (angleIndex + 1) % unsigned(scene.randAngles.size());
+    tran.rotation = RotationMatrixRad(rot[0], rot[1], rot[2]);
+
+    std::vector<RigidTransform> trajectory;
+    RigidTransform settled = scene.Nudge(itemIdx, tran, dir, trajectory);
+    unsigned instanceId = scene.Put(itemIdx, settled);
+    scene.instances[instanceId].trajectory = trajectory;
+    seededPos.push_back(settled.position);
+    seeded++;
+    itemCursor++;
+  }
+  LOGI("seeded " << seeded << "/" << origins.size() << " deep rays with "
+                 << itemIndices.size() << " small fruit kinds round robin\n");
+  return seeded;
+}
+
 }  // namespace
 
-void ComputeSurfaceDepths(PackingScene &scene) {
+// Runs the raycasting pass and saves surface_depths.obj / deep_rays.obj.
+// Returns the deep ray origins/ends via out params so a caller can decide
+// whether to seed fruit into them. Does not place or settle anything, so
+// it is safe to call without running the packing steps.
+void ComputeAndSaveSurfaceDepths(PackingScene &scene,
+                                 std::vector<Vec3f> &deepOrigins,
+                                 std::vector<Vec3f> &deepEnds) {
   const float SAMPLE_EPS = 0.3f;
   Vec3f containerExtent = scene.container.box.vmax - scene.container.box.vmin;
   float maxDepth = std::min({containerExtent[0], containerExtent[1],
@@ -536,80 +721,158 @@ void ComputeSurfaceDepths(PackingScene &scene) {
 
   std::vector<InstanceAccel> accel = BuildInstanceAccel(scene);
 
-  std::vector<Vec3f> origins(points.size());
-  std::vector<Vec3f> ends(points.size());
-  std::vector<float> depths(points.size(), 0.0f);
-  unsigned hitCount = 0;
-  for (size_t i = 0; i < points.size(); i++) {
-    Vec3f O = points[i].x;
-    Vec3f dir = points[i].n;
-    if (dir.norm() < 1e-6f) {
-      origins[i] = points[i].x;
-      ends[i] = points[i].x;
-      continue;
-    }
-    dir.normalize();
-    Vec3f toOrigin = -points[i].x;
-    if (toOrigin.norm() > 1e-6f) {
-      toOrigin.normalize();
-      if (dir.dot(toOrigin) < 0.0f) {
-        dir = -dir;
-      }
-    }
-
-    O += -containerSlack * dir;
-    Box3f rayBox;
-    rayBox.vmin = O;
-    rayBox.vmax = O + maxDepth * dir;
-    for (int k = 0; k < 3; k++) {
-      if (rayBox.vmin[k] > rayBox.vmax[k]) {
-        std::swap(rayBox.vmin[k], rayBox.vmax[k]);
-      }
-    }
-
-    std::vector<unsigned> candidates = scene.broadPhase.GetNearby(rayBox, 0.0f);
-
-    float bestT = maxDepth;
-    bool hit = false;
-    for (unsigned instId : candidates) {
-      float tmin;
-      if (!RayAABB(O, dir, accel[instId].worldBox, bestT, tmin)) {
-        continue;
-      }
-      float t = RayInstanceHit(accel[instId].gridInst, O, dir, bestT);
-      if (t > 0.0f && t < bestT) {
-        bestT = t;
-        hit = true;
-      }
-    }
-    origins[i] = O;
-    float depth = hit ? bestT : missedDepth;
-    depths[i] = depth;
-    ends[i] = O + depth * dir;
-    if (hit) {
-      hitCount++;
-    }
-  }
+  RayDepthResult res = ComputeRayDepths(scene, points, accel, maxDepth,
+                                        missedDepth, containerSlack);
 
   std::string depthFile = scene.outputFolder + "/surface_depths.obj";
-  SaveDepthRaysObj(depthFile, origins, ends);
-  LOGI("surface depths: " << hitCount << "/" << points.size()
+  SaveDepthRaysObj(depthFile, res.origins, res.ends);
+  LOGI("surface depths: " << res.hitCount << "/" << points.size()
                           << " rays hit an item, saved " << depthFile << "\n");
 
   const float neighborRadius = 1.0f;
   const float deepThreshold = 0.5f;
-  std::vector<unsigned> deepRays = FindDeepRays(origins, depths,
+  std::vector<unsigned> deepRays = FindDeepRays(res.origins, res.depths,
                                                 neighborRadius, deepThreshold);
-  std::vector<Vec3f> deepOrigins(deepRays.size());
-  std::vector<Vec3f> deepEnds(deepRays.size());
+  deepOrigins.resize(deepRays.size());
+  deepEnds.resize(deepRays.size());
   for (size_t i = 0; i < deepRays.size(); i++) {
-    deepOrigins[i] = origins[deepRays[i]];
-    deepEnds[i] = ends[deepRays[i]];
+    deepOrigins[i] = res.origins[deepRays[i]];
+    deepEnds[i] = res.ends[deepRays[i]];
   }
   std::string deepFile = scene.outputFolder + "/deep_rays.obj";
   SaveDepthRaysObj(deepFile, deepOrigins, deepEnds);
   LOGI("deep rays: " << deepRays.size() << " rays exceed neighbor median by "
                      << deepThreshold << " cm, saved " << deepFile << "\n");
+}
+
+// Debug helper: finds the container-surface ray whose origin is closest
+// to targetPos, then prints its depth alongside every neighbor ray
+// within neighborRadius (same neighborhood FindDeepRays would use),
+// including which instance/item each one hit and the angle between the
+// two ray directions. Does not place or settle anything, does not save
+// any file. Intended to be called directly from a small standalone
+// harness (build scene, load resume pack, call this) without running
+// PackScene/PackStep.
+void DebugDeepRayNeighbors(PackingScene &scene, const Vec3f &targetPos) {
+  const float SAMPLE_EPS = 0.3f;
+  const float neighborRadius = 1.0f;
+  const float deepThreshold = 0.5f;
+  Vec3f containerExtent = scene.container.box.vmax - scene.container.box.vmin;
+  float maxDepth = std::min({containerExtent[0], containerExtent[1],
+                             containerExtent[2]});
+  float missedDepth = 0.1f;
+  float containerSlack = 0.5f;
+
+  std::vector<SamplePoint> points;
+  SamplePoints(scene.container.mesh, SAMPLE_EPS, points);
+  std::vector<InstanceAccel> accel = BuildInstanceAccel(scene);
+  RayDepthResult res = ComputeRayDepths(scene, points, accel, maxDepth,
+                                        missedDepth, containerSlack);
+
+  size_t bestIdx = 0;
+  float bestDist = 1e30f;
+  for (size_t i = 0; i < res.origins.size(); i++) {
+    float d = (res.origins[i] - targetPos).norm2();
+    if (d < bestDist) {
+      bestDist = d;
+      bestIdx = i;
+    }
+  }
+
+  auto describeHit = [&](int instId) -> std::string {
+    if (instId < 0) {
+      return "MISS";
+    }
+    unsigned itemId = scene.instances[instId].itemId;
+    return scene.items[itemId].name + " (inst " + std::to_string(instId) + ")";
+  };
+
+  Vec3f tO = res.origins[bestIdx];
+  Vec3f tDir = res.ends[bestIdx] - tO;
+  float tDepth = res.depths[bestIdx];
+  tDir.normalize();
+  std::cout << "\n=== DEBUG DEEP RAY near (" << targetPos[0] << " "
+            << targetPos[1] << " " << targetPos[2] << ") ===\n";
+  std::cout << "target: idx=" << bestIdx << " dist_to_query="
+            << std::sqrt(bestDist) << "\n";
+  std::cout << "  origin (" << tO[0] << " " << tO[1] << " " << tO[2] << ")\n";
+  std::cout << "  dir (" << tDir[0] << " " << tDir[1] << " " << tDir[2] << ")\n";
+  std::cout << "  depth=" << tDepth << " hit=" << describeHit(res.hitInstance[bestIdx])
+            << "\n";
+
+  PointGrid grid;
+  grid.Build(res.origins, neighborRadius);
+  std::vector<unsigned> neighbors = grid.Neighbors(tO, neighborRadius);
+  float r2 = neighborRadius * neighborRadius;
+  std::vector<float> neighborDepths;
+  const float patchDepthTol = 0.3f;
+  const unsigned minPatchNeighbors = 3;
+  unsigned patchNeighbors = 0;
+  std::cout << "  neighbors within " << neighborRadius << " cm:\n";
+  for (unsigned idx : neighbors) {
+    if (idx == bestIdx) continue;
+    float d2 = (res.origins[idx] - tO).norm2();
+    if (d2 > r2) continue;
+    Vec3f nDir = res.ends[idx] - res.origins[idx];
+    nDir.normalize();
+    float cosAngle = std::clamp(tDir.dot(nDir), -1.0f, 1.0f);
+    float angleDeg = std::acos(cosAngle) * 180.0f / 3.14159265f;
+    neighborDepths.push_back(res.depths[idx]);
+    bool samePatch = std::fabs(res.depths[idx] - tDepth) <= patchDepthTol;
+    if (samePatch) {
+      patchNeighbors++;
+    }
+    std::cout << "    idx=" << idx << " dist=" << std::sqrt(d2)
+              << " depth=" << res.depths[idx]
+              << " hit=" << describeHit(res.hitInstance[idx])
+              << " dirAngle=" << angleDeg << " deg"
+              << (samePatch ? " [same patch]" : "") << "\n";
+  }
+  std::cout << "  patch neighbors (within " << patchDepthTol << " cm of target depth): "
+            << patchNeighbors << " (need < " << minPatchNeighbors
+            << " to be eligible for the deep flag)\n";
+  if (neighborDepths.size() < 3) {
+    std::cout << "  fewer than 3 neighbors, FindDeepRays would skip this ray\n";
+  } else {
+    std::sort(neighborDepths.begin(), neighborDepths.end());
+    float median = neighborDepths[neighborDepths.size() / 2];
+    bool flaggedDeep = (patchNeighbors < minPatchNeighbors) &&
+                       ((tDepth - median) > deepThreshold);
+    std::cout << "  neighbor median depth=" << median << " margin="
+              << (tDepth - median) << " threshold=" << deepThreshold
+              << " flaggedDeep=" << flaggedDeep << "\n";
+  }
+  std::cout << "=== END DEBUG DEEP RAY ===\n\n";
+}
+
+void ComputeSurfaceDepths(PackingScene &scene,
+                          const std::vector<std::string> &smallItemNames) {
+  std::vector<Vec3f> deepOrigins;
+  std::vector<Vec3f> deepEnds;
+  ComputeAndSaveSurfaceDepths(scene, deepOrigins, deepEnds);
+
+  std::vector<unsigned> smallItems;
+  for (const std::string &name : smallItemNames) {
+    auto it = scene.nameToIndex.find(name);
+    if (it != scene.nameToIndex.end()) {
+      smallItems.push_back(it->second);
+    }
+  }
+  if (smallItems.empty()) {
+    // fallback: no explicit small fruit list, use the single smallest item.
+    std::vector<int> bySize = SortBySize(scene.items);
+    if (!bySize.empty()) {
+      smallItems.push_back(unsigned(bySize.back()));
+    }
+  }
+  unsigned seeded = SeedDeepCrevices(scene, deepOrigins, deepEnds, smallItems);
+  // SeedDeepCrevices has no interval-save logic of its own (it isn't part
+  // of the PackStep round loop), so save once here if it placed anything,
+  // otherwise those instances only exist in memory for the rest of the run.
+  if (seeded > 0 && !scene.trajFile.empty() && !scene.packFile.empty()) {
+    scene.SaveTrajectories(scene.trajFile + "_final.txt");
+    scene.SaveInstances(scene.packFile + "_final.txt");
+  }
 }
 
 void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig &cfg) {
@@ -622,7 +885,7 @@ void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig
   if (cfg.resume) {
     LoadPack(scene, cfg.ResumePackPath());
   }
-  ComputeSurfaceDepths(scene);
+  ComputeSurfaceDepths(scene, plan.groups.empty() ? std::vector<std::string>() : plan.groups.back());
   for (size_t i = cfg.startStep; i < plan.steps.size(); i++) {
     LOGI("=== step " << i << " of " << (plan.steps.size() - 1) << " ===\n");
     Utils::Stopwatch clock;

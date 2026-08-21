@@ -1,0 +1,73 @@
+Optional method (not implemented, keep for later reference)
+=============================================================
+
+Source: proposed by Gemini Flash as an alternative to raycasting for
+finding candidate spots for small fruits (e.g. blueberries).
+
+Idea: estimate surface concavity directly from neighbor geometry of
+sampled surface points, instead of raycasting into the interior.
+Select seed points at local occlusion maxima, apply Poisson-disk
+exclusion, hand off to PBD solver for settling.
+
+Files proposed:
+  PointOcclusion.h / .cpp
+    pruneOccludedPoints()      - filter sample points against inner
+                                  container & static obstacles
+    computeOcclusionAndDepth() - cavity occlusion score + local
+                                  geometric clearance (gap_depth) per
+                                  point, using k-NN neighbor search
+  DeepPointSelection.h / .cpp
+    seedSpheresInCrevices()    - sort candidates by occlusion score,
+                                  apply 3D Poisson exclusion, output
+                                  seed positions offset along inward
+                                  normal by sphere radius
+
+Key data:
+  struct SurfaceSamplePoint {
+    Vec3 pos;
+    Vec3 inward_normal;
+    float occlusion_score = 0.0f;
+    float gap_depth = 0.0f;
+  };
+
+computeOcclusionAndDepth logic (per point p, radius search over
+neighbors q):
+  v = q.pos - p.pos, dist = |v|, dir = v / dist
+  cos_theta = dir . p.inward_normal
+  if cos_theta > 0 (neighbor is on the inward-facing hemisphere):
+    w = 1 - dist / search_radius
+    occlusion_sum += cos_theta * w * w
+    est_radius = dist^2 / (2 * cos_theta)   // estimates local
+                                             // clearance sphere radius
+    gap_depth = min(gap_depth, est_radius)
+  occlusion_score = clamp(occlusion_sum / expected_plane_neighbors, 0, 1)
+
+seedSpheresInCrevices logic:
+  r_eff = sphere_radius - max_overlap / 2
+  exclusion_dist = 2 * r_eff
+  min_depth = sphere_radius - max_overlap
+  keep candidates with occlusion_score >= threshold and
+    gap_depth >= min_depth
+  sort by occlusion_score descending (greedy local maxima)
+  for each candidate, target_pos = pos + inward_normal * r_eff
+    if no already-picked seed within exclusion_dist of target_pos:
+      accept it, insert into occupancy grid
+
+Why we did not go with this first:
+  Our objective is not to approximate the container surface or match
+  aesthetics with a concavity metric. The real requirement is
+  manufacturability: any deep crevice inside the pack that cannot be
+  reached by a mill or a print process must be filled in with a small
+  fruit (with ~0.2 cm overlap to seal it). This is a hard geometric
+  constraint on ray depth into the interior, not a surface curvature
+  estimate. Raycasting measures the actual gap depth directly, which
+  is what we need. The Gemini method estimates a similar quantity
+  (gap_depth / est_radius) from local surface geometry, which could
+  still be useful as a cheap way to find likely seed positions to
+  raycast, but does not replace the depth check.
+
+Revisit if:
+  - Raycasting proves too slow to seed a lot of candidate spots.
+  - We need approximate seed positions before running rigid body
+    settling, and want a cheaper first pass than raycasting every
+    surface sample point.
