@@ -37,11 +37,11 @@ int main() {
   cfg.subgridCellSize = 20.0f;
 
   cfg.maxTrialCount = 10;
-  cfg.startStep = 0;
+  cfg.startStep = 3;
   cfg.startItem = 0;
 
-  cfg.resume = false;
-  cfg.resumePackFile = "melone_pack_test9.txt";
+  cfg.resume = true;
+  cfg.resumePackFile = "melon_test_36.txt";
   cfg.trajSaveInterval = 10;
   cfg.packSaveInterval = 20;
 

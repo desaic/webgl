@@ -37,13 +37,10 @@ bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos,
   const unsigned FFT_ALIGNMENT = 8;
   Vec3u bgSize = bg.GridSize();
   Vec3u fgSize = fg.GridSize();
-  // use circular fft/ntt. no need to pad with fg size.
   Vec3u totalSize = bgSize;
-  //+fgSize;
   Vec3u gridSize = PadSizes(totalSize, FFT_ALIGNMENT);
 
   {
-    // recomputed on every trial even though bg only changes after a Put.
     PROFILE_SCOPE("findspot.bg_fft");
     bg.FFT(gridSize);
   }
@@ -82,13 +79,17 @@ bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos,
   Array2D8u collSlice (gridSize[0], gridSize[1]);
 
   unsigned debugZ = (fgSize[2] + gridSize[2] - 1)/2;
-  // add a little attraction towards bottom left.
-  // using normalized x y z coordinate .
   float positionWeight = -1.0f;
+
+  // only search the actual bg grid, not the FFT padding.
+  // placements in the padding region have no collision (padding is zero)
+  // but their world positions are outside the container box.
+  Vec3u searchEnd = bgSize;
+
   PROFILE_SCOPE("findspot.score_scan");
-  for (unsigned z = fgSize[2] - 1; z < gridSize[2]; z++) {
-    for (unsigned y = fgSize[1] - 1; y < gridSize[1]; y++) {
-      for (unsigned x = fgSize[0] - 1; x < gridSize[0]; x++) {
+  for (unsigned z = fgSize[2] - 1; z < searchEnd[2]; z++) {
+    for (unsigned y = fgSize[1] - 1; y < searchEnd[1]; y++) {
+      for (unsigned x = fgSize[0] - 1; x < searchEnd[0]; x++) {
         if(z == debugZ){
           collSlice(x,y) = collision(x,y,z);
         }
@@ -117,7 +118,7 @@ bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos,
   (void)debugSlice;
   (void)collSlice;
   bool found = (highScore > score0);
-  if (found) {    
+  if (found) {
     pos = GetDisplacement(bestPos, dx, fg.vox.GetSize(), fg.GetOrigin(), bg.GetOrigin());
   }
   return found;
@@ -291,18 +292,17 @@ bool FindSpotSubgrid(MeshConvo &bg,
   TrigMesh const *partPtr = &part;
   TrigMesh shrunk;
   if (maxExtent < 5.0f && maxExtent > 0.5f) {
-    float scale = (maxExtent - 0.5f) / maxExtent;
+    float shrinkScale = (maxExtent - 0.5f) / maxExtent;
     Vec3f center = 0.5f * (itemBox.vmin + itemBox.vmax);
     shrunk = part;
     for (size_t i = 0; i < shrunk.v.size(); i += 3) {
-      shrunk.v[i]   = center[0] + (shrunk.v[i]   - center[0]) * scale;
-      shrunk.v[i+1] = center[1] + (shrunk.v[i+1] - center[1]) * scale;
-      shrunk.v[i+2] = center[2] + (shrunk.v[i+2] - center[2]) * scale;
+      shrunk.v[i]   = center[0] + (shrunk.v[i]   - center[0]) * shrinkScale;
+      shrunk.v[i+1] = center[1] + (shrunk.v[i+1] - center[1]) * shrinkScale;
+      shrunk.v[i+2] = center[2] + (shrunk.v[i+2] - center[2]) * shrinkScale;
     }
     partPtr = &shrunk;
     itemExtent = ComputeBBox(shrunk.v).vmax - ComputeBBox(shrunk.v).vmin;
   }
-
   Vec3u cell3D = CellIndexTo3D(cellIdx, numCells);
   Vec3f containerOrigin = bg.box.vmin;
   float dx = bg.dx;

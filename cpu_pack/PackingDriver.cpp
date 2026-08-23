@@ -149,7 +149,9 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
     for (unsigned i = startItem; i < numItems; i++) {
       unsigned nameIndex = (i + startNameIndex) % numItems;
       std::string name = step.names[nameIndex];
-
+      if(name == "grape4"){
+      //  std::cout << "debug\n";
+      }
       unsigned itemIndex = scene.GetItemIndex(name);
       MeshInfo &item = scene.items[itemIndex];
       if (item.noMoreFit) {
