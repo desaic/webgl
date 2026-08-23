@@ -52,12 +52,6 @@ struct PackingConfig {
     // recompute stats.txt before planning.
     bool computeStats = true;
 
-    // give up on a plan step after this many seconds. 0 means no limit.
-    // once the container is nearly full a single placement can cost
-    // thousands of failed spot searches, so a benchmark needs a way to
-    // stop mid step. production runs leave this at 0.
-    float maxSecondsPerStep = 0.0f;
-
     // path helpers. all return absolute paths.
     std::string MeshDir() const;
     std::string ContainerPath() const;

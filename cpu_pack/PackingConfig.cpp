@@ -110,8 +110,6 @@ bool PackingConfig::LoadFromFile(const std::string &path) {
       packSaveInterval = unsigned(std::atoi(value.c_str()));
     } else if (key == "computeStats") {
       computeStats = ParseBool(value);
-    } else if (key == "maxSecondsPerStep") {
-      maxSecondsPerStep = float(std::atof(value.c_str()));
     } else {
       std::cout << path << ":" << lineNum << " unknown key " << key << "\n";
       unknown++;
@@ -185,8 +183,5 @@ std::string PackingConfig::toString() const {
   oss << "\n";
   oss << "trajSaveInterval " << trajSaveInterval << " packSaveInterval "
       << packSaveInterval << " computeStats " << computeStats << "\n";
-  if (maxSecondsPerStep > 0.0f) {
-    oss << "maxSecondsPerStep " << maxSecondsPerStep << "\n";
-  }
   return oss.str();
 }

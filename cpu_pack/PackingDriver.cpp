@@ -143,25 +143,10 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
               << " instances\n");
     lastReportMs = stepClock.ElapsedMS();
   };
-  auto heartbeat = [&]() {
-    if (stepClock.ElapsedMS() - lastReportMs > REPORT_INTERVAL_MS) {
-      report("progress");
-    }
-  };
-  auto timeUp = [&]() {
-    if (cfg.maxSecondsPerStep <= 0.0f) {
-      return false;
-    }
-    if (stepClock.ElapsedMS() > 1000.0 * double(cfg.maxSecondsPerStep)) {
-      outOfTime = true;
-      return true;
-    }
-    return false;
-  };
 
-  for (; count < step.count && !outOfTime; count++) {
+  for (; count < step.count; count++) {
     bool packSuccess = false;
-    for (unsigned i = startItem; i < numItems && !timeUp(); i++) {
+    for (unsigned i = startItem; i < numItems; i++) {
       unsigned nameIndex = (i + startNameIndex) % numItems;
       std::string name = step.names[nameIndex];
 
@@ -217,7 +202,7 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
       if (useSubgrid) {
         // one item can walk all 90 cells at 10 trials each, so the cell
         // loop needs its own check or a single item could blow the budget.
-        while (!itemPlaced && item.nextCellIdx < totalCells && !timeUp()) {
+        while (!itemPlaced && item.nextCellIdx < totalCells) {
           unsigned cellIdx = item.nextCellIdx;
           bool cellSuccess = false;
           for (unsigned trial = 0; trial < MAX_TRIAL_COUNT; trial++) {
@@ -228,7 +213,6 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
               angleIndex = 0;
             }
             searches++;
-            heartbeat();
             TrigMesh rotatedMesh = item.mesh;
             TransformVerts(item.mesh.v, rotatedMesh.v,
                            RotationMatrixRad(rot[0], rot[1], rot[2]));
@@ -261,7 +245,6 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
             angleIndex = 0;
           }
           searches++;
-          heartbeat();
           TrigMesh rotatedMesh = item.mesh;
           TransformVerts(item.mesh.v, rotatedMesh.v,
                          RotationMatrixRad(rot[0], rot[1], rot[2]));
@@ -878,13 +861,6 @@ void SeedSmallFruitCrevices(PackingScene &scene,
     }
   }
   unsigned seeded = SeedDeepCrevices(scene, deepOrigins, deepEnds, smallItems);
-  // SeedDeepCrevices has no interval-save logic of its own (it isn't part
-  // of the PackStep round loop), so save once here if it placed anything,
-  // otherwise those instances only exist in memory for the rest of the run.
-  if (seeded > 0 && !scene.trajFile.empty() && !scene.packFile.empty()) {
-    scene.SaveTrajectories(scene.trajFile + "_final.txt");
-    scene.SaveInstances(scene.packFile + "_final.txt");
-  }
 }
 
 void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig &cfg) {
@@ -908,6 +884,8 @@ void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig
                      << scene.instances.size() << " instances total ===\n");
   }
 
+  scene.SaveTrajectories(scene.trajFile + "_before_ray.txt");
+  scene.SaveInstances(scene.packFile + "_before_ray.txt");
   // raycasting crevice pass runs last, after every other group has been
   // placed, so the depths it measures reflect the final occupancy. it
   // targets the same small-fruit group as the last PackStep.
@@ -925,4 +903,7 @@ void PackFruits(const PackingPlan &plan, const PackingConfig &cfgIn) {
     return;
   }
   PackScene(scene, plan, cfg);
+  scene.SaveTrajectories(scene.trajFile + "_final.txt");
+  scene.SaveInstances(scene.packFile + "_final.txt");
+  
 }

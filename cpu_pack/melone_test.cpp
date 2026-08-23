@@ -46,7 +46,6 @@ int main() {
   cfg.packSaveInterval = 20;
 
   cfg.computeStats = true;
-  cfg.maxSecondsPerStep = 60.0f;
 
   std::cout << cfg.toString();
 

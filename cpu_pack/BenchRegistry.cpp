@@ -36,18 +36,10 @@ const std::vector<Bench> &AllBenches() {
        BenchNudgePartial},
       {"smallfruit_batch",
        "bulk placement of the smallest berry, with the FFT shrink reported",
-       BenchSmallFruitBatch},
-      {"smallfruit_packstep",
-       "bulk small placement through the real PackStep control flow",
-       BenchSmallFruitPackStep},
-      {"cache_growth", "per placement memory growth of the instance caches",
-       BenchCacheGrowth},
-      {"put_scaling", "Put cost as instance count rises", BenchPutScaling},
-      {"end_to_end", "one plan step through the real PackStep control flow",
-       BenchEndToEnd},
+       BenchSmallFruitBatch},  
       {"validate_selftest",
        "confirm the validator flags known bad placements",
-       BenchValidateSelfTest},
+       BenchValidateSelfTest}
   };
   return benches;
 }
