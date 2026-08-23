@@ -43,7 +43,7 @@ int main() {
   DebugDeepRayNeighbors(scene, targetPos);
 
   std::vector<Vec3f> deepOrigins, deepEnds;
-  ComputeAndSaveSurfaceDepths(scene, deepOrigins, deepEnds);
+  ComputeSurfaceDepths(scene, deepOrigins, deepEnds);
 
   return 0;
 }

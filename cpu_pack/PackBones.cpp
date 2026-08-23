@@ -127,7 +127,10 @@ static void PackBonesStep(PackingScene &scene,
     for (unsigned trial = 0; trial < maxTrials; trial++) {
       Vec3f pos;
       Vec3f rot = TrialRotation(scene.randAngles, angleIndex, trial, constraints);
-      bool success = FindSpotConstrained(scene.bg, item.mesh, pos, rot,
+      TrigMesh rotatedMesh = item.mesh;
+      TransformVerts(item.mesh.v, rotatedMesh.v,
+                     RotationMatrixRad(rot[0], rot[1], rot[2]));
+      bool success = FindSpotConstrained(scene.bg, rotatedMesh, pos,
                                          scene.sdf, sdfFactor, constraints);
       if (success) {
         RigidTransform tran;

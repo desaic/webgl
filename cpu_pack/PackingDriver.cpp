@@ -175,7 +175,6 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
       unsigned totalCells = scene.numSubgridCells[0] * scene.numSubgridCells[1]
                             * scene.numSubgridCells[2];
       bool useSubgrid = (totalCells > 0 && itemMaxExtent < scene.subgridCellSize);
-      bool ignoreCellBoundary = false;
 
       auto placeItem = [&](const Vec3f &p, const Vec3f &r) {
         packSuccess = true;
@@ -230,10 +229,12 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
             }
             searches++;
             heartbeat();
-            if (FindSpotSubgrid(scene.bg, item.mesh, pos, rot, scene.sdf,
+            TrigMesh rotatedMesh = item.mesh;
+            TransformVerts(item.mesh.v, rotatedMesh.v,
+                           RotationMatrixRad(rot[0], rot[1], rot[2]));
+            if (FindSpotSubgrid(scene.bg, rotatedMesh, pos, scene.sdf,
                                 sdfFactor, scene.subgridCellSize,
-                                cellIdx, scene.numSubgridCells,
-                                ignoreCellBoundary)) {
+                                cellIdx, scene.numSubgridCells)) {
               placeItem(pos, rot);
               itemPlaced = true;
               cellSuccess = true;
@@ -261,7 +262,10 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
           }
           searches++;
           heartbeat();
-          if (FindSpot(scene.bg, item.mesh, pos, rot, scene.sdf, sdfFactor)) {
+          TrigMesh rotatedMesh = item.mesh;
+          TransformVerts(item.mesh.v, rotatedMesh.v,
+                         RotationMatrixRad(rot[0], rot[1], rot[2]));
+          if (FindSpot(scene.bg, rotatedMesh, pos, scene.sdf, sdfFactor)) {
             placeItem(pos, rot);
             itemPlaced = true;
             break;
@@ -703,11 +707,12 @@ unsigned SeedDeepCrevices(PackingScene &scene, const std::vector<Vec3f> &origins
 
 // Runs the raycasting pass and saves surface_depths.obj / deep_rays.obj.
 // Returns the deep ray origins/ends via out params so a caller can decide
-// whether to seed fruit into them. Does not place or settle anything, so
-// it is safe to call without running the packing steps.
-void ComputeAndSaveSurfaceDepths(PackingScene &scene,
-                                 std::vector<Vec3f> &deepOrigins,
-                                 std::vector<Vec3f> &deepEnds) {
+// whether to seed fruit into them. Read-only: does not place, settle, or
+// otherwise mutate scene, so it is safe to call without running the
+// packing steps.
+void ComputeSurfaceDepths(PackingScene &scene,
+                          std::vector<Vec3f> &deepOrigins,
+                          std::vector<Vec3f> &deepEnds) {
   const float SAMPLE_EPS = 0.3f;
   Vec3f containerExtent = scene.container.box.vmax - scene.container.box.vmin;
   float maxDepth = std::min({containerExtent[0], containerExtent[1],
@@ -845,11 +850,18 @@ void DebugDeepRayNeighbors(PackingScene &scene, const Vec3f &targetPos) {
   std::cout << "=== END DEBUG DEEP RAY ===\n\n";
 }
 
-void ComputeSurfaceDepths(PackingScene &scene,
-                          const std::vector<std::string> &smallItemNames) {
+// Raycasting crevice pass for the small-fruit group: computes surface
+// depths (see ComputeSurfaceDepths above), finds deep rays, and shoots
+// one small fruit along each deep ray direction to plug it, settling with
+// the rigid body solver. Mutates scene by placing instances. Meant to run
+// once, after every other PackStep group has already been placed, so the
+// depths it measures reflect the final occupancy, not a half-empty
+// container.
+void SeedSmallFruitCrevices(PackingScene &scene,
+                            const std::vector<std::string> &smallItemNames) {
   std::vector<Vec3f> deepOrigins;
   std::vector<Vec3f> deepEnds;
-  ComputeAndSaveSurfaceDepths(scene, deepOrigins, deepEnds);
+  ComputeSurfaceDepths(scene, deepOrigins, deepEnds);
 
   std::vector<unsigned> smallItems;
   for (const std::string &name : smallItemNames) {
@@ -885,7 +897,6 @@ void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig
   if (cfg.resume) {
     LoadPack(scene, cfg.ResumePackPath());
   }
-  ComputeSurfaceDepths(scene, plan.groups.empty() ? std::vector<std::string>() : plan.groups.back());
   for (size_t i = cfg.startStep; i < plan.steps.size(); i++) {
     LOGI("=== step " << i << " of " << (plan.steps.size() - 1) << " ===\n");
     Utils::Stopwatch clock;
@@ -896,6 +907,12 @@ void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig
                      << (scene.instances.size() - before) << " placed, "
                      << scene.instances.size() << " instances total ===\n");
   }
+
+  // raycasting crevice pass runs last, after every other group has been
+  // placed, so the depths it measures reflect the final occupancy. it
+  // targets the same small-fruit group as the last PackStep.
+  SeedSmallFruitCrevices(scene, plan.groups.empty() ? std::vector<std::string>()
+                                                     : plan.groups.back());
 }
 
 void PackFruits(const PackingPlan &plan, const PackingConfig &cfgIn) {

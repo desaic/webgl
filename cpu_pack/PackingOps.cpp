@@ -21,20 +21,17 @@ Vec3f GetDisplacement(Vec3u gridIdx, float dx, Vec3u fgSize, Vec3f fgOrigin, Vec
   return disp;
 }
 
-bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos, const Vec3f &rot,
-  std::shared_ptr<AdapSDF> sdf, float factor) {
+// part is already rotated by the caller.
+bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos,
+              std::shared_ptr<AdapSDF> sdf, float factor) {
   PROFILE_SCOPE("findspot.total");
-  Matrix3f rotMat = RotationMatrixRad(rot[0], rot[1], rot[2]);
-  TrigMesh rotated = part;
-  TransformVerts(part.v, rotated.v, rotMat);
   float dx = bg.dx;
 
   MeshConvo fg;
-  fg.SetMeshPtr(&rotated);
+  fg.SetMeshPtr(const_cast<TrigMesh*>(&part));
   {
     PROFILE_SCOPE("findspot.fg_voxelize");
     fg.Voxelize(dx);
-    // makes values in convo smaller.
     ThreshInPlace(fg.vox, 1);
   }
   const unsigned FFT_ALIGNMENT = 8;
@@ -135,18 +132,15 @@ struct CollisionGridResult {
   Box3f meshBox;
 };
 
+// part is already rotated by the caller.
 static CollisionGridResult ComputeCollisionGrid(MeshConvo &bg,
-                                                const TrigMesh &part,
-                                                const Vec3f &rot) {
+                                                const TrigMesh &part) {
   CollisionGridResult r;
 
-  Matrix3f rotMat = RotationMatrixRad(rot[0], rot[1], rot[2]);
-  TrigMesh rotated = part;
-  TransformVerts(part.v, rotated.v, rotMat);
   float dx = bg.dx;
 
   MeshConvo fg;
-  fg.SetMeshPtr(&rotated);
+  fg.SetMeshPtr(const_cast<TrigMesh*>(&part));
   fg.Voxelize(dx);
   ThreshInPlace(fg.vox, 1);
 
@@ -192,14 +186,14 @@ static bool PassesXSignConstraint(float dispX, float margin, int xSign) {
   return true;
 }
 
+// part is already rotated by the caller.
 static bool FindSpotConstrainedImpl(MeshConvo &bg,
                                     const TrigMesh &part,
                                     Vec3f &pos,
-                                    const Vec3f &rot,
                                     std::shared_ptr<AdapSDF> sdf,
                                     float factor,
                                     const PackingConstraints &constraints) {
-  CollisionGridResult coll = ComputeCollisionGrid(bg, part, rot);
+  CollisionGridResult coll = ComputeCollisionGrid(bg, part);
   Vec3u gridSize = coll.gridSize;
   Vec3u fgSize = coll.fgSize;
   Vec3f fgOrigin = coll.fgOrigin;
@@ -263,14 +257,14 @@ static bool FindSpotConstrainedImpl(MeshConvo &bg,
   return found;
 }
 
+// part is already rotated by the caller.
 bool FindSpotConstrained(MeshConvo &bg,
                          const TrigMesh &part,
                          Vec3f &pos,
-                         const Vec3f &rot,
                          std::shared_ptr<AdapSDF> sdf,
                          float factor,
                          const PackingConstraints &constraints) {
-  return FindSpotConstrainedImpl(bg, part, pos, rot, sdf, factor, constraints);
+  return FindSpotConstrainedImpl(bg, part, pos, sdf, factor, constraints);
 }
 
 static Vec3u CellIndexTo3D(unsigned cellIdx, Vec3u numCells) {
@@ -280,22 +274,20 @@ static Vec3u CellIndexTo3D(unsigned cellIdx, Vec3u numCells) {
   return Vec3u(x, y, z);
 }
 
+// part is already rotated by the caller.
 bool FindSpotSubgrid(MeshConvo &bg,
                      const TrigMesh &part,
                      Vec3f &pos,
-                     const Vec3f &rot,
                      std::shared_ptr<AdapSDF> sdf,
                      float factor,
                      float cellSize,
                      unsigned cellIdx,
-                     Vec3u numCells,
-                     bool ignoreCellBoundary) {
+                     Vec3u numCells) {
   PROFILE_SCOPE("findspot_subgrid.total");
   Box3f itemBox = ComputeBBox(part.v);
   Vec3f itemExtent = itemBox.vmax - itemBox.vmin;
   float maxExtent = std::max({itemExtent[0], itemExtent[1], itemExtent[2]});
 
-  // Shrink small fruits by 0.5cm for FFT to find spots more easily.
   TrigMesh const *partPtr = &part;
   TrigMesh shrunk;
   if (maxExtent < 5.0f && maxExtent > 0.5f) {
@@ -308,8 +300,7 @@ bool FindSpotSubgrid(MeshConvo &bg,
       shrunk.v[i+2] = center[2] + (shrunk.v[i+2] - center[2]) * scale;
     }
     partPtr = &shrunk;
-    itemBox = ComputeBBox(shrunk.v);
-    itemExtent = itemBox.vmax - itemBox.vmin;
+    itemExtent = ComputeBBox(shrunk.v).vmax - ComputeBBox(shrunk.v).vmin;
   }
 
   Vec3u cell3D = CellIndexTo3D(cellIdx, numCells);
@@ -372,45 +363,16 @@ bool FindSpotSubgrid(MeshConvo &bg,
   }
 
   MeshConvo tempConv;
-  tempConv.box.vmin = cropMin;
-  tempConv.box.vmax = cropMax;
+  tempConv.box.vmin = containerOrigin + voxMin.cast<float>() * dx;
+  tempConv.box.vmax = containerOrigin + (voxMax.cast<float>() + Vec3f(1.0f, 1.0f, 1.0f)) * dx;
   tempConv.vox = subVox;
   tempConv.dx = dx;
 
   Vec3f foundPos;
-  bool found = FindSpot(tempConv, *partPtr, foundPos, rot, sdf, factor);
+  bool found = FindSpot(tempConv, *partPtr, foundPos, sdf, factor);
   if (!found) {
     return false;
   }
-
-  // Verify the entire rotated fruit fits inside the container.
-  Matrix3f rotMat = RotationMatrixRad(rot[0], rot[1], rot[2]);
-  TrigMesh rotated = *partPtr;
-  TransformVerts(partPtr->v, rotated.v, rotMat);
-  Box3f rotBox = ComputeBBox(rotated.v);
-  Vec3f fruitMin = foundPos + rotBox.vmin;
-  Vec3f fruitMax = foundPos + rotBox.vmax;
-  const float BOUNDARY_MARGIN = 0.5f;
-  if (fruitMin[0] < bg.box.vmin[0] - BOUNDARY_MARGIN ||
-      fruitMin[1] < bg.box.vmin[1] - BOUNDARY_MARGIN ||
-      fruitMin[2] < bg.box.vmin[2] - BOUNDARY_MARGIN ||
-      fruitMax[0] > bg.box.vmax[0] + BOUNDARY_MARGIN ||
-      fruitMax[1] > bg.box.vmax[1] + BOUNDARY_MARGIN ||
-      fruitMax[2] > bg.box.vmax[2] + BOUNDARY_MARGIN) {
-    return false;
-  }
-
-  if (!ignoreCellBoundary) {
-    Vec3f rotCenter = 0.5f * (rotBox.vmin + rotBox.vmax);
-    Vec3f placedCenter = foundPos + rotCenter;
-    const float MARGIN = 0.0f;
-    if (placedCenter[0] < cellMin[0] - MARGIN || placedCenter[0] > cellMax[0] + MARGIN ||
-        placedCenter[1] < cellMin[1] - MARGIN || placedCenter[1] > cellMax[1] + MARGIN ||
-        placedCenter[2] < cellMin[2] - MARGIN || placedCenter[2] > cellMax[2] + MARGIN) {
-      return false;
-    }
-  }
-
   pos = foundPos;
   return true;
 }

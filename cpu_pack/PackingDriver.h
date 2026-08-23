@@ -26,12 +26,12 @@ void PackFruits(const PackingPlan &plan, const PackingConfig &cfg);
 
 /// casts one inward ray per container surface sample point against all
 /// placed instances, saves surface_depths.obj and deep_rays.obj under
-/// scene.outputFolder, and returns the deep ray origins/ends. does not
-/// place or settle anything, so it is safe to call without running any
-/// packing steps.
-void ComputeAndSaveSurfaceDepths(PackingScene &scene,
-                                 std::vector<Vec3f> &deepOrigins,
-                                 std::vector<Vec3f> &deepEnds);
+/// scene.outputFolder, and returns the deep ray origins/ends. read-only:
+/// does not place, settle, or otherwise mutate scene, so it is safe to
+/// call without running any packing steps.
+void ComputeSurfaceDepths(PackingScene &scene,
+                         std::vector<Vec3f> &deepOrigins,
+                         std::vector<Vec3f> &deepEnds);
 
 /// debug helper: finds the container-surface ray closest to targetPos and
 /// prints its depth plus every neighbor ray within the same radius

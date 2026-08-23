@@ -40,8 +40,8 @@ int main() {
   cfg.startStep = 0;
   cfg.startItem = 0;
 
-  cfg.resume = true;
-  cfg.resumePackFile = "melone_pack7.txt";
+  cfg.resume = false;
+  cfg.resumePackFile = "melone_pack_test9.txt";
   cfg.trajSaveInterval = 10;
   cfg.packSaveInterval = 20;
 
@@ -68,7 +68,7 @@ int main() {
 
   // Group by size: [0] large >20, [1] medium large 6-20, [2] medium small
   // 3-6, [3] small <=3. Same thresholds as PlanPackingSteps.
-  std::vector<float> SIZE_THRESH = {20, 6, 3};
+  std::vector<float> SIZE_THRESH = {20, 6, 3, 2};
   std::vector<std::vector<std::string>> groups(SIZE_THRESH.size() + 1);
   std::map<std::string, float> nameToLen;
   for (const auto &s : stats) {
@@ -136,13 +136,13 @@ int main() {
 
   // Step 3: small fruits, original lattice-walk strategy. useInnerContainer
   // keeps berries out of the deep center, inwards with weak force.
-  PackingStep lastStep;
-  lastStep.names = groups[3];
-  lastStep.outwards = false;
-  lastStep.useInnerContainer = true;
-  lastStep.count = LARGE_INT;
-  lastStep.force = Vec3f(-0.1f, 0, 0);
-  plan.steps.push_back(lastStep);
+  PackingStep step3;
+  step3.names = groups[3];
+  step3.outwards = false;
+  step3.useInnerContainer = true;
+  step3.count = LARGE_INT;
+  step3.force = Vec3f(-0.1f, 0, 0);
+  plan.steps.push_back(step3);
 
   if (plan.steps.empty()) {
     std::cout << "empty packing plan. nothing to do.\n";

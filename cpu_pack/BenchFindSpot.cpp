@@ -27,13 +27,16 @@ void FindSpotSweep(BenchScene &bs, const PackingConfig &cfg,
       Vec3f rot = scene.randAngles[angleIndex];
       angleIndex = (angleIndex + 1) % unsigned(scene.randAngles.size());
       tried++;
+      TrigMesh rotatedMesh = item.mesh;
+      TransformVerts(item.mesh.v, rotatedMesh.v,
+                     RotationMatrixRad(rot[0], rot[1], rot[2]));
       bool ok;
       if (subgrid) {
-        ok = FindSpotSubgrid(scene.bg, item.mesh, pos, rot, scene.sdf, 1.0f,
+        ok = FindSpotSubgrid(scene.bg, rotatedMesh, pos, scene.sdf, 1.0f,
                              scene.subgridCellSize, trial % totalCells,
-                             scene.numSubgridCells, false);
+                             scene.numSubgridCells);
       } else {
-        ok = FindSpot(scene.bg, item.mesh, pos, rot, scene.sdf, 1.0f);
+        ok = FindSpot(scene.bg, rotatedMesh, pos, scene.sdf, 1.0f);
       }
       if (ok) {
         found++;
