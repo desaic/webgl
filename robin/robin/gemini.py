@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from robin.config import GEMINI_MODEL, logger
+from robin.history import load_account_history
 
 _MAX_RETRIES = 4
 _RETRY_BASE_DELAY = 2.0
@@ -92,6 +93,36 @@ def _strip_json(text: str) -> str:
     if start != -1 and end != -1 and end > start:
         text = text[start : end + 1]
     return text
+
+
+def _summarize_account_history() -> str:
+    data = load_account_history()
+    if not data:
+        return ""
+    series: list[tuple[str, float]] = []
+    for k in sorted(data.keys()):
+        for ts, val in data[k]:
+            series.append((ts, round(float(val), 2)))
+    if len(series) < 2:
+        return ""
+    now_ts = datetime.now(timezone.utc).timestamp()
+    recent = [(ts, v) for ts, v in series if now_ts - datetime.fromisoformat(ts).timestamp() < 30 * 86400]
+    if not recent:
+        recent = series[-100:]
+    vals = [v for _, v in recent]
+    first_val = vals[0]
+    last_val = vals[-1]
+    low_val = min(vals)
+    high_val = max(vals)
+    chg = last_val - first_val
+    pct_chg = (chg / first_val) * 100 if first_val else 0
+    sign = "+" if chg >= 0 else ""
+    dates = [d[:10] for d, _ in recent]
+    days_visible = len(set(dates))
+    lines = [f"Account value history (last ~{days_visible} days, {len(recent)} data points):"]
+    lines.append(f"  Start: {first_val:,.2f}  Now: {last_val:,.2f}  Change: {sign}{chg:,.2f} ({sign}{pct_chg:.1f}%)")
+    lines.append(f"  High: {high_val:,.2f}  Low: {low_val:,.2f}")
+    return "\n".join(lines) + "\n"
 
 
 def _try_parse_news_request(text: str) -> list[str] | None:
@@ -326,10 +357,11 @@ class GeminiClient:
             history_block = (
                 f"\n\nPrevious chat history (for context):\n{history}\n" if history else ""
             )
+            acct_history = _summarize_account_history()
             full = (
                 f"{now}"
                 f"Portfolio snapshot (holdings, prices, gain/loss):\n{summary}"
-                f"{txn_block}{history_block}\n\n{_ASK_NEWS_INSTR}\n\nUser question: {prompt}"
+                f"{txn_block}{acct_history}{history_block}\n\n{_ASK_NEWS_INSTR}\n\nUser question: {prompt}"
             )
             self._msgs_since_portfolio = 0
         else:

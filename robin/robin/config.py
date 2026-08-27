@@ -12,6 +12,9 @@ GEMINI_KEY_FILE = Path(
     os.environ.get("GEMINI_KEY_FILE", str(Path.home() / "gemini_free_api_key" / "key.txt"))
 )
 ROBINHOOD_SESSION_PATH = DATA_DIR / "rh_session.json"
+ACCOUNT_HISTORY_PATH = DATA_DIR / "account_history.json"
+
+ROBIN_ACCOUNT_NUMBER = os.environ.get("ROBIN_ACCOUNT_NUMBER", "")
 
 READ_ONLY = True
 

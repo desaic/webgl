@@ -1,7 +1,191 @@
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const usdShort = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const pct = (v) => (v == null || isNaN(v) ? "—" : (v >= 0 ? "+" : "") + v.toFixed(2) + "%");
 
 function cls(v) { return v == null ? "" : v > 0 ? "pos" : v < 0 ? "neg" : ""; }
+
+let chartData = [];
+
+async function loadChart() {
+  try {
+    const raw = await getJSON("/api/history");
+    const series = [];
+    const keys = Object.keys(raw).sort();
+    const cutoff = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+    for (const k of keys) {
+      if (k < cutoff) continue;
+      for (const [ts, val] of raw[k]) series.push([ts, val]);
+    }
+    chartData = series;
+  } catch (e) { chartData = []; }
+  drawChart();
+}
+
+function drawChart() {
+  const canvas = document.getElementById("history-chart");
+  if (!canvas) return;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = rect.width * dpr;
+  canvas.height = 260 * dpr;
+  canvas.style.width = rect.width + "px";
+  canvas.style.height = "260px";
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  const w = rect.width;
+  const h = 260;
+
+  const isLight = document.body.classList.contains("light");
+  const bg = isLight ? "#f2efe9" : "#161b22";
+  const fg = isLight ? "#1a1a1a" : "#c9d1d9";
+  const muted = isLight ? "#6b6b6b" : "#8b949e";
+  const accent = isLight ? "#2563eb" : "#58a6ff";
+  const pos = isLight ? "#2d7a3e" : "#3fb950";
+  const negColor = isLight ? "#c0392b" : "#f85149";
+
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, w, h);
+
+  if (chartData.length < 2) {
+    ctx.fillStyle = muted;
+    ctx.font = "14px ui-sans-serif, system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("No history yet — data appears after 5-min polls", w / 2, h / 2);
+    return;
+  }
+
+  const pad = { top: 12, right: 16, bottom: 30, left: 60 };
+  const pw = w - pad.left - pad.right;
+  const ph = h - pad.top - pad.bottom;
+
+  const tvals = chartData.map(d => d[1]);
+  let minVal = Math.min(...tvals);
+  let maxVal = Math.max(...tvals);
+  const spread = maxVal - minVal || 1;
+  minVal -= spread * 0.05;
+  maxVal += spread * 0.05;
+
+  const xScale = (i) => pad.left + (i / (chartData.length - 1)) * pw;
+  const yScale = (v) => pad.top + ph - ((v - minVal) / (maxVal - minVal)) * ph;
+
+  const lastVal = tvals[tvals.length - 1];
+  const firstVal = tvals[0];
+  const trend = lastVal > firstVal ? pos : lastVal < firstVal ? negColor : muted;
+  const pctChg = firstVal ? ((lastVal - firstVal) / firstVal) * 100 : 0;
+
+  ctx.strokeStyle = muted;
+  ctx.lineWidth = 0.5;
+  const gridLines = 5;
+  for (let i = 0; i <= gridLines; i++) {
+    const v = minVal + (maxVal - minVal) * (i / gridLines);
+    const y = yScale(v);
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(w - pad.right, y);
+    ctx.stroke();
+    ctx.fillStyle = muted;
+    ctx.font = "10px ui-monospace, monospace";
+    ctx.textAlign = "right";
+    ctx.fillText(usdShort.format(v), pad.left - 6, y + 4);
+  }
+
+  const dateLabels = [];
+  const tickMap = new Map();
+  for (const [ts] of chartData) {
+    const d = ts.slice(0, 10);
+    if (tickMap.has(d)) continue;
+    tickMap.set(d, chartData.findIndex(([t]) => t.slice(0, 10) === d));
+  }
+  const days = [...tickMap.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  const skip = Math.max(1, Math.floor(days.length / 6));
+  for (let i = 0; i < days.length; i += skip) {
+    dateLabels.push({ date: days[i][0], idx: days[i][1] });
+  }
+  if (dateLabels.length === 0 || dateLabels[dateLabels.length - 1].idx !== chartData.length - 1) {
+    dateLabels.push({ date: chartData[chartData.length - 1][0].slice(0, 10), idx: chartData.length - 1 });
+  }
+
+  ctx.font = "10px ui-sans-serif, system-ui, sans-serif";
+  for (const dl of dateLabels) {
+    const x = xScale(dl.idx);
+    const d = new Date(dl.date + "T00:00:00");
+    ctx.fillStyle = muted;
+    ctx.textAlign = "center";
+    ctx.fillText(d.toLocaleDateString(undefined, { month: "short", day: "numeric" }), x, h - 4);
+  }
+
+  const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ph);
+  grad.addColorStop(0, trend === pos ? "rgba(63,185,80,0.15)" : "rgba(248,81,73,0.15)");
+  grad.addColorStop(1, "rgba(0,0,0,0)");
+
+  ctx.beginPath();
+  ctx.moveTo(xScale(0), yScale(tvals[0]));
+  for (let i = 1; i < tvals.length; i++) {
+    ctx.lineTo(xScale(i), yScale(tvals[i]));
+  }
+  ctx.strokeStyle = trend;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.lineTo(xScale(tvals.length - 1), pad.top + ph);
+  ctx.lineTo(xScale(0), pad.top + ph);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  const legendDiv = canvas.parentElement.querySelector(".chart-legend");
+  if (!legendDiv) {
+    const div = document.createElement("div");
+    div.className = "chart-legend";
+    const sign = pctChg >= 0 ? "+" : "";
+    div.innerHTML = `<span><span class="dot val"></span> ${usd.format(lastVal)}</span><span style="color:${trend}">${sign}${usd.format(lastVal - firstVal)} (${sign}${pctChg.toFixed(1)}%)</span>`;
+    canvas.parentElement.appendChild(div);
+  } else {
+    const sign = pctChg >= 0 ? "+" : "";
+    legendDiv.innerHTML = `<span><span class="dot val"></span> ${usd.format(lastVal)}</span><span style="color:${trend}">${sign}${usd.format(lastVal - firstVal)} (${sign}${pctChg.toFixed(1)}%)</span>`;
+  }
+
+  canvas._chartMeta = { pad, xScale, yScale, w, h, tvals, minVal, maxVal };
+}
+
+let tooltip = null;
+function ensureTooltip() {
+  if (!tooltip) {
+    tooltip = document.createElement("div");
+    tooltip.className = "chart-tooltip";
+    document.querySelector(".chart-container").appendChild(tooltip);
+  }
+  return tooltip;
+}
+
+document.getElementById("history-chart").addEventListener("mousemove", function(e) {
+  const meta = this._chartMeta;
+  if (!meta || chartData.length < 2) return;
+  const rect = this.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const { pad, xScale, tvals } = meta;
+  if (mx < pad.left || mx > meta.w - pad.right) { ensureTooltip().style.display = "none"; return; }
+
+  const norm = (mx - pad.left) / (meta.w - pad.left - pad.right);
+  const idx = Math.round(norm * (chartData.length - 1));
+  const clamped = Math.max(0, Math.min(idx, chartData.length - 1));
+  const [ts, val] = chartData[clamped];
+  const d = new Date(ts);
+  const tip = ensureTooltip();
+  tip.style.display = "block";
+  tip.innerHTML = `<div class="tooltip-date">${d.toLocaleString()}</div><div class="tooltip-val">${usd.format(val)}</div>`;
+  const x = xScale(clamped);
+  tip.style.left = (x - tip.offsetWidth / 2) + "px";
+  tip.style.top = (pad.top - 40) + "px";
+});
+
+document.getElementById("history-chart").addEventListener("mouseleave", function() {
+  if (tooltip) tooltip.style.display = "none";
+});
+
+window.addEventListener("resize", drawChart);
+
 
 function setStatus(s) {
   const el = document.getElementById("status");
@@ -122,6 +306,7 @@ async function refresh() {
     setStatus(s); renderPortfolio(p); renderScripts(sc);
     document.getElementById("events").innerHTML = "";
     e.reverse().forEach(renderEvent);
+    loadChart();
   } catch (err) { console.error(err); }
 }
 

@@ -121,7 +121,7 @@ class RobinhoodClient:
         self.prices = PublicPriceSource()
         self.mcp = RobinhoodMCPClient()
         self._account_number: str | None = None
-        self._positions_cache: tuple[float, list[dict[str, Any]], dict[str, float]] = (0.0, [], {})
+        self._positions_cache: tuple[float, list[dict[str, Any]], dict[str, Any]] = (0.0, [], {})
         self._options_cache: tuple[float, list[dict[str, Any]]] = (0.0, [])
         self._watchlist_cache: tuple[float, list[dict[str, Any]]] = (0.0, [])
         self._positions_ttl = float(POSITIONS_TTL_SECONDS)
@@ -243,21 +243,63 @@ class RobinhoodClient:
             mode="simulate",
         )
 
+    def _probe_account_positions(self, account_number: str) -> int:
+        """Return the number of open equity positions for an account (or -1 on error)."""
+        try:
+            result = self.mcp.call_tool(
+                "get_equity_positions", {"account_number": account_number}
+            )
+            data = result.get("data", result) if isinstance(result, dict) else {}
+            positions = data.get("positions", []) if isinstance(data, dict) else []
+            if positions:
+                first = positions[0]
+                logger.info("account %s probe: %d positions, sample keys=%s",
+                             account_number, len(positions), list(first.keys())[:15])
+            else:
+                logger.info("account %s probe: 0 positions", account_number)
+            return len(positions)
+        except Exception as e:
+            logger.info("account %s probe failed: %s", account_number, e)
+            return -1
+
     def _get_account_number(self) -> str:
+        from robin.config import ROBIN_ACCOUNT_NUMBER
+
         if self._account_number:
+            return self._account_number
+        if ROBIN_ACCOUNT_NUMBER:
+            self._account_number = ROBIN_ACCOUNT_NUMBER
+            logger.info("using account from ROBIN_ACCOUNT_NUMBER env: %s", self._account_number)
             return self._account_number
         result = self.mcp.call_tool("get_accounts")
         accounts = result.get("data", {}).get("accounts", []) if isinstance(result, dict) else []
+        names = [(a.get("account_number"), a.get("is_default"), a.get("agentic_allowed"), a.get("name", "")) for a in accounts]
+        logger.info("available accounts: %s", names)
+
+        candidates = [a for a in accounts if a.get("agentic_allowed")]
+        if not candidates:
+            candidates = accounts
+
+        for acc in candidates:
+            num = acc["account_number"]
+            count = self._probe_account_positions(num)
+            if count > 0:
+                self._account_number = num
+                logger.info("selected account %s with %d positions", num, count)
+                return self._account_number
+
         for acc in accounts:
             if acc.get("is_default"):
                 self._account_number = acc["account_number"]
+                logger.info("fallback to default account: %s", self._account_number)
                 return self._account_number
         if accounts:
             self._account_number = accounts[0]["account_number"]
+            logger.info("fallback to first account: %s", self._account_number)
             return self._account_number
         raise MCPError("no accounts found")
 
-    def _load_positions(self) -> tuple[list[dict[str, Any]], dict[str, float]]:
+    def _load_positions(self) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         now = time.time()
         cached_at, cached_rows, cached_account = self._positions_cache
         if cached_rows and (now - cached_at) < self._positions_ttl:
@@ -285,6 +327,9 @@ class RobinhoodClient:
         acct_data = acct_result.get("data", {}) if isinstance(acct_result, dict) else {}
         bp = acct_data.get("buying_power", {})
         account = {
+            "total_value": _f(acct_data.get("total_value")),
+            "equity_value": _f(acct_data.get("equity_value")),
+            "options_value": _f(acct_data.get("options_value")),
             "cash": _f(acct_data.get("cash")),
             "buying_power": _f(bp.get("buying_power") if isinstance(bp, dict) else bp),
             "unsettled_funds": 0.0,
@@ -480,7 +525,7 @@ class RobinhoodClient:
                 h.equity_pct = round((h.market_value / total_mv) * 100, 2) if total_mv else 0.0
             return Portfolio(
                 holdings=holdings,
-                total_market_value=round(total_mv, 2),
+                total_market_value=old.get("total_market_value", round(total_mv, 2)),
                 total_cost=round(total_cost, 2),
                 total_unrealized_pl=round(total_mv - total_cost, 2),
                 total_unrealized_pl_pct=(
@@ -588,12 +633,13 @@ class RobinhoodClient:
 
         return Portfolio(
             holdings=holdings, options=options, watchlist=watchlist,
-            total_market_value=round(total_mv, 2), total_cost=round(total_cost, 2),
+            total_market_value=_f(account.get("total_value")),
+            total_cost=round(total_cost, 2),
             total_unrealized_pl=round(total_mv - total_cost, 2),
             total_unrealized_pl_pct=round(((total_mv - total_cost) / total_cost) * 100, 2)
             if total_cost else 0.0,
-            cash=account.get("cash", 0.0), buying_power=account.get("buying_power", 0.0),
-            unsettled_funds=account.get("unsettled_funds", 0.0), day_pl=round(day_pl, 2),
+            cash=_f(account.get("cash")), buying_power=_f(account.get("buying_power")),
+            unsettled_funds=_f(account.get("unsettled_funds")), day_pl=round(day_pl, 2),
             extended_hours=False, updated_at=datetime.now(UTC).isoformat(), mode="real",
         )
 
@@ -663,15 +709,15 @@ class RobinhoodClient:
             holdings=holdings,
             options=options,
             watchlist=watchlist,
-            total_market_value=round(total_mv, 2),
+            total_market_value=_f(account.get("total_value")),
             total_cost=round(total_cost, 2),
             total_unrealized_pl=round(total_mv - total_cost, 2),
             total_unrealized_pl_pct=round(((total_mv - total_cost) / total_cost) * 100, 2)
             if total_cost
             else 0.0,
-            cash=account.get("cash", 0.0),
-            buying_power=account.get("buying_power", 0.0),
-            unsettled_funds=account.get("unsettled_funds", 0.0),
+            cash=_f(account.get("cash")),
+            buying_power=_f(account.get("buying_power")),
+            unsettled_funds=_f(account.get("unsettled_funds")),
             day_pl=round(day_pl, 2),
             extended_hours=False,
             updated_at=datetime.now(UTC).isoformat(),
@@ -706,10 +752,9 @@ class RobinhoodClient:
             holding.day_pl = d["day_pl"]
             holding.day_pl_pct = d["day_pl_pct"]
         self.prices.flush_cache()
-        # Recalculate totals
+        # Recalculate equity-only totals (P/L, cost basis from holdings only)
         total_mv = sum(h.market_value for h in portfolio.holdings)
         total_cost = sum(h.total_cost for h in portfolio.holdings)
-        portfolio.total_market_value = round(total_mv, 2)
         portfolio.total_cost = round(total_cost, 2)
         portfolio.total_unrealized_pl = round(total_mv - total_cost, 2)
         portfolio.total_unrealized_pl_pct = (

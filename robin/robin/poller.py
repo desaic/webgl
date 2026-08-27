@@ -8,6 +8,7 @@ from typing import Any
 import anyio
 
 from robin.config import POLL_INTERVAL_SECONDS, logger
+from robin.history import record_account_value
 from robin.market_hours import is_market_open, next_market_open, seconds_until_open
 from robin.notifier import Event, EventBus
 from robin.rh_client import RobinhoodClient
@@ -103,6 +104,11 @@ class Poller:
             self.bus.publish_raw("portfolio", self.latest_portfolio)
 
         portfolio_dict = self.latest_portfolio
+
+        try:
+            record_account_value(portfolio_dict["total_market_value"])
+        except Exception:
+            pass
 
         events: list[Event] = []
         if self.strategy.scripts:

@@ -30,6 +30,7 @@ from robin.config import (
     setup_logging,
 )
 from robin.gemini import GeminiClient, GeminiError
+from robin.history import load_account_history, record_account_value
 from robin.news import NewsSource
 from robin.notifier import EventBus
 from robin.poller import Poller
@@ -191,8 +192,19 @@ async def portfolio() -> dict[str, Any]:
         p = await anyio.to_thread.run_sync(
             state.client.get_portfolio_cached, state.poller.latest_portfolio
         )
-        return p.to_dict()
-    return state.poller.latest_portfolio
+        result = p.to_dict()
+    else:
+        result = state.poller.latest_portfolio
+    try:
+        record_account_value(result["total_market_value"])
+    except Exception:
+        pass
+    return result
+
+
+@app.get("/api/history")
+async def history() -> dict[str, list[list]]:
+    return load_account_history()
 
 
 @app.get("/api/holdings")
