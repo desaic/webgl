@@ -60,11 +60,8 @@ function drawChart() {
   const ph = h - pad.top - pad.bottom;
 
   const tvals = chartData.map(d => d[1]);
-  let minVal = Math.min(...tvals);
   let maxVal = Math.max(...tvals);
-  const spread = maxVal - minVal || 1;
-  minVal -= spread * 0.05;
-  maxVal += spread * 0.05;
+  let minVal = Math.max(Math.min(...tvals), 0.8 * maxVal);
 
   const xScale = (i) => pad.left + (i / (chartData.length - 1)) * pw;
   const yScale = (v) => pad.top + ph - ((v - minVal) / (maxVal - minVal)) * ph;
