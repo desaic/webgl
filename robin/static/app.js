@@ -62,6 +62,7 @@ function drawChart() {
   const tvals = chartData.map(d => d[1]);
   let maxVal = Math.max(...tvals);
   let minVal = Math.max(Math.min(...tvals), 0.8 * maxVal);
+  minVal = Math.min(minVal, 0.95 * maxVal);
 
   const xScale = (i) => pad.left + (i / (chartData.length - 1)) * pw;
   const yScale = (v) => pad.top + ph - ((v - minVal) / (maxVal - minVal)) * ph;
