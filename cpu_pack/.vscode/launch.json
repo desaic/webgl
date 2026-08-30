@@ -33,6 +33,28 @@
             ]
         },
         {
+            "name": "(msvc) Launch",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/Debug/cpu_pack.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "preLaunchTask": "cmake: build (windows)"
+        },
+        {
+            "name": "(msvc) melon",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/Debug/melone_test.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "preLaunchTask": "cmake: build (windows)"
+        },
+        {
             "name": "(gdb) melon",
             "type": "cppdbg",
             "request": "launch",

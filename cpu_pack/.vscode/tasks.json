@@ -12,11 +12,40 @@
                 "$(nproc)"
             ],
             "group": {
-                "kind": "build",
-                "isDefault": true
+                "kind": "build"
             },
             "problemMatcher": [
                 "$gcc"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": false
+            }
+        }
+        ,
+        {
+            "label": "cmake: build (windows)",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "${workspaceFolder}/build",
+                "--parallel",
+                "$env:NUMBER_OF_PROCESSORS"
+            ],
+            "options": {
+                "shell": {
+                    "executable": "powershell.exe",
+                    "args": ["-NoProfile", "-Command"]
+                }
+            },
+            "group": "build",
+            "problemMatcher": [
+                "$msCompile"
             ],
             "presentation": {
                 "echo": true,

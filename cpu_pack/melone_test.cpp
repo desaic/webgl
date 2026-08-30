@@ -7,12 +7,10 @@
 #include <iostream>
 #include <map>
 
-// Test case: pack fruits from fruits_1 into melone_two.obj as the
-// container, using medium large (6-20 cm), medium small (3-6 cm), and
-// small (<=3 cm) groups. The large (>20 cm) group is skipped since the
-// ~14 cm melon container cannot hold them. The container mesh itself is
-// excluded from the fruit list so it is not packed inside itself. Small
-// fruits use the original lattice-walk strategy (useInnerContainer, inwards).
+// Test case: melone_two.obj container
+// using medium large (6-20 cm), medium small (3-6 cm), and
+// small (<=3 cm) groups. Small
+// fruits use the original voxel strategy (useInnerContainer, inwards).
 //
 //   ./melone_test
 //
@@ -22,9 +20,12 @@ int main() {
   std::cout.setf(std::ios::unitbuf);
 
   PackingConfig cfg;
+#ifdef _WIN32
+  cfg.dataDir = "F:/meshes/fruit_hand/";
+#else
   // cfg.dataDir = "/media/desaic/ssd2/meshes/fruit_hand/";
-  //desktop
   cfg.dataDir = "/media/desaic/WD/meshes/fruit_hand/";
+#endif
   cfg.fruitSubdir = "fruits_1";
   cfg.containerFile = "fruits_1/melone_two.obj";
   cfg.innerContainerFile = "hands/finger_inner4.8m.stl";
@@ -85,11 +86,8 @@ int main() {
               });
   }
 
-  // Exclude the container mesh from the fruit groups, and filter out any
-  // fruit whose max extent exceeds the container's -- a 20 cm banana will
-  // never fit inside a 14 cm melon, and a single FindSpot call for a mesh
-  // larger than the container can take minutes because the time check only
-  // fires between items, not during the FFT search.
+  // Exclude the container mesh from the fruit groups
+  // filter out big fruits.
   const std::string containerName = "melone_two";
   float containerExtent = 0.0f;
   for (const auto &s : stats) {
@@ -133,7 +131,7 @@ int main() {
   step2.force = Vec3f(-0.1f, 0, 0);
   plan.steps.push_back(step2);
 
-  // Step 3: small fruits, original lattice-walk strategy. useInnerContainer
+  // Step 3: small fruits, original voxel strategy. useInnerContainer
   // keeps berries out of the deep center, inwards with weak force.
   PackingStep step3;
   step3.names = groups[3];

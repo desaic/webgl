@@ -106,10 +106,6 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
     LOGI("\n");
   }
 
-  // steps hold different numbers of kinds, so a startItem that is valid for
-  // one step can be past the end of another. left unclamped the item loop
-  // body never runs and the step spins through step.count rounds placing
-  // nothing.
   unsigned startItem = cfg.startItem;
   if (startItem >= numItems) {
     LOGI("  startItem " << startItem << " past the last of " << numItems
@@ -118,9 +114,7 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
     startItem = numItems - 1;
   }
 
-  // a saturated container burns thousands of failed searches without a
-  // single placement, and the only output used to come from placeItem, so
-  // that case looked exactly like a hang. these counters print regardless
+  // print counters print regardless
   // of whether anything is being placed.
   unsigned long searches = 0;
   unsigned placedCount = 0;
@@ -307,12 +301,6 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
                             : 0.0)
                     << " searches per placement\n");
 
-  // The interval saves above only fire when the round counter crosses a
-  // multiple of trajSaveInterval/packSaveInterval, so a step that places
-  // items but never reaches that many rounds (e.g. a nearly full
-  // container that retires every kind within a handful of rounds) never
-  // saves anything. Do one unconditional save of the current state here
-  // so a step's progress is never silently lost.
   if (placedCount > 0) {
     if (cfg.trajSaveInterval > 0) {
       scene.SaveTrajectories(scene.trajFile + "_final.txt");
@@ -573,19 +561,7 @@ struct PointGrid {
 // Extract rays whose depth exceeds the median depth of their neighbors
 // by more than deepThreshold. Returns indices of deep rays.
 //
-// A raw median-vs-neighbors test misfires next to a smooth, big, convex
-// surface (e.g. a kiwi) that already has small fruit seeded against part
-// of it: samples right behind the small fruit are shallow (blocked by
-// it), while samples just past its silhouette see straight through to
-// the big surface and read a much larger, but perfectly normal, depth.
-// That forms two separate populations in one 1 cm neighborhood, and the
-// shallow one drags the median down enough to flag the far population as
-// "deep" even though it is not an isolated pocket -- several neighbors
-// share essentially the same depth, i.e. it is a broad patch of the big
-// surface, not a narrow crevice. A genuine crevice bottom is a local
-// outlier: few or no neighbors share its depth, since the pocket is
-// narrow and most surrounding rays stop at the pocket's (shallower)
-// walls. So a ray is only flagged when it clears the neighbor median by
+// a ray is only flagged when it clears the neighbor median by
 // deepThreshold AND is not corroborated by at least minPatchNeighbors
 // other rays within patchDepthTol of its own depth.
 std::vector<unsigned> FindDeepRays(const std::vector<Vec3f> &origins,
@@ -631,12 +607,9 @@ std::vector<unsigned> FindDeepRays(const std::vector<Vec3f> &origins,
   return deepRays;
 }
 
-// Shoots one instance along each deep ray direction, starting at the ray
-// origin (outside the container by containerSlack), and settles it with
-// the rigid body solver. Cycles round robin through itemIndices so the
-// seeded fruits are a mix of kinds, not just the smallest one. Skips a
-// ray if it lands too close to an already-seeded position, to avoid
-// stacking many fruits into one mouth of a crevice. Returns the number
+// Shoots one instance along each deep ray direction. Skips a
+// ray if it lands too close to an already-seeded position.
+// Returns the number
 // of instances placed.
 unsigned SeedDeepCrevices(PackingScene &scene, const std::vector<Vec3f> &origins,
                           const std::vector<Vec3f> &ends,
@@ -835,13 +808,7 @@ void DebugDeepRayNeighbors(PackingScene &scene, const Vec3f &targetPos) {
   std::cout << "=== END DEBUG DEEP RAY ===\n\n";
 }
 
-// Raycasting crevice pass for the small-fruit group: computes surface
-// depths (see ComputeSurfaceDepths above), finds deep rays, and shoots
-// one small fruit along each deep ray direction to plug it, settling with
-// the rigid body solver. Mutates scene by placing instances. Meant to run
-// once, after every other PackStep group has already been placed, so the
-// depths it measures reflect the final occupancy, not a half-empty
-// container.
+// Raycasting crevice, finds deep rays. Mutates scene by placing instances
 void SeedSmallFruitCrevices(PackingScene &scene,
                             const std::vector<std::string> &smallItemNames) {
   std::vector<Vec3f> deepOrigins;
@@ -888,8 +855,7 @@ void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig
 
   scene.SaveTrajectories(scene.trajFile + "_before_ray.txt");
   scene.SaveInstances(scene.packFile + "_before_ray.txt");
-  // raycasting crevice pass runs last, after every other group has been
-  // placed, so the depths it measures reflect the final occupancy. it
+  // raycasting crevice pass 
   // targets the same small-fruit group as the last PackStep.
   SeedSmallFruitCrevices(scene, plan.groups.empty() ? std::vector<std::string>()
                                                      : plan.groups.back());
