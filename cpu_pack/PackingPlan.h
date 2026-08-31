@@ -14,6 +14,12 @@ struct PackingStep {
 
     Vec3f force;
 
+    // weight for force. such as bias towards -x.
+    float biasW = 1.0f;
+
+    // weight for biasForce + sdfForce against attraction towards other objects.
+    float forceW = 0.5f;
+
     unsigned count = 0;
     // pack towards inside or outside of container.
     bool outwards = true;

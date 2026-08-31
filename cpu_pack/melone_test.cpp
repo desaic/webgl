@@ -41,7 +41,7 @@ int main() {
   cfg.startStep = 3;
   cfg.startItem = 0;
 
-  cfg.resume = true;
+  cfg.resume = false;
   cfg.resumePackFile = "melon_test_36.txt";
   cfg.trajSaveInterval = 10;
   cfg.packSaveInterval = 20;
@@ -113,7 +113,8 @@ int main() {
   PackingStep step0;
   step0.names = groups[1];
   step0.count = 20;
-  step0.force = Vec3f(-10, 0, 0);
+  step0.force = Vec3f(-1, 0, 0);
+  step0.biasW = 10;
   plan.steps.push_back(step0);
 
   // Step 1: medium large full fill, outwards.
@@ -123,12 +124,13 @@ int main() {
   step1.outwards = true;
   plan.steps.push_back(step1);
 
-  // Step 2: medium small, inwards, weak force.
+  // Step 2: medium small, inwards, weak bias force.
   PackingStep step2;
   step2.names = groups[2];
   step2.count = LARGE_INT;
   step2.outwards = false;
-  step2.force = Vec3f(-0.1f, 0, 0);
+  step2.force = Vec3f(1.0f, 0, 0);
+  step2.biasW = 0.1f;
   plan.steps.push_back(step2);
 
   // Step 3: small fruits, original voxel strategy. useInnerContainer
@@ -138,8 +140,10 @@ int main() {
   step3.outwards = false;
   step3.useInnerContainer = true;
   step3.count = LARGE_INT;
-  step3.force = Vec3f(-0.1f, 0, 0);
-  plan.steps.push_back(step3);
+  step3.biasW = 0.1f;
+
+  //skip step 3 entirely to use raycasting instead
+  //plan.steps.push_back(step3);
 
   if (plan.steps.empty()) {
     std::cout << "empty packing plan. nothing to do.\n";

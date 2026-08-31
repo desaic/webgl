@@ -54,12 +54,18 @@ class PackingScene {
     unsigned Put(unsigned itemIdx, const RigidTransform &tran);
 
     /// heuristic force direction
-    Vec3f ForceDirection(unsigned itemIdx, const Vec3f & gravity, float sdfFactor, const RigidTransform & tran);
+    Vec3f ForceDirection(
+        unsigned itemIdx, const Vec3f &gravity, float gravityWeight, float sdfFactor, const RigidTransform &tran);
     /// @brief compute tighter packing location by moving in a given direction.
     /// @param itemIdx 
     /// @param tran 
-    /// @return 
-    RigidTransform Nudge(unsigned itemIdx, const RigidTransform & tran, const Vec3f & dir, std::vector<RigidTransform> & trajectory);
+    /// @param dirWeight betwee 0-1, weight of dir vs dynamic attraction force.
+    /// @return
+    RigidTransform Nudge(unsigned itemIdx,
+                         const RigidTransform &tran,
+                         const Vec3f &dir,
+                         float dirWeight,
+                         std::vector<RigidTransform> &trajectory);
 
     RigidTransform NudgeConstrained(unsigned itemIdx, const RigidTransform & tran,
                                     const Vec3f & dir0, const PackingConstraints & constraints,

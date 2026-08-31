@@ -62,14 +62,12 @@ unsigned PackingScene::Put(unsigned itemIdx, const RigidTransform &tran) {
 
 Vec3f PackingScene::ForceDirection(unsigned itemIdx,
                                    const Vec3f &gravity,
+                                   float gravityWeight,
                                    float sdfFactor,
-                                   const RigidTransform &tran) {
-  Vec3f dir0 = gravity;
-  // (0, 1)
-  float dir0Weight = dir0.norm();
+                                   const RigidTransform &tran) {    
   // assume object is centered at origin in reference space.
   Vec3f sdfDir = sdf->GetCoarseGrad(tran.position);
-  Vec3f dir = dir0 + (1 - dir0Weight) * (sdfFactor * sdfDir);
+  Vec3f dir = gravityWeight * gravity + (1 - gravityWeight) * (sdfFactor * sdfDir);
   dir.normalize();
   return dir;
 }
@@ -629,9 +627,42 @@ std::string RigidBodyStateToString(const std::vector<RigidBodyState> & debugStep
   return out.str();
 }
 
+struct RBSimParams {
+  size_t steps = 100;
+  float damping = 0.85f;
+  float pgsPasses = 8;
+  float minVel = 1e-4f;
+  unsigned contactGatherInterval = 1;
+  RBSimParams(){}
+};
+
+//heuristics
+void SetSimParams(RBSimParams & params, float minBoxSize){
+  if (minBoxSize < 3.0f) {
+    params.steps = 30;
+    params.damping = 0.82f;
+    params.pgsPasses = 5;
+    params.minVel = 1e-3f;
+    params.contactGatherInterval = 1;
+  } else if (minBoxSize < 5.0f) {
+    params.steps = 50;
+    params.damping = 0.84f;
+    params.pgsPasses = 6;
+    params.minVel = 1e-3f;
+    params.contactGatherInterval = 2;
+  } else if (minBoxSize < 10.0f) {
+    params.steps = 80;
+    params.damping = 0.85f;
+    params.pgsPasses = 7;
+    params.minVel = 1e-3f;
+    params.contactGatherInterval = 1;
+  } 
+}
+
 RigidTransform PackingScene::Nudge(unsigned itemIdx,
                                    const RigidTransform &tran,
                                    const Vec3f &dir0,
+                                   float dirWeight,
                                    std::vector<RigidTransform> &trajectory) {
   PROFILE_SCOPE("nudge.total");
   RigidTransform tOut = tran;
@@ -658,36 +689,8 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
 
   // Simulation parameters -- scaled by fruit size.
   // Small fruits need fewer steps to settle and coarser approximation is fine.
-  size_t maxOptimizationSteps;
-  float damping;
-  float pgsPasses;
-  float earlyExitVelSq;
-  unsigned contactGatherInterval;
-  if (minExtent < 3.0f) {
-    maxOptimizationSteps = 30;
-    damping = 0.82f;
-    pgsPasses = 5;
-    earlyExitVelSq = 1e-3f;
-    contactGatherInterval = 1;
-  } else if (minExtent < 5.0f) {
-    maxOptimizationSteps = 50;
-    damping = 0.84f;
-    pgsPasses = 6;
-    earlyExitVelSq = 1e-3f;
-    contactGatherInterval = 2;
-  } else if (minExtent < 10.0f) {
-    maxOptimizationSteps = 80;
-    damping = 0.85f;
-    pgsPasses = 7;
-    earlyExitVelSq = 1e-3f;
-    contactGatherInterval = 1;
-  } else {
-    maxOptimizationSteps = 100;
-    damping = 0.85f;
-    pgsPasses = 8;
-    earlyExitVelSq = 1e-4f;
-    contactGatherInterval = 1;
-  }
+  RBSimParams simParams;
+  SetSimParams(simParams, minExtent);
   float dt = 1.0f / 60.0f;          // Fixed time step
   float nudgeAcceleration = 200.0f; // Accelerate at 200 cm/s^2 (which is 2 m/s^2)
   // attraction towards contacting object.
@@ -737,15 +740,14 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   double gatherTime = 0, pgsTime = 0, broadTime = 0;
   unsigned maxGrids = 0;
 
-  for (size_t step = 0; step < maxOptimizationSteps; step++) {
+  for (size_t step = 0; step < simParams.steps; step++) {
     Utils::Stopwatch swStep;
     swStep.Start();
     Matrix3f currentRotMat = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
     auto Rinv = currentRotMat.transposed();
 
     // 1. Apply External Forces
-    float dir0Weight = 1.0f - step/float(maxOptimizationSteps);
-    Vec3f forceDir = dir0Weight *dir0 + (1-dir0Weight) * attractionDir;
+    Vec3f forceDir = dirWeight *dir0 + (1-dirWeight) * attractionDir;
     forceDir.normalize();
     linearVel += (forceDir * nudgeAcceleration) * dt;
 
@@ -793,7 +795,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
 
     // 3. Narrow Phase Contact Gathering (throttled for small fruits)
     std::vector<Contact> contacts;
-    if (step % contactGatherInterval == 0) {
+    if (step % simParams.contactGatherInterval == 0) {
       Utils::Stopwatch swGather;
       swGather.Start();
       PROFILE_SCOPE("nudge.narrowphase");
@@ -828,7 +830,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     {
       PROFILE_SCOPE("nudge.pgs_solve");
       SolveContactConstraintsPGS(contacts, currentT, currentRotMat, Rinv, invMass, invI_local,
-                                  eps, (int)pgsPasses, dt, linearVel, angularVel);
+                                  eps, (int)simParams.pgsPasses, dt, linearVel, angularVel);
     }
     pgsTime += swPGS.ElapsedMS();
 
@@ -840,8 +842,8 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     currentQ.normalize();
 
     // Apply damping so the fruit settles down and energy bleeds out
-    linearVel *= damping;
-    angularVel *= damping;
+    linearVel *= simParams.damping;
+    angularVel *= simParams.damping;
 
     // Record debug step data
     RigidBodyState dStep;
@@ -857,7 +859,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     trajectory.push_back(RigidTransform(currentT, Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w())));
     
     // Early exit if the fruit has completely settled into a snug spot
-    if (linearVel.dot(linearVel) < earlyExitVelSq && angularVel.dot(angularVel) < earlyExitVelSq) {
+    if (linearVel.dot(linearVel) < simParams.minVel && angularVel.dot(angularVel) <  simParams.minVel) {
         break; 
     }
   }

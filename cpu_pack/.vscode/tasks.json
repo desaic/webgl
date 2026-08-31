@@ -34,6 +34,8 @@
             "args": [
                 "--build",
                 "${workspaceFolder}/build",
+                "--config",
+                "${command:cmake.buildType}",
                 "--parallel",
                 "$env:NUMBER_OF_PROCESSORS"
             ],

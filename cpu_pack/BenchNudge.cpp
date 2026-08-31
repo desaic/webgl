@@ -55,9 +55,9 @@ void PlaceSweep(BenchScene &bs, const PackingConfig &cfg,
       RigidTransform tran;
       tran.position = pos;
       tran.rotation = RotationMatrixRad(rot[0], rot[1], rot[2]);
-      Vec3f pushDir = scene.ForceDirection(picks[i], Vec3f(-1, 0, 0), 1.0f, tran);
+      Vec3f pushDir = scene.ForceDirection(picks[i], Vec3f(-1, 0, 0), 0.5f, 1.0f, tran);
       std::vector<RigidTransform> trajectory;
-      RigidTransform newTran = scene.Nudge(picks[i], tran, pushDir, trajectory);
+      RigidTransform newTran = scene.Nudge(picks[i], tran, pushDir,0.5f, trajectory);
 
       if (validator != nullptr) {
         ValidationResult vr =

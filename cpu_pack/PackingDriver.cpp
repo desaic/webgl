@@ -162,10 +162,10 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
         RigidTransform tran;
         tran.position = p;
         tran.rotation = RotationMatrixRad(r[0], r[1], r[2]);
-        Vec3f pushDir = scene.ForceDirection(itemIndex, step.force, sdfFactor, tran);
+        Vec3f pushDir = scene.ForceDirection(itemIndex, step.force, step.biasW, sdfFactor, tran);
         double settleStartMs = stepClock.ElapsedMS();
         std::vector<RigidTransform> trajectory;
-        RigidTransform newTran = scene.Nudge(itemIndex, tran, pushDir, trajectory);
+        RigidTransform newTran = scene.Nudge(itemIndex, tran, pushDir, step.forceW, trajectory);
         unsigned instanceId = scene.Put(itemIndex, newTran);
         scene.instances[instanceId].trajectory = trajectory;
         placedCount++;
@@ -609,8 +609,7 @@ std::vector<unsigned> FindDeepRays(const std::vector<Vec3f> &origins,
 
 // Shoots one instance along each deep ray direction. Skips a
 // ray if it lands too close to an already-seeded position.
-// Returns the number
-// of instances placed.
+// Returns the number of instances placed.
 unsigned SeedDeepCrevices(PackingScene &scene, const std::vector<Vec3f> &origins,
                           const std::vector<Vec3f> &ends,
                           const std::vector<unsigned> &itemIndices) {
@@ -649,7 +648,8 @@ unsigned SeedDeepCrevices(PackingScene &scene, const std::vector<Vec3f> &origins
     tran.rotation = RotationMatrixRad(rot[0], rot[1], rot[2]);
 
     std::vector<RigidTransform> trajectory;
-    RigidTransform settled = scene.Nudge(itemIdx, tran, dir, trajectory);
+    float forceW = 0.9f;
+    RigidTransform settled = scene.Nudge(itemIdx, tran, dir, forceW, trajectory);
     unsigned instanceId = scene.Put(itemIdx, settled);
     scene.instances[instanceId].trajectory = trajectory;
     seededPos.push_back(settled.position);

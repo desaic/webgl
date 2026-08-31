@@ -88,9 +88,9 @@ void BenchSmallFruitBatch(BenchContext &ctx) {
       RigidTransform tran;
       tran.position = pos;
       tran.rotation = RotationMatrixRad(rot[0], rot[1], rot[2]);
-      Vec3f pushDir = scene.ForceDirection(itemIdx, Vec3f(-1, 0, 0), 1.0f, tran);
+      Vec3f pushDir = scene.ForceDirection(itemIdx, Vec3f(-1, 0, 0),0.1f, 1.0f, tran);
       std::vector<RigidTransform> trajectory;
-      RigidTransform newTran = scene.Nudge(itemIdx, tran, pushDir, trajectory);
+      RigidTransform newTran = scene.Nudge(itemIdx, tran, pushDir,0.5f, trajectory);
 
       ValidationResult vr = validator.ValidatePlacement(scene, itemIdx, newTran);
       if (!vr.Ok()) {

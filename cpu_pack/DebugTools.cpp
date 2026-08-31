@@ -59,7 +59,7 @@ void DebugNudge(const PackingConfig &cfg) {
   tran.rotation = RotationMatrixRad(0, 0, 0);
   Vec3f pushDir = Vec3f(-1, -1, -1);
   std::vector<RigidTransform> trajectory;
-  RigidTransform newTran = scene.Nudge(0, tran, pushDir, trajectory);
+  RigidTransform newTran = scene.Nudge(0, tran, pushDir,0.5f, trajectory);
   unsigned instanceId = scene.Put(0, newTran);
   scene.instances[instanceId].trajectory = trajectory;
   std::string trajFile = scene.outputFolder + "traj_debug.txt";
