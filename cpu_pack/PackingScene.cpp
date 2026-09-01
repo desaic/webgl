@@ -1165,6 +1165,234 @@ RigidTransform PackingScene::NudgeConstrained(unsigned itemIdx,
   return tOut;
 }
 
+std::vector<CreviceSurface> FindDeepCreviceSurface(
+    const std::vector<SamplePoint> &surfacePoints,
+    const TrigGrid &containerGrid,
+    float maxRayDist,
+    float minDepth,
+    float exclusionDist) {
+
+  std::vector<CreviceSurface> candidates;
+  candidates.reserve(surfacePoints.size() / 4);
+
+  for (const auto &pt : surfacePoints) {
+    float t = maxRayDist;
+    Vec3f n = pt.n;
+    Vec3f origin = pt.x + n * 1e-3f;
+    if (!containerGrid.RayHit(origin, pt.n, maxRayDist, t)) {
+      continue;
+    }
+    if (t < minDepth) {
+      continue;
+    }
+    CreviceSurface cs;
+    cs.pos = pt.x;
+    cs.inwardNormal = pt.n;
+    cs.rayDepth = t;
+    candidates.push_back(cs);
+  }
+
+  // sort deepest first so greedy Poisson-disk keeps the best spots
+  std::sort(candidates.begin(), candidates.end(),
+            [](const CreviceSurface &a, const CreviceSurface &b) {
+              return a.rayDepth > b.rayDepth;
+            });
+
+  // Poisson-disk exclusion via spatial grid (same approach as DownsamplePoints)
+  std::vector<CreviceSurface> result;
+  result.reserve(candidates.size());
+
+  std::unordered_map<int64_t, std::vector<size_t>> spatialGrid;
+  float excl = exclusionDist;
+  float exclSq = excl * excl;
+  auto gridKey = [excl](const Vec3f &p) -> int64_t {
+    int32_t ix = static_cast<int32_t>(std::floor(p[0] / excl));
+    int32_t iy = static_cast<int32_t>(std::floor(p[1] / excl));
+    int32_t iz = static_cast<int32_t>(std::floor(p[2] / excl));
+    return (static_cast<int64_t>(ix) << 40) | (static_cast<int64_t>(iy) << 20) | static_cast<int64_t>(iz);
+  };
+
+  for (const auto &cs : candidates) {
+    bool tooClose = false;
+    int32_t bx = static_cast<int32_t>(std::floor(cs.pos[0] / excl));
+    int32_t by = static_cast<int32_t>(std::floor(cs.pos[1] / excl));
+    int32_t bz = static_cast<int32_t>(std::floor(cs.pos[2] / excl));
+    for (int dx = -1; dx <= 1 && !tooClose; dx++) {
+      for (int dy = -1; dy <= 1 && !tooClose; dy++) {
+        for (int dz = -1; dz <= 1; dz++) {
+          int64_t nk = (static_cast<int64_t>(bx + dx) << 40) |
+                       (static_cast<int64_t>(by + dy) << 20) |
+                       static_cast<int64_t>(bz + dz);
+          auto it = spatialGrid.find(nk);
+          if (it == spatialGrid.end()) continue;
+          for (size_t idx : it->second) {
+            Vec3f d = cs.pos - result[idx].pos;
+            if (d.dot(d) < exclSq) {
+              tooClose = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+    if (!tooClose) {
+      spatialGrid[gridKey(cs.pos)].push_back(result.size());
+      result.push_back(cs);
+    }
+  }
+
+  return result;
+}
+
+RigidTransform PackingScene::NudgeToTarget(unsigned itemIdx,
+                                           const RigidTransform &tran,
+                                           const Vec3f &target,
+                                           std::vector<RigidTransform> &trajectory) {
+  PROFILE_SCOPE("nudge_target.total");
+  RigidTransform tOut = tran;
+
+  const float CONTACT_ANGLE_THRESH_DEG = 20.0f;
+
+  auto &meshInfo = items[itemIdx];
+  Box3f fruitBox = ComputeBBox(meshInfo.mesh.v);
+  Vec3f fruitExtent = fruitBox.vmax - fruitBox.vmin;
+  float minExtent = std::min({fruitExtent[0], fruitExtent[1], fruitExtent[2]});
+  float ds = 0.5f;
+  if (minExtent < 3.0f) {
+    ds = 0.2f;
+  } else if (minExtent < 5.0f) {
+    ds = 0.3f;
+  }
+  float eps = ds * 0.1f;
+  float activeBuffer = ds;
+
+  RBSimParams simParams;
+  SetSimParams(simParams, minExtent);
+  float dt = 1.0f / 60.0f;
+  float nudgeAcceleration = 200.0f;
+  const float MAX_OVERLAP = 0.2f;
+
+  std::vector<SamplePoint> samples;
+  if (meshInfo.samples.empty()) {
+    PROFILE_SCOPE("nudge_target.sample_gen");
+    std::vector<SamplePoint> allFineSamples;
+    float sampleSpacing;
+    float maxOverlap;
+    if (minExtent < 3.0f) {
+      sampleSpacing = std::max(0.2f, minExtent * 0.15f);
+      maxOverlap = 0.0f;
+    } else if (minExtent < 5.0f) {
+      sampleSpacing = std::max(0.15f, minExtent * 0.12f);
+      maxOverlap = 0.1f;
+    } else {
+      sampleSpacing = std::max(0.1f, std::min(ds, minExtent * 0.1f));
+      maxOverlap = MAX_OVERLAP;
+    }
+    SamplePoints(meshInfo.mesh, sampleSpacing, allFineSamples);
+    samples = DownsamplePoints(allFineSamples, sampleSpacing);
+    meshInfo.ComputeSDFCached();
+    MovePointsInward(samples, maxOverlap, meshInfo.sdf);
+    meshInfo.samples = samples;
+  } else {
+    samples = meshInfo.samples;
+  }
+
+  Box3f localBox = fruitBox;
+  Vec3f currentT = tran.position;
+  Quat4f currentQ = Quat4f::fromRotationMatrix(tran.rotation);
+
+  const auto &item = items[itemIdx];
+  float invMass = 1.0f / item.rb.vol;
+  Vec3f invI_local(1.0f / item.rb.inertia(0, 0),
+                   1.0f / item.rb.inertia(1, 1),
+                   1.0f / item.rb.inertia(2, 2));
+
+  Vec3f linearVel(0.0f);
+  Vec3f angularVel(0.0f);
+  std::vector<Contact> prevContacts;
+
+  for (size_t step = 0; step < simParams.steps; step++) {
+    Matrix3f currentRotMat = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
+    auto Rinv = currentRotMat.transposed();
+
+    // spring force toward target
+    Vec3f toTarget = target - currentT;
+    float dist = std::sqrt(toTarget.dot(toTarget));
+    if (dist > 1e-6f) {
+      toTarget *= 1.0f / dist;
+    }
+    linearVel += toTarget * (nudgeAcceleration * dt);
+
+    std::vector<unsigned> intersectingInstances;
+    {
+      PROFILE_SCOPE("nudge_target.broadphase");
+      auto corners = TransformPoints(BoxCorners(localBox), currentRotMat, currentT);
+      Box3f instBox = ComputeBBox(corners);
+      intersectingInstances = broadPhase.GetNearby(instBox, eps + activeBuffer);
+    }
+
+    std::vector<GridInstance> accGrids;
+    for (size_t i = 0; i < intersectingInstances.size(); i++) {
+      unsigned instIdx = intersectingInstances[i];
+      const InstanceInfo &inst = instances[instIdx];
+      auto it = kindGrids.find(inst.itemId);
+      if (it == kindGrids.end()) {
+        PROFILE_SCOPE("nudge_target.triggrid_build");
+        auto newGrid = std::make_shared<TrigGrid>();
+        newGrid->Build(items[inst.itemId].mesh, gridDx);
+        it = kindGrids.emplace(inst.itemId, newGrid).first;
+      }
+      accGrids.push_back(GridInstance::Local(it->second.get(),
+                                             inst.tran.rotation,
+                                             inst.tran.position,
+                                             inst.tran.scale));
+    }
+    accGrids.push_back(GridInstance::World(&containerGrid));
+    if (innerContainerEnabled) {
+      accGrids.push_back(GridInstance::World(&containerInnerGrid));
+    }
+
+    std::vector<Contact> contacts;
+    if (step % simParams.contactGatherInterval == 0) {
+      PROFILE_SCOPE("nudge_target.narrowphase");
+      contacts = GatherActiveContacts(
+          samples, accGrids, currentRotMat, currentT, eps, activeBuffer, CONTACT_ANGLE_THRESH_DEG);
+    } else {
+      contacts = prevContacts;
+    }
+    prevContacts = contacts;
+
+    {
+      PROFILE_SCOPE("nudge_target.pgs_solve");
+      SolveContactConstraintsPGS(contacts, currentT, currentRotMat, Rinv, invMass, invI_local,
+                                 eps, (int)simParams.pgsPasses, dt, linearVel, angularVel);
+    }
+
+    currentT += linearVel * dt;
+    Quat4f q_delta = IntegrateAngularVelocity(angularVel, dt);
+    currentQ = q_delta * currentQ;
+    currentQ.normalize();
+
+    linearVel *= simParams.damping;
+    angularVel *= simParams.damping;
+
+    trajectory.push_back(RigidTransform(currentT,
+        Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w())));
+
+    if (linearVel.dot(linearVel) < simParams.minVel && angularVel.dot(angularVel) < simParams.minVel) {
+      break;
+    }
+  }
+
+  tOut.position = currentT;
+  tOut.rotation = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
+  LOGI("NudgeToTarget " << items[itemIdx].name
+       << " steps=" << trajectory.size()
+       << " pos=(" << currentT[0] << "," << currentT[1] << "," << currentT[2] << ")"
+       << " target=(" << target[0] << "," << target[1] << "," << target[2] << ")\n");
+  return tOut;
+}
+
 static bool ReadVec3f(std::istream &in, Vec3f &v) {
   return bool(in >> v[0] >> v[1] >> v[2]);
 }

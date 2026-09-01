@@ -6,6 +6,7 @@
 #include "TrigMesh.h"
 #include "MeshConvo.h"
 #include "MeshInfo.h"
+#include "PointSample.h"
 #include "TrigGrid.h"
 
 #include <string>
@@ -71,6 +72,12 @@ class PackingScene {
                                     const Vec3f & dir0, const PackingConstraints & constraints,
                                     std::vector<RigidTransform> & trajectory);
 
+    // Nudge toward a fixed world-space target position using a spring force.
+    RigidTransform NudgeToTarget(unsigned itemIdx,
+                                 const RigidTransform &tran,
+                                 const Vec3f &target,
+                                 std::vector<RigidTransform> &trajectory);
+
     Vec3f WorldOrigin()const{
       return bg.GetOrigin();
     }
@@ -129,6 +136,21 @@ class PackingScene {
     std::string packFile;
 };
 
+
+struct CreviceSurface {
+    Vec3f pos;
+    Vec3f inwardNormal;
+    float rayDepth = 0.0f;
+};
+
+// Raycast from each surface point along its inward normal to measure gap depth.
+// Returns points where rayDepth >= minDepth, Poisson-disk downsampled to exclusionDist.
+std::vector<CreviceSurface> FindDeepCreviceSurface(
+    const std::vector<SamplePoint> &surfacePoints,
+    const TrigGrid &containerGrid,
+    float maxRayDist,
+    float minDepth,
+    float exclusionDist);
 
 void LoadPack(PackingScene & scene, const std::string & packFile);
 

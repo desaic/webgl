@@ -568,8 +568,8 @@ std::vector<unsigned> FindDeepRays(const std::vector<Vec3f> &origins,
                                    const std::vector<float> &depths,
                                    float neighborRadius,
                                    float deepThreshold,
-                                   float patchDepthTol = 0.3f,
-                                   unsigned minPatchNeighbors = 3) {
+                                   float patchDepthTol = 0.3f
+                                   ) {
   PointGrid grid;
   grid.Build(origins, neighborRadius);
   std::vector<unsigned> deepRays;
@@ -593,11 +593,7 @@ std::vector<unsigned> FindDeepRays(const std::vector<Vec3f> &origins,
     if (neighborDepths.size() < 3) {
       continue;
     }
-    if (patchNeighbors >= minPatchNeighbors) {
-      // corroborated by a broad patch at roughly the same depth: this is
-      // a smoothly varying surface, not an isolated crevice.
-      continue;
-    }
+
     std::sort(neighborDepths.begin(), neighborDepths.end());
     float median = neighborDepths[neighborDepths.size() / 2];
     if (depths[i] - median > deepThreshold) {
@@ -609,6 +605,39 @@ std::vector<unsigned> FindDeepRays(const std::vector<Vec3f> &origins,
 
 // Shoots one instance along each deep ray direction. Skips a
 // ray if it lands too close to an already-seeded position.
+// Returns the fraction (0-1) of transformed sample points that land in
+// occupied voxels of scene.bg.vox (non-zero = wall or placed item).
+float OccupiedFraction(const PackingScene &scene,
+                       const std::vector<SamplePoint> &samples,
+                       const Matrix3f &rot,
+                       const Vec3f &pos) {
+  if (samples.empty()) {
+    return 0.0f;
+  }
+  const MeshConvo &bg = scene.bg;
+  Vec3f origin = bg.GetOrigin();
+  float invDx = 1.0f / bg.dx;
+  Vec3u gridSize = bg.vox.GetSize();
+  unsigned occupied = 0;
+  for (const auto &sp : samples) {
+    Vec3f w = rot * sp.x + pos;
+    int ix = int((w[0] - origin[0]) * invDx);
+    int iy = int((w[1] - origin[1]) * invDx);
+    int iz = int((w[2] - origin[2]) * invDx);
+    if (ix < 0 || iy < 0 || iz < 0 ||
+        (unsigned)ix >= gridSize[0] ||
+        (unsigned)iy >= gridSize[1] ||
+        (unsigned)iz >= gridSize[2]) {
+      occupied++;
+      continue;
+    }
+    if (bg.vox((unsigned)ix, (unsigned)iy, (unsigned)iz) != 0) {
+      occupied++;
+    }
+  }
+  return float(occupied) / float(samples.size());
+}
+
 // Returns the number of instances placed.
 unsigned SeedDeepCrevices(PackingScene &scene, const std::vector<Vec3f> &origins,
                           const std::vector<Vec3f> &ends,
@@ -642,14 +671,22 @@ unsigned SeedDeepCrevices(PackingScene &scene, const std::vector<Vec3f> &origins
     dir.normalize();
 
     RigidTransform tran;
-    tran.position = O;
+    tran.position = O + dir * (0.5f + 0.5f * item.BoxDiagonal());
     Vec3f rot = scene.randAngles[angleIndex];
     angleIndex = (angleIndex + 1) % unsigned(scene.randAngles.size());
     tran.rotation = RotationMatrixRad(rot[0], rot[1], rot[2]);
 
+    const std::vector<SamplePoint> &samples = item.samples;
+    if (!samples.empty()) {
+      float occFrac = OccupiedFraction(scene, samples, tran.rotation, tran.position);
+      if (occFrac > 0.5f) {
+        std::cout << "skip crevice ray " << i << " occFrac=" << occFrac << "\n";
+        continue;
+      }
+    }
+
     std::vector<RigidTransform> trajectory;
-    float forceW = 0.9f;
-    RigidTransform settled = scene.Nudge(itemIdx, tran, dir, forceW, trajectory);
+    RigidTransform settled = scene.NudgeToTarget(itemIdx, tran, ends[i], trajectory);
     unsigned instanceId = scene.Put(itemIdx, settled);
     scene.instances[instanceId].trajectory = trajectory;
     seededPos.push_back(settled.position);
@@ -692,7 +729,7 @@ void ComputeSurfaceDepths(PackingScene &scene,
   LOGI("surface depths: " << res.hitCount << "/" << points.size()
                           << " rays hit an item, saved " << depthFile << "\n");
 
-  const float neighborRadius = 1.0f;
+  const float neighborRadius = 3.0f;
   const float deepThreshold = 0.5f;
   std::vector<unsigned> deepRays = FindDeepRays(res.origins, res.depths,
                                                 neighborRadius, deepThreshold);
@@ -811,10 +848,6 @@ void DebugDeepRayNeighbors(PackingScene &scene, const Vec3f &targetPos) {
 // Raycasting crevice, finds deep rays. Mutates scene by placing instances
 void SeedSmallFruitCrevices(PackingScene &scene,
                             const std::vector<std::string> &smallItemNames) {
-  std::vector<Vec3f> deepOrigins;
-  std::vector<Vec3f> deepEnds;
-  ComputeSurfaceDepths(scene, deepOrigins, deepEnds);
-
   std::vector<unsigned> smallItems;
   for (const std::string &name : smallItemNames) {
     auto it = scene.nameToIndex.find(name);
@@ -823,13 +856,24 @@ void SeedSmallFruitCrevices(PackingScene &scene,
     }
   }
   if (smallItems.empty()) {
-    // fallback: no explicit small fruit list, use the single smallest item.
     std::vector<int> bySize = SortBySize(scene.items);
     if (!bySize.empty()) {
       smallItems.push_back(unsigned(bySize.back()));
     }
   }
-  unsigned seeded = SeedDeepCrevices(scene, deepOrigins, deepEnds, smallItems);
+
+  const unsigned MIN_SEEDED = 10;
+  const unsigned MAX_ROUNDS = 20;
+  for (unsigned round = 0; round < MAX_ROUNDS; round++) {
+    std::vector<Vec3f> deepOrigins;
+    std::vector<Vec3f> deepEnds;
+    ComputeSurfaceDepths(scene, deepOrigins, deepEnds);
+    unsigned seeded = SeedDeepCrevices(scene, deepOrigins, deepEnds, smallItems);
+    LOGI("crevice round " << round << ": seeded " << seeded << "\n");
+    if (seeded < MIN_SEEDED) {
+      break;
+    }
+  }
 }
 
 void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig &cfg) {
@@ -857,6 +901,10 @@ void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig
   scene.SaveInstances(scene.packFile + "_before_ray.txt");
   // raycasting crevice pass 
   // targets the same small-fruit group as the last PackStep.
+  if(plan.groups.size()>1){
+  SeedSmallFruitCrevices(scene, plan.groups[plan.groups.size()-2]);
+
+  }
   SeedSmallFruitCrevices(scene, plan.groups.empty() ? std::vector<std::string>()
                                                      : plan.groups.back());
 }

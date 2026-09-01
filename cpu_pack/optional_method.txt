@@ -68,6 +68,15 @@ Why we did not go with this first:
 
 Revisit if:
   - Raycasting proves too slow to seed a lot of candidate spots.
+    - nope. raycasting is incredibly fast.
   - We need approximate seed positions before running rigid body
     settling, and want a cheaper first pass than raycasting every
     surface sample point.
+    - nope. again this is just performance optimization. 
+	  performance is not an issue.
+  - Need more consistent surface point locations for deep crevices.
+    and a different Nudge force. 
+	The seed location provides a spring force to attract the
+    fruit. That is during nudge, the force direction always points from
+	fruit center towards the target surface sample point.
+only focus on where three fruits meet?
