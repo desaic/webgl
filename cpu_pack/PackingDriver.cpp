@@ -1,10 +1,13 @@
 #include "PackingDriver.h"
 
+#include "AdapSDF.h"
 #include "GridUtils.h"
 #include "Log.h"
+#include "MarchingCubes.h"
 #include "MeshInfo.h"
 #include "MeshOps.h"
 #include "PackingOps.h"
+#include "PackShrinkWrap.h"
 #include "Profiler.h"
 #include "Stopwatch.h"
 
@@ -14,6 +17,31 @@
 #include <fstream>
 
 namespace fs = std::filesystem;
+
+// Returns the centroid of the k nearest points in pts to pos.
+static Vec3f NearestKCenter(const std::vector<Vec3f> &pts, const Vec3f &pos, unsigned k) {
+  if (pts.empty()) {
+    return pos;
+  }
+  using Pair = std::pair<float, unsigned>;
+  std::vector<Pair> heap;
+  heap.reserve(k + 1);
+  for (unsigned i = 0; i < (unsigned)pts.size(); i++) {
+    float d2 = (pts[i] - pos).norm2();
+    heap.push_back({d2, i});
+    std::push_heap(heap.begin(), heap.end());
+    if (heap.size() > k) {
+      std::pop_heap(heap.begin(), heap.end());
+      heap.pop_back();
+    }
+  }
+  Vec3f center(0, 0, 0);
+  for (const auto &p : heap) {
+    center += pts[p.second];
+  }
+  center *= 1.0f / float(heap.size());
+  return center;
+}
 
 bool BuildScene(PackingScene &scene, const PackingConfig &cfg) {
   std::string meshDir = cfg.MeshDir();
@@ -60,7 +88,8 @@ void PrepareBackground(PackingScene &scene, const PackingConfig &cfg) {
   InvertContainer(scene.bg.vox, 1);
 }
 
-void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig &cfg) {
+void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig &cfg,
+              const std::vector<Vec3f> &surfacePoints) {
   unsigned count = 0;
   // first item to consider in the next iteration.
   unsigned startNameIndex = 0;
@@ -162,10 +191,16 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
         RigidTransform tran;
         tran.position = p;
         tran.rotation = RotationMatrixRad(r[0], r[1], r[2]);
-        Vec3f pushDir = scene.ForceDirection(itemIndex, step.force, step.biasW, sdfFactor, tran);
         double settleStartMs = stepClock.ElapsedMS();
         std::vector<RigidTransform> trajectory;
-        RigidTransform newTran = scene.Nudge(itemIndex, tran, pushDir, step.forceW, trajectory);
+        RigidTransform newTran;
+        if (!surfacePoints.empty()) {
+          Vec3f target = NearestKCenter(surfacePoints, p, 5);
+          newTran = scene.NudgeToTarget(itemIndex, tran, target, trajectory);
+        } else {
+          Vec3f pushDir = scene.ForceDirection(itemIndex, step.force, step.biasW, sdfFactor, tran);
+          newTran = scene.Nudge(itemIndex, tran, pushDir, step.forceW, trajectory);
+        }
         unsigned instanceId = scene.Put(itemIndex, newTran);
         scene.instances[instanceId].trajectory = trajectory;
         placedCount++;
@@ -641,7 +676,8 @@ float OccupiedFraction(const PackingScene &scene,
 // Returns the number of instances placed.
 unsigned SeedDeepCrevices(PackingScene &scene, const std::vector<Vec3f> &origins,
                           const std::vector<Vec3f> &ends,
-                          const std::vector<unsigned> &itemIndices) {
+                          const std::vector<unsigned> &itemIndices,
+                          const std::vector<Vec3f> &surfacePoints) {
   if (itemIndices.empty()) {
     return 0;
   }
@@ -686,7 +722,8 @@ unsigned SeedDeepCrevices(PackingScene &scene, const std::vector<Vec3f> &origins
     }
 
     std::vector<RigidTransform> trajectory;
-    RigidTransform settled = scene.NudgeToTarget(itemIdx, tran, ends[i], trajectory);
+    Vec3f target = NearestKCenter(surfacePoints, O, 5);
+    RigidTransform settled = scene.NudgeToTarget(itemIdx, tran, target, trajectory);
     unsigned instanceId = scene.Put(itemIdx, settled);
     scene.instances[instanceId].trajectory = trajectory;
     seededPos.push_back(settled.position);
@@ -745,7 +782,7 @@ void ComputeSurfaceDepths(PackingScene &scene,
                      << deepThreshold << " cm, saved " << deepFile << "\n");
 }
 
-// Debug helper: finds the container-surface ray whose origin is closest
+// finds the container-surface ray closest
 // to targetPos, then prints its depth alongside every neighbor ray
 // within neighborRadius (same neighborhood FindDeepRays would use),
 // including which instance/item each one hit and the angle between the
@@ -847,7 +884,8 @@ void DebugDeepRayNeighbors(PackingScene &scene, const Vec3f &targetPos) {
 
 // Raycasting crevice, finds deep rays. Mutates scene by placing instances
 void SeedSmallFruitCrevices(PackingScene &scene,
-                            const std::vector<std::string> &smallItemNames) {
+                            const std::vector<std::string> &smallItemNames,
+                            const std::vector<Vec3f> &surfacePoints) {
   std::vector<unsigned> smallItems;
   for (const std::string &name : smallItemNames) {
     auto it = scene.nameToIndex.find(name);
@@ -868,7 +906,7 @@ void SeedSmallFruitCrevices(PackingScene &scene,
     std::vector<Vec3f> deepOrigins;
     std::vector<Vec3f> deepEnds;
     ComputeSurfaceDepths(scene, deepOrigins, deepEnds);
-    unsigned seeded = SeedDeepCrevices(scene, deepOrigins, deepEnds, smallItems);
+    unsigned seeded = SeedDeepCrevices(scene, deepOrigins, deepEnds, smallItems, surfacePoints);
     LOGI("crevice round " << round << ": seeded " << seeded << "\n");
     if (seeded < MIN_SEEDED) {
       break;
@@ -886,12 +924,13 @@ void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig
   if (cfg.resume) {
     LoadPack(scene, cfg.ResumePackPath());
   }
-  for (size_t i = cfg.startStep; i < plan.steps.size(); i++) {
-    LOGI("=== step " << i << " of " << (plan.steps.size() - 1) << " ===\n");
+  size_t lastStep = plan.steps.size() > 0 ? plan.steps.size() - 1 : 0;
+  for (size_t i = cfg.startStep; i < lastStep; i++) {
+    LOGI("=== step " << i << " of " << lastStep << " ===\n");
     Utils::Stopwatch clock;
     clock.Start();
     size_t before = scene.instances.size();
-    PackStep(scene, plan.steps[i], cfg);
+    PackStep(scene, plan.steps[i], cfg, {});
     LOGI("=== step " << i << " took " << (clock.ElapsedMS() / 1000.0) << " s, "
                      << (scene.instances.size() - before) << " placed, "
                      << scene.instances.size() << " instances total ===\n");
@@ -899,14 +938,72 @@ void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig
 
   scene.SaveTrajectories(scene.trajFile + "_before_ray.txt");
   scene.SaveInstances(scene.packFile + "_before_ray.txt");
-  // raycasting crevice pass 
+
+  std::vector<Vec3f> surfPts = ComputeFreeContainerPoints(scene);
+  SaveVec3fObj(scene.outputFolder + "/free_container_surface.obj", surfPts);
+  LOGI("free surface: " << surfPts.size() << " unoccupied points\n");
+
+  if (!plan.steps.empty()) {
+    LOGI("=== step " << lastStep << " of " << lastStep << " (surface-guided) ===\n");
+    Utils::Stopwatch clock;
+    clock.Start();
+    size_t before = scene.instances.size();
+    PackStep(scene, plan.steps[lastStep], cfg, surfPts);
+    LOGI("=== step " << lastStep << " took " << (clock.ElapsedMS() / 1000.0) << " s, "
+                     << (scene.instances.size() - before) << " placed, "
+                     << scene.instances.size() << " instances total ===\n");
+  }
+
+  SaveShrinkWrapMesh(scene, scene.outputFolder + "/shrinkwrap.obj", 0.5f);
+
+  // raycasting crevice pass
   // targets the same small-fruit group as the last PackStep.
   if(plan.groups.size()>1){
-  SeedSmallFruitCrevices(scene, plan.groups[plan.groups.size()-2]);
-
+    SeedSmallFruitCrevices(scene, plan.groups[plan.groups.size()-2], surfPts);
   }
   SeedSmallFruitCrevices(scene, plan.groups.empty() ? std::vector<std::string>()
-                                                     : plan.groups.back());
+                                                     : plan.groups.back(), surfPts);
+
+}
+
+std::vector<Vec3f> ComputeFreeContainerPoints(PackingScene &scene) {
+  const float SAMPLE_EPS = 0.3f;
+  const float INWARD = 2.0f;
+
+  TrigMesh innerMesh;
+  MarchingCubes(scene.sdf->dist, -INWARD, scene.sdf->distUnit,
+                scene.sdf->voxSize, scene.sdf->origin, &innerMesh);
+
+  std::vector<SamplePoint> points;
+  SamplePoints(innerMesh, SAMPLE_EPS, points);
+
+  Vec3f origin = scene.bg.GetOrigin();
+  float invDx = 1.0f / scene.bg.dx;
+  Vec3u gridSize = scene.bg.vox.GetSize();
+
+  std::vector<Vec3f> free;
+  for (const auto &sp : points) {
+    int ix = int((sp.x[0] - origin[0]) * invDx);
+    int iy = int((sp.x[1] - origin[1]) * invDx);
+    int iz = int((sp.x[2] - origin[2]) * invDx);
+    if (ix < 0 || iy < 0 || iz < 0 ||
+        (unsigned)ix >= gridSize[0] ||
+        (unsigned)iy >= gridSize[1] ||
+        (unsigned)iz >= gridSize[2]) {
+      continue;
+    }
+    if (scene.bg.vox((unsigned)ix, (unsigned)iy, (unsigned)iz) == 0) {
+      free.push_back(sp.x);
+    }
+  }
+  return free;
+}
+
+void SaveFreeContainerSurface(PackingScene &scene, const std::string &filename) {
+  std::vector<Vec3f> free = ComputeFreeContainerPoints(scene);
+  SaveVec3fObj(filename, free);
+  LOGI("free container surface: " << free.size() << " points unoccupied, saved "
+                                  << filename << "\n");
 }
 
 void PackFruits(const PackingPlan &plan, const PackingConfig &cfgIn) {

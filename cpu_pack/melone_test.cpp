@@ -1,6 +1,7 @@
 #include "PackingConfig.h"
 #include "PackingDriver.h"
 #include "PackingPlan.h"
+#include "DebugTools.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -28,7 +29,7 @@ int main() {
 #endif
   cfg.fruitSubdir = "fruits_1";
   cfg.containerFile = "fruits_1/melone_two.obj";
-  cfg.innerContainerFile = "hands/finger_inner4.8m.stl";
+  cfg.innerContainerFile = "hands/melone_two_inner.obj";
   cfg.outSubdir = "out_melone_test";
 
   cfg.dx = 0.3f;
@@ -38,16 +39,16 @@ int main() {
   cfg.subgridCellSize = 20.0f;
 
   cfg.maxTrialCount = 10;
-  cfg.startStep = 3;
+  cfg.startStep = 2;
   cfg.startItem = 0;
 
-  cfg.resume = false;
-  cfg.resumePackFile = "melon_test_36.txt";
+  cfg.resume = true;
+  cfg.resumePackFile = "pack_before_ray.txt";
   cfg.trajSaveInterval = 10;
   cfg.packSaveInterval = 20;
 
   cfg.computeStats = true;
-
+  DebugShrinkWrap(cfg, 1, 0.25);
   std::cout << cfg.toString();
 
   // The output directory is not created by PackingScene -- create it here
@@ -141,9 +142,7 @@ int main() {
   step3.useInnerContainer = true;
   step3.count = LARGE_INT;
   step3.biasW = 0.1f;
-
-  //skip step 3 entirely to use raycasting instead
-  //plan.steps.push_back(step3);
+  plan.steps.push_back(step3);
 
   if (plan.steps.empty()) {
     std::cout << "empty packing plan. nothing to do.\n";

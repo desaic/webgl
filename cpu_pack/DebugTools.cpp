@@ -3,9 +3,11 @@
 #include "AdapSDF.h"
 #include "MarchingCubes.h"
 #include "MeshOps.h"
+#include "PackShrinkWrap.h"
 #include "PackingDriver.h"
 #include "PackingScene.h"
 #include "PointSample.h"
+#include "meshutil.h"
 
 #include <filesystem>
 #include <iostream>
@@ -65,4 +67,89 @@ void DebugNudge(const PackingConfig &cfg) {
   std::string trajFile = scene.outputFolder + "traj_debug.txt";
   scene.SaveTrajectories(trajFile);
   std::cout << "saved " << trajFile << "\n";
+}
+
+namespace {
+
+/// builds the scene and loads the resume pack. false if either failed, so the
+/// debug tools below do not go on to save empty geometry.
+bool LoadPackedScene(PackingScene &scene, const PackingConfig &cfg) {
+  if (!BuildScene(scene, cfg)) {
+    std::cout << "failed to build scene\n";
+    return false;
+  }
+  // Put() stamps into bg.vox, so the background has to exist before LoadPack.
+  PrepareBackground(scene, cfg);
+  LoadPack(scene, cfg.ResumePackPath());
+  if (scene.instances.empty()) {
+    std::cout << "no instances loaded from " << cfg.ResumePackPath() << "\n";
+    return false;
+  }
+  return true;
+}
+
+/// the same transformed meshes VoxelizeItems voxelizes, merged into one obj,
+/// so voxels and hulls can be overlaid on the geometry they came from.
+void SaveMergedItemMeshes(const PackingScene &scene) {
+  TrigMesh merged;
+  for (const auto &inst : scene.instances) {
+    merged.append(MakeTransformedMesh(scene.items[inst.itemId].mesh, inst.tran));
+  }
+  std::string meshFile = scene.outputFolder + "/item_meshes.obj";
+  merged.SaveObj(meshFile);
+  std::cout << "saved " << meshFile << " (" << merged.GetNumTrigs()
+            << " triangles)\n";
+}
+
+}  // namespace
+
+void DebugItemVoxels(const PackingConfig &cfg, float voxelSize) {
+  PackingScene scene;
+  if (!LoadPackedScene(scene, cfg)) {
+    return;
+  }
+  SaveMergedItemMeshes(scene);
+
+  Vec3f origin;
+  Array3D8u vox = VoxelizeItems(scene, voxelSize, origin);
+
+  size_t numSolid = 0;
+  for (uint8_t v : vox.GetData()) {
+    numSolid += (v != 0);
+  }
+  Vec3u gridSize = vox.GetSize();
+  std::cout << "voxelized " << scene.instances.size() << " instances at "
+            << voxelSize << " cm into " << gridSize[0] << "x" << gridSize[1]
+            << "x" << gridSize[2] << ", " << numSolid << " solid voxels, "
+            << numSolid * voxelSize * voxelSize * voxelSize << " cm3\n";
+  std::cout << "grid origin " << origin[0] << " " << origin[1] << " "
+            << origin[2] << "\n";
+
+  // SaveVolAsObjMesh spans voxel (i,j,k) over [i*dx, (i+1)*dx] + origin,
+  // the same cell convention VoxelizeItems reports, so origin goes in as is.
+  Vec3f voxRes(voxelSize, voxelSize, voxelSize);
+  std::string voxFile = scene.outputFolder + "/item_voxels.obj";
+  SaveVolAsObjMesh(voxFile, vox, voxRes, origin, 1);
+  std::cout << "saved " << voxFile << "\n";
+}
+
+void DebugShrinkWrap(const PackingConfig &cfg, float shrinkRadius,
+                     float voxelSize) {
+  PackingScene scene;
+  if (!LoadPackedScene(scene, cfg)) {
+    return;
+  }
+  SaveMergedItemMeshes(scene);
+
+  TrigMesh hull = ComputeShrinkWrapMesh(scene, shrinkRadius, voxelSize);
+  if (hull.GetNumTrigs() == 0) {
+    std::cout << "shrinkwrap produced an empty mesh at radius " << shrinkRadius
+              << " cm, voxel size " << voxelSize << " cm\n";
+    return;
+  }
+  std::string hullFile = scene.outputFolder + "/shrinkwrap_debug.obj";
+  hull.SaveObj(hullFile);
+  std::cout << "saved " << hullFile << " (" << hull.GetNumTrigs()
+            << " triangles, radius " << shrinkRadius << " cm, voxel size "
+            << voxelSize << " cm)\n";
 }

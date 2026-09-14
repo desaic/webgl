@@ -1,0 +1,332 @@
+PACKING IMPROVEMENT PLAN
+========================
+
+Goal: combine the pieces that already exist into one loop with feedback,
+instead of a straight line of independent passes.
+
+WHAT EXISTS NOW
+---------------
+  BuildScene / PrepareBackground   scene + container SDF + bg.vox
+  FindSpot / FindSpotSubgrid       candidate position search
+  Nudge                            force-field settle (gravity + sdf grad)
+  NudgeToTarget                    settle toward one world point
+  NudgeConstrained                 settle with pos/rot locks (unused in driver)
+  ComputeFreeContainerPoints       inner surface samples not in bg.vox
+  ComputeSurfaceDepths             inward ray depth per container sample
+  FindDeepRays                     rays deeper than neighbor median
+  SeedDeepCrevices                 place one fruit per deep ray
+  ComputeShrinkWrapMesh            outer hull of packed fruits at radius r
+  OccupiedFraction                 fraction of item samples in occupied voxels
+
+Current PackScene order (PackingDriver.cpp:917):
+  steps 0..N-2 -> free points (once) -> step N-1 -> shrinkwrap -> crevices x20
+
+Problem with that order: free points and the deep-ray set are computed once
+and consumed many times. Every fruit in the last step aims at the same
+centroid, so they queue up on one spot, block each other, and stall.
+
+
+CORE IDEA
+---------
+Two fields describe the state of the pack:
+
+  A. container void field   = inner container SDF (already in scene.sdf)
+  B. pack envelope field    = shrinkwrap dist field of placed fruits
+                              (PackShrinkWrap.cpp, currently thrown away
+                               after marching cubes)
+
+The region worth filling is A_inside AND B_outside. That is a signed field,
+not a point list, so it can drive search, targeting, and the stop condition
+with one representation. Right now A and B are only ever used to produce
+debug meshes / point clouds.
+
+Change: have ComputeShrinkWrapDistField return the field, not just the mesh,
+and keep it on the scene as scene.envelope (Array3D<short> + origin +
+voxelSize + distUnit). Recompute it once per round, not once per run.
+
+
+PIPELINE
+--------
+Phase 0  setup
+  BuildScene, PrepareBackground.
+  unchanged.
+
+Phase 1  bulk placement (large -> medium)
+  PackStep with force field Nudge, as today.
+  No surface targeting here. Gravity plus sdf gradient is the right
+  behaviour when the container is mostly empty.
+
+Phase 2  void-driven fill, ITERATED
+  repeat until gain < threshold or round budget hit:
+    2a. envelope = ComputeShrinkWrapDistField(fruits, r=1cm)
+    2b. voidField = clamp(min(-containerSDF_inset, envelope))
+        cells where voidField > 0 are reachable empty space
+    2c. freePts = marching cubes of voidField at iso 0, sampled,
+        then filtered by voidField width (drop pockets narrower than the
+        smallest remaining fruit)
+    2d. sort freePts by local void width, descending
+    2e. for each fruit kind, smallest first:
+          claim the widest unclaimed freePt within reach
+          NudgeToTarget to it
+          accept only if post-settle OccupiedFraction < thresh
+          on accept: mark every freePt within item diagonal as claimed
+    2f. report volume gained this round
+  Key difference from today: freePts are re-derived each round and claimed
+  as they are used, so two fruits never chase the same hole.
+
+Phase 3  crevice pass
+  ComputeSurfaceDepths + FindDeepRays as today, but:
+    - target = point along the ray at depth*0.5, not the wall-side
+      centroid of nearby surface points. See NUDGE NOTES below; the current
+      target is behind the fruit.
+    - reuse the Phase 2 claim grid so a crevice and a void point cannot
+      both be filled by different fruits.
+    - recompute depths each round (already does).
+
+Phase 4  report
+  final shrinkwrap mesh, fill fraction = fruit volume / shrinkwrap volume,
+  plus container fill fraction. Two numbers, because a pack can be dense
+  locally and still leave the container half empty.
+
+
+SHARED HELPERS TO FACTOR OUT
+----------------------------
+1. VoidField(scene, shrinkRadius) -> {Array3D<short>, origin, voxelSize,
+   distUnit}. Wraps ComputeShrinkWrapDistField and the container SDF.
+   Replaces both ComputeFreeContainerPoints and the ad-hoc bg.vox lookups
+   in OccupiedFraction.
+
+2. ClaimGrid: sparse voxel set of "a fruit was just placed here this round".
+   Used by Phase 2e and Phase 3. Prevents the pile-up.
+
+3. SettleAndAccept(scene, itemIdx, tran, target) -> bool.
+   NudgeToTarget, then validate, then Put or discard. Today
+   SeedDeepCrevices (PackingDriver.cpp:726) Puts unconditionally and only
+   checks OccupiedFraction on the PRE-settle pose, so an unresolved
+   overlap gets committed.
+
+4. One nudge entry point. Nudge, NudgeConstrained and NudgeToTarget are
+   ~80% duplicated: same sample generation, same broadphase, same grid
+   cache, same integrate/damp loop. Collapse to
+     Settle(itemIdx, tran, ForceSpec, constraints, trajectory)
+   where ForceSpec is either a direction field or a target point. Three
+   copies means the fixes below have to be made three times.
+
+
+BUG: SHRINKWRAP VOXELIZATION CUT OFF IN -XYZ
+--------------------------------------------
+Symptom: fruits are clipped on their -x/-y/-z sides in the shrinkwrap
+occupancy grid, so the hull cuts into them.
+
+Root cause, VoxelizeFruits (PackShrinkWrap.cpp:277). Two origin
+conventions are mixed in one expression.
+  AlignOriginToGrid floors to a multiple of voxelSize (GridUtils.cpp:10),
+  so totalBox.vmin and every per-item bbox.vmin sit on the same lattice
+  and their difference is an exact integer number of voxels.
+  But outOrigin = totalBox.vmin + 0.5*voxelSize (voxel CENTER, needed by
+  MarchingCubes), while conf.origin = bbox.vmin (voxel CORNER, what
+  VoxConf wants). So
+    (conf.origin - outOrigin)/voxelSize = n - 0.5
+  and std::round of n-0.5 rounds away from zero: n for positive, n-1 for
+  negative. Items whose padded bbox starts at or left of the total origin
+  get shifted one voxel the wrong way; the rest do not. Hence a per-item,
+  sign-dependent one-voxel error on the low side of each axis.
+  The asymmetric per-item pad at PackShrinkWrap.cpp:264-265 (+1 voxel on
+  vmax, -3 voxels on vmin) is a patch over this, not a fix.
+
+Fix:
+  - keep ONE lattice origin for all index math:
+      gridOrigin = totalBox.vmin
+      offset = RoundVec((conf.origin - gridOrigin) / voxelSize)
+    which is now an exact integer, no half-voxel bias.
+  - apply the +0.5*voxelSize center shift only where the field is sampled,
+    i.e. at the MarchingCubes call, not in the origin used for stamping.
+  - then make the per-item pad symmetric (2 voxels each side). The pad is
+    only needed so FloodOutside8u has a clear border to start from: if a
+    voxelized surface touches index 0 on any axis the outside flood leaks
+    into the interior and the item loses its solid fill entirely.
+  - assert it: after stamping, count set voxels per item and compare with
+    volume/voxelSize^3. A clipped item shows up immediately.
+
+
+FINAL GOAL: MANUFACTURABLE PACK
+-------------------------------
+The deliverable is not the fruit instances, it is one closed surface that
+can be (a) CNC milled and (b) used as a master to cast a rubber mold.
+The shrinkwrap mesh is the first approximation of that sculpture.
+
+Tentative acceptance criteria, by opening size (opening = width of the
+gap at the surface, not its depth):
+
+  < 0.2 cm      ignore. mill cannot cut it, rubber will not enter it.
+                these fill themselves. do not spend geometry on them.
+
+  0.2 - 1 cm    minimize the count. any overhang under such a hole is
+                auto-filled. after filling, the walls must read straight
+                along the surface normal, or slightly shallower than
+                straight (positive draft). never undercut.
+
+  1 - 3 cm      must survive, and must have no overhang. these are the
+                pockets the shrinkwrap is meant to shape, so the hull
+                has to come out draft-clean at this scale.
+
+  > 3 cm        real voids between fruits. these are the pack quality
+                problem, handled by Phase 2 above, not by surface work.
+
+Two conflicting requirements to keep straight: milling wants visibility
+from a tool axis, rubber wants demoldability from a pull direction.
+Rubber tolerates more undercut than a mill does because it stretches, so
+the mill constraint is the binding one and is what should be enforced.
+
+
+WHAT IS MISSING FOR A MANUFACTURABLE MESH
+-----------------------------------------
+M1. Hole detection and classification. Nothing measures opening width
+    today. Needed: for each surface cell of the shrinkwrap field, the
+    radius of the largest inscribed disk across the aperture, which the
+    existing distance field already almost gives. Bucket by the four
+    ranges above and print a histogram. Without this number there is no
+    way to tell whether a parameter change helped.
+
+M2. Separate closing radius from offset radius. Verify what
+    ComputeShrinkWrapDistField actually is. A closing (dilate r then
+    erode r) fills holes up to ~2r with zero net growth. A plain offset
+    grows the whole sculpture by r and sinks the fruits into it. The
+    current code offsets, floods, then subtracts, which is closing-like,
+    but the constants at PackShrinkWrap.cpp:214-216 mix
+    shrinkRadius, 0.5*voxelSize and -2*voxelSize, so the net growth is
+    not obviously zero. Measure it on a single sphere: hull radius should
+    come back equal to the sphere radius, not radius+r.
+    Then expose two radii: closeRadius (kill small holes) and
+    growRadius (usually 0).
+
+M3. Overhang / undercut removal. This is the largest missing piece and
+    it is cheap on the grid that already exists. For a pull direction p,
+    sweep the occupancy grid along p: any empty voxel that lies behind a
+    solid voxel along p, and is inside the hull, becomes solid. One pass
+    per axis order, O(n). That is exactly the "auto-filled overhang"
+    rule stated above, and it makes hole walls straight by construction.
+    Needs a decision on p: single axis (2-part mold, simplest), or a
+    small set for a 4/5-axis mill. Do single axis first.
+
+M4. Draft angle. Straight walls from M3 are the zero-draft case, which
+    releases from rubber but drags on a mill and on a rigid backing
+    shell. Slightly shallower than straight means eroding the fill by a
+    cone instead of a cylinder: at depth d below the opening, remove
+    tan(alpha)*d of wall. Same sweep as M3 with a per-layer dilation.
+    Pick alpha 3-5 degrees.
+
+M5. Voxel size is too coarse for the criteria. voxelSize is 0.25 cm
+    (PackShrinkWrap.cpp:304) and the smallest feature that matters is
+    0.2 cm. Cannot classify a 0.2 cm hole on a 0.25 cm grid. The surface
+    stage needs 0.05-0.1 cm, which the current single-grid-for-everything
+    approach will not fit in memory. Needs either a narrow-band field
+    around the hull only, or a two-resolution pass: coarse for the pack,
+    fine for the surface.
+
+M6. Mesh conditioning after marching cubes. The output is watertight and
+    manifold, which is the hard part, but it is dense and stair-stepped.
+    Needed: taubin or bilaplacian smoothing that does not move the
+    surface more than half a voxel (or it will reintroduce the undercuts
+    M3 removed), then quadric decimation with an error bound tied to the
+    0.2 cm tolerance. Re-run M1 and the M3 sweep check AFTER decimation.
+
+M7. Minimum thickness on the rubber side. The mold is the complement of
+    this mesh. Thin walls of rubber in the gaps between adjacent fruits
+    will tear on demold. Same distance-field query as M1 but on the
+    negative: flag complement regions thinner than ~0.3 cm and fill them
+    (merging the two fruits' hulls locally), which is another argument
+    for a real closing operator in M2.
+
+M8. A base. Milling needs stock, a flat parting plane and a fixturing
+    datum; pouring rubber needs a level rim. Nothing in the pipeline
+    establishes an orientation or a base plane. Needed: choose the pull
+    direction p (M3) and the parting plane together, then boolean the
+    hull against a half-space and add a skirt.
+
+M9. A verification report, run every time, that either passes or fails:
+    hole histogram by bucket, undercut voxel count for p, draft
+    violations, min complement thickness, and whether the mesh is
+    closed and self-intersection-free. Manufacturability is a set of
+    inequalities, so it should be checked mechanically, not by looking
+    at the mesh.
+
+Suggested order: M2 (know what the operator does) -> M1 (be able to
+measure) -> M3 (the actual fix) -> M9 (keep it fixed) -> M5 -> M4 -> M6
+-> M7 -> M8.
+
+
+NUDGE NOTES  (answers "is the physical nudge code correct")
+----------------------------------------------------------
+Short answer: the solver is sound, the driving is not. Fruits stop halfway
+because they run out of steps and because the target is often unreachable,
+not because the contact response is wrong.
+
+N1. Step budget vs distance. PackingScene.cpp:1272 nudgeAcceleration=200,
+    dt=1/60, damping 0.82-0.85. Terminal speed = a*dt*d/(1-d) ~= 19 cm/s,
+    so ~0.31 cm of travel per step. SetSimParams (PackingScene.cpp:640)
+    gives steps=30 for minExtent<3. Max reach ~9 cm, and that assumes no
+    contacts. Targets from NearestKCenter are routinely 10-30 cm away.
+    The fruit stops mid-flight with velocity still high.
+    Fix: in NudgeToTarget, size the step count from the initial distance,
+    steps = clamp(dist / (v_term*dt) * 1.5, 30, 400), and exit on
+    arrival (dist < eps_arrive) rather than only on low velocity.
+
+N2. Velocity cap fights the pull. SolveContactConstraintsPGS
+    (PackingScene.cpp:537) caps approach speed at
+    -(distance - eps)/dt. With activeBuffer = ds = 0.2 and eps = 0.02 that
+    is 10.8 cm/s, well under the 19 cm/s terminal speed. Any contact in
+    the buffer throttles motion along its normal to about half speed, so
+    a fruit sliding down a wall covers half the ground the step budget
+    assumed. Compounds N1.
+    Fix: keep the cap (it is what stops tunneling) but account for it in
+    the step budget, or raise activeBuffer only for the gather and use a
+    tighter distance for the cap.
+
+N3. Early exit cannot tell "arrived" from "jammed".
+    PackingScene.cpp:1382 breaks when both velocities are small. A fruit
+    wedged against a wall with the spring pulling straight into the wall
+    has near-zero velocity on step 2 and exits immediately, one step from
+    where it started. Caller then Puts it there.
+    Fix: return an outcome (arrived / jammed / out-of-steps) so the caller
+    can retry with the next-best target instead of committing a bad spot.
+
+N4. Target is behind the fruit in the crevice path.
+    SeedDeepCrevices (PackingDriver.cpp:710) places the fruit at
+    O + dir*(0.5 + 0.5*diag), i.e. already inside, then targets
+    NearestKCenter(surfacePoints, O, 5) which is a centroid of points near
+    O, i.e. near the wall it just came from. The pull is backwards. The
+    fruit moves a little, hits the wall, and stalls. This is the most
+    visible "stops halfway".
+    Fix: target a point further along the ray, e.g. O + dir*depth*0.5.
+
+N5. Centroid of 5 surface points is not guaranteed to be free space.
+    NearestKCenter (PackingDriver.cpp:22) averages positions on a curved
+    inner surface, so on a concave corner the centroid lands inside the
+    wall, and on a convex bulge it lands outside the container. The fruit
+    then pushes into geometry it can never reach.
+    Fix: after averaging, project the centroid back with the container SDF,
+    or pick the single best point by void width instead of averaging.
+
+N6. Stale contacts are applied at stale positions.
+    contactGatherInterval=2 for 3-5 cm fruits (PackingScene.cpp:652).
+    Contact.worldPos is captured at gather time and reused next step
+    (PackingScene.cpp:1361), so the lever arm r = worldPos - currentT is
+    wrong by one step of motion, which injects spurious torque.
+    Fix: either gather every step for these sizes, or store contacts in
+    body-local coordinates and re-project each step.
+
+N7. Constant-magnitude pull, not a spring. PackingScene.cpp:1319 normalizes
+    toTarget, so force does not fall off near the target. With damping it
+    settles rather than orbiting, so this is survivable, but there is no
+    braking and no arrival test. Pairs with N3.
+
+N8. Minor: minVel is compared against squared speed
+    (PackingScene.cpp:1382) while the name and the 1e-3/1e-4 values read
+    like a speed. Effective thresholds are 0.032 and 0.01 cm/s. Rename to
+    minVelSq or square at use, so tuning it does what the tuner expects.
+
+Priority: N4 and N1 first, they explain the reported symptom directly.
+N3 next, it stops bad placements from being committed. Then the Phase 2
+re-derivation, which is what makes the last step actually fill holes
+instead of queueing every fruit at one centroid.

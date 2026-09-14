@@ -15,7 +15,10 @@ bool BuildScene(PackingScene &scene, const PackingConfig &cfg);
 void PrepareBackground(PackingScene &scene, const PackingConfig &cfg);
 
 /// runs one step of the plan: repeatedly find a spot and nudge an item in.
-void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig &cfg);
+/// when surfacePoints is non-empty, small-fruit nudges target the centroid of
+/// the 5 nearest free container-surface points instead of the default force field.
+void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig &cfg,
+              const std::vector<Vec3f> &surfacePoints = {});
 
 /// prepares the background, optionally resumes from a pack file,
 /// then runs plan steps starting at cfg.startStep.
@@ -38,3 +41,10 @@ void ComputeSurfaceDepths(PackingScene &scene,
 /// FindDeepRays uses, so a spurious "deep ray" flag on a curved surface
 /// can be diagnosed without running the packing steps.
 void DebugDeepRayNeighbors(PackingScene &scene, const Vec3f &targetPos);
+
+/// marching-cubes a 2-voxel inset of the container SDF, samples the resulting
+/// mesh, and returns only the points whose voxel is unoccupied in scene.bg.vox.
+std::vector<Vec3f> ComputeFreeContainerPoints(PackingScene &scene);
+
+/// calls ComputeFreeContainerPoints and writes the result to filename.
+void SaveFreeContainerSurface(PackingScene &scene, const std::string &filename);
