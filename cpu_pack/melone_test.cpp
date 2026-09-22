@@ -48,7 +48,7 @@ int main() {
   cfg.packSaveInterval = 20;
 
   cfg.computeStats = true;
-  DebugShrinkWrap(cfg, 1, 0.25);
+  DebugShrinkWrap(cfg, 1, 0.1);
   std::cout << cfg.toString();
 
   // The output directory is not created by PackingScene -- create it here
