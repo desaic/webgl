@@ -723,7 +723,22 @@ unsigned SeedDeepCrevices(PackingScene &scene, const std::vector<Vec3f> &origins
 
     std::vector<RigidTransform> trajectory;
     Vec3f target = NearestKCenter(surfacePoints, O, 5);
-    RigidTransform settled = scene.NudgeToTarget(itemIdx, tran, target, trajectory);
+    NudgeOutcome outcome;
+    RigidTransform settled = scene.NudgeToTarget(itemIdx, tran, target, trajectory, &outcome);
+    // N3: the pre-settle occFrac check above does not catch overlap left
+    // behind by a jammed or out-of-steps settle -- re-check post-settle
+    // instead of committing unconditionally.
+    if (!samples.empty()) {
+      float occFracAfter = OccupiedFraction(scene, samples, settled.rotation, settled.position);
+      if (occFracAfter > 0.5f) {
+        std::cout << "skip crevice ray " << i << " outcome="
+                  << (outcome == NudgeOutcome::Arrived ? "arrived" :
+                      outcome == NudgeOutcome::Jammed ? "jammed" : "out_of_steps")
+                  << " post-settle occFrac=" << occFracAfter << "\n";
+        itemCursor++;
+        continue;
+      }
+    }
     unsigned instanceId = scene.Put(itemIdx, settled);
     scene.instances[instanceId].trajectory = trajectory;
     seededPos.push_back(settled.position);

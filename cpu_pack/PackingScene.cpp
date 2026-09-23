@@ -1247,9 +1247,11 @@ std::vector<CreviceSurface> FindDeepCreviceSurface(
 RigidTransform PackingScene::NudgeToTarget(unsigned itemIdx,
                                            const RigidTransform &tran,
                                            const Vec3f &target,
-                                           std::vector<RigidTransform> &trajectory) {
+                                           std::vector<RigidTransform> &trajectory,
+                                           NudgeOutcome *outcome) {
   PROFILE_SCOPE("nudge_target.total");
   RigidTransform tOut = tran;
+  NudgeOutcome localOutcome = NudgeOutcome::OutOfSteps;
 
   const float CONTACT_ANGLE_THRESH_DEG = 20.0f;
 
@@ -1271,6 +1273,21 @@ RigidTransform PackingScene::NudgeToTarget(unsigned itemIdx,
   float dt = 1.0f / 60.0f;
   float nudgeAcceleration = 200.0f;
   const float MAX_OVERLAP = 0.2f;
+
+  // N1: size the step budget from the initial distance to target, not just
+  // minExtent. SetSimParams' step counts (30/50/80) assume near-field
+  // settling; NudgeToTarget's targets (crevice/void picks) are routinely
+  // farther than that, so a fruit can run out of steps mid-flight with
+  // velocity still high. terminal speed under constant acceleration with
+  // per-step damping d: v_term = a*dt*d/(1-d).
+  float vTerm = nudgeAcceleration * dt * simParams.damping / (1.0f - simParams.damping);
+  float initialDist = (target - tran.position).norm();
+  size_t distanceSteps = size_t(1.5f * initialDist / std::max(1e-6f, vTerm * dt));
+  size_t maxSteps = std::max(simParams.steps, std::min(distanceSteps, size_t(400)));
+  // N3: arrival tolerance -- within one sample-spacing unit of the target
+  // counts as reached, so a jam right next to the target is not reported
+  // the same way as one that stalled far short of it.
+  float epsArrive = ds;
 
   std::vector<SamplePoint> samples;
   if (meshInfo.samples.empty()) {
@@ -1311,13 +1328,17 @@ RigidTransform PackingScene::NudgeToTarget(unsigned itemIdx,
   Vec3f angularVel(0.0f);
   std::vector<Contact> prevContacts;
 
-  for (size_t step = 0; step < simParams.steps; step++) {
+  for (size_t step = 0; step < maxSteps; step++) {
     Matrix3f currentRotMat = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
     auto Rinv = currentRotMat.transposed();
 
     // spring force toward target
     Vec3f toTarget = target - currentT;
     float dist = std::sqrt(toTarget.dot(toTarget));
+    if (dist < epsArrive) {
+      localOutcome = NudgeOutcome::Arrived;
+      break;
+    }
     if (dist > 1e-6f) {
       toTarget *= 1.0f / dist;
     }
@@ -1380,14 +1401,26 @@ RigidTransform PackingScene::NudgeToTarget(unsigned itemIdx,
         Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w())));
 
     if (linearVel.dot(linearVel) < simParams.minVel && angularVel.dot(angularVel) < simParams.minVel) {
+      // N3: velocity died before arrival -- distinguish a genuine jam from
+      // simply having already arrived this step (toTarget's own check above
+      // already breaks the Arrived case first, but distance may have
+      // crossed epsArrive on this exact step before the velocity check).
+      float distNow = (target - currentT).norm();
+      localOutcome = (distNow < epsArrive) ? NudgeOutcome::Arrived : NudgeOutcome::Jammed;
       break;
     }
   }
 
   tOut.position = currentT;
   tOut.rotation = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
+  if (outcome != nullptr) {
+    *outcome = localOutcome;
+  }
+  const char *outcomeStr = localOutcome == NudgeOutcome::Arrived ? "arrived" :
+                           localOutcome == NudgeOutcome::Jammed ? "jammed" : "out_of_steps";
   LOGI("NudgeToTarget " << items[itemIdx].name
-       << " steps=" << trajectory.size()
+       << " steps=" << trajectory.size() << "/" << maxSteps
+       << " outcome=" << outcomeStr
        << " pos=(" << currentT[0] << "," << currentT[1] << "," << currentT[2] << ")"
        << " target=(" << target[0] << "," << target[1] << "," << target[2] << ")\n");
   return tOut;

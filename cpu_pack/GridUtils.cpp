@@ -15,6 +15,14 @@ Vec3f AlignOriginToGrid(const Vec3f &o, float dx) {
   return aligned;
 }
 
+Vec3f AlignMaxToGrid(const Vec3f &o, float dx) {
+  Vec3f aligned;
+  for (unsigned d = 0; d < 3; d++) {
+    aligned[d] = std::ceil(o[d] / dx) * dx;
+  }
+  return aligned;
+}
+
 
 std::array<float, 3> ToArray(const Vec3f &v) {
   return {v[0], v[1], v[2]};

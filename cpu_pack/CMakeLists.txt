@@ -3,6 +3,7 @@ set(BIN "cpu_pack")
 set(BENCH_BIN "cpu_pack_bench")
 set(MELONE_TEST_BIN "melone_test")
 set(DEBUG_RAY_BIN "debug_ray_test")
+set(SPHERE_SHRINKWRAP_TEST_BIN "sphere_shrinkwrap_test")
 PROJECT (CpuPack)
 FILE(GLOB CORE_SRC CONFIGURE_DEPENDS "*.cpp" "*.c" "quickhull/*.cpp")
 # main.cpp, benchmarks.cpp, melone_test.cpp, and debug_ray_test.cpp each
@@ -12,7 +13,8 @@ list(REMOVE_ITEM CORE_SRC
   "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/melone_test.cpp"
-  "${CMAKE_CURRENT_SOURCE_DIR}/debug_ray_test.cpp")
+  "${CMAKE_CURRENT_SOURCE_DIR}/debug_ray_test.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/sphere_shrinkwrap_test.cpp")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_CXX_STANDARD 20)
 
@@ -81,3 +83,8 @@ target_link_libraries(${MELONE_TEST_BIN} pack_core)
 # the full packing steps.
 add_executable(${DEBUG_RAY_BIN} debug_ray_test.cpp)
 target_link_libraries(${DEBUG_RAY_BIN} pack_core)
+
+# M2: measures shrinkwrap net growth on a single sphere of known radius,
+# independent of any container/fruit data files.
+add_executable(${SPHERE_SHRINKWRAP_TEST_BIN} sphere_shrinkwrap_test.cpp)
+target_link_libraries(${SPHERE_SHRINKWRAP_TEST_BIN} pack_core)

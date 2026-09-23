@@ -28,6 +28,15 @@ struct InstanceInfo{
   std::vector<RigidTransform> trajectory;
 };
 
+// why a NudgeToTarget settle loop stopped. Distinguishes "reached the
+// target" from "gave up partway" so callers can retry with a fallback
+// instead of committing a placement that never actually got there.
+enum class NudgeOutcome {
+  Arrived,     // came within arrival tolerance of the target.
+  Jammed,      // velocity dropped to near zero before arriving (blocked).
+  OutOfSteps,  // used the whole step budget, still moving toward target.
+};
+
 struct PackingConstraints {
   // locks the part's x position to fixedPosX.
   bool lockPosX = false;
@@ -73,10 +82,14 @@ class PackingScene {
                                     std::vector<RigidTransform> & trajectory);
 
     // Nudge toward a fixed world-space target position using a spring force.
+    // outcome, if non-null, reports why the settle stopped -- callers should
+    // not commit a placement on Jammed/OutOfSteps without checking overlap
+    // themselves, since the fruit may have stopped short of the target.
     RigidTransform NudgeToTarget(unsigned itemIdx,
                                  const RigidTransform &tran,
                                  const Vec3f &target,
-                                 std::vector<RigidTransform> &trajectory);
+                                 std::vector<RigidTransform> &trajectory,
+                                 NudgeOutcome *outcome = nullptr);
 
     Vec3f WorldOrigin()const{
       return bg.GetOrigin();

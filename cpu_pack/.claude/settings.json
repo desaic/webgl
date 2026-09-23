@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where MSBuild.exe)",
+      "Bash(\"/c/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/amd64/MSBuild.exe\" cpu_pack.sln -p:Configuration=Debug -m)",
+      "Bash(\"/c/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/amd64/MSBuild.exe\" ALL_BUILD.vcxproj -p:Configuration=Debug -m)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(grep -n \"steps=[3-9][0-9][0-9]\\\\?/\\\\|skip crevice ray\" run_n1n3.log)"
+    ]
+  }
+}

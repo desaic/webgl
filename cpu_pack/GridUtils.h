@@ -7,6 +7,11 @@
 
 Vec3f AlignOriginToGrid(const Vec3f &o, float dx) ;
 
+// ceils each component to a multiple of dx. use for a box's vmax so the
+// aligned box never clips into the original extent (AlignOriginToGrid
+// floors, which is correct for vmin but cuts into vmax by up to dx).
+Vec3f AlignMaxToGrid(const Vec3f &o, float dx);
+
 std::array<float, 3> ToArray(const Vec3f &v);
 
 Array3D8u Thresh(const Array3Df &f, float thresh);

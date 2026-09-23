@@ -4,6 +4,54 @@ PACKING IMPROVEMENT PLAN
 Goal: combine the pieces that already exist into one loop with feedback,
 instead of a straight line of independent passes.
 
+
+IMPLEMENTATION ORDER
+---------------------
+Dependency order, not priority order -- each step needs the ones before
+it to be trustworthy. Section names refer to headers further down.
+
+ 1. Fix shrinkwrap voxelization bug (BUG section, VoxelizeFruits,
+    PackShrinkWrap.cpp:277). Every distance field downstream depends on
+    this; fixing it later invalidates measurements already taken.
+ 2. M2: verify/fix closing vs offset radius. Test on a single sphere until
+    hull radius == input radius. Gates the "crust" false-positive problem.
+ 3. Nudge fixes N1 (step budget vs distance) and N3 (arrival / jammed /
+    out-of-steps outcome). Cheap, independent of 1-2, and every settle-
+    and-accept step later needs to know WHY a nudge stopped.
+ 4. Build VoidField helper (wraps the now-fixed ComputeShrinkWrapDistField
+    + container SDF).
+ 5. Threshold + morphological open + local-maxima extraction (CANDIDATE
+    SPOT MANAGEMENT), plus the debug blob-OBJ / point-cloud-PLY output.
+    Stop and visually check blobs against the shrinkwrap mesh before
+    writing any placement code -- cheapest point to catch a bad threshold
+    or open radius.
+ 6. M1 histogram, reusing the width numbers from step 5. Calibrates the
+    multi-scale tier and the merge test instead of guessing.
+ 7. ClaimGrid + TryFillSpot (SPOT-PICKS-FRUIT, kindsBySize). Needs step 4
+    (widths) and step 3 (reliable settle outcomes).
+ 8. Assemble the Phase 2 loop end to end from 4-7, run with the nominal
+    fruit size ONLY first -- isolates loop bugs from multi-scale bugs.
+ 9. Add the floor-sized second blueberry tier (MULTI-SCALE FILL), sized
+    from step 6's histogram, re-measure. Only worth doing once 7-8 prove
+    out on one size.
+10. Rewrite Phase 3 (crevice pass) onto the same field/spot pipeline --
+    field-based depth and target, reused ClaimGrid, TryFillSpot. Mostly
+    rewiring once 4-9 exist, not new algorithm.
+11. Remaining Nudge notes (N4 full fix, N5-N8) and the Settle() collapse
+    (shared helper #4). Safest once the field-based approach is proven.
+12. Phase 4 report (fill fraction, container fraction). Wire up once 8-10
+    produce a real pack to report on.
+13. M3: overhang/undercut removal. First manufacturability fix on the
+    final mesh; needs a real pack from above, not a synthetic sphere.
+14. M9 verification report skeleton (histogram + undercut count + closed/
+    manifold check), even before M4-M8 exist -- gives every later change
+    a regression gate instead of eyeballing meshes.
+15. M5 (finer surface-only resolution), M4 (draft angle), M6 (smoothing/
+    decimation), M7 (min complement thickness), M8 (base/parting plane) --
+    in that order, since M6/M7/M8 each need the previous one's output to
+    check against.
+
+
 WHAT EXISTS NOW
 ---------------
   BuildScene / PrepareBackground   scene + container SDF + bg.vox
@@ -60,33 +108,323 @@ Phase 2  void-driven fill, ITERATED
   repeat until gain < threshold or round budget hit:
     2a. envelope = ComputeShrinkWrapDistField(fruits, r=1cm)
     2b. voidField = clamp(min(-containerSDF_inset, envelope))
-        cells where voidField > 0 are reachable empty space
-    2c. freePts = marching cubes of voidField at iso 0, sampled,
-        then filtered by voidField width (drop pockets narrower than the
-        smallest remaining fruit)
+        threshold at voidField > (voxelSize + epsilon), NOT > 0. Even after
+        M2 makes growRadius ~0 on average, per-voxel rounding still leaves
+        a residual on the order of 1 voxel, and a >0 test would count that
+        residual as free space over the ENTIRE fruit surface, not just at
+        gaps -- a uniform false crevice, exactly the "crust" problem M2
+        calls out. Raising the bar to voxelSize+epsilon (or straight to
+        the smallest fruit tier's radius, since a gap that can't fit that
+        tier is not worth finding anyway) removes the crust and keeps only
+        cells that are actually wide enough to matter.
+    2c. freePts = LOCAL MAXIMA of voidField, not a marching-cubes iso-0
+        surface. Iso-0 gives points ON the boundary of a void (one per
+        boundary triangle -- many points tracing the edge of one hole);
+        a local maximum gives the single most-open point INSIDE it, which
+        is both a better attraction target and, for free, the width
+        (2 * field value at the maximum). See CANDIDATE SPOT MANAGEMENT
+        below for how maxima are found and kept apart.
+        Filter: drop maxima whose width is narrower than the smallest
+        remaining fruit tier.
     2d. sort freePts by local void width, descending
-    2e. for each fruit kind, smallest first:
-          claim the widest unclaimed freePt within reach
-          NudgeToTarget to it
-          accept only if post-settle OccupiedFraction < thresh
-          on accept: mark every freePt within item diagonal as claimed
+    2e. for each freePt, widest first (spot-outer, fruit-inner -- see
+        SPOT-PICKS-FRUIT below for why the loop nests this way round):
+          skip if claimed
+          TryFillSpot(freePt, localWidth, kindsBySize, claims)
+            -- tries the largest kind that still fits the freePt's width,
+               falls back to the next smaller kind if settle fails, marks
+               the claim on success.
     2f. report volume gained this round
   Key difference from today: freePts are re-derived each round and claimed
   as they are used, so two fruits never chase the same hole.
 
 Phase 3  crevice pass
   ComputeSurfaceDepths + FindDeepRays as today, but:
-    - target = point along the ray at depth*0.5, not the wall-side
-      centroid of nearby surface points. See NUDGE NOTES below; the current
-      target is behind the fruit.
+    - candidate origins are also local maxima, not one per 0.3cm container
+      surface sample. Today SamplePoints(container.mesh, 0.3cm) plus
+      FindDeepRays' local-median test emits dozens of "deep ray" hits for
+      one physical crevice, and SeedDeepCrevices' only deduplication is a
+      fixed exclusionDist = item.BoxDiagonal() checked against whatever
+      was placed earlier in scan order (PackingDriver.cpp:692-695) -- so
+      which sample wins is an accident of triangle order, and the
+      exclusion radius has nothing to do with the crevice's own size. Once
+      the envelope field covers near-wall space too, crevices are just
+      local maxima of the SAME field Phase 2 uses, found and spaced the
+      same way (CANDIDATE SPOT MANAGEMENT below). This removes the 0.3cm
+      dense sampling and the scan-order dependency entirely.
+    - depth comes from sampling Phase 2's envelope field along the inward
+      ray, not from raycasting against a freshly-built InstanceAccel
+      (ComputeRayDepths / BuildInstanceAccel in ComputeSurfaceDepths,
+      PackingDriver.cpp:745). A field lookup is smooth and immune to a ray
+      slipping through a seam between two fruits or being blocked by a
+      bulge past the true gap; it also removes a second acceleration
+      structure that duplicates what Phase 2 already built this round.
+    - target = walk inward along the ray in the envelope field and stop
+      where it crosses zero (the pack surface), back off a bit, not the
+      wall-side centroid of nearby surface points (NearestKCenter). See N5:
+      averaging points can land inside a wall or outside the container;
+      the field lookup cannot, by construction.
     - reuse the Phase 2 claim grid so a crevice and a void point cannot
       both be filled by different fruits.
-    - recompute depths each round (already does).
+    - recompute the envelope each round (Phase 2 already does; crevice pass
+      just reads it, does not rebuild anything of its own).
 
 Phase 4  report
   final shrinkwrap mesh, fill fraction = fruit volume / shrinkwrap volume,
   plus container fill fraction. Two numbers, because a pack can be dense
   locally and still leave the container half empty.
+
+
+SPOT-PICKS-FRUIT (invert the placement loop for crevices and voids)
+---------------------------------------------------------------------
+Today: pick a fruit kind -> pick a spot for it (round-robin over
+itemIndices in SeedDeepCrevices, PackingDriver.cpp:677; same shape in
+Phase 2e's "for each fruit kind" loop above). That is backwards for gap
+filling: the gap's size is fixed by geometry, so it should choose which
+fruit fits, not the other way around.
+
+Minimal change, reusing pieces already planned:
+  1. Build kindsBySize once (item catalogue is static within a round):
+       std::vector<unsigned> kindsBySize(scene.items.size());
+       for (unsigned i = 0; i < scene.items.size(); i++) kindsBySize[i] = i;
+       std::sort(kindsBySize.begin(), kindsBySize.end(), [&](unsigned a, unsigned b){
+         return scene.items[a].BoxDiagonal() > scene.items[b].BoxDiagonal();
+       });
+     Include every scale tier from MULTI-SCALE FILL below as its own entry;
+     they are already separate item KINDS, so this needs no special case.
+
+  2. TryFillSpot (helper #3 above) is the new inner loop:
+       int TryFillSpot(PackingScene &scene, const Vec3f &target, float localWidth,
+                       const std::vector<unsigned> &kindsBySize, float clearance,
+                       ClaimGrid &claims) {
+         for (unsigned itemIdx : kindsBySize) {
+           MeshInfo &item = scene.items[itemIdx];
+           if (item.BoxDiagonal() + clearance > localWidth) continue; // too big, try smaller
+           std::vector<RigidTransform> trajectory;
+           RigidTransform tran;
+           tran.position = target;
+           tran.rotation = scene.randAngles[...]; // round-robin or random, as today
+           RigidTransform settled = scene.NudgeToTarget(itemIdx, tran, target, trajectory);
+           float occFrac = OccupiedFraction(scene, item.samples, settled.rotation, settled.position);
+           if (occFrac < kOccupiedThresh) {
+             unsigned id = scene.Put(itemIdx, settled);
+             scene.instances[id].trajectory = trajectory;
+             claims.Mark(settled.position, item.BoxDiagonal());
+             return int(id);
+           }
+           // this kind didn't settle cleanly -- fall through to the next
+           // smaller kind at the SAME spot, instead of abandoning the spot.
+         }
+         return -1;  // nothing in the catalogue fits here
+       }
+
+  3. Both passes become one shape: sort candidate spots by localWidth
+     descending, then for each unclaimed spot call TryFillSpot:
+       for (const Spot &s : spotsSortedByWidthDescending) {
+         if (claims.IsClaimed(s.pos)) continue;
+         TryFillSpot(scene, s.target, s.localWidth, kindsBySize, clearance, claims);
+       }
+     For Phase 2, Spot = {freePt, voidField value at freePt}. For Phase 3,
+     Spot = {envelope-field-walk target (see Phase 3 above), localWidth =
+     the same envelope/void sample at that point}. Same loop, same helper,
+     two different spot lists -- SeedDeepCrevices and Phase 2e's per-kind
+     loop both collapse into this, so there is one placement path instead
+     of two independently-tuned ones.
+
+  4. localWidth for crevices needs a real number, not just ray depth.
+     Ray depth (ComputeSurfaceDepths) measures distance to the nearest
+     fruit/wall along ONE direction; it is not the aperture. Once the
+     envelope field exists (Phase 2a), sample it at the crevice target the
+     same way Phase 2b does for voidField -- this is the same number M1
+     wants for the manufacturability histogram, so it is not new
+     machinery, just an earlier consumer of it.
+
+Net effect: a crevice or void that is only big enough for the floor-sized
+blueberry tier (MULTI-SCALE FILL below) automatically gets that tier
+instead of stalling on a nominal-size fruit that cannot fit, and a large
+open void still gets the nominal size instead of wasting a small one on it.
+
+
+CANDIDATE SPOT MANAGEMENT (are two connected spots one or two, how far apart)
+------------------------------------------------------------------------------
+Question: how are candidate spots (freePts / crevice origins) generated and
+deduplicated, and are their attraction centers spaced far enough apart.
+
+Current state (the actual bug, not a hypothetical): candidates are dense
+per-sample points, not one point per physical gap.
+  - Crevices: one candidate per 0.3cm container-surface sample that passes
+    FindDeepRays' local-median test. A single 3cm-wide crevice contains on
+    the order of 100 such samples (its footprint at 0.3cm spacing).
+  - Voids (as drafted before this pass): marching cubes at iso 0 gives one
+    point per boundary triangle -- again many points per void, tracing its
+    edge rather than marking its center.
+  Deduplication today (crevice path only) is SeedDeepCrevices' tooClose
+  check: skip a candidate within item.BoxDiagonal() of an already-placed
+  position (PackingDriver.cpp:692-695). Two problems: (1) which candidate
+  "wins" depends on scan order over the surface mesh, not on which one is
+  actually the center of the gap; (2) the exclusion radius is the CURRENT
+  fruit kind's size, not the gap's own width, so it does not adapt when a
+  kind is swapped in the SPOT-PICKS-FRUIT loop above.
+
+Fix: make a candidate spot a LOCAL MAXIMUM of the distance field
+(voidField for interior voids, the same field once it also covers
+near-wall space for crevices -- see Phase 3 above), not a boundary sample.
+Add a cleanup pass before extracting maxima, since the thresholded mask
+from 2b is jagged, not a clean set of blobs:
+  - Threshold voidField per 2b's fix (voxelSize+epsilon, or the smallest
+    fruit tier's radius) to get a binary mask.
+  - Morphological open: erode the mask by 1-2 voxels, then dilate by the
+    same amount. Erosion kills thin webs and residual crust that survived
+    thresholding (jagged inflation noise, not real gaps); dilation puffs
+    the surviving cores back to their real boundary. Cheap, and it is the
+    same voxel grid already in hand, no new data structure.
+  - Compute a fresh distance transform INSIDE the cleaned mask (distance
+    to the mask's own boundary, not the raw voidField value, since the
+    mask boundary shifted slightly from the open). This is the field local
+    maxima are taken from.
+  - Debug output, worth wiring up early since Phase 2/3 are otherwise hard
+    to verify: marching cubes on the cleaned binary mask -> OBJ blobs, one
+    isolated chunk per real crevice/void, with the outer sculpture surface
+    absent by construction (thresholded away in 2b). And a PLY point cloud
+    of the local maxima found inside those blobs -- the actual target
+    positions TryFillSpot will use. Cross-check these visually against the
+    shrinkwrap mesh before trusting the automated fill; a blob touching the
+    outer surface, or a point cloud denser than the blob count, means the
+    threshold or the open radius is still off.
+  - Finding maxima: a voxel is a candidate if its field value is >= every
+    neighbor in a window sized to ITS OWN value (a voxel with value w is
+    only compared within roughly radius w of itself, so a deep pocket does
+    not get out-competed by a shallow one several widths away that it has
+    no business suppressing).
+  - This directly answers "connected but one or two": a void's field
+    naturally has one peak per lobe, separated by a saddle at the neck
+    between them. A single round pocket integrates to one peak; a
+    dumbbell-shaped void integrates to two, each with its own width. This
+    falls out of the field's shape, not a tuned merge distance, so it
+    stays correct as the pack fills in and the void's shape changes round
+    to round.
+  - Spacing between accepted maxima (non-maximum suppression): sort raw
+    maxima by field value descending. Walk the list; merge a maximum into
+    an already-accepted LARGER one only if their inscribed spheres already
+    overlap: dist(A,B) < rA + rB. This is an EXACT test, not a tuned
+    constant -- if the disks overlap, A's own free space already reaches
+    into B, so they are the same feature by definition, not two features
+    that happen to be near each other. If dist(A,B) >= rA + rB, keep both,
+    no matter how close that is.
+    Bias this test toward keeping spots, not merging them: a spot dropped
+    here is a fill opportunity lost for the whole round with nothing
+    downstream to recover it, whereas a spot kept that turns out to
+    conflict with a neighbor is caught cheaply a few steps later (below).
+    So do not round k up "to be safe" -- k=1 (disks touching) is the
+    correct value, not a lower bound to pad.
+
+  How "too close" actually gets resolved (not by this test): process the
+  surviving spots widest-first (2d/2e) through TryFillSpot + ClaimGrid.
+  ClaimGrid marks each spot's neighborhood using the ACTUALLY PLACED item's
+  own radius the moment it settles, not a guess made at generation time.
+  So if spot B was only maybe blocked by A, the answer falls out for free:
+  either B still validates against OccupiedFraction (genuinely reachable,
+  fill it), or it doesn't (fails or falls back to a smaller kind per
+  SPOT-PICKS-FRUIT). No separate collision prediction is needed between
+  spots -- the settle step is ground truth, the merge test above is not.
+
+  How "too sparse, leaves new small crevices" actually gets resolved: by
+  Phase 2 being iterated at all. The void field, the cleanup mask, and the
+  maxima are recomputed every round, so any gap that opens up between two
+  freshly-placed fruits -- or any spot conservatively kept-but-unfilled
+  this round -- simply reappears as a fresh maximum next round, sized
+  against whatever fruit tiers are still available. Nothing is lost by
+  erring toward keeping spots at generation time; it only costs one extra
+  round, which is far cheaper than merging away a real spot permanently.
+
+  Refinement to keep on the shelf, not build yet: the pairwise disk-overlap
+  test above is a cheap stand-in for watershed segmentation of the distance
+  transform inside the cleaned mask, which is the textbook-correct way to
+  decide "one blob or two" and handles elongated/asymmetric crevices (a
+  long trough with two bumps) better than comparing peak centers pairwise.
+  Only build it if the debug blob/point-cloud output (above) or the M1
+  histogram shows the pairwise test mis-splitting real crevices.
+
+  ClaimGrid (helper #2) should use the same PLACED-item-radius logic as
+  above for claims, not a fixed constant, so a floor-sized tier does not
+  over-claim a small pocket and a nominal-size fruit does not under-claim
+  a large one.
+
+
+MULTI-SCALE FILL (discrete blueberry sizes vs per-instance scale)
+-------------------------------------------------------------------
+Question: does scaling let smaller copies fill the gaps left by the nominal
+size, and how do we know which radius fits a given gap.
+
+Hard constraint: a blueberry cannot be scaled below 0.8 cm diameter and
+still read as a blueberry, so this is not a free parameter down to zero.
+If nominal size is, say, 1.2-1.6 cm diameter, there is room for maybe ONE
+smaller tier before hitting the floor (e.g. 0.9-1.0 cm), not the 3-4 tier
+range assumed below for an unconstrained filler particle. Consequences:
+  - most sub-0.8cm gap volume can never be closed by a smaller instance,
+    regardless of how good the void-width targeting gets. It falls through
+    to the shrinkwrap closing radius (M2) or the "ignore, self-fills" bucket
+    in the acceptance table by construction, not by choice.
+  - the realistic win from a second tier is bounded and worth measuring
+    BEFORE building the extra kind: run Phase 2 with the nominal size only,
+    take the M1 histogram, and sum void volume in the 0.8-1.6 cm bucket. If
+    that is a small fraction of total void volume, a second tier is not
+    worth the settle time and the mesh/SDF/trigrid upkeep of another kind.
+  - if a second tier is added, size it to the floor (~0.85-0.9 cm diameter),
+    not to a fraction of the nominal radius -- the geometric-fraction sizing
+    below assumed an unconstrained filler and does not apply once realism
+    sets the floor above where the gap distribution wants the next tier.
+
+Use discrete pre-scaled mesh KINDS, not a per-instance scale factor.
+  items and kindGrids (PackingScene.h:101,127) are already cached per item
+  KIND, not per instance, so adding "blueberry_0.5x" as a new entry in items
+  costs exactly what adding a new fruit type costs: one TrigGrid, one SDF
+  build. RigidTransform, Nudge, NudgeToTarget all work unmodified.
+  True per-instance scale would need a scalar threaded through
+  RigidTransform, every TrigGrid query, the broadphase bbox, contact normal
+  calc, and SDF gradient sampling -- a much bigger change for a benefit the
+  multi-kind route already gets, since void sizes in a random pack are not
+  continuous. They cluster geometrically (the gap between near-equal spheres
+  packed tightly is a fixed fraction of their radius, regardless of absolute
+  scale), so a handful of discrete tiers spans the range that matters. Only
+  build continuous per-instance scale if a measured gap histogram (M1) shows
+  real gaps falling between the chosen tiers.
+
+Precision needed to pick a radius for a gap: this is already planned, not
+new machinery. Phase 2's voidField and "local void width" (2b/2c/2d) is the
+inscribed-disk radius at each free point, at whatever resolution the field
+is sampled (M5 flags today's 0.25 cm grid as too coarse below ~0.5 cm).
+Matching rule for 2e: for a kind of radius r, only claim a freePt whose void
+width >= 2r + clearance, and within the existing "smallest fruit kind first"
+loop, try the largest kind that still fits before falling to the next size
+down. One-line change to 2e's claim logic once VoidField exists.
+
+Expected payoff, given the 0.8 cm diameter floor above:
+  - the general "0.4-0.5x then 0.15-0.25x" tiering below is what an
+    unconstrained filler particle would use. With a realism floor, only the
+    first step is normally reachable: one tier near the floor
+    (~0.85-0.9 cm diameter) recovers whatever gap volume sits in the
+    0.8-1.6 cm range. That is the whole multi-scale budget here.
+  - do not add a second smaller tier at all; there is no room left below the
+    floor. Gaps under 0.8 cm are M2's (shrinkwrap closing radius) problem or
+    self-fill per the acceptance table, not a smaller instance's.
+  - so this plan's tiering rule below (unconstrained geometric fractions) is
+    reference material for a filler particle without a realism floor. For
+    actual blueberries, use just the two tiers: nominal, and one floor-sized
+    tier, and validate with the M1 histogram whether the second tier is
+    worth it at all before building it.
+
+Unconstrained reference (particle with no minimum size), largest first:
+  - one extra small tier (roughly 0.4-0.5x nominal radius) recovers most of
+    the gap volume between equal spheres. Highest value single addition.
+  - a second smaller tier (roughly 0.15-0.25x) picks up the small voids left
+    between three touching first-tier spheres. Volume gained drops roughly
+    an order of magnitude versus the first tier.
+  - a third tier is rarely worth its instance count and settle time; check
+    the M1 histogram before adding one.
+  - below the ~0.2 cm opening threshold, do not add a mesh tier at all --
+    that range is the shrinkwrap closing radius's job (M2), not more
+    instances. Filling it with geometry fights M2/M3 instead of helping.
 
 
 SHARED HELPERS TO FACTOR OUT
@@ -97,13 +435,24 @@ SHARED HELPERS TO FACTOR OUT
    in OccupiedFraction.
 
 2. ClaimGrid: sparse voxel set of "a fruit was just placed here this round".
-   Used by Phase 2e and Phase 3. Prevents the pile-up.
+   Used by Phase 2e and Phase 3. Prevents the pile-up. Claim radius should
+   scale with the PLACED item's own size, not a fixed constant -- see
+   CANDIDATE SPOT MANAGEMENT below for why a flat radius mismatches
+   between fruit tiers.
 
-3. SettleAndAccept(scene, itemIdx, tran, target) -> bool.
-   NudgeToTarget, then validate, then Put or discard. Today
-   SeedDeepCrevices (PackingDriver.cpp:726) Puts unconditionally and only
-   checks OccupiedFraction on the PRE-settle pose, so an unresolved
-   overlap gets committed.
+3. TryFillSpot(scene, target, localWidth, kindsBySize, clearance, claims)
+   -> int instanceId or -1. Generalizes SettleAndAccept into the
+   spot-picks-fruit inversion (see SPOT-PICKS-FRUIT below): tries each
+   kind in kindsBySize (all item KINDS incl. scale tiers, sorted descending
+   by BoxDiagonal) whose size fits localWidth, NudgeToTarget's it, and
+   Puts on the first one that validates (post-settle OccupiedFraction <
+   thresh). Falls through to the next smaller kind on a failed settle
+   instead of giving up on the spot. On success, marks the claim grid.
+   Today SeedDeepCrevices (PackingDriver.cpp:726) Puts unconditionally and
+   only checks OccupiedFraction on the PRE-settle pose, so an unresolved
+   overlap gets committed -- this replaces that call entirely, and also
+   replaces Phase 2e's per-kind loop, so there is one accept/reject path
+   instead of two.
 
 4. One nudge entry point. Nudge, NudgeConstrained and NudgeToTarget are
    ~80% duplicated: same sample generation, same broadphase, same grid
@@ -199,6 +548,106 @@ M2. Separate closing radius from offset radius. Verify what
     come back equal to the sphere radius, not radius+r.
     Then expose two radii: closeRadius (kill small holes) and
     growRadius (usually 0).
+    Concrete symptom if this stays unmeasured: envelope - actualFruitSDF
+    (or equivalently voidField > 0 at Phase 2b) will read positive
+    EVERYWHERE the shrinkwrap is inflated, not just at real gaps, because
+    at least 1 voxel of net growth shows up as a uniform false-positive
+    "crust" over the whole sculpture surface. That crust is exactly the
+    same size order as a real small crevice, so it swamps Phase 2/3's void
+    detection with noise before growRadius is known to be ~0. Fixing M2
+    first is a precondition for CANDIDATE SPOT MANAGEMENT below working at
+    all, not an independent nice-to-have.
+
+    MEASURED (sphere_shrinkwrap_test.cpp, new standing regression test,
+    single sphere of radius 2cm, no holes to close):
+      shrinkR=0.2 dx=0.1  -> hull meanR delta = 0.154 (1.54 voxels)
+      shrinkR=0.5 dx=0.1  -> delta = 0.137 (1.37 voxels)
+      shrinkR=1.0 dx=0.1  -> delta = 0.114 (1.14 voxels)
+      shrinkR=2.0 dx=0.1  -> delta = 0.090 (0.90 voxels)
+      shrinkR=0.5 dx=0.05 -> delta = 0.023 (0.45 voxels)
+      shrinkR=0.5 dx=0.25 -> delta = 0.375 (1.50 voxels)
+      shrinkR=0.5 dx=0.5  -> empty hull (degenerate, shrinkR==dx)
+
+    Net growth is real (0.09-0.15cm, never near 0) but does NOT scale with
+    shrinkRadius the way a broken closing-vs-offset confusion would predict
+    (growth barely changes across a 10x range of shrinkRadius). It DOES
+    scale with voxelSize (~1.4-1.5 voxels of extra radius at dx=0.1 and
+    dx=0.25, dropping to ~0.45 voxels at dx=0.05). That points at a
+    different root cause than the shrinkRadius/0.5*voxelSize/-2*voxelSize
+    constants: ComputeShrinkWrapDistField's voxelization stage
+    (PackShrinkWrap.cpp:183-192) marks ALL 8 corner vertices of an occupied
+    voxel as dist=0, regardless of where inside that voxel the true
+    surface actually passes. That is a conservative binary-occupancy test,
+    not a real signed distance, and it pushes the zero-level-set outward
+    by up to a full voxel before any shrinkRadius/closing math runs at
+    all. The code's own comment already flags this ("coarse approximation.
+    could use adapudf instead of voxelize meshes.").
+    So "expose closeRadius vs growRadius" is not the right fix -- that
+    framing assumes the bias scales with shrinkRadius, and it does not.
+    The real fix is sub-voxel-accurate distance at the voxelization stage:
+    sample each grid vertex against a real distance to the mesh surface
+    (the codebase already has AdapSDF for this, used for the container
+    SDF) instead of binary occupancy + corner-zeroing. Do this before
+    trusting any voidField threshold derived from this field.
+    sphere_shrinkwrap_test.cpp is a standing regression test for this --
+    rerun it after the voxelization fix and expect delta to shrink toward
+    a fraction of a voxel, independent of shrinkRadius.
+
+    DONE. Used AdapUDF (unsigned), not AdapSDF -- signed distance needs
+    reliable mesh winding to tell inside from outside, which per-fruit
+    meshes do not guarantee; AdapUDF's MinDist is winding-independent.
+    ComputeShrinkWrapMesh now merges all instances into one TrigMesh and
+    seeds the dist field via AdapUDF::BuildTrigList/ComputeCoarseDist
+    (exact point-triangle distance) instead of VoxelizeItems +
+    corner-zeroing; the old closing math is unchanged, split out into
+    ApplyShrinkWrapClosing so it can run on either seed. Two bugs found
+    and fixed along the way, both would have crashed or silently
+    corrupted results on real (non-sphere-test) data:
+      - TrigMesh::ComputePseudoNormals reads the per-triangle normal array
+        (nt) directly and does not compute it from current vertex
+        positions; a hand-built mesh with nt never populated crashes
+        (segfault) inside it. Fixed by calling mesh.ComputeTrigNormals()
+        first. LoadMesh() already does this for real fruit meshes, so
+        production data was never at risk from THIS specific path, but:
+      - MakeTransformedMesh rotates vertex positions but never rotates nt,
+        so nt on the merged multi-instance mesh is stale (wrong direction)
+        for every rotated instance -- which is nearly all of them in a
+        real pack. AdapDF::ComputeCoarseDist reads GetTrigNormal() (backed
+        by nt) to build each triangle's frame and does not recompute it,
+        so this would have silently corrupted the distance field on any
+        rotated instance without crashing. Fixed by calling
+        mesh.ComputeTrigNormals() on the MERGED mesh inside
+        BuildUnsignedDistField, after merging/rotating, instead of
+        trusting the per-instance nt that came in.
+
+    MEASURED AFTER THE FIX (same sphere, radius 2cm):
+      shrinkR=0.2 dx=0.1  -> delta = 0.039 (0.39 voxels)   [was 1.54]
+      shrinkR=0.5 dx=0.1  -> delta = 0.011 (0.11 voxels)   [was 1.37]
+      shrinkR=1.0 dx=0.1  -> delta = -0.055 (-0.55 voxels) [was 1.14]
+      shrinkR=2.0 dx=0.1  -> delta = -0.496 (-4.96 voxels) [was 0.90]
+      shrinkR=0.5 dx=0.05 -> delta = -0.062 (-1.24 voxels) [was 0.45]
+      shrinkR=0.5 dx=0.25 -> delta = 0.097 (0.39 voxels)   [was 1.50]
+    Net growth dropped from a consistent ~1-1.5 voxels to well under half a
+    voxel across the range that matters for this project (shrinkR 0.2-0.5cm
+    at dx 0.1-0.25cm). Two things NOT fully resolved, both explainable, not
+    yet fixed:
+      - shrinkR=1.0 and shrinkR=2.0 at dx=0.1 need band =
+        shrinkRadius/voxelSize + 2 = 12 and 22 voxels; AdapDF::MAX_BAND
+        caps band at 16, so the shrinkR=2.0 case silently runs with less
+        band than it needs and the error grows accordingly (-4.96 voxels).
+        ComputeShrinkWrapMesh already clamps to MAX_BAND rather than
+        crashing, but does not warn when the clamp bites. Add a log
+        warning when shrinkRadius/voxelSize + 2 > AdapDF::MAX_BAND so a
+        future large-shrinkRadius call fails loud, not silently inaccurate.
+      - shrinkR=0.5 at dx=0.05 (band=12, well inside the cap) still shows
+        -1.24 voxels of error, worse in relative terms than dx=0.1's 0.11
+        voxels despite being a finer grid. Not yet root-caused; candidates
+        are icosphere facet error interacting with the closing formula's
+        fixed constants (0.5*voxelSize, -2*voxelSize terms in
+        ApplyShrinkWrapClosing), or distUnit=0.01cm being too coarse in
+        `short` units relative to a 0.05cm voxel. Worth another sphere
+        sweep at finer distUnit before relying on dx<0.1 in production.
+    sphere_shrinkwrap_test.cpp stays as the regression check for both.
 
 M3. Overhang / undercut removal. This is the largest missing piece and
     it is cheap on the grid that already exists. For a pull direction p,
@@ -217,12 +666,21 @@ M4. Draft angle. Straight walls from M3 are the zero-draft case, which
     Pick alpha 3-5 degrees.
 
 M5. Voxel size is too coarse for the criteria. voxelSize is 0.25 cm
-    (PackShrinkWrap.cpp:304) and the smallest feature that matters is
-    0.2 cm. Cannot classify a 0.2 cm hole on a 0.25 cm grid. The surface
-    stage needs 0.05-0.1 cm, which the current single-grid-for-everything
-    approach will not fit in memory. Needs either a narrow-band field
-    around the hull only, or a two-resolution pass: coarse for the pack,
-    fine for the surface.
+    (PackingDriver.cpp:957, SaveShrinkWrapMesh default) and the smallest
+    feature that matters is 0.2 cm. Cannot classify a 0.2 cm hole on a
+    0.25 cm grid. The surface stage needs 0.05-0.1 cm, which the current
+    single-grid-for-everything approach will not fit in memory. Needs
+    either a narrow-band field around the hull only, or a two-resolution
+    pass: coarse for the pack, fine for the surface.
+    Confirmed on melone_two (185 instances): shrinkRadius=0.5cm at
+    voxelSize=0.25cm (ratio 2) produces visibly flat faceted sides where
+    whole fruits sit underneath -- not a closing-operator bug, just too
+    few voxels of margin to represent curvature within the closing
+    kernel. Same radius at voxelSize=0.1cm (ratio 5) removes the
+    flattening entirely. Left the production default at 0.25cm for now
+    (cheap at 185 instances, unverified at "much bigger" scale) --
+    resolve as part of M5's narrow-band/two-resolution design, not a
+    quick default bump.
 
 M6. Mesh conditioning after marching cubes. The output is watertight and
     manifold, which is the hard part, but it is dense and stair-stepped.
@@ -272,6 +730,18 @@ N1. Step budget vs distance. PackingScene.cpp:1272 nudgeAcceleration=200,
     steps = clamp(dist / (v_term*dt) * 1.5, 30, 400), and exit on
     arrival (dist < eps_arrive) rather than only on low velocity.
 
+    DONE. maxSteps = max(simParams.steps, min(400, 1.5*initialDist/(vTerm*dt)))
+    in NudgeToTarget (PackingScene.cpp), vTerm = nudgeAcceleration*dt*damping/
+    (1-damping) per the formula above. Loop also now checks dist < epsArrive
+    (epsArrive = ds, the per-size contact tolerance already computed) at the
+    top of each step and breaks with outcome=Arrived, instead of relying on
+    the low-velocity break to also mean "got there". On melone_test's real
+    pack, most settles still land at steps=30/30 (initial distance was small
+    enough that the existing 30-step floor already covered it), confirming
+    this is additive, not a behavior change for short moves; long-distance
+    crevice targets now get more steps when they need them instead of being
+    silently truncated.
+
 N2. Velocity cap fights the pull. SolveContactConstraintsPGS
     (PackingScene.cpp:537) caps approach speed at
     -(distance - eps)/dt. With activeBuffer = ds = 0.2 and eps = 0.02 that
@@ -291,6 +761,20 @@ N3. Early exit cannot tell "arrived" from "jammed".
     Fix: return an outcome (arrived / jammed / out-of-steps) so the caller
     can retry with the next-best target instead of committing a bad spot.
 
+    DONE. Added enum class NudgeOutcome {Arrived, Jammed, OutOfSteps}
+    (PackingScene.h) and an optional NudgeOutcome *outcome out-param on
+    NudgeToTarget. Jammed vs Arrived is decided at the existing low-velocity
+    break by re-checking distance to target against epsArrive, so a fruit
+    that stalls right next to its target is not reported the same as one
+    that stalled far short. Full TryFillSpot-style retry-on-Jammed (helper
+    #3) is still future work (step 7), but SeedDeepCrevices
+    (PackingDriver.cpp) already uses the outcome for something concrete now:
+    it re-checks OccupiedFraction on the POST-settle pose before committing,
+    where before it only checked the PRE-settle pose and Put unconditionally
+    -- exactly the bug flagged in SHARED HELPERS #3 ("an unresolved overlap
+    gets committed"). On melone_test's real pack this post-settle check
+    fired and skipped 62 placements that the pre-settle check had missed.
+
 N4. Target is behind the fruit in the crevice path.
     SeedDeepCrevices (PackingDriver.cpp:710) places the fruit at
     O + dir*(0.5 + 0.5*diag), i.e. already inside, then targets
@@ -299,14 +783,19 @@ N4. Target is behind the fruit in the crevice path.
     fruit moves a little, hits the wall, and stalls. This is the most
     visible "stops halfway".
     Fix: target a point further along the ray, e.g. O + dir*depth*0.5.
+    Once the envelope field (Phase 2) exists, do this by sampling the field
+    along the ray and stopping just short of where it crosses zero, so the
+    target is guaranteed reachable open space, not a fixed 0.5*depth guess.
 
 N5. Centroid of 5 surface points is not guaranteed to be free space.
     NearestKCenter (PackingDriver.cpp:22) averages positions on a curved
     inner surface, so on a concave corner the centroid lands inside the
     wall, and on a convex bulge it lands outside the container. The fruit
     then pushes into geometry it can never reach.
-    Fix: after averaging, project the centroid back with the container SDF,
-    or pick the single best point by void width instead of averaging.
+    Fix: drop NearestKCenter for this purpose. Use the same envelope-field
+    walk as N4's fix instead of averaging points at all -- a field lookup
+    cannot land inside a wall or outside the container by construction,
+    where an average of surface points can.
 
 N6. Stale contacts are applied at stale positions.
     contactGatherInterval=2 for 3-5 cm fruits (PackingScene.cpp:652).
@@ -330,3 +819,49 @@ Priority: N4 and N1 first, they explain the reported symptom directly.
 N3 next, it stops bad placements from being committed. Then the Phase 2
 re-derivation, which is what makes the last step actually fill holes
 instead of queueing every fruit at one centroid.
+
+
+RELEVANT LITERATURE
+--------------------
+Not required reading to implement the plan above, but each of these maps
+onto a specific piece of it closely enough to be worth pulling up if that
+piece needs a numeric target or a more robust algorithm than the pairwise
+heuristic sketched here.
+
+- Pore network extraction / "maximal ball" algorithms (rock physics,
+  porous media): Silin & Patzek; Al-Kharusi & Blunt, "Extracting Pore
+  Network Model from micro-CT Images of Sandstone". Same problem as
+  CANDIDATE SPOT MANAGEMENT above -- local maxima of a distance transform
+  as pore/void centers, merged by inscribed-sphere overlap, connected into
+  a network by throats. Their watershed-based merge refinement is the
+  citable version of the "shelf item" noted there if the pairwise disk
+  test proves too crude on real crevice shapes.
+
+- Polydisperse / bidisperse hard-sphere packing density. Ordered-lattice
+  void radii are exact and a useful sanity check: FCC/HCP octahedral void
+  inscribes 0.414r, tetrahedral void inscribes 0.225r (r = the large
+  sphere radius). For random packings, Kansal, Torquato & Stillinger's
+  polydisperse hard-sphere packing work and the broader bidisperse-density
+  literature give a measured optimum large:small diameter ratio (roughly
+  5:1-7:1 for a binary mix) for maximum density -- a literature-backed
+  number to check the MULTI-SCALE FILL tiers against, rather than the
+  0.4-0.5x / 0.15-0.25x guess used there.
+
+- Ellipsoid jamming: Donev et al., "Improving the Density of Jammed
+  Disordered Packings Using Ellipsoids" (Science, 2004). Random close
+  packing density ~0.64 (spheres, Bernal) rises to ~0.71 for ellipsoids
+  purely from the added rotational degree of freedom letting particles
+  rotate into gaps a sphere cannot. Directly argues for letting
+  Nudge/NudgeToTarget exploit rotation aggressively during settling, not
+  just as a random initial pose, if items are approximated as ellipsoids.
+  Torquato & Stillinger, "Jammed Hard-Particle Packings: From Kepler to
+  Bernal and Beyond" (Rev. Mod. Phys., 2010) is a good single survey tying
+  RCP, jamming criteria, and the ellipsoid result together.
+
+- Moldability / undercut / parting-direction analysis (CAD literature):
+  search terms "moldability analysis," "parting direction computation,"
+  "undercut detection ray casting." The core M3 technique (sweep occupancy
+  along a candidate pull direction, shadowed voxels are undercuts) is a
+  studied CAD problem; that literature mainly adds smarter parting-
+  direction selection when a single axis is not good enough, relevant to
+  M8's base/parting-plane choice.
