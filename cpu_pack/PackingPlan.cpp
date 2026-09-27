@@ -21,6 +21,11 @@ std::string PackingStep::toString() const {
   oss << " force " << force[0] << " " << force[1] << " " << force[2] << " ";
   oss << "count " << count;
   oss << " outwards " << outwards << " useInnerContainer " << useInnerContainer;
+  oss << " useFreeSurfacePoints " << useFreeSurfacePoints;
+  oss << " kind " << int(kind);
+  oss << " shrinkwrapRadius " << shrinkwrapRadius;
+  oss << " shrinkwrapVoxelSize " << shrinkwrapVoxelSize;
+  oss << " shrinkwrapOpenRadiusVoxels " << shrinkwrapOpenRadiusVoxels;
   return oss.str();
 }
 
@@ -41,6 +46,18 @@ void PackingStep::Load(std::istream &in) {
   in >> outwards;
   in >> token; // "useInnerContainer"
   in >> useInnerContainer;
+  in >> token; // "useFreeSurfacePoints"
+  in >> useFreeSurfacePoints;
+  in >> token; // "kind"
+  int kindInt;
+  in >> kindInt;
+  kind = StepKind(kindInt);
+  in >> token; // "shrinkwrapRadius"
+  in >> shrinkwrapRadius;
+  in >> token; // "shrinkwrapVoxelSize"
+  in >> shrinkwrapVoxelSize;
+  in >> token; // "shrinkwrapOpenRadiusVoxels"
+  in >> shrinkwrapOpenRadiusVoxels;
 }
 
 void PackingPlan::Save(std::ostream &out) const {
@@ -231,8 +248,26 @@ PackingPlan PlanPackingSteps(const std::string &meshDir) {
   lastStep.useInnerContainer = true;
   lastStep.count = LARGE_INT;
   lastStep.force = finalForce;
+  lastStep.useFreeSurfacePoints = true;
   plan.steps.push_back(lastStep);
 
+  // Phase 2: crevice fill on the two smallest groups, using default
+  // shrinkwrap settings -- mirrors the fixed two-call pipeline PackScene
+  // used to hardcode before crevice fill became its own plan step kind.
+  // Callers that want coarser/finer settings per group should build these
+  // steps by hand instead of going through PlanPackingSteps.
+  if (plan.groups.size() >= 2) {
+    PackingStep creviceMed;
+    creviceMed.kind = StepKind::Crevice;
+    creviceMed.names = plan.groups[plan.groups.size() - 2];
+    plan.steps.push_back(creviceMed);
+  }
+  if (!plan.groups.empty()) {
+    PackingStep creviceSmall;
+    creviceSmall.kind = StepKind::Crevice;
+    creviceSmall.names = plan.groups.back();
+    plan.steps.push_back(creviceSmall);
+  }
 
   return plan;
 }

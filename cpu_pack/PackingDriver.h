@@ -148,6 +148,16 @@ int TryFillSpot(PackingScene &scene, const Vec3f &target, float localWidth,
 /// (plan.txt CURRENT STATUS) -- kept only for DebugFillVoids/benchmarks.
 void PackFillVoids(PackingScene &scene, const PackingConfig &cfg, PlacementTimer *timer = nullptr);
 
+/// shrinkwrap grid settings for one crevice-fill plan step (PackingPlan.h's
+/// PackingStep, StepKind::Crevice). Kept separate from PackingConfig so a
+/// bigger-fruit crevice step can use a coarser grid than a small-fruit one
+/// in the same run -- see PackingStep's own doc comment.
+struct CreviceFieldParams {
+  float shrinkwrapRadius = 1.0f;
+  float shrinkwrapVoxelSize = 0.2f;
+  unsigned shrinkwrapOpenRadiusVoxels = 1;
+};
+
 /// the crevices Phase 2 is allowed to target, computed ONCE from the pack as
 /// it stood after Phase 1 and never regenerated -- so small fruit placed by
 /// Phase 2 cannot create new targets for later small fruit (plan.txt
@@ -170,7 +180,7 @@ struct CreviceBaseline {
 
 /// builds the baseline from scene.instances[0, numInstances) only.
 CreviceBaseline ComputeCreviceBaseline(PackingScene &scene, const PackingConfig &cfg,
-                                       size_t numInstances);
+                                       const CreviceFieldParams &fp, size_t numInstances);
 
 /// Phase 2: small fruit resting on top of fruit-fruit crevices, targets
 /// restricted to baseline.spots. Each round recomputes the current void
@@ -181,6 +191,7 @@ CreviceBaseline ComputeCreviceBaseline(PackingScene &scene, const PackingConfig 
 /// cfg.creviceMaxAttemptsPerSpot times per spot. Stops when a round places
 /// fewer than cfg.creviceMinPlaced or cfg.creviceMaxRounds is hit.
 void PackFillCrevices(PackingScene &scene, const PackingConfig &cfg,
+                      const CreviceFieldParams &fp,
                       const std::vector<std::string> &smallItemNames,
                       const CreviceBaseline &baseline,
                       PlacementTimer *timer = nullptr);
@@ -210,6 +221,7 @@ struct CreviceCoverageReport {
 };
 
 CreviceCoverageReport ComputeCreviceCoverage(PackingScene &scene, const PackingConfig &cfg,
+                                             const CreviceFieldParams &fp,
                                              const CreviceBaseline &baseline);
 
 /// writes the report to filename, plus the unnecessary fruit centers as a

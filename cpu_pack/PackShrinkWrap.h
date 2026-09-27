@@ -70,33 +70,35 @@ struct VoidField {
 VoidField ComputeVoidField(PackingScene &scene, float shrinkRadius = 1.0f,
                           float voxelSize = 0.25f);
 
-/// like VoidField, but restricted to a thin shell around the shrinkwrap
-/// surface's own zero crossing (|closedField(x)| <= voxelSize) instead of
-/// the whole interior -- i.e. only points that are actually part of the
-/// manufactured skin, not bulk space behind it (plan.txt PIPELINE Phase 2,
-/// shrinkwrap-surface rework: Phase 2 only cares about covering the
-/// shrinkwrap surface where it is not already covered by a single bigger
-/// fruit, not volumetric interior gaps -- a big pocket that is really just
-/// open space beside one large convex fruit has a big VoidField radius
-/// deep in its interior despite there being nothing to bridge at the skin
-/// itself). rawEnvelope(x) at a kept (on-skin) point is the unsigned
-/// distance to the nearest ACTUAL fruit surface: near 0 means some single
-/// fruit's own surface passes through the skin right there (nothing to
-/// bridge, correctly excluded by ExtractVoidSpots' own threshold); large
-/// (up to shrinkRadius) means the skin only reaches here by smoothing over
-/// a real gap between multiple fruit -- a genuine crevice mouth. Same
-/// shape as VoidField (raw where kept, blocked=-MAX_DIST sentinel
-/// elsewhere) so ExtractVoidSpots runs on it completely unchanged -- no
-/// marching cubes, no point sampling, still a plain dense-grid operation.
-/// skinBandVoxels: half-thickness of the kept shell, in voxels. Must be
-/// thick enough to survive ExtractVoidSpots' own morphological open (erode
-/// by openRadiusVoxels then dilate back) -- a voxel only survives erosion
-/// if all 6 face-neighbors are also foreground, so a 1-voxel shell (the
-/// literal zero crossing) has no "interior" thick enough to survive that
-/// at all and erosion wipes it out completely. Callers should pass at
-/// least openRadiusVoxels+1.
+/// hull interior minus actual fruit, eroded, then restricted to a thin
+/// shell around the shrinkwrap surface's own zero crossing -- true
+/// crevices only, no single-fruit inflation, no deep bulk interior:
+///   1. voidMask(x) = closedField(x) <= 0 AND rawField(x) > 0 -- inside the
+///      manufactured hull, but not inside any actual placed fruit.
+///   2. erode voidMask by erodeVoxels. A single fruit's own concave
+///      surface feature (a dimple) gets bridged by closing the same as a
+///      real multi-fruit crevice mouth is, so voidMask alone cannot tell
+///      them apart; erosion removes thin/shallow slivers like a dimple
+///      while a genuinely wide multi-fruit crevice survives. NOT derived
+///      from shrinkRadius -- closing nets close to zero growth over a
+///      smooth convex surface (see plan.txt M2), so there is no uniform
+///      shrinkRadius-thick shell to size this against; tune it directly.
+///   3. keep only voxels within skinBandVoxels + erodeVoxels of
+///      closedField(x)'s own zero crossing (the erosion in step 2 already
+///      pulled every survivor at least erodeVoxels away from that
+///      boundary, so the band is widened by the same amount to compensate)
+///      -- attraction points belong on the manufactured surface, not
+///      floating in whatever bulk void the erosion left behind deeper in
+///      the interior.
+/// Kept voxels hold rawField(x), the unsigned distance to the nearest
+/// ACTUAL fruit surface (same value ExtractVoidSpots' local-maxima search
+/// treats as the local crevice width); everywhere else is blocked
+/// (-MAX_DIST sentinel), same shape VoidField uses, so ExtractVoidSpots
+/// runs on this completely unchanged -- no marching cubes, no point
+/// sampling, still a plain dense-grid operation.
 VoidField ComputeShrinkwrapField(PackingScene &scene, float shrinkRadius = 1.0f,
-                                 float voxelSize = 0.25f, unsigned skinBandVoxels = 2);
+                                 float voxelSize = 0.25f, unsigned erodeVoxels = 2,
+                                 unsigned skinBandVoxels = 2);
 
 /// plain unsigned distance to the nearest placed fruit surface, no closing
 /// applied (unlike VoidField, nothing here is masked to a hull interior or

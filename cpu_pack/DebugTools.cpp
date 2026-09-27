@@ -367,10 +367,14 @@ void DebugCreviceCoverage(const PackingConfig &cfg, size_t numBaseInstances,
   for (const InstanceInfo &inst : scene.instances) {
     scene.EnsureItemSamples(inst.itemId);
   }
-  CreviceBaseline baseline = ComputeCreviceBaseline(scene, cfg, numBaseInstances);
+  CreviceFieldParams fp;
+  fp.shrinkwrapRadius = cfg.shrinkwrapRadius;
+  fp.shrinkwrapVoxelSize = cfg.shrinkwrapVoxelSize;
+  fp.shrinkwrapOpenRadiusVoxels = cfg.shrinkwrapOpenRadiusVoxels;
+  CreviceBaseline baseline = ComputeCreviceBaseline(scene, cfg, fp, numBaseInstances);
   std::cout << "crevice baseline: " << baseline.spots.size() << " in-range spots from "
             << baseline.numBaseInstances << " instances\n";
-  SaveCreviceCoverageReport(ComputeCreviceCoverage(scene, cfg, baseline),
+  SaveCreviceCoverageReport(ComputeCreviceCoverage(scene, cfg, fp, baseline),
                             scene.outputFolder + "/" + outPrefix + "_coverage.txt",
                             scene.outputFolder + "/" + outPrefix + "_unnecessary.obj");
 }

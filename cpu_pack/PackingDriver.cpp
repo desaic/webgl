@@ -1094,11 +1094,12 @@ struct CurrentVoid {
 // not a crevice at all (nothing to bridge, no second fruit involved). The
 // skin band itself can stay a tight 1 voxel now that nothing needs to
 // survive erosion.
-static CurrentVoid ComputeCurrentVoid(PackingScene &scene, const PackingConfig &cfg) {
+static CurrentVoid ComputeCurrentVoid(PackingScene &scene, const CreviceFieldParams &fp) {
   CurrentVoid cur;
-  cur.vf = ComputeShrinkwrapField(scene, cfg.shrinkwrapRadius, cfg.shrinkwrapVoxelSize, 1);
+  cur.vf = ComputeShrinkwrapField(scene, fp.shrinkwrapRadius, fp.shrinkwrapVoxelSize,
+                                  fp.shrinkwrapOpenRadiusVoxels, 1);
   if (cur.vf.dist.GetSize()[0] > 0) {
-    cur.spots = ExtractVoidSpots(cur.vf, cfg.shrinkwrapVoxelSize * 1.1f, 0);
+    cur.spots = ExtractVoidSpots(cur.vf, fp.shrinkwrapVoxelSize * 1.1f, 0);
   }
   return cur;
 }
@@ -1117,14 +1118,14 @@ static float OpenFraction(const std::vector<Vec3f> &voxels, const CurrentVoid &c
 }
 
 CreviceBaseline ComputeCreviceBaseline(PackingScene &scene, const PackingConfig &cfg,
-                                       size_t numInstances) {
+                                       const CreviceFieldParams &fp, size_t numInstances) {
   CreviceBaseline base;
   numInstances = std::min(numInstances, scene.instances.size());
   base.numBaseInstances = numInstances;
   // evaluate the field on just the prefix by temporarily dropping the tail.
   std::vector<InstanceInfo> tail(scene.instances.begin() + numInstances, scene.instances.end());
   scene.instances.erase(scene.instances.begin() + numInstances, scene.instances.end());
-  CurrentVoid cur = ComputeCurrentVoid(scene, cfg);
+  CurrentVoid cur = ComputeCurrentVoid(scene, fp);
   scene.instances.insert(scene.instances.end(), tail.begin(), tail.end());
   if (cur.vf.dist.GetSize()[0] == 0) {
     return base;
@@ -1176,6 +1177,7 @@ CreviceBaseline ComputeCreviceBaseline(PackingScene &scene, const PackingConfig 
 }
 
 void PackFillCrevices(PackingScene &scene, const PackingConfig &cfg,
+                      const CreviceFieldParams &fp,
                       const std::vector<std::string> &smallItemNames,
                       const CreviceBaseline &baseline, PlacementTimer *timer) {
   std::vector<unsigned> kindsBySize;
@@ -1207,12 +1209,12 @@ void PackFillCrevices(PackingScene &scene, const PackingConfig &cfg,
     Utils::Stopwatch clock;
     clock.Start();
 
-    CurrentVoid cur = ComputeCurrentVoid(scene, cfg);
+    CurrentVoid cur = ComputeCurrentVoid(scene, fp);
     if (cur.vf.dist.GetSize()[0] == 0) {
       LOGI("fill crevices round " << round << ": void field is empty, stopping\n");
       break;
     }
-    EnvelopeField envelope = ComputeEnvelopeField(scene, cfg.shrinkwrapVoxelSize);
+    EnvelopeField envelope = ComputeEnvelopeField(scene, fp.shrinkwrapVoxelSize);
 
     ClaimGrid claims;
     unsigned filled = 0, claimed = 0, noFit = 0, closed = 0, exhausted = 0;
@@ -1254,12 +1256,13 @@ void PackFillCrevices(PackingScene &scene, const PackingConfig &cfg,
 }
 
 CreviceCoverageReport ComputeCreviceCoverage(PackingScene &scene, const PackingConfig &cfg,
+                                             const CreviceFieldParams &fp,
                                              const CreviceBaseline &baseline) {
   CreviceCoverageReport rep;
   rep.usefulVolume = cfg.creviceUsefulVolume;
   rep.spotsTotal = unsigned(baseline.spots.size());
   float voxVol = baseline.voxelSize * baseline.voxelSize * baseline.voxelSize;
-  CurrentVoid cur = ComputeCurrentVoid(scene, cfg);
+  CurrentVoid cur = ComputeCurrentVoid(scene, fp);
 
   struct Cand {
     unsigned id;
@@ -1716,75 +1719,70 @@ void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig
       scene.EnsureItemSamples(inst.itemId);
     }
   }
-  size_t lastStep = plan.steps.size() > 0 ? plan.steps.size() - 1 : 0;
-  for (size_t i = cfg.startStep; i < lastStep; i++) {
-    LOGI("=== step " << i << " of " << lastStep << " ===\n");
+  std::vector<Vec3f> surfPts;
+  bool haveSurfPts = false;
+  bool savedBeforeFill = false;
+  unsigned creviceStepCount = 0;
+
+  for (size_t i = cfg.startStep; i < plan.steps.size(); i++) {
+    const PackingStep &step = plan.steps[i];
+    LOGI("=== step " << i << " of " << plan.steps.size() << " ("
+                     << (step.kind == StepKind::Crevice ? "crevice" : "bulk") << ") ===\n");
     Utils::Stopwatch clock;
     clock.Start();
     size_t before = scene.instances.size();
-    PackStep(scene, plan.steps[i], cfg, {}, &runTimer);
+
+    if (step.kind == StepKind::Crevice) {
+      if (!savedBeforeFill) {
+        scene.SaveTrajectories(scene.trajFile + "_before_ray.txt");
+        scene.SaveInstances(scene.packFile + "_before_ray.txt");
+        Array3D<short> dist;
+        Vec3f origin;
+        float distUnit;
+        ComputeShrinkWrapDistField(scene, 1.0f, 0.2f, dist, origin, distUnit);
+        TrigMesh hull = ComputeShrinkWrapMesh(dist, origin, 0.2f, distUnit);
+        SaveShrinkWrapMesh(hull, scene.outputFolder + "/shrinkwrap.obj");
+        SavePackQualityReport(ComputePackQuality(scene, cfg),
+                              scene.outputFolder + "/pack_quality_before_fill.txt");
+        savedBeforeFill = true;
+      }
+
+      CreviceFieldParams fp;
+      fp.shrinkwrapRadius = step.shrinkwrapRadius;
+      fp.shrinkwrapVoxelSize = step.shrinkwrapVoxelSize;
+      fp.shrinkwrapOpenRadiusVoxels = step.shrinkwrapOpenRadiusVoxels;
+
+      CreviceBaseline baseline = ComputeCreviceBaseline(scene, cfg, fp, scene.instances.size());
+      std::string suffix = "_" + std::to_string(creviceStepCount);
+      {
+        std::vector<Vec3f> spotPts;
+        for (const VoidSpot &s : baseline.spots) {
+          spotPts.push_back(s.pos);
+        }
+        SaveVec3fObj(scene.outputFolder + "/crevice_baseline_spots" + suffix + ".obj", spotPts);
+        LOGI("crevice baseline: " << baseline.spots.size() << " in-range spots from "
+                                  << baseline.numBaseInstances << " instances\n");
+      }
+      PackFillCrevices(scene, cfg, fp, step.names, baseline, &runTimer);
+      SaveCreviceCoverageReport(ComputeCreviceCoverage(scene, cfg, fp, baseline),
+                                scene.outputFolder + "/crevice_coverage" + suffix + ".txt",
+                                scene.outputFolder + "/crevice_unnecessary" + suffix + ".obj");
+      creviceStepCount++;
+    } else {
+      if (step.useFreeSurfacePoints && !haveSurfPts) {
+        surfPts = ComputeFreeContainerPoints(scene);
+        SaveVec3fObj(scene.outputFolder + "/free_container_surface.obj", surfPts);
+        LOGI("free surface: " << surfPts.size() << " unoccupied points\n");
+        haveSurfPts = true;
+      }
+      PackStep(scene, step, cfg, step.useFreeSurfacePoints ? surfPts : std::vector<Vec3f>{},
+              &runTimer);
+    }
+
     LOGI("=== step " << i << " took " << (clock.ElapsedMS() / 1000.0) << " s, "
                      << (scene.instances.size() - before) << " placed, "
                      << scene.instances.size() << " instances total ===\n");
   }
-
-  scene.SaveTrajectories(scene.trajFile + "_before_ray.txt");
-  scene.SaveInstances(scene.packFile + "_before_ray.txt");
-
-  std::vector<Vec3f> surfPts = ComputeFreeContainerPoints(scene);
-  SaveVec3fObj(scene.outputFolder + "/free_container_surface.obj", surfPts);
-  LOGI("free surface: " << surfPts.size() << " unoccupied points\n");
-
-  if (!plan.steps.empty() && cfg.startStep <= lastStep) {
-    LOGI("=== step " << lastStep << " of " << lastStep << " (surface-guided) ===\n");
-    Utils::Stopwatch clock;
-    clock.Start();
-    size_t before = scene.instances.size();
-    PackStep(scene, plan.steps[lastStep], cfg, surfPts, &runTimer);
-    LOGI("=== step " << lastStep << " took " << (clock.ElapsedMS() / 1000.0) << " s, "
-                     << (scene.instances.size() - before) << " placed, "
-                     << scene.instances.size() << " instances total ===\n");
-  }
-
-  {
-    Array3D<short> dist;
-    Vec3f origin;
-    float distUnit;
-    ComputeShrinkWrapDistField(scene, 1.0f, 0.2f, dist, origin, distUnit);
-    TrigMesh hull = ComputeShrinkWrapMesh(dist, origin, 0.2f, distUnit);
-    SaveShrinkWrapMesh(hull, scene.outputFolder + "/shrinkwrap.obj");
-  }
-  SavePackQualityReport(ComputePackQuality(scene, cfg),
-                        scene.outputFolder + "/pack_quality_before_fill.txt");
-
-  LOGI("=== Phase 2: crevice fill ===\n");
-  CreviceBaseline baseline = ComputeCreviceBaseline(scene, cfg, scene.instances.size());
-  {
-    std::vector<Vec3f> spotPts;
-    for (const VoidSpot &s : baseline.spots) {
-      spotPts.push_back(s.pos);
-    }
-    SaveVec3fObj(scene.outputFolder + "/crevice_baseline_spots.obj", spotPts);
-    LOGI("crevice baseline: " << baseline.spots.size() << " in-range spots from "
-                              << baseline.numBaseInstances << " instances\n");
-  }
-  {
-    size_t before = scene.instances.size();
-    Utils::Stopwatch clock;
-    clock.Start();
-    if (plan.groups.size() > 1) {
-      PackFillCrevices(scene, cfg, plan.groups[plan.groups.size() - 2], baseline, &runTimer);
-    }
-    PackFillCrevices(scene, cfg, plan.groups.empty() ? std::vector<std::string>()
-                                                      : plan.groups.back(),
-                     baseline, &runTimer);
-    LOGI("=== Phase 2 took " << (clock.ElapsedMS() / 1000.0) << " s, "
-                             << (scene.instances.size() - before) << " placed, "
-                             << scene.instances.size() << " instances total ===\n");
-  }
-  SaveCreviceCoverageReport(ComputeCreviceCoverage(scene, cfg, baseline),
-                            scene.outputFolder + "/crevice_coverage.txt",
-                            scene.outputFolder + "/crevice_unnecessary.obj");
 
   PackQualityReport finalReport = ComputePackQuality(scene, cfg);
   SavePackQualityReport(finalReport, scene.outputFolder + "/pack_quality_final.txt");

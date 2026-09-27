@@ -8,6 +8,12 @@
 #include <sstream>
 #include <vector>
 
+enum class StepKind {
+  Bulk,     // PackStep: force/gravity-driven placement.
+  Crevice,  // PackFillCrevices: small fruit resting on this step's own
+            // crevice baseline (names is the small-fruit kind list).
+};
+
 struct PackingStep {
 
     std::vector<std::string> names;
@@ -25,11 +31,22 @@ struct PackingStep {
     bool outwards = true;
     // prevent packing at center of container
     bool useInnerContainer = false;
+    // Bulk only: target the centroid of nearby free container-surface
+    // points (see PackStep) instead of the default force field.
+    bool useFreeSurfacePoints = false;
+
+    StepKind kind = StepKind::Bulk;
+    // Crevice only. Independent per step so a bigger-fruit crevice pass can
+    // use a coarser grid than a small-fruit one -- keeps the dense
+    // shrinkwrap field affordable as fruit/container size grows.
+    float shrinkwrapRadius = 1.0f;
+    float shrinkwrapVoxelSize = 0.2f;
+    unsigned shrinkwrapOpenRadiusVoxels = 1;
 
     PackingStep() : force(-1, 0, 0) {}
-    
+
     std::string toString() const;
-    
+
     void Load(std::istream &in);
 };
 

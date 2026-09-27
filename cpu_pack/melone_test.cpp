@@ -148,7 +148,30 @@ int main() {
   step3.useInnerContainer = true;
   step3.count = LARGE_INT;
   step3.biasW = 0.1f;
+  step3.useFreeSurfacePoints = true;
   plan.steps.push_back(step3);
+
+  // Step 4: Phase 2 crevice fill, small fruit (groups.size()-2, same tier
+  // step3 already placed in bulk). cfg.startStep=4 (see the rewind-state
+  // config above) starts the run right here, resuming from a Phase-1-only
+  // pack.
+  PackingStep step4;
+  step4.kind = StepKind::Crevice;
+  step4.names = groups[groups.size() - 2];
+  step4.shrinkwrapRadius = 1.0f;
+  step4.shrinkwrapVoxelSize = 0.2f;
+  step4.shrinkwrapOpenRadiusVoxels = 1;
+  plan.steps.push_back(step4);
+
+  // Step 5: Phase 2 crevice fill, tiniest fruit tier -- same grid, finer
+  // fruit tier than step4.
+  PackingStep step5;
+  step5.kind = StepKind::Crevice;
+  step5.names = groups.back();
+  step5.shrinkwrapRadius = 1.0f;
+  step5.shrinkwrapVoxelSize = 0.2f;
+  step5.shrinkwrapOpenRadiusVoxels = 1;
+  plan.steps.push_back(step5);
 
   if (plan.steps.empty()) {
     std::cout << "empty packing plan. nothing to do.\n";

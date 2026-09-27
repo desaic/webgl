@@ -447,31 +447,6 @@ VoidField ComputeVoidField(PackingScene &scene, float shrinkRadius, float voxelS
   return vf;
 }
 
-VoidField ComputeShrinkwrapField(PackingScene &scene, float shrinkRadius, float voxelSize,
-                                 unsigned skinBandVoxels) {
-  VoidField vf;
-  vf.voxelSize = voxelSize;
-  Array3D<short> raw;
-  ComputeShrinkWrapDistField(scene, shrinkRadius, voxelSize, vf.dist, vf.origin,
-                             vf.distUnit, &raw);
-  if (vf.dist.GetSize()[0] == 0) {
-    return vf;
-  }
-
-  const short MAX_DIST = 32700;
-  float halfBand = float(std::max(1u, skinBandVoxels)) * voxelSize;
-  // vf.dist currently holds the CLOSED field. Keep raw's value only at
-  // voxels within halfBand of the closed field's own zero crossing -- the
-  // shrinkwrap SKIN itself, not the volume behind it (see this function's
-  // doc comment). Everywhere else is blocked, same sentinel VoidField uses.
-  for (size_t i = 0; i < vf.dist.GetData().size(); i++) {
-    float closedPhys = float(vf.dist.GetData()[i]) * vf.distUnit;
-    bool onSkin = std::fabs(closedPhys) <= halfBand;
-    vf.dist.GetData()[i] = onSkin ? raw.GetData()[i] : -MAX_DIST;
-  }
-  return vf;
-}
-
 EnvelopeField ComputeEnvelopeField(PackingScene &scene, float voxelSize) {
   EnvelopeField ef;
   ef.voxelSize = voxelSize;
@@ -705,6 +680,58 @@ std::vector<VoidSpot> SuppressNonMaxima(std::vector<VoidSpot> maxima) {
 }
 
 }  // namespace
+
+VoidField ComputeShrinkwrapField(PackingScene &scene, float shrinkRadius, float voxelSize,
+                                 unsigned erodeVoxels, unsigned skinBandVoxels) {
+  VoidField vf;
+  vf.voxelSize = voxelSize;
+  Array3D<short> raw;
+  ComputeShrinkWrapDistField(scene, shrinkRadius, voxelSize, vf.dist, vf.origin,
+                             vf.distUnit, &raw);
+  if (vf.dist.GetSize()[0] == 0) {
+    return vf;
+  }
+
+  const short MAX_DIST = 32700;
+  Vec3u size = vf.dist.GetSize();
+
+  // hull interior (closed <= 0) that is not actual fruit (raw > 0): the
+  // manufactured skin's own volume minus every placed fruit.
+  Array3D8u voidMask;
+  voidMask.Allocate(size, 0);
+  for (size_t i = 0; i < vf.dist.GetData().size(); i++) {
+    bool insideHull = vf.dist.GetData()[i] <= 0;
+    bool insideFruit = raw.GetData()[i] <= 0;
+    voidMask.GetData()[i] = (insideHull && !insideFruit) ? 1 : 0;
+  }
+
+  // erode away thin/shallow slivers (a single fruit's own concave dimple,
+  // bridged by closing same as a real crevice mouth) while a genuinely
+  // wide multi-fruit crevice survives -- see this function's doc comment
+  // for why this is NOT derived from shrinkRadius.
+  Array3D8u eroded = voidMask;
+  for (unsigned i = 0; i < erodeVoxels; i++) {
+    eroded = ErodeOnce(eroded);
+  }
+
+  // keep only what's near the ORIGINAL shrinkwrap skin (the closed field's
+  // own zero crossing), not deep bulk interior -- attraction points belong
+  // on the manufactured surface, not floating inside the pack. Erosion
+  // above already pulled every surviving voxel at least erodeVoxels away
+  // from the skin (that boundary of voidMask sits exactly on the skin), so
+  // the band is widened by that same amount -- otherwise a genuine shallow
+  // crevice's surviving core would be tested against a band that no longer
+  // reaches it, and skinBandVoxels would need to grow with shrinkRadius by
+  // hand to compensate.
+  float halfBand = float(std::max(1u, skinBandVoxels) + erodeVoxels) * voxelSize;
+  for (size_t i = 0; i < vf.dist.GetData().size(); i++) {
+    float closedPhys = float(vf.dist.GetData()[i]) * vf.distUnit;
+    bool onSkin = std::fabs(closedPhys) <= halfBand;
+    bool keep = eroded.GetData()[i] != 0 && onSkin;
+    vf.dist.GetData()[i] = keep ? raw.GetData()[i] : -MAX_DIST;
+  }
+  return vf;
+}
 
 VoidSpotResult ExtractVoidSpots(const VoidField &vf, float threshold,
                                 unsigned openRadiusVoxels) {
