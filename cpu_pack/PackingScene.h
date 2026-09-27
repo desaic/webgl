@@ -91,6 +91,21 @@ class PackingScene {
                                  std::vector<RigidTransform> &trajectory,
                                  NudgeOutcome *outcome = nullptr);
 
+    // Populates items[itemIdx].samples/sdf if not already done, same
+    // sampling scheme Nudge/NudgeToTarget generate as a side effect of
+    // their own first call for a kind. Exists because a kind resumed from
+    // a pack file (LoadPack) via Put() never goes through Nudge/
+    // NudgeToTarget at all if nothing of that kind gets freshly placed
+    // later in the same run -- its samples/sdf then stay null for the
+    // whole process, and every overlap check that depends on them
+    // (TryFillSpot's SignedOverlapFraction/ExistingInsideCandidateFraction,
+    // PackStep's own post-settle check) silently no-ops against every
+    // instance of that kind. Call once per kind right after a resume load,
+    // before running anything that places new items, so no existing
+    // instance is invisible to overlap checking just because it happened
+    // to arrive via a pack file instead of this run's own placement.
+    void EnsureItemSamples(unsigned itemIdx);
+
     Vec3f WorldOrigin()const{
       return bg.GetOrigin();
     }

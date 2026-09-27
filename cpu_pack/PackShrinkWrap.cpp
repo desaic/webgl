@@ -383,33 +383,341 @@ Array3D8u VoxelizeItems(PackingScene &scene, float voxelSize, Vec3f &outOrigin) 
   return allVox;
 }
 
-TrigMesh ComputeShrinkWrapMesh(PackingScene &scene, float shrinkRadius,
-                               float voxelSize) {
-  TrigMesh outMesh;
+void ComputeShrinkWrapDistField(PackingScene &scene, float shrinkRadius,
+                                float voxelSize, Array3D<short> &dist,
+                                Vec3f &origin, float &distUnit,
+                                Array3D<short> *rawOut) {
+  distUnit = 0.01f;
+  dist = Array3D<short>();
+  origin = Vec3f(0.0f, 0.0f, 0.0f);
   if (scene.instances.empty()) {
-    return outMesh;
+    return;
   }
   TrigMesh merged = MergeInstanceMeshes(scene);
 
-  float distUnit = 0.01f;
   unsigned band = unsigned(std::min(
       float(AdapDF::MAX_BAND), std::max(2.0f, shrinkRadius / voxelSize) + 2.0f));
 
-  Array3D<short> dist;
-  Vec3f origin;
   BuildUnsignedDistField(merged, voxelSize, distUnit, band, dist, origin);
+  if (rawOut != nullptr) {
+    *rawOut = dist;
+  }
   ApplyShrinkWrapClosing(dist, voxelSize, shrinkRadius, distUnit);
+}
 
+TrigMesh ComputeShrinkWrapMesh(const Array3D<short> &dist, const Vec3f &origin,
+                               float voxelSize, float distUnit) {
+  TrigMesh outMesh;
+  if (dist.GetSize()[0] == 0) {
+    return outMesh;
+  }
   MarchingCubes(dist, 0.0f, distUnit, voxelSize, origin, &outMesh);
-
-  LOGI("shrinkwrap: " << outMesh.GetNumTrigs() << " triangles, radius "
-                       << shrinkRadius << " cm, voxel size " << voxelSize << " cm\n");
+  LOGI("shrinkwrap: " << outMesh.GetNumTrigs() << " triangles, voxel size "
+                       << voxelSize << " cm\n");
   return outMesh;
 }
 
-void SaveShrinkWrapMesh(PackingScene &scene, const std::string &filename,
-                        float shrinkRadius, float voxelSize) {
-  TrigMesh mesh = ComputeShrinkWrapMesh(scene, shrinkRadius, voxelSize);
+void SaveShrinkWrapMesh(const TrigMesh &mesh, const std::string &filename) {
   mesh.SaveObj(filename);
   LOGI("saved shrinkwrap mesh to " << filename << "\n");
+}
+
+VoidField ComputeVoidField(PackingScene &scene, float shrinkRadius, float voxelSize) {
+  VoidField vf;
+  vf.voxelSize = voxelSize;
+  Array3D<short> raw;
+  ComputeShrinkWrapDistField(scene, shrinkRadius, voxelSize, vf.dist, vf.origin,
+                             vf.distUnit, &raw);
+  if (vf.dist.GetSize()[0] == 0) {
+    return vf;
+  }
+
+  const short MAX_DIST = 32700;
+  // vf.dist currently holds the CLOSED field (post-ApplyShrinkWrapClosing):
+  // <= 0 inside the manufactured hull (fruit + small closed gaps), > 0
+  // outside its silhouette entirely. raw holds distance-to-nearest-fruit
+  // from before closing. Overwrite vf.dist in place: keep raw's value only
+  // where the closed field says "inside the hull"; block everywhere else,
+  // regardless of how that point reads relative to the container. This is
+  // deliberately container-independent -- see the VoidField comment.
+  for (size_t i = 0; i < vf.dist.GetData().size(); i++) {
+    short closed = vf.dist.GetData()[i];
+    vf.dist.GetData()[i] = (closed <= 0) ? raw.GetData()[i] : -MAX_DIST;
+  }
+  return vf;
+}
+
+VoidField ComputeShrinkwrapField(PackingScene &scene, float shrinkRadius, float voxelSize,
+                                 unsigned skinBandVoxels) {
+  VoidField vf;
+  vf.voxelSize = voxelSize;
+  Array3D<short> raw;
+  ComputeShrinkWrapDistField(scene, shrinkRadius, voxelSize, vf.dist, vf.origin,
+                             vf.distUnit, &raw);
+  if (vf.dist.GetSize()[0] == 0) {
+    return vf;
+  }
+
+  const short MAX_DIST = 32700;
+  float halfBand = float(std::max(1u, skinBandVoxels)) * voxelSize;
+  // vf.dist currently holds the CLOSED field. Keep raw's value only at
+  // voxels within halfBand of the closed field's own zero crossing -- the
+  // shrinkwrap SKIN itself, not the volume behind it (see this function's
+  // doc comment). Everywhere else is blocked, same sentinel VoidField uses.
+  for (size_t i = 0; i < vf.dist.GetData().size(); i++) {
+    float closedPhys = float(vf.dist.GetData()[i]) * vf.distUnit;
+    bool onSkin = std::fabs(closedPhys) <= halfBand;
+    vf.dist.GetData()[i] = onSkin ? raw.GetData()[i] : -MAX_DIST;
+  }
+  return vf;
+}
+
+EnvelopeField ComputeEnvelopeField(PackingScene &scene, float voxelSize) {
+  EnvelopeField ef;
+  ef.voxelSize = voxelSize;
+  ef.distUnit = 0.01f;
+  if (scene.instances.empty()) {
+    return ef;
+  }
+  TrigMesh merged = MergeInstanceMeshes(scene);
+  BuildUnsignedDistField(merged, voxelSize, ef.distUnit, AdapDF::MAX_BAND, ef.dist, ef.origin);
+  return ef;
+}
+
+float SampleDistField(const Array3D<short> &dist, const Vec3f &origin, float voxelSize,
+                      float distUnit, const Vec3f &worldPos) {
+  Vec3f local = (worldPos - origin) * (1.0f / voxelSize);
+  int ix = int(std::floor(local[0]));
+  int iy = int(std::floor(local[1]));
+  int iz = int(std::floor(local[2]));
+  Vec3u size = dist.GetSize();
+  if (ix < 0 || iy < 0 || iz < 0 || (unsigned)ix >= size[0] || (unsigned)iy >= size[1] ||
+      (unsigned)iz >= size[2]) {
+    return 1e4f;
+  }
+  return float(dist((unsigned)ix, (unsigned)iy, (unsigned)iz)) * distUnit;
+}
+
+
+namespace {
+
+Array3D8u ThresholdMask(const Array3D<short> &dist, float distUnit, float threshold) {
+  Vec3u size = dist.GetSize();
+  Array3D8u mask;
+  mask.Allocate(size, 0);
+  short rawThresh = short(threshold / distUnit);
+  for (size_t i = 0; i < dist.GetData().size(); i++) {
+    mask.GetData()[i] = (dist.GetData()[i] > rawThresh) ? 1 : 0;
+  }
+  return mask;
+}
+
+const int kFaceNbr6[6][3] = {{1, 0, 0},  {-1, 0, 0}, {0, 1, 0},
+                             {0, -1, 0}, {0, 0, 1},  {0, 0, -1}};
+
+// 1 voxel of erosion: a foreground voxel survives only if all 6 face
+// neighbors are also foreground (grid boundary counts as background, so
+// this also erodes away from the domain edge).
+Array3D8u ErodeOnce(const Array3D8u &mask) {
+  Vec3u size = mask.GetSize();
+  Array3D8u out;
+  out.Allocate(size, 0);
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      for (unsigned x = 0; x < size[0]; x++) {
+        if (mask(x, y, z) == 0) {
+          continue;
+        }
+        bool allSolid = true;
+        for (unsigned n = 0; n < 6 && allSolid; n++) {
+          int nx = int(x) + kFaceNbr6[n][0];
+          int ny = int(y) + kFaceNbr6[n][1];
+          int nz = int(z) + kFaceNbr6[n][2];
+          if (!InBound(nx, ny, nz, size) ||
+              mask((unsigned)nx, (unsigned)ny, (unsigned)nz) == 0) {
+            allSolid = false;
+          }
+        }
+        out(x, y, z) = allSolid ? 1 : 0;
+      }
+    }
+  }
+  return out;
+}
+
+// 1 voxel of dilation: a background voxel becomes foreground if any of its
+// 6 face neighbors already is.
+Array3D8u DilateOnce(const Array3D8u &mask) {
+  Vec3u size = mask.GetSize();
+  Array3D8u out = mask;
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      for (unsigned x = 0; x < size[0]; x++) {
+        if (mask(x, y, z) != 0) {
+          continue;
+        }
+        bool anySolid = false;
+        for (unsigned n = 0; n < 6 && !anySolid; n++) {
+          int nx = int(x) + kFaceNbr6[n][0];
+          int ny = int(y) + kFaceNbr6[n][1];
+          int nz = int(z) + kFaceNbr6[n][2];
+          if (InBound(nx, ny, nz, size) &&
+              mask((unsigned)nx, (unsigned)ny, (unsigned)nz) != 0) {
+            anySolid = true;
+          }
+        }
+        out(x, y, z) = anySolid ? 1 : 0;
+      }
+    }
+  }
+  return out;
+}
+
+// erode then dilate by the same radius: kills thin webs/jagged crust that
+// survived the threshold (erosion), then puffs the surviving cores back to
+// their real boundary (dilation). plan.txt CANDIDATE SPOT MANAGEMENT.
+Array3D8u MorphOpen(const Array3D8u &mask, unsigned radiusVoxels) {
+  Array3D8u cur = mask;
+  for (unsigned i = 0; i < radiusVoxels; i++) {
+    cur = ErodeOnce(cur);
+  }
+  for (unsigned i = 0; i < radiusVoxels; i++) {
+    cur = DilateOnce(cur);
+  }
+  return cur;
+}
+
+// unsigned distance to cleanedMask's own boundary, valid where cleanedMask
+// is 1 (background cells are left at 0). Reuses FastSweepParUnsigned exactly
+// like ApplyShrinkWrapClosing does: seed boundary voxels at distance 0,
+// frozen, sweep the whole grid, then only the foreground half of the result
+// is meaningful.
+Array3D<short> DistanceTransformInMask(const Array3D8u &mask, float voxelSize,
+                                       float distUnit) {
+  Vec3u size = mask.GetSize();
+  const short MAX_DIST = 32700;
+  Array3D<short> dist;
+  dist.Allocate(size, MAX_DIST);
+  Array3D8u frozen;
+  frozen.Allocate(size, 0);
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      for (unsigned x = 0; x < size[0]; x++) {
+        if (mask(x, y, z) == 0) {
+          continue;
+        }
+        bool isBoundary = false;
+        for (unsigned n = 0; n < 6 && !isBoundary; n++) {
+          int nx = int(x) + kFaceNbr6[n][0];
+          int ny = int(y) + kFaceNbr6[n][1];
+          int nz = int(z) + kFaceNbr6[n][2];
+          if (!InBound(nx, ny, nz, size) ||
+              mask((unsigned)nx, (unsigned)ny, (unsigned)nz) == 0) {
+            isBoundary = true;
+          }
+        }
+        if (isBoundary) {
+          dist(x, y, z) = 0;
+          frozen(x, y, z) = 1;
+        }
+      }
+    }
+  }
+  float band = float(size[0] + size[1] + size[2]);
+  FastSweepParUnsigned(dist, voxelSize, distUnit, band, frozen);
+  for (size_t i = 0; i < mask.GetData().size(); i++) {
+    if (mask.GetData()[i] == 0) {
+      dist.GetData()[i] = 0;
+    }
+  }
+  return dist;
+}
+
+// candidate is a local maximum if its value is >= every neighbor within a
+// window sized to its OWN value -- a voxel with a wide local void is only
+// compared against neighbors roughly that far away, so a deep pocket is not
+// out-competed by an unrelated shallow one several widths away.
+std::vector<VoidSpot> FindLocalMaxima(const Array3D<short> &dist, const Vec3f &origin,
+                                      float voxelSize, float distUnit) {
+  Vec3u size = dist.GetSize();
+  std::vector<VoidSpot> maxima;
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      for (unsigned x = 0; x < size[0]; x++) {
+        short raw = dist(x, y, z);
+        if (raw <= 0) {
+          continue;
+        }
+        float w = float(raw) * distUnit;
+        int r = int(std::ceil(w / voxelSize));
+        bool isMax = true;
+        for (int dz = -r; dz <= r && isMax; dz++) {
+          for (int dy = -r; dy <= r && isMax; dy++) {
+            for (int dx = -r; dx <= r && isMax; dx++) {
+              if (dx == 0 && dy == 0 && dz == 0) {
+                continue;
+              }
+              int nx = int(x) + dx, ny = int(y) + dy, nz = int(z) + dz;
+              if (!InBound(nx, ny, nz, size)) {
+                continue;
+              }
+              short nRaw = dist((unsigned)nx, (unsigned)ny, (unsigned)nz);
+              if (nRaw > raw) {
+                isMax = false;
+              }
+            }
+          }
+        }
+        if (isMax) {
+          Vec3f pos = origin + Vec3f((x + 0.5f) * voxelSize, (y + 0.5f) * voxelSize,
+                                     (z + 0.5f) * voxelSize);
+          maxima.push_back({pos, w});
+        }
+      }
+    }
+  }
+  return maxima;
+}
+
+// sort by radius descending; drop a candidate into an already-accepted
+// LARGER spot only if their inscribed disks already overlap
+// (dist(A,B) < rA+rB, an exact test, not a padded/tuned constant). See
+// plan.txt CANDIDATE SPOT MANAGEMENT for why k=1 (touching) is correct and
+// should not be rounded up "to be safe".
+std::vector<VoidSpot> SuppressNonMaxima(std::vector<VoidSpot> maxima) {
+  std::sort(maxima.begin(), maxima.end(),
+            [](const VoidSpot &a, const VoidSpot &b) { return a.radius > b.radius; });
+  std::vector<VoidSpot> accepted;
+  for (const VoidSpot &cand : maxima) {
+    bool overlaps = false;
+    for (const VoidSpot &acc : accepted) {
+      float d = (cand.pos - acc.pos).norm();
+      if (d < cand.radius + acc.radius) {
+        overlaps = true;
+        break;
+      }
+    }
+    if (!overlaps) {
+      accepted.push_back(cand);
+    }
+  }
+  return accepted;
+}
+
+}  // namespace
+
+VoidSpotResult ExtractVoidSpots(const VoidField &vf, float threshold,
+                                unsigned openRadiusVoxels) {
+  VoidSpotResult result;
+  if (vf.dist.GetSize()[0] == 0) {
+    return result;
+  }
+  Array3D8u mask = ThresholdMask(vf.dist, vf.distUnit, threshold);
+  result.cleanedMask = MorphOpen(mask, openRadiusVoxels);
+  result.cleanDist =
+      DistanceTransformInMask(result.cleanedMask, vf.voxelSize, vf.distUnit);
+  std::vector<VoidSpot> maxima =
+      FindLocalMaxima(result.cleanDist, vf.origin, vf.voxelSize, vf.distUnit);
+  result.spots = SuppressNonMaxima(std::move(maxima));
+  return result;
 }

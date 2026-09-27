@@ -118,7 +118,11 @@ void RunCase(float sphereRadius, float shrinkRadius, float voxelSize) {
   RigidTransform tran;
   scene.instances.push_back(InstanceInfo(0, tran));
 
-  TrigMesh hull = ComputeShrinkWrapMesh(scene, shrinkRadius, voxelSize);
+  Array3D<short> dist;
+  Vec3f fieldOrigin;
+  float distUnit;
+  ComputeShrinkWrapDistField(scene, shrinkRadius, voxelSize, dist, fieldOrigin, distUnit);
+  TrigMesh hull = ComputeShrinkWrapMesh(dist, fieldOrigin, voxelSize, distUnit);
   if (hull.GetNumTrigs() == 0) {
     std::cout << "sphereR=" << sphereRadius << " shrinkR=" << shrinkRadius
               << " voxelSize=" << voxelSize << " -> EMPTY HULL\n";

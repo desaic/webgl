@@ -15,8 +15,24 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <unordered_map>
 
 namespace fs = std::filesystem;
+
+// fruit-vs-fruit overlap tolerance for TryFillSpot/PackStep acceptance.
+static const float kOccupiedThresh = 0.15f;
+// container-containment tolerance, stricter and separate from the above.
+static const float kContainerOutsideThresh = 0.05f;
+
+static float ContainerOutsideFraction(const std::vector<SamplePoint> &samples,
+                                      const Matrix3f &rot, const Vec3f &pos,
+                                      const std::shared_ptr<AdapSDF> &sdf);
+static float SignedOverlapFraction(PackingScene &scene, const Box3f &candidateLocalBox,
+                                   const std::vector<SamplePoint> &candidateSamples,
+                                   const Matrix3f &candRot, const Vec3f &candPos);
+static float ExistingInsideCandidateFraction(PackingScene &scene, const Box3f &candidateLocalBox,
+                                             const Matrix3f &rot, const Vec3f &pos,
+                                             const std::shared_ptr<AdapSDF> &itemSdf);
 
 // Returns the centroid of the k nearest points in pts to pos.
 static Vec3f NearestKCenter(const std::vector<Vec3f> &pts, const Vec3f &pos, unsigned k) {
@@ -89,7 +105,7 @@ void PrepareBackground(PackingScene &scene, const PackingConfig &cfg) {
 }
 
 void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig &cfg,
-              const std::vector<Vec3f> &surfacePoints) {
+              const std::vector<Vec3f> &surfacePoints, PlacementTimer *timer) {
   unsigned count = 0;
   // first item to consider in the next iteration.
   unsigned startNameIndex = 0;
@@ -115,8 +131,6 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
     AddInnerContainer(scene);
   }
 
-  // checked between items rather than inside the trial loop, so a step
-  // overruns by at most one placement attempt.
   Utils::Stopwatch stepClock;
   stepClock.Start();
   bool outOfTime = false;
@@ -143,8 +157,6 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
     startItem = numItems - 1;
   }
 
-  // print counters print regardless
-  // of whether anything is being placed.
   unsigned long searches = 0;
   unsigned placedCount = 0;
   double lastReportMs = 0.0;
@@ -172,9 +184,6 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
     for (unsigned i = startItem; i < numItems; i++) {
       unsigned nameIndex = (i + startNameIndex) % numItems;
       std::string name = step.names[nameIndex];
-      if(name == "grape4"){
-      //  std::cout << "debug\n";
-      }
       unsigned itemIndex = scene.GetItemIndex(name);
       MeshInfo &item = scene.items[itemIndex];
       if (item.noMoreFit) {
@@ -186,8 +195,7 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
                             * scene.numSubgridCells[2];
       bool useSubgrid = (totalCells > 0 && itemMaxExtent < scene.subgridCellSize);
 
-      auto placeItem = [&](const Vec3f &p, const Vec3f &r) {
-        packSuccess = true;
+      auto placeItem = [&](const Vec3f &p, const Vec3f &r) -> bool {
         RigidTransform tran;
         tran.position = p;
         tran.rotation = RotationMatrixRad(r[0], r[1], r[2]);
@@ -201,19 +209,39 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
           Vec3f pushDir = scene.ForceDirection(itemIndex, step.force, step.biasW, sdfFactor, tran);
           newTran = scene.Nudge(itemIndex, tran, pushDir, step.forceW, trajectory);
         }
+        double settleMs = stepClock.ElapsedMS() - settleStartMs;
+        if (timer) {
+          timer->Record(item.name, settleMs);
+        }
+        // the settle can drag an item into an already-placed neighbor;
+        // verify with the same overlap checks TryFillSpot's gate uses.
+        if (!item.samples.empty()) {
+          float outsideFracAfter =
+              ContainerOutsideFraction(item.samples, newTran.rotation, newTran.position, scene.sdf);
+          float occFracAfter =
+              SignedOverlapFraction(scene, item.box, item.samples, newTran.rotation, newTran.position);
+          float engulfFrac =
+              ExistingInsideCandidateFraction(scene, item.box, newTran.rotation, newTran.position, item.sdf);
+          if (outsideFracAfter > kContainerOutsideThresh || occFracAfter > kOccupiedThresh ||
+              engulfFrac > kOccupiedThresh) {
+            LOGI("  rejected " << item.name << " settle at (" << newTran.position[0] << " "
+                               << newTran.position[1] << " " << newTran.position[2]
+                               << "): outside=" << outsideFracAfter << " occ=" << occFracAfter
+                               << " engulf=" << engulfFrac << ", retrying\n");
+            return false;
+          }
+        }
+        packSuccess = true;
         unsigned instanceId = scene.Put(itemIndex, newTran);
         scene.instances[instanceId].trajectory = trajectory;
         placedCount++;
-        // the found spot and the settled spot both matter: a large gap
-        // between them means the search is aiming at places the nudge has
-        // to drag the item out of.
         Vec3f moved = newTran.position - p;
         LOGI("  placed " << scene.items[itemIndex].name << " instance "
                          << instanceId << " cell " << item.nextCellIdx
                          << " at " << newTran.position[0] << " "
                          << newTran.position[1] << " " << newTran.position[2]
                          << ", settled " << moved.norm() << " cm in "
-                         << (stepClock.ElapsedMS() - settleStartMs) << " ms, "
+                         << settleMs << " ms, "
                          << placedCount << " this step\n");
         if (cfg.trajSaveInterval > 0 && count % cfg.trajSaveInterval == 0 && count > 0) {
           std::string trajFile = scene.trajFile
@@ -227,12 +255,11 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
                                  + ".txt";
           scene.SaveInstances(packFile);
         }
+        return true;
       };
 
       bool itemPlaced = false;
       if (useSubgrid) {
-        // one item can walk all 90 cells at 10 trials each, so the cell
-        // loop needs its own check or a single item could blow the budget.
         while (!itemPlaced && item.nextCellIdx < totalCells) {
           unsigned cellIdx = item.nextCellIdx;
           bool cellSuccess = false;
@@ -250,23 +277,19 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
             if (FindSpotSubgrid(scene.bg, rotatedMesh, pos, scene.sdf,
                                 sdfFactor, scene.subgridCellSize,
                                 cellIdx, scene.numSubgridCells)) {
-              placeItem(pos, rot);
-              itemPlaced = true;
-              cellSuccess = true;
-              break;
+              if (placeItem(pos, rot)) {
+                itemPlaced = true;
+                cellSuccess = true;
+                break;
+              }
             }
           }
           if (cellSuccess) {
-            // stay on this cell. a 20cm cell holds many small items, so
-            // advancing on success would cap the run at one placement per
-            // (item, cell) pair, i.e. 90 per kind.
+            // stay on this cell -- it can hold more than one item.
             break;
           }
-          // only a cell that failed every trial is retired.
           item.nextCellIdx++;
         }
-        // the retirement test below covers this path identically, so the
-        // duplicate that used to sit here was removed.
       } else {
         for (unsigned trial = 0; trial < MAX_TRIAL_COUNT; trial++) {
           Vec3f pos;
@@ -280,9 +303,10 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
           TransformVerts(item.mesh.v, rotatedMesh.v,
                          RotationMatrixRad(rot[0], rot[1], rot[2]));
           if (FindSpot(scene.bg, rotatedMesh, pos, scene.sdf, sdfFactor)) {
-            placeItem(pos, rot);
-            itemPlaced = true;
-            break;
+            if (placeItem(pos, rot)) {
+              itemPlaced = true;
+              break;
+            }
           }
         }
       }
@@ -317,7 +341,6 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
     startNameIndex = (startNameIndex + 1) % numItems;
   }
 
-  // exit reason, so a short step and an exhausted step are told apart.
   const char *why = "all kinds retired";
   if (outOfTime) {
     why = "step time limit";
@@ -345,8 +368,6 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
     }
   }
 }
-
-// sample points on container surface, cast rays inward to gather depths
 
 namespace {
 
@@ -449,16 +470,13 @@ void SaveDepthRaysObj(const std::string &filename,
   }
 }
 
-// Casts one inward ray per container surface sample point against all
-// placed instances (broadphase + TrigGrid narrow phase). Records the
-// origin (pulled back by containerSlack), the hit end point, the hit
-// depth, and which instance (if any) was hit.
+// one inward ray per container surface sample point, against all placed
+// instances.
 struct RayDepthResult {
   std::vector<Vec3f> origins;
   std::vector<Vec3f> ends;
   std::vector<float> depths;
-  // -1 if the ray missed everything within maxDepth.
-  std::vector<int> hitInstance;
+  std::vector<int> hitInstance;  // -1 if missed within maxDepth.
   unsigned hitCount = 0;
 };
 
@@ -529,8 +547,7 @@ RayDepthResult ComputeRayDepths(PackingScene &scene,
 }
 
 
-// Uniform grid for point neighbors. Cell size matches the query radius
-// so a 3x3x3 neighborhood covers all candidates.
+// uniform grid for point-neighbor queries; cell size == query radius.
 struct PointGrid {
   float cellSize = 1.0f;
   Vec3f origin;
@@ -593,12 +610,7 @@ struct PointGrid {
   }
 };
 
-// Extract rays whose depth exceeds the median depth of their neighbors
-// by more than deepThreshold. Returns indices of deep rays.
-//
-// a ray is only flagged when it clears the neighbor median by
-// deepThreshold AND is not corroborated by at least minPatchNeighbors
-// other rays within patchDepthTol of its own depth.
+// rays whose depth exceeds their neighbor median by deepThreshold.
 std::vector<unsigned> FindDeepRays(const std::vector<Vec3f> &origins,
                                    const std::vector<float> &depths,
                                    float neighborRadius,
@@ -638,10 +650,7 @@ std::vector<unsigned> FindDeepRays(const std::vector<Vec3f> &origins,
   return deepRays;
 }
 
-// Shoots one instance along each deep ray direction. Skips a
-// ray if it lands too close to an already-seeded position.
-// Returns the fraction (0-1) of transformed sample points that land in
-// occupied voxels of scene.bg.vox (non-zero = wall or placed item).
+// fraction of transformed sample points landing in occupied bg voxels.
 float OccupiedFraction(const PackingScene &scene,
                        const std::vector<SamplePoint> &samples,
                        const Matrix3f &rot,
@@ -673,7 +682,6 @@ float OccupiedFraction(const PackingScene &scene,
   return float(occupied) / float(samples.size());
 }
 
-// Returns the number of instances placed.
 unsigned SeedDeepCrevices(PackingScene &scene, const std::vector<Vec3f> &origins,
                           const std::vector<Vec3f> &ends,
                           const std::vector<unsigned> &itemIndices,
@@ -725,9 +733,6 @@ unsigned SeedDeepCrevices(PackingScene &scene, const std::vector<Vec3f> &origins
     Vec3f target = NearestKCenter(surfacePoints, O, 5);
     NudgeOutcome outcome;
     RigidTransform settled = scene.NudgeToTarget(itemIdx, tran, target, trajectory, &outcome);
-    // N3: the pre-settle occFrac check above does not catch overlap left
-    // behind by a jammed or out-of-steps settle -- re-check post-settle
-    // instead of committing unconditionally.
     if (!samples.empty()) {
       float occFracAfter = OccupiedFraction(scene, samples, settled.rotation, settled.position);
       if (occFracAfter > 0.5f) {
@@ -752,11 +757,783 @@ unsigned SeedDeepCrevices(PackingScene &scene, const std::vector<Vec3f> &origins
 
 }  // namespace
 
-// Runs the raycasting pass and saves surface_depths.obj / deep_rays.obj.
-// Returns the deep ray origins/ends via out params so a caller can decide
-// whether to seed fruit into them. Read-only: does not place, settle, or
-// otherwise mutate scene, so it is safe to call without running the
-// packing steps.
+bool ClaimGrid::IsClaimed(const Vec3f &pos) const {
+  for (const auto &c : claims) {
+    if ((pos - c.first).norm() < c.second) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void ClaimGrid::Mark(const Vec3f &pos, float radius) {
+  claims.push_back({pos, radius});
+}
+
+// fine-grained OccupiedFraction, against the EnvelopeField instead of
+// scene.bg.vox.
+static float EnvelopeOccupiedFraction(const std::vector<SamplePoint> &samples,
+                                      const Matrix3f &rot, const Vec3f &pos,
+                                      const EnvelopeField &envelope) {
+  if (samples.empty() || envelope.dist.GetSize()[0] == 0) {
+    return 0.0f;
+  }
+  unsigned occupied = 0;
+  for (const auto &sp : samples) {
+    Vec3f w = rot * sp.x + pos;
+    float d = SampleDistField(envelope.dist, envelope.origin, envelope.voxelSize,
+                              envelope.distUnit, w);
+    if (d <= 0.0f) {
+      occupied++;
+    }
+  }
+  return float(occupied) / float(samples.size());
+}
+
+// fraction of item samples landing outside the container (scene.sdf > 0).
+static float ContainerOutsideFraction(const std::vector<SamplePoint> &samples,
+                                      const Matrix3f &rot, const Vec3f &pos,
+                                      const std::shared_ptr<AdapSDF> &sdf) {
+  if (samples.empty() || !sdf) {
+    return 0.0f;
+  }
+  unsigned outside = 0;
+  for (const auto &sp : samples) {
+    Vec3f w = rot * sp.x + pos;
+    if (sdf->GetCoarseDist(w) > 0.0f) {
+      outside++;
+    }
+  }
+  return float(outside) / float(samples.size());
+}
+
+// fraction of the candidate's own samples landing inside a nearby
+// existing instance's signed per-kind sdf. Unlike EnvelopeOccupiedFraction
+// (unsigned distance to the nearest fruit surface, merged across
+// instances), this can't be fooled by a sample deep inside a neighbor
+// reading as "far from any surface" == "free".
+static float SignedOverlapFraction(PackingScene &scene, const Box3f &candidateLocalBox,
+                                   const std::vector<SamplePoint> &candidateSamples,
+                                   const Matrix3f &candRot, const Vec3f &candPos) {
+  if (candidateSamples.empty()) {
+    return 0.0f;
+  }
+  Box3f worldBox = WorldBox(candidateLocalBox, candRot, candPos);
+  std::vector<unsigned> nearby = scene.broadPhase.GetNearby(worldBox, 0.0f);
+  if (nearby.empty()) {
+    return 0.0f;
+  }
+  unsigned occupied = 0;
+  for (const auto &sp : candidateSamples) {
+    Vec3f w = candRot * sp.x + candPos;
+    for (unsigned instId : nearby) {
+      const InstanceInfo &inst = scene.instances[instId];
+      MeshInfo &existingItem = scene.items[inst.itemId];
+      if (!existingItem.sdf) {
+        continue;
+      }
+      Vec3f localPt = inst.tran.rotation.transposed() * (w - inst.tran.position);
+      if (existingItem.sdf->GetCoarseDist(localPt) < 0.0f) {
+        occupied++;
+        break;
+      }
+    }
+  }
+  return float(occupied) / float(candidateSamples.size());
+}
+
+// the reverse of SignedOverlapFraction: worst, over nearby existing
+// instances, of how much of THAT instance's own samples land inside the
+// candidate's sdf -- catches a small neighbor engulfed by a big candidate,
+// which SignedOverlapFraction alone would miss.
+static float ExistingInsideCandidateFraction(PackingScene &scene, const Box3f &candidateLocalBox,
+                                              const Matrix3f &rot, const Vec3f &pos,
+                                              const std::shared_ptr<AdapSDF> &itemSdf) {
+  if (!itemSdf) {
+    return 0.0f;
+  }
+  Box3f candidateBox = WorldBox(candidateLocalBox, rot, pos);
+  std::vector<unsigned> nearby = scene.broadPhase.GetNearby(candidateBox, 0.0f);
+  if (nearby.empty()) {
+    return 0.0f;
+  }
+  Matrix3f rotInv = rot.transposed();
+  float worst = 0.0f;
+  for (unsigned instId : nearby) {
+    const InstanceInfo &inst = scene.instances[instId];
+    const std::vector<SamplePoint> &existingSamples = scene.items[inst.itemId].samples;
+    if (existingSamples.empty()) {
+      continue;
+    }
+    unsigned inside = 0;
+    for (const auto &sp : existingSamples) {
+      Vec3f w = inst.tran.rotation * sp.x + inst.tran.position;
+      Vec3f localPt = rotInv * (w - pos);
+      if (itemSdf->GetCoarseDist(localPt) < 0.0f) {
+        inside++;
+      }
+    }
+    worst = std::max(worst, float(inside) / float(existingSamples.size()));
+  }
+  return worst;
+}
+
+// walks outward from target along outwardDir until SignedOverlapFraction/
+// ExistingInsideCandidateFraction read clear, capped at maxDist. Falls
+// back to the least-overlapping point tried if nothing is fully clear.
+static Vec3f FindClearSpawnPos(PackingScene &scene, const Box3f &candidateLocalBox,
+                               const std::vector<SamplePoint> &samples, const Vec3f &target,
+                               const Vec3f &outwardDir, const Matrix3f &rot,
+                               const std::shared_ptr<AdapSDF> &itemSdf, float maxDist) {
+  if (samples.empty() || outwardDir.norm2() < 1e-12f) {
+    return target;
+  }
+  const float STEP = 0.5f;
+  const float kClearThresh = 0.02f;
+  auto occAt = [&](const Vec3f &pos) {
+    return std::max(SignedOverlapFraction(scene, candidateLocalBox, samples, rot, pos),
+                    ExistingInsideCandidateFraction(scene, candidateLocalBox, rot, pos, itemSdf));
+  };
+  Vec3f dir = outwardDir.normalizedCopy();
+  Vec3f bestPos = target;
+  float bestOcc = occAt(target);
+  for (float d = STEP; d <= maxDist; d += STEP) {
+    Vec3f cand = target + dir * d;
+    float occ = occAt(cand);
+    if (occ < bestOcc) {
+      bestOcc = occ;
+      bestPos = cand;
+    }
+    if (occ <= kClearThresh) {
+      return cand;
+    }
+  }
+  return bestPos;
+}
+
+int TryFillSpot(PackingScene &scene, const Vec3f &target, float localWidth,
+                const std::vector<unsigned> &kindsBySize, float clearance,
+                const EnvelopeField &envelope, ClaimGrid &claims,
+                PlacementTimer *timer, bool sizeMustFitLocalWidth) {
+  static unsigned angleCursor = 0;
+
+  // nudge 1cm past target, into the interior, so the spring has a nonzero
+  // pull from step 0 (a settle starting exactly at its own target has no
+  // initial force). outwardDir also gives FindClearSpawnPos an escape
+  // direction (Phase 2 only), pointing the other way.
+  Vec3f nudgeTarget = target;
+  Vec3f outwardDir(0.0f);
+  if (scene.sdf) {
+    Vec3f grad = scene.sdf->GetCoarseGrad(target);
+    float gradNorm = grad.norm();
+    if (gradNorm > 1e-6f) {
+      outwardDir = grad * (1.0f / gradNorm);
+      nudgeTarget = target - outwardDir;
+    }
+  }
+
+  for (unsigned itemIdx : kindsBySize) {
+    MeshInfo &item = scene.items[itemIdx];
+    if (sizeMustFitLocalWidth && item.BoxDiagonal() + clearance > localWidth) {
+      continue;
+    }
+    RigidTransform tran;
+    tran.position = target;
+    Vec3f rot = scene.randAngles[angleCursor % scene.randAngles.size()];
+    angleCursor++;
+    tran.rotation = RotationMatrixRad(rot[0], rot[1], rot[2]);
+
+    // item.samples/sdf populate as a side effect of NudgeToTarget's first
+    // call for this kind, so this block is only live from the second use on.
+    if (!item.samples.empty()) {
+      if (!sizeMustFitLocalWidth) {
+        float maxSearchDist = 10.0f * item.BoxDiagonal();
+        tran.position = FindClearSpawnPos(scene, item.box, item.samples, target, outwardDir,
+                                          tran.rotation, item.sdf, maxSearchDist);
+        LOGI("    FindClearSpawnPos " << item.name << " outwardDir=(" << outwardDir[0] << ","
+                                       << outwardDir[1] << "," << outwardDir[2]
+                                       << ") target=(" << target[0] << "," << target[1] << ","
+                                       << target[2] << ") spawn=(" << tran.position[0] << ","
+                                       << tran.position[1] << "," << tran.position[2] << ")\n");
+      }
+      float occFracBefore = EnvelopeOccupiedFraction(item.samples, tran.rotation, tran.position, envelope);
+      float outsideFracBefore = ContainerOutsideFraction(item.samples, tran.rotation, tran.position, scene.sdf);
+      if (occFracBefore > kOccupiedThresh || outsideFracBefore > kContainerOutsideThresh) {
+        LOGI("    TryFillSpot " << item.name << " pre-reject occBefore=" << occFracBefore
+                                 << " outsideBefore=" << outsideFracBefore << "\n");
+        continue;
+      }
+      // reject hopeless starting poses before paying for a full settle.
+      if (!sizeMustFitLocalWidth) {
+        const float kPreOverlapThresh = 0.6f;
+        float preOverlap = SignedOverlapFraction(scene, item.box, item.samples, tran.rotation, tran.position);
+        float preEngulf = ExistingInsideCandidateFraction(scene, item.box, tran.rotation,
+                                                           tran.position, item.sdf);
+        if (preOverlap > kPreOverlapThresh || preEngulf > kPreOverlapThresh) {
+          LOGI("    TryFillSpot " << item.name << " pre-reject preOverlap=" << preOverlap
+                                   << " preEngulf=" << preEngulf << "\n");
+          continue;
+        }
+      }
+    }
+
+    std::vector<RigidTransform> trajectory;
+    NudgeOutcome outcome;
+    Utils::Stopwatch settleClock;
+    settleClock.Start();
+    RigidTransform settled = scene.NudgeToTarget(itemIdx, tran, nudgeTarget, trajectory, &outcome);
+    if (timer) {
+      timer->Record(item.name, settleClock.ElapsedMS());
+    }
+    if (!item.samples.empty()) {
+      float outsideFracAfter =
+          ContainerOutsideFraction(item.samples, settled.rotation, settled.position, scene.sdf);
+      if (outsideFracAfter > kContainerOutsideThresh) {
+        LOGI("    TryFillSpot " << item.name << " post-reject outsideAfter=" << outsideFracAfter << "\n");
+        continue;
+      }
+      float occFracAfter =
+          SignedOverlapFraction(scene, item.box, item.samples, settled.rotation, settled.position);
+      if (occFracAfter > kOccupiedThresh) {
+        LOGI("    TryFillSpot " << item.name << " post-reject occAfter=" << occFracAfter << "\n");
+        continue;
+      }
+      float engulfFrac =
+          ExistingInsideCandidateFraction(scene, item.box, settled.rotation, settled.position, item.sdf);
+      if (engulfFrac > kOccupiedThresh) {
+        LOGI("    TryFillSpot " << item.name << " post-reject engulf=" << engulfFrac << "\n");
+        continue;
+      }
+    }
+    unsigned id = scene.Put(itemIdx, settled);
+    scene.instances[id].trajectory = trajectory;
+    claims.Mark(settled.position, item.BoxDiagonal());
+    return int(id);
+  }
+  return -1;
+}
+
+void PackFillVoids(PackingScene &scene, const PackingConfig &cfg, PlacementTimer *timer) {
+  std::vector<unsigned> kindsBySize(scene.items.size());
+  for (unsigned i = 0; i < scene.items.size(); i++) {
+    kindsBySize[i] = i;
+  }
+  std::sort(kindsBySize.begin(), kindsBySize.end(), [&](unsigned a, unsigned b) {
+    return scene.items[a].BoxDiagonal() > scene.items[b].BoxDiagonal();
+  });
+
+  float threshold = cfg.shrinkwrapVoxelSize * 1.1f;
+  for (unsigned round = 0; round < cfg.fillVoidMaxRounds; round++) {
+    size_t before = scene.instances.size();
+    Utils::Stopwatch clock;
+    clock.Start();
+
+    VoidField vf = ComputeVoidField(scene, cfg.shrinkwrapRadius, cfg.shrinkwrapVoxelSize);
+    if (vf.dist.GetSize()[0] == 0) {
+      LOGI("fill voids round " << round << ": void field is empty (no instances), stopping\n");
+      break;
+    }
+    VoidSpotResult result = ExtractVoidSpots(vf, threshold, cfg.shrinkwrapOpenRadiusVoxels);
+    EnvelopeField envelope = ComputeEnvelopeField(scene, cfg.shrinkwrapVoxelSize);
+
+    ClaimGrid claims;
+    unsigned filled = 0, claimed = 0, noFit = 0;
+    for (const VoidSpot &s : result.spots) {
+      if (claims.IsClaimed(s.pos)) {
+        claimed++;
+        continue;
+      }
+      float localWidth = 2.0f * s.radius;
+      int id = TryFillSpot(scene, s.pos, localWidth, kindsBySize, cfg.fillVoidClearance,
+                           envelope, claims, timer);
+      if (id >= 0) {
+        filled++;
+      } else {
+        noFit++;
+      }
+    }
+    LOGI("fill voids round " << round << ": " << result.spots.size() << " spots, "
+                             << filled << " placed, " << claimed << " claimed, "
+                             << noFit << " no fit/settled, " << scene.instances.size()
+                             << " instances total, " << (clock.ElapsedMS() / 1000.0)
+                             << " s\n");
+    if (scene.instances.size() - before < cfg.fillVoidMinPlaced) {
+      LOGI("fill voids: round " << round << " placed fewer than "
+                                << cfg.fillVoidMinPlaced << ", stopping\n");
+      break;
+    }
+  }
+}
+
+static bool MaskAt(const Array3D8u &mask, const Vec3f &origin, float voxelSize,
+                   const Vec3f &worldPos) {
+  Vec3f local = (worldPos - origin) * (1.0f / voxelSize);
+  int ix = int(std::floor(local[0]));
+  int iy = int(std::floor(local[1]));
+  int iz = int(std::floor(local[2]));
+  Vec3u size = mask.GetSize();
+  if (ix < 0 || iy < 0 || iz < 0 || (unsigned)ix >= size[0] || (unsigned)iy >= size[1] ||
+      (unsigned)iz >= size[2]) {
+    return false;
+  }
+  return mask((unsigned)ix, (unsigned)iy, (unsigned)iz) != 0;
+}
+
+struct CurrentVoid {
+  VoidField vf;
+  VoidSpotResult spots;
+  bool IsOpen(const Vec3f &p) const {
+    return MaskAt(spots.cleanedMask, vf.origin, vf.voxelSize, p);
+  }
+};
+
+// Phase 2's own field: ComputeShrinkwrapField, not ComputeVoidField (that
+// one is volumetric interior, used by ComputePackQuality/PackFillVoids).
+// No morphological open here (openRadiusVoxels=0, a no-op) -- it was wide
+// enough to keep a single fruit's own surface dimple as a "spot," which is
+// not a crevice at all (nothing to bridge, no second fruit involved). The
+// skin band itself can stay a tight 1 voxel now that nothing needs to
+// survive erosion.
+static CurrentVoid ComputeCurrentVoid(PackingScene &scene, const PackingConfig &cfg) {
+  CurrentVoid cur;
+  cur.vf = ComputeShrinkwrapField(scene, cfg.shrinkwrapRadius, cfg.shrinkwrapVoxelSize, 1);
+  if (cur.vf.dist.GetSize()[0] > 0) {
+    cur.spots = ExtractVoidSpots(cur.vf, cfg.shrinkwrapVoxelSize * 1.1f, 0);
+  }
+  return cur;
+}
+
+static float OpenFraction(const std::vector<Vec3f> &voxels, const CurrentVoid &cur) {
+  if (voxels.empty()) {
+    return 0.0f;
+  }
+  unsigned open = 0;
+  for (const Vec3f &p : voxels) {
+    if (cur.IsOpen(p)) {
+      open++;
+    }
+  }
+  return float(open) / float(voxels.size());
+}
+
+CreviceBaseline ComputeCreviceBaseline(PackingScene &scene, const PackingConfig &cfg,
+                                       size_t numInstances) {
+  CreviceBaseline base;
+  numInstances = std::min(numInstances, scene.instances.size());
+  base.numBaseInstances = numInstances;
+  // evaluate the field on just the prefix by temporarily dropping the tail.
+  std::vector<InstanceInfo> tail(scene.instances.begin() + numInstances, scene.instances.end());
+  scene.instances.erase(scene.instances.begin() + numInstances, scene.instances.end());
+  CurrentVoid cur = ComputeCurrentVoid(scene, cfg);
+  scene.instances.insert(scene.instances.end(), tail.begin(), tail.end());
+  if (cur.vf.dist.GetSize()[0] == 0) {
+    return base;
+  }
+  base.origin = cur.vf.origin;
+  base.voxelSize = cur.vf.voxelSize;
+  base.allMask = cur.spots.cleanedMask;
+
+  // assign voxels using every spot (not just in-range ones), so a >3cm void
+  // keeps its own voxels instead of leaking into a neighboring small spot.
+  const std::vector<VoidSpot> &all = cur.spots.spots;
+  std::vector<int> inRangeIndex(all.size(), -1);
+  for (size_t i = 0; i < all.size(); i++) {
+    float width = 2.0f * all[i].radius;
+    if (width >= cfg.creviceMinWidth && width <= cfg.creviceMaxWidth) {
+      inRangeIndex[i] = int(base.spots.size());
+      base.spots.push_back(all[i]);
+    }
+  }
+  base.spotVoxels.resize(base.spots.size());
+  if (all.empty()) {
+    return base;
+  }
+  Vec3u size = base.allMask.GetSize();
+  float h = base.voxelSize;
+  for (unsigned z = 0; z < size[2]; z++) {
+    for (unsigned y = 0; y < size[1]; y++) {
+      for (unsigned x = 0; x < size[0]; x++) {
+        if (base.allMask(x, y, z) == 0) {
+          continue;
+        }
+        Vec3f p = base.origin + Vec3f((x + 0.5f) * h, (y + 0.5f) * h, (z + 0.5f) * h);
+        size_t best = 0;
+        float bestD = 1e30f;
+        for (size_t i = 0; i < all.size(); i++) {
+          float d = (p - all[i].pos).norm() - all[i].radius;
+          if (d < bestD) {
+            bestD = d;
+            best = i;
+          }
+        }
+        if (inRangeIndex[best] >= 0) {
+          base.spotVoxels[inRangeIndex[best]].push_back(p);
+        }
+      }
+    }
+  }
+  return base;
+}
+
+void PackFillCrevices(PackingScene &scene, const PackingConfig &cfg,
+                      const std::vector<std::string> &smallItemNames,
+                      const CreviceBaseline &baseline, PlacementTimer *timer) {
+  std::vector<unsigned> kindsBySize;
+  for (const std::string &name : smallItemNames) {
+    auto it = scene.nameToIndex.find(name);
+    if (it != scene.nameToIndex.end()) {
+      kindsBySize.push_back(it->second);
+    }
+  }
+  if (kindsBySize.empty()) {
+    std::vector<int> bySize = SortBySize(scene.items);
+    if (!bySize.empty()) {
+      kindsBySize.push_back(unsigned(bySize.back()));
+    }
+  }
+  std::sort(kindsBySize.begin(), kindsBySize.end(), [&](unsigned a, unsigned b) {
+    return scene.items[a].BoxDiagonal() > scene.items[b].BoxDiagonal();
+  });
+  if (kindsBySize.empty()) {
+    LOGI("fill crevices: no small item kinds resolved, nothing to do\n");
+    return;
+  }
+
+  // targets come only from the fixed baseline; the field is recomputed
+  // each round only to check whether a baseline spot is already closed.
+  std::vector<unsigned> attempts(baseline.spots.size(), 0);
+  for (unsigned round = 0; round < cfg.creviceMaxRounds; round++) {
+    size_t before = scene.instances.size();
+    Utils::Stopwatch clock;
+    clock.Start();
+
+    CurrentVoid cur = ComputeCurrentVoid(scene, cfg);
+    if (cur.vf.dist.GetSize()[0] == 0) {
+      LOGI("fill crevices round " << round << ": void field is empty, stopping\n");
+      break;
+    }
+    EnvelopeField envelope = ComputeEnvelopeField(scene, cfg.shrinkwrapVoxelSize);
+
+    ClaimGrid claims;
+    unsigned filled = 0, claimed = 0, noFit = 0, closed = 0, exhausted = 0;
+    for (size_t i = 0; i < baseline.spots.size(); i++) {
+      const VoidSpot &s = baseline.spots[i];
+      if (OpenFraction(baseline.spotVoxels[i], cur) < cfg.creviceClosedFrac) {
+        closed++;
+        continue;
+      }
+      if (attempts[i] >= cfg.creviceMaxAttemptsPerSpot) {
+        exhausted++;
+        continue;
+      }
+      if (claims.IsClaimed(s.pos)) {
+        claimed++;
+        continue;
+      }
+      attempts[i]++;
+      int id = TryFillSpot(scene, s.pos, 2.0f * s.radius, kindsBySize, cfg.creviceClearance,
+                           envelope, claims, timer, /*sizeMustFitLocalWidth=*/false);
+      if (id >= 0) {
+        filled++;
+      } else {
+        noFit++;
+      }
+    }
+    LOGI("fill crevices round " << round << ": " << baseline.spots.size() << " baseline spots, "
+                                << filled << " placed, " << closed << " closed, " << claimed
+                                << " claimed, " << exhausted << " out of attempts, " << noFit
+                                << " no fit/settled, " << scene.instances.size()
+                                << " instances total, " << (clock.ElapsedMS() / 1000.0)
+                                << " s\n");
+    if (scene.instances.size() - before < cfg.creviceMinPlaced) {
+      LOGI("fill crevices: round " << round << " placed fewer than "
+                                   << cfg.creviceMinPlaced << ", stopping\n");
+      break;
+    }
+  }
+}
+
+CreviceCoverageReport ComputeCreviceCoverage(PackingScene &scene, const PackingConfig &cfg,
+                                             const CreviceBaseline &baseline) {
+  CreviceCoverageReport rep;
+  rep.usefulVolume = cfg.creviceUsefulVolume;
+  rep.spotsTotal = unsigned(baseline.spots.size());
+  float voxVol = baseline.voxelSize * baseline.voxelSize * baseline.voxelSize;
+  CurrentVoid cur = ComputeCurrentVoid(scene, cfg);
+
+  struct Cand {
+    unsigned id;
+    Vec3f pos;
+    float halfDiag;
+  };
+  std::vector<Cand> phase3;
+  for (size_t i = baseline.numBaseInstances; i < scene.instances.size(); i++) {
+    const InstanceInfo &inst = scene.instances[i];
+    phase3.push_back({unsigned(i), inst.tran.position,
+                      0.5f * scene.items[inst.itemId].BoxDiagonal()});
+  }
+  std::unordered_map<unsigned, float> closedBy;
+  const float ATTRIB_RANGE = 1.0f;
+
+  for (size_t s = 0; s < baseline.spots.size(); s++) {
+    const std::vector<Vec3f> &voxels = baseline.spotVoxels[s];
+    unsigned open = 0;
+    for (const Vec3f &p : voxels) {
+      rep.c0Volume += voxVol;
+      if (cur.IsOpen(p)) {
+        open++;
+        rep.stillOpenVolume += voxVol;
+        continue;
+      }
+      int best = -1;
+      float bestD = ATTRIB_RANGE;
+      for (const Cand &c : phase3) {
+        if ((p - c.pos).norm() - c.halfDiag > ATTRIB_RANGE) {
+          continue;
+        }
+        const InstanceInfo &inst = scene.instances[c.id];
+        const MeshInfo &item = scene.items[inst.itemId];
+        float d;
+        if (item.sdf) {
+          Vec3f local = inst.tran.rotation.transposed() * (p - inst.tran.position);
+          d = item.sdf->GetCoarseDist(local);
+        } else {
+          d = (p - c.pos).norm() - c.halfDiag;
+        }
+        if (d < bestD) {
+          bestD = d;
+          best = int(c.id);
+        }
+      }
+      if (best >= 0) {
+        closedBy[unsigned(best)] += voxVol;
+      } else {
+        rep.unattributedClosed += voxVol;
+      }
+    }
+    if (voxels.empty() || float(open) / float(voxels.size()) < cfg.creviceClosedFrac) {
+      rep.spotsClosed++;
+    }
+  }
+  rep.closedVolume = rep.c0Volume - rep.stillOpenVolume;
+
+  if (cur.vf.dist.GetSize()[0] > 0) {
+    Vec3u size = cur.spots.cleanedMask.GetSize();
+    float h = cur.vf.voxelSize;
+    float curVoxVol = h * h * h;
+    for (unsigned z = 0; z < size[2]; z++) {
+      for (unsigned y = 0; y < size[1]; y++) {
+        for (unsigned x = 0; x < size[0]; x++) {
+          if (cur.spots.cleanedMask(x, y, z) == 0) {
+            continue;
+          }
+          Vec3f p = cur.vf.origin + Vec3f((x + 0.5f) * h, (y + 0.5f) * h, (z + 0.5f) * h);
+          if (!MaskAt(baseline.allMask, baseline.origin, baseline.voxelSize, p)) {
+            rep.newVoidVolume += curVoxVol;
+          }
+        }
+      }
+    }
+  }
+
+  for (const Cand &c : phase3) {
+    CreviceCoverageReport::Fruit f;
+    f.instanceId = c.id;
+    const MeshInfo &item = scene.items[scene.instances[c.id].itemId];
+    f.itemName = item.name;
+    f.pos = item.rb.GetInputTran(scene.instances[c.id].tran).position;
+    auto it = closedBy.find(c.id);
+    f.closedVolume = it == closedBy.end() ? 0.0f : it->second;
+    if (f.closedVolume < cfg.creviceUsefulVolume) {
+      rep.unnecessaryCount++;
+    }
+    rep.fruits.push_back(f);
+  }
+  std::sort(rep.fruits.begin(), rep.fruits.end(),
+            [](const auto &a, const auto &b) { return a.closedVolume < b.closedVolume; });
+  return rep;
+}
+
+void SaveCreviceCoverageReport(const CreviceCoverageReport &rep, const std::string &filename,
+                               const std::string &objFilename) {
+  std::ofstream out(filename);
+  out << "baseline_spots: " << rep.spotsTotal << "\n";
+  out << "baseline_spots_closed: " << rep.spotsClosed << "\n";
+  out << "c0_volume_cm3: " << rep.c0Volume << "\n";
+  out << "c0_still_open_cm3: " << rep.stillOpenVolume << "\n";
+  out << "c0_closed_cm3: " << rep.closedVolume << "\n";
+  out << "c0_closed_unattributed_cm3: " << rep.unattributedClosed << "\n";
+  out << "new_void_outside_baseline_cm3: " << rep.newVoidVolume << "\n";
+  out << "phase3_fruits: " << rep.fruits.size() << "\n";
+  out << "unnecessary_fruits (closed < " << rep.usefulVolume << " cm3): " << rep.unnecessaryCount
+      << "\n";
+  out << "# fruit: instance_id item_name pos_x pos_y pos_z closed_c0_cm3 (least useful first)\n";
+  std::vector<Vec3f> pts;
+  for (const auto &f : rep.fruits) {
+    out << "fruit: " << f.instanceId << " " << f.itemName << " " << f.pos[0] << " " << f.pos[1]
+        << " " << f.pos[2] << " " << f.closedVolume << "\n";
+    if (f.closedVolume < rep.usefulVolume) {
+      pts.push_back(f.pos);
+    }
+  }
+  if (!objFilename.empty()) {
+    SaveVec3fObj(objFilename, pts);
+  }
+  LOGI("crevice coverage: C0 " << rep.c0Volume << " cm3, closed " << rep.closedVolume
+                               << ", still open " << rep.stillOpenVolume << ", new void "
+                               << rep.newVoidVolume << ", spots closed " << rep.spotsClosed << "/"
+                               << rep.spotsTotal << ", unnecessary fruit " << rep.unnecessaryCount
+                               << "/" << rep.fruits.size() << ", saved " << filename << "\n");
+}
+
+void PlacementTimer::Record(const std::string &name, double ms) {
+  Stats &s = byName[name];
+  s.count++;
+  s.totalMs += ms;
+  s.minMs = std::min(s.minMs, ms);
+  s.maxMs = std::max(s.maxMs, ms);
+}
+
+void SavePlacementTimer(const PlacementTimer &timer, const std::string &filename) {
+  std::vector<std::pair<std::string, PlacementTimer::Stats>> rows(
+      timer.byName.begin(), timer.byName.end());
+  std::sort(rows.begin(), rows.end(), [](const auto &a, const auto &b) {
+    return a.second.totalMs > b.second.totalMs;
+  });
+  std::ofstream out(filename);
+  out << "# name count total_ms avg_ms min_ms max_ms\n";
+  for (const auto &[name, s] : rows) {
+    double avg = s.count > 0 ? s.totalMs / double(s.count) : 0.0;
+    out << name << " " << s.count << " " << s.totalMs << " " << avg << " "
+        << (s.count > 0 ? s.minMs : 0.0) << " " << s.maxMs << "\n";
+  }
+  LOGI("saved settle timing for " << rows.size() << " item kinds to " << filename << "\n");
+}
+
+// exact mesh volume via the divergence theorem.
+static float MeshSignedVolume(const TrigMesh &mesh) {
+  double vol = 0.0;
+  size_t numTris = mesh.t.size() / 3;
+  for (size_t i = 0; i < numTris; i++) {
+    Vec3f v0 = mesh.Vert(mesh.t[3 * i + 0]);
+    Vec3f v1 = mesh.Vert(mesh.t[3 * i + 1]);
+    Vec3f v2 = mesh.Vert(mesh.t[3 * i + 2]);
+    vol += double(v0.dot(v1.cross(v2)));
+  }
+  return float(std::fabs(vol) / 6.0);
+}
+
+PackQualityReport ComputePackQuality(PackingScene &scene, const PackingConfig &cfg,
+                                     unsigned numOffendersToReport) {
+  PackQualityReport report;
+  if (!scene.sdf) {
+    return report;
+  }
+
+  std::unordered_map<unsigned, float> kindVolume;
+  for (const InstanceInfo &inst : scene.instances) {
+    auto it = kindVolume.find(inst.itemId);
+    if (it == kindVolume.end()) {
+      it = kindVolume.emplace(inst.itemId, MeshSignedVolume(scene.items[inst.itemId].mesh)).first;
+    }
+    report.fruitVolume += it->second;
+  }
+
+  {
+    Vec3u sdfSize = scene.sdf->dist.GetSize();
+    double containerVoxels = 0.0;
+    for (size_t i = 0; i < scene.sdf->dist.GetData().size(); i++) {
+      if (float(scene.sdf->dist.GetData()[i]) * scene.sdf->distUnit <= 0.0f) {
+        containerVoxels += 1.0;
+      }
+    }
+    float sdfVoxelVolume = scene.sdf->voxSize * scene.sdf->voxSize * scene.sdf->voxSize;
+    report.containerVolume = float(containerVoxels) * sdfVoxelVolume;
+  }
+
+  VoidField vf = ComputeVoidField(scene, cfg.shrinkwrapRadius, cfg.shrinkwrapVoxelSize);
+  if (vf.dist.GetSize()[0] == 0) {
+    return report;
+  }
+  float threshold = cfg.shrinkwrapVoxelSize * 1.1f;
+  VoidSpotResult result = ExtractVoidSpots(vf, threshold, cfg.shrinkwrapOpenRadiusVoxels);
+
+  float voxelVolume = cfg.shrinkwrapVoxelSize * cfg.shrinkwrapVoxelSize * cfg.shrinkwrapVoxelSize;
+  Vec3u gridSize = vf.dist.GetSize();
+  double openVoxels = 0.0;
+  std::unordered_map<unsigned, float> nearbyOpenVolume;
+  for (unsigned z = 0; z < gridSize[2]; z++) {
+    for (unsigned y = 0; y < gridSize[1]; y++) {
+      for (unsigned x = 0; x < gridSize[0]; x++) {
+        if (result.cleanedMask(x, y, z) == 0) {
+          continue;
+        }
+        openVoxels += 1.0;
+        if (scene.instances.empty()) {
+          continue;
+        }
+        Vec3f world = vf.origin + Vec3f((x + 0.5f) * cfg.shrinkwrapVoxelSize,
+                                        (y + 0.5f) * cfg.shrinkwrapVoxelSize,
+                                        (z + 0.5f) * cfg.shrinkwrapVoxelSize);
+        unsigned nearest = 0;
+        float bestD2 = 1e30f;
+        for (unsigned i = 0; i < scene.instances.size(); i++) {
+          float d2 = (scene.instances[i].tran.position - world).norm2();
+          if (d2 < bestD2) {
+            bestD2 = d2;
+            nearest = i;
+          }
+        }
+        nearbyOpenVolume[nearest] += voxelVolume;
+      }
+    }
+  }
+  report.openVolume = float(openVoxels) * voxelVolume;
+  report.fillFraction = report.containerVolume > 0.0f
+                            ? report.fruitVolume / report.containerVolume
+                            : 0.0f;
+  report.openFraction = report.containerVolume > 0.0f
+                            ? report.openVolume / report.containerVolume
+                            : 0.0f;
+
+  std::vector<std::pair<unsigned, float>> offenders(nearbyOpenVolume.begin(),
+                                                     nearbyOpenVolume.end());
+  std::sort(offenders.begin(), offenders.end(),
+           [](const auto &a, const auto &b) { return a.second > b.second; });
+  if (offenders.size() > numOffendersToReport) {
+    offenders.resize(numOffendersToReport);
+  }
+  for (const auto &[instId, vol] : offenders) {
+    PackQualityReport::Offender off;
+    off.instanceId = instId;
+    off.itemName = scene.items[scene.instances[instId].itemId].name;
+    off.pos = scene.instances[instId].tran.position;
+    off.nearbyOpenVolume = vol;
+    report.worstOffenders.push_back(off);
+  }
+  return report;
+}
+
+void SavePackQualityReport(const PackQualityReport &report, const std::string &filename) {
+  std::ofstream out(filename);
+  out << "container_volume_cm3: " << report.containerVolume << "\n";
+  out << "fruit_volume_cm3: " << report.fruitVolume << "\n";
+  out << "open_volume_cm3: " << report.openVolume << "\n";
+  out << "fill_fraction: " << report.fillFraction << "\n";
+  out << "open_fraction: " << report.openFraction << "\n";
+  out << "# worst offenders: instance_id item_name pos_x pos_y pos_z nearby_open_volume_cm3\n";
+  for (const auto &off : report.worstOffenders) {
+    out << "offender: " << off.instanceId << " " << off.itemName << " "
+        << off.pos[0] << " " << off.pos[1] << " " << off.pos[2] << " "
+        << off.nearbyOpenVolume << "\n";
+  }
+  LOGI("saved pack quality report to " << filename << " (fill "
+                                       << (report.fillFraction * 100.0f)
+                                       << "%, open " << (report.openFraction * 100.0f)
+                                       << "%, " << report.worstOffenders.size()
+                                       << " offenders listed)\n");
+}
+
 void ComputeSurfaceDepths(PackingScene &scene,
                           std::vector<Vec3f> &deepOrigins,
                           std::vector<Vec3f> &deepEnds) {
@@ -797,14 +1574,8 @@ void ComputeSurfaceDepths(PackingScene &scene,
                      << deepThreshold << " cm, saved " << deepFile << "\n");
 }
 
-// finds the container-surface ray closest
-// to targetPos, then prints its depth alongside every neighbor ray
-// within neighborRadius (same neighborhood FindDeepRays would use),
-// including which instance/item each one hit and the angle between the
-// two ray directions. Does not place or settle anything, does not save
-// any file. Intended to be called directly from a small standalone
-// harness (build scene, load resume pack, call this) without running
-// PackScene/PackStep.
+// prints the container-surface ray closest to targetPos plus its
+// neighbors, for diagnosing a deep-ray flag without running a full pack.
 void DebugDeepRayNeighbors(PackingScene &scene, const Vec3f &targetPos) {
   const float SAMPLE_EPS = 0.3f;
   const float neighborRadius = 1.0f;
@@ -897,7 +1668,6 @@ void DebugDeepRayNeighbors(PackingScene &scene, const Vec3f &targetPos) {
   std::cout << "=== END DEBUG DEEP RAY ===\n\n";
 }
 
-// Raycasting crevice, finds deep rays. Mutates scene by placing instances
 void SeedSmallFruitCrevices(PackingScene &scene,
                             const std::vector<std::string> &smallItemNames,
                             const std::vector<Vec3f> &surfacePoints) {
@@ -936,8 +1706,15 @@ void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig
   scene.trajFile = scene.outputFolder + "/traj";
   scene.placed.resize(scene.items.size());
 
+  PlacementTimer runTimer;
+
   if (cfg.resume) {
     LoadPack(scene, cfg.ResumePackPath());
+    // force samples/sdf population for resumed kinds -- LoadPack's Put()
+    // does not, and downstream overlap checks need it.
+    for (const InstanceInfo &inst : scene.instances) {
+      scene.EnsureItemSamples(inst.itemId);
+    }
   }
   size_t lastStep = plan.steps.size() > 0 ? plan.steps.size() - 1 : 0;
   for (size_t i = cfg.startStep; i < lastStep; i++) {
@@ -945,7 +1722,7 @@ void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig
     Utils::Stopwatch clock;
     clock.Start();
     size_t before = scene.instances.size();
-    PackStep(scene, plan.steps[i], cfg, {});
+    PackStep(scene, plan.steps[i], cfg, {}, &runTimer);
     LOGI("=== step " << i << " took " << (clock.ElapsedMS() / 1000.0) << " s, "
                      << (scene.instances.size() - before) << " placed, "
                      << scene.instances.size() << " instances total ===\n");
@@ -958,27 +1735,63 @@ void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig
   SaveVec3fObj(scene.outputFolder + "/free_container_surface.obj", surfPts);
   LOGI("free surface: " << surfPts.size() << " unoccupied points\n");
 
-  if (!plan.steps.empty()) {
+  if (!plan.steps.empty() && cfg.startStep <= lastStep) {
     LOGI("=== step " << lastStep << " of " << lastStep << " (surface-guided) ===\n");
     Utils::Stopwatch clock;
     clock.Start();
     size_t before = scene.instances.size();
-    PackStep(scene, plan.steps[lastStep], cfg, surfPts);
+    PackStep(scene, plan.steps[lastStep], cfg, surfPts, &runTimer);
     LOGI("=== step " << lastStep << " took " << (clock.ElapsedMS() / 1000.0) << " s, "
                      << (scene.instances.size() - before) << " placed, "
                      << scene.instances.size() << " instances total ===\n");
   }
 
-  SaveShrinkWrapMesh(scene, scene.outputFolder + "/shrinkwrap.obj", 0.5f);
-
-  // raycasting crevice pass
-  // targets the same small-fruit group as the last PackStep.
-  if(plan.groups.size()>1){
-    SeedSmallFruitCrevices(scene, plan.groups[plan.groups.size()-2], surfPts);
+  {
+    Array3D<short> dist;
+    Vec3f origin;
+    float distUnit;
+    ComputeShrinkWrapDistField(scene, 1.0f, 0.2f, dist, origin, distUnit);
+    TrigMesh hull = ComputeShrinkWrapMesh(dist, origin, 0.2f, distUnit);
+    SaveShrinkWrapMesh(hull, scene.outputFolder + "/shrinkwrap.obj");
   }
-  SeedSmallFruitCrevices(scene, plan.groups.empty() ? std::vector<std::string>()
-                                                     : plan.groups.back(), surfPts);
+  SavePackQualityReport(ComputePackQuality(scene, cfg),
+                        scene.outputFolder + "/pack_quality_before_fill.txt");
 
+  LOGI("=== Phase 2: crevice fill ===\n");
+  CreviceBaseline baseline = ComputeCreviceBaseline(scene, cfg, scene.instances.size());
+  {
+    std::vector<Vec3f> spotPts;
+    for (const VoidSpot &s : baseline.spots) {
+      spotPts.push_back(s.pos);
+    }
+    SaveVec3fObj(scene.outputFolder + "/crevice_baseline_spots.obj", spotPts);
+    LOGI("crevice baseline: " << baseline.spots.size() << " in-range spots from "
+                              << baseline.numBaseInstances << " instances\n");
+  }
+  {
+    size_t before = scene.instances.size();
+    Utils::Stopwatch clock;
+    clock.Start();
+    if (plan.groups.size() > 1) {
+      PackFillCrevices(scene, cfg, plan.groups[plan.groups.size() - 2], baseline, &runTimer);
+    }
+    PackFillCrevices(scene, cfg, plan.groups.empty() ? std::vector<std::string>()
+                                                      : plan.groups.back(),
+                     baseline, &runTimer);
+    LOGI("=== Phase 2 took " << (clock.ElapsedMS() / 1000.0) << " s, "
+                             << (scene.instances.size() - before) << " placed, "
+                             << scene.instances.size() << " instances total ===\n");
+  }
+  SaveCreviceCoverageReport(ComputeCreviceCoverage(scene, cfg, baseline),
+                            scene.outputFolder + "/crevice_coverage.txt",
+                            scene.outputFolder + "/crevice_unnecessary.obj");
+
+  PackQualityReport finalReport = ComputePackQuality(scene, cfg);
+  SavePackQualityReport(finalReport, scene.outputFolder + "/pack_quality_final.txt");
+  SavePlacementTimer(runTimer, scene.outputFolder + "/timing.txt");
+  LOGI("=== final quality: fill " << (finalReport.fillFraction * 100.0f)
+                                  << "%, open " << (finalReport.openFraction * 100.0f)
+                                  << "%, saved pack_quality_final.txt / timing.txt ===\n");
 }
 
 std::vector<Vec3f> ComputeFreeContainerPoints(PackingScene &scene) {
@@ -1022,8 +1835,6 @@ void SaveFreeContainerSurface(PackingScene &scene, const std::string &filename) 
 }
 
 void PackFruits(const PackingPlan &plan, const PackingConfig &cfgIn) {
-  // the plan is only known here, so this is the first point at which
-  // startStep can be checked against something real.
   PackingConfig cfg = cfgIn;
   cfg.ClampStartStep(plan.steps.size());
   PackingScene scene;

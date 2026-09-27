@@ -39,16 +39,22 @@ int main() {
   cfg.subgridCellSize = 20.0f;
 
   cfg.maxTrialCount = 10;
-  cfg.startStep = 2;
+  // rewind: resume from the Phase 1 pack and skip all 4 steps.
+  cfg.startStep = 4;
   cfg.startItem = 0;
 
   cfg.resume = true;
-  cfg.resumePackFile = "pack_before_ray.txt";
+  cfg.resumePackFile = "out_melone_test/pack_dbg_phase1.txt";
   cfg.trajSaveInterval = 10;
   cfg.packSaveInterval = 20;
 
   cfg.computeStats = true;
-  DebugShrinkWrap(cfg, 1, 0.1);
+  DebugShrinkWrap(cfg, 1, 0.2);
+  DebugVoidField(cfg, 1, 0.1);
+  DebugVoidSpots(cfg, 1, 0.1);
+  DebugFillVoids(cfg, 1, 0.1);
+  // DebugVoidSpots above IS Phase 2's own debug view now too -- see
+  // DebugTools.h's note on the removed DebugCreviceField.
   std::cout << cfg.toString();
 
   // The output directory is not created by PackingScene -- create it here

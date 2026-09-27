@@ -52,6 +52,52 @@ struct PackingConfig {
     // recompute stats.txt before planning.
     bool computeStats = true;
 
+    // shrinkwrap field parameters, shared by Phase 2 (ComputeShrinkwrapField)
+    // and the old, removed-from-pipeline nominal-size fill pass
+    // (PackFillVoids, kept only for DebugFillVoids/benchmarks, ComputeVoidField).
+    // voxelSize is independent of dx and needs to be fine enough to resolve
+    // the smallest fruit tier (melone_test uses 0.1, 3x finer than dx=0.3).
+    float shrinkwrapRadius = 1.0f;
+    float shrinkwrapVoxelSize = 0.2f;
+    unsigned shrinkwrapOpenRadiusVoxels = 1;
+    // PackFillVoids-only (the old removed pass).
+    float fillVoidClearance = 0.1f;
+    unsigned fillVoidMinPlaced = 3;
+    unsigned fillVoidMaxRounds = 10;
+
+    // Phase 2 (plan.txt PIPELINE Phase 2; renamed from Phase 3 once the old
+    // nominal-size Phase 2/PackFillVoids was removed from the pipeline):
+    // small fruit resting on top of fruit-fruit crevices (especially where
+    // 3+ fruit meet), at low volume. Targets are shrinkwrap SURFACE voxels
+    // not already covered by a bigger fruit's own surface (ComputeShrinkwrapField,
+    // PackShrinkWrap.h) -- not volumetric interior gaps, there is no "fill
+    // void" step left in the real pipeline at all.
+    float creviceClearance = 0.1f;
+    // one placed fruit's claim radius (its own BoxDiagonal, often much
+    // bigger than the crevice itself) can legitimately cover dozens of
+    // nearby crevice spots in a single round, so unlike the old removed
+    // pass, 1 placement in a round is still real progress; stop only once
+    // a round places nothing at all.
+    unsigned creviceMinPlaced = 1;
+    unsigned creviceMaxRounds = 15;
+    // crevice opening WIDTH (2*s.radius) bounds, cm, from the user's
+    // manufacturability bucket table: <0.2cm self-fills (ignore), 0.2-3cm
+    // is Phase 2's actual working range (rest fruit on top, shrink the
+    // opening), >3cm is a real void Phase 2 is not meant to handle. The
+    // lower bound is also roughly enforced by ExtractVoidSpots' own
+    // threshold (shrinkwrapVoxelSize*1.1 on s.radius), but checked
+    // explicitly here too so it does not silently drift if that changes.
+    float creviceMinWidth = 0.2f;
+    float creviceMaxWidth = 3.0f;
+    // a baseline crevice spot counts as closed once less than this fraction
+    // of its own baseline voxels is still open in the current void field.
+    float creviceClosedFrac = 0.5f;
+    // TryFillSpot attempts per baseline spot, across all rounds of one call.
+    unsigned creviceMaxAttemptsPerSpot = 3;
+    // a Phase 2 fruit that closed less baseline crevice volume than this
+    // (cm^3) is reported as unnecessary by the coverage metric.
+    float creviceUsefulVolume = 0.05f;
+
     // path helpers. all return absolute paths.
     std::string MeshDir() const;
     std::string ContainerPath() const;
@@ -73,7 +119,8 @@ struct PackingConfig {
     bool LoadFromFile(const std::string &path);
 
     /// startStep comes from a hand written file, so it is clamped rather than
-    /// trusted. out of range means the last step, and an empty plan is the
+    /// trusted. numSteps means skip all steps; anything larger is clamped to
+    /// that, and an empty plan is the
     /// caller's problem. returns true if the value was changed.
     /// startItem is clamped in PackStep instead, because the valid range is
     /// the kind count of whichever step is running, not a property of cfg.

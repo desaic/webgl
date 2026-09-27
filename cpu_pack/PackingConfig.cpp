@@ -127,11 +127,13 @@ bool PackingConfig::ClampStartStep(size_t numSteps) {
   if (numSteps == 0) {
     return false;
   }
-  unsigned last = unsigned(numSteps - 1);
-  if (startStep > last) {
-    std::cout << "startStep " << startStep << " past the last step " << last
+  // startStep == numSteps is valid: skip every plan step, go straight to
+  // the crevice phase on a resumed pack.
+  unsigned limit = unsigned(numSteps);
+  if (startStep > limit) {
+    std::cout << "startStep " << startStep << " past the step count " << limit
               << ", clamped\n";
-    startStep = last;
+    startStep = limit;
     return true;
   }
   return false;

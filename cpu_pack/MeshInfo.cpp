@@ -7,6 +7,7 @@
 #include <FastSweep.h>
 
 #include <algorithm>
+#include <cmath>
 #include <iomanip>
 #include <iostream>
 #include <numeric>
@@ -109,7 +110,21 @@ void MeshInfo::ComputeSDFCached(){
   sdf->ComputeCoarseDist();
   //CloseExterior(sdf->dist, sdf->MAX_DIST);
   Array3D8u frozen;
-  int band = 8;
+  // band=8 (1.6cm at MIN_H) only reaches the surface region -- fine for
+  // this sdf's original use (contact/collision queries near a surface),
+  // but any point deeper than that reads back as AdapDF::MAX_DIST, a
+  // large POSITIVE "far/unswept" sentinel, not a genuine "outside"
+  // classification. TryFillSpot's SignedOverlapFraction/
+  // ExistingInsideCandidateFraction (PackingDriver.cpp) use THIS sdf's
+  // sign to test "is this point inside the mesh" for overlap checks, which
+  // silently passes as "not inside" once a query point is buried more than
+  // ~1.6cm into a mesh bigger than that (e.g. a raspberry sitting deep in
+  // a plum) -- this is what let raspberries settle genuinely half-
+  // submerged into bigger fruit undetected. Size the band from the mesh's
+  // own extent (in voxels) so the sweep reaches its full interior
+  // regardless of item size, same reasoning ComputeSDF (PackingScene.cpp,
+  // container sdf) already uses a very large band for.
+  int band = int(std::ceil(maxLen / sdf->voxSize)) + 4;
   FastSweepPar(sdf->dist, sdf->voxSize, distUnit, band, frozen);
 }
 

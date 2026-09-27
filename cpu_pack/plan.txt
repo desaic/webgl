@@ -4,6 +4,416 @@ PACKING IMPROVEMENT PLAN
 Goal: combine the pieces that already exist into one loop with feedback,
 instead of a straight line of independent passes.
 
+PHASE 3 FIXED CREVICE SET (current procedure, per user):
+  1. After Phase 1, compute the crevice field ONCE (ComputeCreviceBaseline):
+     cleaned VoidField mask + spots, keep spots with width 0.2-3cm (S0).
+     Each mask voxel is assigned to its nearest spot (distance to inscribed
+     sphere); in-range spots' voxels form C0.
+  2. Targets come only from S0, never regenerated -- small fruit must not
+     create targets for later small fruit. Attraction target = spot center
+     offset 1cm away from the container wall (unchanged).
+  3. Each round recomputes the current field ONLY to test closure: a spot is
+     closed once < creviceClosedFrac (0.5) of its C0 voxels are still open.
+  4. Open spots: TryFillSpot with small kinds, sizeMustFitLocalWidth=false,
+     at most creviceMaxAttemptsPerSpot (3) attempts per spot.
+  5. Metric (ComputeCreviceCoverage -> crevice_coverage.txt): C0 volume
+     closed/still open, new void outside baseline, and per Phase 3 fruit the
+     C0 volume it closed (nearest fruit surface within 1cm). Closed <
+     creviceUsefulVolume (0.05 cm^3) = unnecessary fruit.
+  Result on melone_test from the 39-instance Phase 1 pack (2026-09-26):
+    old (regenerated spots): 258 fruit, 159 unnecessary, C0 closed 30.0 of
+      206.5 cm^3, 31/161 spots closed, new void 146.6 cm^3, 330 s.
+    new (fixed S0):           96 fruit,   3 unnecessary, C0 closed 31.2 of
+      206.5 cm^3, 31/161 spots closed, new void 104.3 cm^3, 108 s.
+  Open issue: 130/161 spots stay open, most run out of attempts.
+
+PHASE 3 RENAMED TO PHASE 2 (2026-09-26, per user): the old nominal-size
+fill pass (originally "Phase 2", PackFillVoids) is gone from the real
+pipeline, so the crevice-fill pass (originally "Phase 3", PackFillCrevices)
+is now just called "Phase 2" everywhere current-facing (LOGI output, doc
+comments in PackingDriver.h/.cpp, PackingConfig.h, PackShrinkWrap.h,
+DebugTools.h, melone_test.cpp). Historical entries below this point that
+predate the rename still say "Phase 3" (or "Phase 2" meaning the OLD
+removed pass) -- read them as written, they describe what things were
+called at the time, not the current names. Doc comments that talked about
+BOTH passes in the same breath were reworded to name PackFillVoids
+explicitly instead of "Phase 2", to avoid exactly the collision a blind
+find-replace would have caused (PackFillVoids' own sizeMustFitLocalWidth=
+true behavior briefly became indistinguishable from the renamed Phase 2's
+sizeMustFitLocalWidth=false behavior in a few comments -- fixed).
+
+PHASE 3 SHRINKWRAP-SURFACE REWORK (2026-09-26, per user): VoidField's
+"worth filling" test is volumetric (raw dist kept wherever closed<=0, i.e.
+the WHOLE interior of the closed hull) -- caught by the
+blueberry1_001-on-fig1 case: spot 4 had a big VoidField radius (1.11cm)
+purely because fig1's own surface is ~0.95cm from the spot CENTER while
+nothing else is nearby, but at fig1's own outer skin there was nothing to
+bridge at all -- a lone convex fruit's flank, not a crevice. User's
+correction: Phase 3 should only ever attract fruit to points ON the
+shrinkwrap's own surface that are not already covered by a single bigger
+fruit's surface -- never volumetric interior. Rejected surface-mesh +
+point-sampling as the mechanism (extra geometry step, resampling
+artifacts, harder to subgrid later); instead added ComputeShrinkwrapField
+(PackShrinkWrap.h/.cpp): same two grids ComputeShrinkWrapDistField already
+builds for the shrinkwrap mesh (closed + raw, one call, shared grid), kept
+raw's value only where |closed| <= voxelSize (a thin shell AROUND the
+zero crossing = the skin itself, not the volume behind it), blocked
+elsewhere -- same shape/sentinel as VoidField, so ExtractVoidSpots (
+threshold+morph-open+distance-transform+local-maxima+NMS) runs on it
+completely unchanged. Wired in by swapping the one ComputeVoidField call
+inside PackingDriver.cpp's ComputeCurrentVoid (the single chokepoint
+ComputeCreviceBaseline/PackFillCrevices' closure test/ComputeCreviceCoverage
+all go through) to ComputeShrinkwrapField -- everything downstream of that
+helper is now skin-based with no other code changes needed.
+ComputePackQuality's own openVolume metric deliberately still uses the
+volumetric ComputeVoidField (a global fillable-space number, not a Phase 3
+target list).
+
+CURRENT STATUS: per explicit user instruction, Phase 2 (PackFillVoids) is
+REMOVED from the real pipeline -- the PackFillVoids(scene, cfg, &runTimer)
+call and its before/after-fill quality report writes were deleted from
+PackFruits in PackingDriver.cpp. The function itself is left in place
+(still used by DebugFillVoids and referenced by PackFillCrevices' own doc
+comments, since Phase 3 still reuses Phase 2's VoidField/EnvelopeField
+machinery -- only the standalone nominal-size-fill PASS is gone, not the
+field it was built on). The real pipeline now goes: steps 0-3, then Phase
+3 crevice fill only. Numbers below that mention "Phase 2 goes 45->90
+instances" etc. describe the OLD pipeline shape and are kept for history,
+not the current one.
+
+CURRENT STATUS (steps 1-8, 10 done; full pipeline wired and verified on
+melone_test): PackFillVoids (Phase 2) and PackFillCrevices (Phase 3) both
+run inside the real PackScene/PackFruits pipeline now, not just debug
+harnesses -- see SHARED HELPERS #3's two DONE blocks and Phase 3's DONE +
+TRIED AND REVERTED blocks below for exact numbers and the watermelon bug
+that got caught and fixed there. Net result on melone_test as of this
+session: Phase 2 goes 45->90 instances; Phase 3 correctly places 0/473
+wall-crevice spots given the current item catalogue (smallest kind 1.39cm
+BoxDiagonal, spots only 0.34-1.08cm wide) -- that is the right answer, not
+a bug, confirmed twice (once before, once after a wrong "fix" was tried
+and reverted). Next real lever is step 9 (a floor-sized small tier), which
+is what would let Phase 3 actually place something on this scene -- and
+that IS an asset gap, not a code gap: checked the full fruits_1 catalogue,
+blueberry1_001 (1.39cm BoxDiagonal) really is the smallest mesh on disk,
+nothing smaller already exists to just re-tag into the small group.
+
+DONE this session: two evaluation tools, both requested explicitly so
+future "did this help" questions have a number instead of eyeballing logs.
+  - Fixed a real waste in PackFillCrevices: it was calling
+    ComputeEnvelopeField twice per round (once itself, once again inside
+    ComputeCreviceField). ComputeCreviceField now takes the EnvelopeField
+    as a parameter instead of building its own. Confirmed via full melone_test
+    run: no behavior change, one fewer BuildUnsignedDistField pass/round.
+  - Added PackQualityReport / ComputePackQuality (PackingDriver.h/.cpp):
+    container volume, exact fruit volume (divergence theorem per mesh kind
+    x instance count), and openVolume = volume of voxels ExtractVoidSpots'
+    cleaned mask still keeps on the CreviceField at cfg.creviceVoxelSize --
+    i.e. exactly what the pipeline itself still considers "worth filling",
+    not raw unoccupied space. Also attributes open volume to the nearest
+    instance CENTER per open voxel (worstOffenders, top 10) -- a debugging
+    tool per the user's ask: "pin down why a specific fruit placement sucks
+    ass." PackScene now saves pack_quality_before_fill.txt (post plan
+    steps), pack_quality_after_fill.txt (post Phase 2), and
+    pack_quality_final.txt (post Phase 3).
+  - Added PlacementTimer (PackingDriver.h/.cpp): per-item-kind settle count/
+    total/min/max ms, threaded through PackStep/TryFillSpot/PackFillVoids/
+    PackFillCrevices as an optional pointer (default nullptr, so DebugTools'
+    direct TryFillSpot call is unaffected). PackScene owns one instance for
+    the whole run, saved to timing.txt at the end.
+  - Measured on melone_test after the fix above: 46.1% fill, 26.0% still
+    "open" by the pipeline's own definition (1457 cm3 container, 672 cm3
+    fruit, 379 cm3 open). Top offenders are grape4/grape5 instances (8-11
+    cm3 of open volume parked next to each) -- worth checking those poses
+    specifically next session, this is exactly the kind of lead
+    worstOffenders was built to surface. Phase 3 speed did drop (the
+    redundant-envelope fix), Phase 3 fill quality did not change (0 placed,
+    same root cause as above, not something this session's fixes touch).
+
+  Followed the grape4/grape5 offender lead into N1/N2 (PackingScene.cpp
+  NudgeToTarget): nearly every offending settle was outcome=out_of_steps in
+  the surface-guided last plan step, with FINAL distance to target still
+  ~0.5cm (well over epsArrive) despite tiny total travel -- contacts from
+  neighbors were throttling approach speed (N2's diagnosis), and the
+  near-field step floor (simParams.steps=30 for minExtent<3) truncated the
+  settle before the spring could close that residual gap.
+  DONE (bounded fix, not a full N1/N2 rewrite): NudgeToTarget now extends
+  its OWN step budget past the initial floor, but ONLY when the just-
+  finished window's own closing rate extrapolates to arrival within about
+  2 more windows (see the "N2 extension check" comment there) -- a case
+  that is not actually closing the gap (boxed in, sliding tangentially)
+  extrapolates to a huge step count, fails that check, and gets no more
+  steps than before, so this cannot regress into an unbounded crawl for a
+  truly stuck settle. Deliberately did NOT touch SetSimParams (shared by
+  every Nudge call, including the ~1000+ TryFillSpot attempts per Phase
+  2/3 round) -- that would have paid the extra cost on every failed
+  attempt, not just the ones actually converging.
+  Measured on melone_test: fill fraction 46.14% -> 46.54%, Phase 2 round
+  time unchanged (~3s/round, 17.98s total vs 17.5s before) confirming the
+  extension is NOT firing broadly. The SAME grape4/grape5/blueberry2
+  instances are still the top offenders afterward, at similar magnitude --
+  their neighborhood gaps are not a truncated-settle artifact (this fix
+  would have closed those), they are genuinely too big/oddly shaped for
+  any currently loaded kind to fill. That points back to step 9
+  (floor-sized tier), not further physics tuning, as the next lever for
+  those specific spots.
+
+  CORRECTED MENTAL MODEL (user correction, supersedes step 9's framing
+  above for Phase 3 specifically): small fruit is not supposed to FIT
+  inside a wall crevice -- it is supposed to REST ON TOP of one, bridging
+  its mouth, shrinking a large cavity down to something small enough to
+  ignore at manufacturing time. Tiny bespoke blueberry tiers are explicitly
+  NOT wanted (hard to manufacture, bloat mesh size). This means step 9 (a
+  floor-sized tier) is the WRONG lever for Phase 3; the right lever is
+  letting Phase 3 place existing small-fruit kinds even when they are
+  bigger than the crevice.
+  DONE: TryFillSpot gained a sizeMustFitLocalWidth parameter (default true,
+  Phase 2's behavior unchanged); PackFillCrevices passes false. This is the
+  SAME parameter name/idea as the very first TRIED AND REVERTED entry
+  above, redone now that the two defenses that disaster was missing are
+  both in place: kindsBySize scoped to the small-fruit categories (so a
+  container-sized "watermelon" mesh cannot be reached), and a real
+  container-containment check (ContainerOutsideFraction, tightened this
+  round to kContainerOutsideThresh=0.05 from 0.5 -- 0.5 was never actually
+  validated, it just happened not to matter while sizeMustFitLocalWidth was
+  always true).
+  Removing the fit filter exposed a SECOND, deeper defect that had nothing
+  to do with size-fit directly: EnvelopeOccupiedFraction measures UNSIGNED
+  distance from the candidate's own surface samples to the nearest existing
+  fruit surface, merged across all instances. Unsigned distance cannot tell
+  "far from any surface because free" from "far from any surface because
+  deep inside one" -- and cannot see overlap AT ALL from the side of an
+  existing instance the candidate fully swallows (the swallowed instance is
+  nowhere near the CANDIDATE's own surface, so the candidate reads as
+  clear). This was invisible under sizeMustFitLocalWidth=true (a
+  size-bounded candidate is always close to scale with its gap, so its
+  whole body sits near a boundary somewhere) and only surfaces once a
+  candidate is free to be bigger than its neighbors. First measured
+  result: fill_fraction read 118.7% of container volume -- physically
+  impossible, i.e. real, severe, silent overlap.
+  DONE (two new checks, PackingDriver.cpp):
+    - SignedOverlapFraction: fraction of the CANDIDATE's own samples that
+      land inside any nearby EXISTING instance's OWN per-kind SIGNED sdf
+      (queried directly, instance by instance, via broad phase) -- replaces
+      EnvelopeOccupiedFraction in the POST-settle acceptance gate (the
+      pre-settle cheap check still uses the unsigned field as a fast,
+      approximate first pass; only the check that actually decides
+      commit needs to be exact).
+    - EngulfsExistingInstance: true if any nearby EXISTING instance's
+      CENTER lands well inside the CANDIDATE's own sdf -- covers the
+      opposite direction SignedOverlapFraction cannot (existing instance
+      swallowed somewhere in the candidate's interior, away from the
+      candidate's own surface). Only run when sizeMustFitLocalWidth=false.
+  Iterated three times against melone_test's real fill_fraction number:
+  118.7% -> 109.2% (tightened thresholds alone) -> 102.0% (added
+  EngulfsExistingInstance) -> 78.9% (swapped in SignedOverlapFraction for
+  the acceptance gate). 78.9% fill / 4.5% open is the first result that is
+  both physically sane (<100%) and a real win over the pre-Phase-3-rewrite
+  baseline (45.6% fill / 34% open) -- exactly the "shrink big cavities into
+  small ignorable ones" outcome the user asked for.
+  Performance side effect, also fixed: with the fit filter gone, every kind
+  in kindsBySize gets tried at every spot, and the new post-settle checks
+  reject most of them -- but paying for a full physics settle (up to 30-137
+  steps under the N2 extension) only to reject anyway made crevice rounds
+  balloon from ~4s to 45+s as fewer spots stayed claimed. Fixed by adding
+  a SECOND, PRE-settle call to SignedOverlapFraction/EngulfsExistingInstance
+  (on the unsettled starting pose, with a much looser threshold, 0.6 vs the
+  0.15 acceptance threshold -- loose enough that physics still gets to
+  fix a moderate starting overlap, tight enough to kill hopeless ones
+  before ever calling NudgeToTarget). melone_test total Phase 3 time with
+  everything above: 137s over both small-fruit categories, 138 placed,
+  bounded and finite (no runaway), down from need-to-kill-the-process
+  before this fix existed.
+
+  SECOND ROUND OF USER FEEDBACK, two more real defects found by inspecting
+  the actual result (not just the aggregate numbers):
+  1. "raspberry2_106 ... half-way inside another fruit." SignedOverlapFraction
+     (candidate's own samples vs. existing instances' signed sdf) and the
+     old EngulfsExistingInstance (existing instance's CENTER vs. candidate's
+     sdf) still missed PARTIAL engulfment: an existing instance half-
+     submerged in a bigger new candidate can have its center sitting just
+     outside the candidate while most of its volume is already inside --
+     neither check catches that.
+     DONE: replaced EngulfsExistingInstance with
+     ExistingInsideCandidateFraction -- checks the EXISTING instance's own
+     cached SAMPLES (not just its center) against the candidate's sdf, same
+     resolution SignedOverlapFraction already uses in the other direction.
+     Wired into both the pre-settle (loose 0.6 threshold) and post-settle
+     (strict kOccupiedThresh=0.15) gates, and made unconditional (not just
+     !sizeMustFitLocalWidth) since it is cheap and the bug is not
+     structurally impossible under Phase 2 either.
+  2. "way too many small fruits ... I don't care if the container has lots
+     of empty space, that's not the goal at the crevice stage ... if a
+     surface is just the round surface of a larger fruit, there's no need
+     to put anything over it." This is a scope correction on top of the
+     CORRECTED MENTAL MODEL above: Phase 3 target selection (ExtractVoidSpots
+     on CreviceField) has no upper bound on WHERE it looks, only a lower
+     bound (the threshold). A point deep in open bulk interior (far from
+     both wall and fruit) or near a lone fruit's convex surface but far
+     from the wall is just as much a local max of
+     min(containerDepth, envelopeDist) as a genuine pocket bounded by both
+     -- cf.dist only stores the min, so it cannot tell "close to one, far
+     from the other" apart from "close to both."
+     DONE: cfg.creviceMaxRadius (2.5cm default). In PackFillCrevices, before
+     TryFillSpot, recompute containerDepth and envelopeDist SEPARATELY at
+     the spot's own position (cheap single-point queries) and skip the spot
+     if EITHER exceeds creviceMaxRadius -- requires being close to BOTH, not
+     just whichever is smaller. (Checking s.radius itself, tried first, did
+     not work -- logged 0 "too wide" every round; the field is apparently
+     tiled by many small-radius local maxima across a big open region
+     rather than one big one, so radius alone does not distinguish bulk
+     space from a real pocket.)
+     Measured on melone_test: fill 77.1%/open 5.0% (102 vs 131 fruit placed
+     in Phase 3, before this filter) -> fill 68.4%/open 9.4%, faster too
+     (69s vs 101s Phase 3 total) -- fewer, more targeted placements, and
+     the drop in fill fraction is the EXPECTED, correct direction here per
+     the user (Phase 3 should not be chasing fill fraction at all).
+     NOT done / still open: this still does not distinguish a genuine
+     concave pocket from a smoothly-varying gap along a single round
+     fruit's surface near the wall (both can be "close to both wall and
+     fruit" everywhere along a continuous curve) -- that needs a real
+     curvature/concavity signal (closer to the original FindDeepRays
+     "deeper than neighbor median" test) if it turns out to still matter
+     after this radius-pair fix. Not measured yet whether it does.
+
+  THIRD ROUND: user reported raspberries STILL half-inside plum after fix
+  #1 above (SignedOverlapFraction / ExistingInsideCandidateFraction). Root
+  cause was not in either check's logic -- it was in the DATA they read.
+  MeshInfo::ComputeSDFCached (MeshInfo.cpp) builds each item KIND's own
+  per-instance sdf as a NARROW-BAND field: FastSweepPar was called with a
+  fixed band=8 voxels, valid only within ~1.6cm of the mesh surface for a
+  plum-scale item (voxSize 0.2cm). Beyond that band, GetCoarseDist returns
+  AdapDF::MAX_DIST -- a large POSITIVE "far/unswept" sentinel, indistinguishable
+  from genuinely outside. Both overlap checks test dist<0 for "inside," so
+  a raspberry buried more than ~1.6cm into a plum read as NOT inside,
+  silently. (There was even a commented-out CloseExterior call in this
+  function, suggesting the incompleteness was already half-noticed.) The
+  container's own sdf (ComputeSDF, PackingScene.cpp) never had this problem
+  because it already uses band=1000 (effectively unbounded).
+  DONE: sized MeshInfo::ComputeSDFCached's FastSweepPar band from the
+  mesh's own extent (ceil(maxLen/voxSize)+4) instead of a fixed 8, so the
+  sweep reaches every item's full interior regardless of size. One-time
+  cost per kind (cached), same reasoning the container path already uses a
+  large band for.
+  Measured: fill 67.3%/open 10.1%, 104 placed (run_log11.txt) -- similar
+  aggregate numbers to before, expected since this bug only affected
+  candidates overlapping LARGER existing fruit specifically, not most
+  placements. NOT independently re-verified with a rigorous mesh-accurate
+  check yet -- a rough sphere-distance sanity check on raspberry-vs-plum
+  pairs still flags a few as close, but average-radius spheres are too
+  crude a proxy for irregular/elongated fruit shapes to be decisive. Next
+  step if this resurfaces: query TryFillSpot's actual SignedOverlapFraction
+  directly on the specific flagged instance pair rather than a standalone
+  geometric approximation.
+
+  FOURTH ROUND: user reported blueberries and grapes ALSO embedded now, not
+  just raspberries -- the sdf-band fix above did not actually fix it. Root
+  cause this time: melone_test resumes from a pack file (cfg.resume=true,
+  pack_before_ray.txt) via LoadPack, which calls scene.Put() directly for
+  every resumed instance -- it never calls Nudge/NudgeToTarget for them at
+  all. Nudge/NudgeToTarget are the ONLY place that populates
+  items[i].samples/sdf (as a side effect of a kind's FIRST use). melone_test
+  sets cfg.startStep=2, so steps 0-1 (which would place fresh medium-large
+  instances -- plum, kiwi_low_painter, strawberry* etc) never run in this
+  session at all; those kinds exist ONLY via the resume file. Their
+  items[i].samples stayed permanently empty, and every overlap check that
+  is gated on "if (!item.samples.empty())" -- TryFillSpot's checks AND
+  PackStep's own (see below) -- silently no-oped against every instance of
+  those kinds for the WHOLE run. This is why the specific kinds in the
+  user's reports (plum, kiwi_low_painter, strawberry*) were exactly the
+  ones nothing protected against: they are exactly the resume-only kinds on
+  this scene.
+  DONE: PackingScene::EnsureItemSamples (PackingScene.h/.cpp) -- duplicates
+  NudgeToTarget's own sample-generation block deliberately (rather than
+  refactoring NudgeToTarget itself, to avoid any risk to its existing
+  tuning) so it can be called independently of an actual settle. Called
+  once per resumed instance's kind (a fast no-op after the first, since it
+  checks samples.empty() itself) right after LoadPack in PackScene, before
+  any step/phase runs.
+  Also added, same session: PackStep's OWN post-settle overlap check
+  (previously placeItem committed unconditionally after ANY settle
+  outcome, arrived/jammed/out_of_steps -- TryFillSpot's fixes never
+  touched PackStep at all, and grapes/blueberries placed during the
+  original force-based plan steps were exactly as unprotected as the
+  resume-only kinds were). placeItem now returns bool; a rejected settle
+  is treated as if FindSpot/FindSpotSubgrid itself failed that trial (keep
+  trying other random rotations) rather than committing. kOccupiedThresh/
+  kContainerOutsideThresh hoisted to file scope (PackingDriver.cpp) so both
+  TryFillSpot and PackStep share one definition.
+  Measured on melone_test (run_log13.txt): a crude sphere-distance sanity
+  check (raspberry/blueberry/grape vs plum/kiwi/strawberry, minimum-half-
+  extent-sum threshold) went from 47 flagged close pairs, several under
+  1cm apart, down to 5, all within 15-30% of the (deliberately
+  conservative) threshold -- i.e. plausible near-touches, not the severe
+  "halfway inside" cases reported. Side effect, and a real remaining
+  problem: step2/3 now place far fewer items (step3: 40 -> 9 on this run)
+  and Phase 2 placed 0 -- FindSpot/FindSpotSubgrid's own occupancy grid
+  (scene.bg, much coarser than the fine per-instance sdf checks) was
+  finding "spots" that read as free at its resolution but were not
+  actually collision-free once checked precisely; those got silently
+  accepted before, and now correctly get rejected and burn through
+  MAX_TRIAL_COUNT without the search itself trying anywhere else. Fill
+  fraction dropped accordingly (65.9% -> 58.3%, open 11.6% -> 21.4%) as a
+  direct consequence of no longer silently accepting bad placements, not a
+  new bug -- but a real quality-vs-yield tradeoff worth deciding on
+  purpose rather than leaving as an accident: either FindSpot/
+  FindSpotSubgrid need a finer/consistent occupancy source, or PackStep's
+  trial loop needs to retry with a fresh FindSpot call (not just a new
+  rotation at the same found position) when placeItem rejects.
+
+  FIFTH ROUND -- Phase 3 was built on a wrong premise, not a wrong
+  implementation. The user, asked point-blank "do you know at a high level
+  what problem I'm trying to solve": Phase 3 is NOT about the fruit-to-
+  container-wall boundary at all -- "I don't give a shit about fruit to
+  container wall... the container wall might as well not exist." It is
+  ONLY about low-volume small fruit resting on top of fruit-FRUIT crevices
+  (the "intersections of 3 or more fruits" case from the debug-dump
+  request earlier in this session). Everything built on the wall-relative
+  premise -- ComputeCreviceField (min(containerDepth, envelopeDist), its
+  own container-sized grid, its own coarser voxelSize, the
+  containerDepth/envelopeDist dual cap, DebugCreviceField -- was answering
+  a question nobody asked. All of it removed rather than left as dead
+  code:
+    - ComputeCreviceField deleted (PackShrinkWrap.h/.cpp).
+    - DebugCreviceField deleted (DebugTools.h/.cpp); DebugVoidSpots (unchanged)
+      is now Phase 3's own debug view too, see below.
+    - PackFillCrevices (PackingDriver.cpp) now calls ComputeVoidField/
+      ComputeEnvelopeField at cfg.fillVoidVoxelSize -- the IDENTICAL fields
+      PackFillVoids uses -- instead of a separate container-relative field.
+      The only two things that still make this Phase 3 and not another
+      Phase 2 round: kindsBySize restricted to the small-fruit categories,
+      and TryFillSpot's sizeMustFitLocalWidth=false.
+    - cfg.creviceVoxelSize/creviceOpenRadiusVoxels removed (PackingConfig.h)
+      -- no separate grid to size at all anymore.
+    - ComputePackQuality's openVolume metric switched from the crevice
+      field to VoidField for the same reason; containerVolume switched to
+      reading directly off scene.sdf's own grid instead of piggybacking on
+      the (now deleted) crevice grid.
+  This ALSO resolves the earlier "why does the crevice field need to span
+  the whole container" question from mid-session, which turned out to be
+  the wrong question: reaching the walls never required the FIELD's own
+  grid to span the container (scene.sdf, a separate structure, already
+  does that) -- it was a symptom of chasing the wrong physical target in
+  the first place, not a grid-sizing tradeoff to optimize.
+
+  User also clarified and gave EXACT numbers for Phase 3's own treatment of
+  the existing manufacturability bucket table (see PIPELINE Phase 3 above
+  for the full table this refines) -- stored there in full; short version:
+  <0.2cm width ignore, 0.2-3cm width is Phase 3's actual working range
+  (rest fruit ON TOP, don't fit inside, hope neighbors shrink the opening
+  further), >3cm width ignore (Phase 2's job, not Phase 3's). This is now
+  enforced explicitly via cfg.creviceMinWidth/creviceMaxWidth (replacing
+  the old radius-based creviceMaxRadius, which was on the wrong axis --
+  2.5cm RADIUS was a 5cm WIDTH cap, more than 1.5x looser than intended).
+  It also answers the live voxel-size question outright: the whole 0.2-3cm
+  active range resolves comfortably on Phase 2's existing 0.1cm grid (2
+  voxels at the narrow end, 30 at the wide end), which is exactly why Phase
+  3 could just reuse that grid wholesale instead of needing its own tuned
+  resolution.
+  NOT YET re-verified end to end after this rewrite -- build is clean, but
+  no melone_test run has been done against the corrected Phase 3 yet at
+  time of writing. Do that next, on the same pack_melon_test.txt resume
+  state, before drawing any conclusions about crevice-fill quality.
+
 
 IMPLEMENTATION ORDER
 ---------------------
@@ -168,6 +578,75 @@ Phase 3  crevice pass
       both be filled by different fruits.
     - recompute the envelope each round (Phase 2 already does; crevice pass
       just reads it, does not rebuild anything of its own).
+
+  DONE (step 10). Added ComputeCreviceField (PackShrinkWrap.h/.cpp): the
+  container-relative counterpart to VoidField, min(containerDepth,
+  envelopeDist) restricted to inside the container -- exactly the
+  A_inside-AND-B_outside combination CORE IDEA first proposed and VoidField
+  backed away from for Phase 2 (that combination swallows the whole
+  pack-to-wall shell, wrong scale for Phase 2's between-fruit gaps, but
+  right for Phase 3's wall-adjacent ones). Built on a grid sized to the
+  CONTAINER's own bbox, not the packed items' bbox like EnvelopeField/
+  VoidField, at its own coarser voxelSize (cfg.creviceVoxelSize, default
+  0.3cm) -- a container-sized dense grid at Phase 2's fine 0.1cm is not
+  affordable, and crevices are wall-scale (>=1cm) so the coarser grid loses
+  nothing that matters. Reuses the VoidField struct shape so
+  ExtractVoidSpots/TryFillSpot needed no changes. New PackFillCrevices
+  (PackingDriver.h/.cpp) is the same round-loop shape as PackFillVoids,
+  wired into PackScene in place of SeedSmallFruitCrevices (which stays,
+  unused by the main pipeline now, since debug_ray_test.cpp still calls
+  ComputeSurfaceDepths directly).
+  Ran end to end on melone_test after Phase 2 (90 instances): Phase 3
+  extracted 473 real candidate spots (0.34-1.08cm wide, correctly wall-
+  adjacent, no crash) but placed 0 -- diagnostic added at round 0 showed
+  every spot's width was below the smallest loaded item kind's
+  BoxDiagonal()+clearance (1.39+0.1cm). This is a real geometric fact
+  about melone_two's current item catalogue, not a pipeline bug: TryFillSpot
+  and ClaimGrid already proved themselves on Phase 2 (45/192 placed in the
+  same run), and this run's own diagnostic confirms every one of the 473
+  spots was correctly rejected by the same "any kind fits" check TryFillSpot
+  itself uses, before settle was even attempted. This is exactly the gap
+  MULTI-SCALE FILL (step 9) describes: Phase 3's wall crevices here are
+  narrower than the current smallest kind, so a floor-sized tier (or a
+  smaller existing kind, if one is added to the catalogue) is what unlocks
+  Phase 3 placements, not a further change to Phase 3 itself.
+
+  TRIED AND REVERTED: relaxing TryFillSpot's size-fit pre-filter for Phase 3
+  (sizeMustFitLocalWidth=false, try every kind largest-first) on the theory
+  that a wall crevice only needs covering, not fitting inside. Measured
+  result before reverting: Phase 3 did place fruit (91 -> 105 instances over
+  15 rounds), but the largest kind in kindsBySize on this scene is a
+  "watermelon" mesh bigger than the CONTAINER ITSELF -- with the pre-filter
+  gone, nothing stopped it being tried first at every single spot. Its
+  fruit-only occupancy check (EnvelopeOccupiedFraction) has no way to
+  reject a pose that sticks out through the container wall, since it only
+  measures overlap against other FRUIT; one such pose settled after only 3
+  steps (near its unmoved start pose, not pushed out) and got committed,
+  producing the container-spanning intersecting mess this was reverted for.
+  Also slow: every rejected watermelon attempt still cost a full failed
+  NudgeToTarget settle (round times grew from 28s to 87s as instance count
+  rose), for a phase whose whole point (plan.txt PIPELINE Phase 3) is the
+  SMALL-fruit category, same as the ray-casting SeedSmallFruitCrevices this
+  replaced -- not "whichever kind happens to fit best."
+  Correct fix, kept: PackFillCrevices now takes an explicit smallItemNames
+  list (same scene.nameToIndex resolution + single-smallest-kind fallback
+  SeedSmallFruitCrevices used) and builds kindsBySize from ONLY those, so
+  TryFillSpot's normal sizeMustFitLocalWidth-equivalent check (item fits
+  within localWidth) is back to unconditional -- the parameter was removed
+  again, not left as a toggle nobody should use. PackScene calls it twice,
+  same two small-fruit groups (medium-small, then small) and order the old
+  ray-casting pass used. Also kept, orthogonal to the revert and still a
+  real gap either way: TryFillSpot now checks (before AND after settle)
+  that the item's samples land inside the container (scene.sdf <= 0), via a
+  new ContainerOutsideFraction helper mirroring EnvelopeOccupiedFraction --
+  cheap, and the actual thing that should have caught the watermelon pose
+  if the size filter had somehow still let it through.
+  Re-ran melone_test after reverting: Phase 3 correctly places 0/473 again
+  (round takes 14.7s, not 733-849s), confirming the ORIGINAL diagnosis
+  above was right all along -- these particular wall crevices (0.34-1.08cm)
+  are narrower than the current smallest kind (1.39cm), and that gap can
+  only be closed by MULTI-SCALE FILL's floor-sized tier (step 9), not by
+  loosening what Phase 3 is allowed to try.
 
 Phase 4  report
   final shrinkwrap mesh, fill fraction = fruit volume / shrinkwrap volume,
@@ -454,6 +933,80 @@ SHARED HELPERS TO FACTOR OUT
    replaces Phase 2e's per-kind loop, so there is one accept/reject path
    instead of two.
 
+   DONE (steps 7-8). ClaimGrid and TryFillSpot implemented in
+   PackingDriver.h/.cpp per this spec, plus a debug harness (DebugFillVoids,
+   DebugTools.cpp) that runs the whole Phase 2 loop once end to end on
+   melone_test's scene: extract spots (step 5), build kindsBySize from every
+   item in the scene (no second tier exists yet -- the M1 histogram from
+   this same round said one is not worth building), then TryFillSpot widest
+   spot first. First run: 0/292 spots placed. Three real bugs found and
+   fixed along the way, not just tuning:
+     - NudgeToTarget's N1 arrival check (dist < epsArrive) sat at the TOP of
+       the settle loop, before any force/contact/integration for that step.
+       TryFillSpot starts the item exactly AT the target (target IS the
+       candidate spot), so dist==0 on iteration 0 and "arrived" fired
+       before a single step of physics ran -- settled came back identical
+       to the untouched random-rotation starting pose. Fixed by moving both
+       the arrival check and the low-velocity/jam check to the BOTTOM of
+       the loop, evaluated after that step's integration, so at least one
+       step of contact resolution always happens first.
+     - Even after that fix, nothing moved: the spring force is
+       toTarget/|toTarget|, undefined when start==target, so there was no
+       pull and no initial velocity for a resting overlap to be resolved
+       against (a velocity-only PGS contact solve has nothing to project
+       from rest). Fixed in TryFillSpot by aiming NudgeToTarget 1cm further
+       into the container's interior (down scene.sdf's gradient, negated)
+       instead of at the spot itself, so there is a real nonzero pull from
+       step 0; the settle START position stays at the actual spot,
+       unshifted.
+     - Root cause of the 0/292: comparing a candidate pose against
+       OccupiedFraction/scene.bg.vox, which is built at cfg.dx (0.3cm here,
+       3x the void field's 0.1cm) via the same crude per-instance
+       voxelize+corner-zero approach M2 already fixed for the shrinkwrap
+       field. A verified-open 3.5cm gap (by the fine field's own local
+       maximum) read as 100% occupied in bg.vox. Fixed by adding
+       EnvelopeField (PackShrinkWrap.h: plain unsigned distance to nearest
+       placed fruit, no closing, same grid resolution VoidField uses) and
+       having TryFillSpot sample that instead of scene.bg.vox -- comparing
+       the fine spot-finding result against a field built the same way,
+       not a 3x-coarser, dilation-biased one. After all three fixes:
+       10/292 placed, 156 already claimed (ClaimGrid working as intended,
+       skipping spots the same round already filled), 126 no kind
+       fit/settled (expected -- many of the 292 are below the smallest
+       current item's size, see the M1 histogram's own long tail of
+       sub-0.2cm spots).
+     - Not yet done: TryFillSpot's post-settle EnvelopeOccupiedFraction
+       check uses a snapshot of EnvelopeField taken once before the round,
+       so it does not see instances placed earlier in the SAME round.
+       ClaimGrid covers the same-round case at the spot level (an already-
+       claimed spot is skipped before TryFillSpot even runs), which is why
+       10 placements did not produce visible overlaps in this run, but this
+       is a known gap, not a proven-safe design -- worth watching if a
+       future round places many more instances per pass.
+
+   DONE (step 8, wired into the real pipeline). Added PackFillVoids
+   (PackingDriver.h/.cpp): the debug harness's single pass wrapped in a
+   round loop matching Phase 2's own "iterate until gain < threshold"
+   spec -- each round recomputes VoidField/spots/EnvelopeField from the
+   CURRENT instances (so a spot filled or opened up last round is seen
+   fresh) and stops when a round places fewer than
+   cfg.fillVoidMinPlaced (default 3) or cfg.fillVoidMaxRounds (default
+   10) is hit. Called from PackScene between the shrinkwrap save and the
+   crevice pass (Phase 2 before Phase 3, per the PIPELINE section).
+   New PackingConfig fields: fillVoidShrinkRadius/fillVoidVoxelSize
+   (default 1.0/0.1, matching melone_test's debug calls),
+   fillVoidOpenRadiusVoxels, fillVoidClearance, fillVoidMinPlaced,
+   fillVoidMaxRounds.
+   Ran end to end on melone_test's real PackFruits pipeline (not just
+   the debug harness), resuming from pack_before_ray.txt (10 instances):
+   steps 2-3 placed 35 more (-> 45), then Phase 2 fill ran 6 rounds
+   (13, 8, 9, 9, 4, 2 placed) for 45 more (-> 90) before the round-5
+   stop condition fired, then the existing crevice pass placed 102 more
+   (-> 192 final, matching pack_final.txt's line count exactly). No
+   crashes, no hangs; total Phase 2 time 149s across 6 rounds on this
+   scene. Phase 2 alone contributed 45/192 (23%) of the final pack --
+   confirms the wiring is live, not just correct in isolation.
+
 4. One nudge entry point. Nudge, NudgeConstrained and NudgeToTarget are
    ~80% duplicated: same sample generation, same broadphase, same grid
    cache, same integrate/damp loop. Collapse to
@@ -526,6 +1079,30 @@ Two conflicting requirements to keep straight: milling wants visibility
 from a tool axis, rubber wants demoldability from a pull direction.
 Rubber tolerates more undercut than a mill does because it stretches, so
 the mill constraint is the binding one and is what should be enforced.
+
+PHASE 3'S OWN TREATMENT OF THESE SAME BUCKETS (user, this session -- store
+so this does not get relitigated or drift):
+  < 0.2 cm      ignore -- self-fills, same as above.
+  0.2 - 3 cm    Phase 3's actual working range (collapses the 0.2-1 and
+                1-3 buckets above into one rule for THIS stage): try to
+                rest one or a few appropriately-sized fruit ON TOP of the
+                crevice, NOT inside it, hoping the new fruit plus its
+                neighbors reduce the opening to something smaller (ideally
+                into the <0.2cm bucket, but any reduction counts). This is
+                the whole point of sizeMustFitLocalWidth=false in
+                TryFillSpot.
+  > 3 cm        ignore, for Phase 3 specifically -- not this stage's job
+                (real voids between fruit are Phase 2's job with nominal-
+                size fruit, per the table above; Phase 3 does not touch
+                them either way).
+This directly answers the voxel-size question raised while debugging
+Phase 3: the whole active range (0.2-3cm) resolves comfortably on Phase
+2's existing fillVoidVoxelSize=0.1cm grid (2 voxels at the narrow end, 30
+at the wide end), and Phase 3 now reuses that exact grid (see PackFillVoids/
+PackFillCrevices, PackingDriver.cpp) -- there is no separate Phase 3 voxel
+size to tune anymore, which also removes the memory-cost argument that
+justified the old container-relative field's coarser voxelSize in the
+first place (see FOURTH+ ROUND corrections below).
 
 
 WHAT IS MISSING FOR A MANUFACTURABLE MESH

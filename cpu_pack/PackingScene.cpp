@@ -1244,6 +1244,44 @@ std::vector<CreviceSurface> FindDeepCreviceSurface(
   return result;
 }
 
+void PackingScene::EnsureItemSamples(unsigned itemIdx) {
+  MeshInfo &meshInfo = items[itemIdx];
+  if (!meshInfo.samples.empty()) {
+    return;
+  }
+  // exact same sampling scheme as NudgeToTarget's own first-use block --
+  // duplicated rather than shared to avoid touching that already-tuned
+  // function at all for this fix.
+  Box3f fruitBox = ComputeBBox(meshInfo.mesh.v);
+  Vec3f fruitExtent = fruitBox.vmax - fruitBox.vmin;
+  float minExtent = std::min({fruitExtent[0], fruitExtent[1], fruitExtent[2]});
+  float ds = 0.5f;
+  if (minExtent < 3.0f) {
+    ds = 0.2f;
+  } else if (minExtent < 5.0f) {
+    ds = 0.3f;
+  }
+  const float MAX_OVERLAP = 0.2f;
+  std::vector<SamplePoint> allFineSamples;
+  float sampleSpacing;
+  float maxOverlap;
+  if (minExtent < 3.0f) {
+    sampleSpacing = std::max(0.2f, minExtent * 0.15f);
+    maxOverlap = 0.0f;
+  } else if (minExtent < 5.0f) {
+    sampleSpacing = std::max(0.15f, minExtent * 0.12f);
+    maxOverlap = 0.1f;
+  } else {
+    sampleSpacing = std::max(0.1f, std::min(ds, minExtent * 0.1f));
+    maxOverlap = MAX_OVERLAP;
+  }
+  SamplePoints(meshInfo.mesh, sampleSpacing, allFineSamples);
+  std::vector<SamplePoint> samples = DownsamplePoints(allFineSamples, sampleSpacing);
+  meshInfo.ComputeSDFCached();
+  MovePointsInward(samples, maxOverlap, meshInfo.sdf);
+  meshInfo.samples = samples;
+}
+
 RigidTransform PackingScene::NudgeToTarget(unsigned itemIdx,
                                            const RigidTransform &tran,
                                            const Vec3f &target,
@@ -1283,7 +1321,8 @@ RigidTransform PackingScene::NudgeToTarget(unsigned itemIdx,
   float vTerm = nudgeAcceleration * dt * simParams.damping / (1.0f - simParams.damping);
   float initialDist = (target - tran.position).norm();
   size_t distanceSteps = size_t(1.5f * initialDist / std::max(1e-6f, vTerm * dt));
-  size_t maxSteps = std::max(simParams.steps, std::min(distanceSteps, size_t(400)));
+  const size_t HARD_STEP_CAP = 400;
+  size_t maxSteps = std::max(simParams.steps, std::min(distanceSteps, HARD_STEP_CAP));
   // N3: arrival tolerance -- within one sample-spacing unit of the target
   // counts as reached, so a jam right next to the target is not reported
   // the same way as one that stalled far short of it.
@@ -1328,17 +1367,30 @@ RigidTransform PackingScene::NudgeToTarget(unsigned itemIdx,
   Vec3f angularVel(0.0f);
   std::vector<Contact> prevContacts;
 
-  for (size_t step = 0; step < maxSteps; step++) {
+  // N2: the budget above assumes unobstructed travel at vTerm, but a
+  // contact's velocity cap (see SolveContactConstraintsPGS) throttles
+  // approach speed near neighbors/walls, so a fruit that is genuinely still
+  // closing the gap -- just slower than vTerm -- can get truncated
+  // mid-approach and committed short of where it was headed (this is
+  // exactly what the pack-quality worstOffenders debug tool flagged:
+  // grape4/grape5 in melone_test's surface-guided step, settling
+  // out_of_steps a fraction of a cm short). Rather than raising the shared
+  // per-size step budget (SetSimParams) for every settle everywhere,
+  // extend ONLY when the last window's own closing rate says arrival is
+  // near -- a case that is not actually closing the gap (sliding
+  // tangentially, boxed in on all sides) extrapolates to a huge step
+  // count, fails the "near" check, and gets no more steps than before.
+  size_t stepsGranted = maxSteps;
+  size_t windowStartStep = 0;
+  float distAtWindowStart = initialDist;
+
+  for (size_t step = 0; step < stepsGranted; step++) {
     Matrix3f currentRotMat = Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w());
     auto Rinv = currentRotMat.transposed();
 
     // spring force toward target
     Vec3f toTarget = target - currentT;
     float dist = std::sqrt(toTarget.dot(toTarget));
-    if (dist < epsArrive) {
-      localOutcome = NudgeOutcome::Arrived;
-      break;
-    }
     if (dist > 1e-6f) {
       toTarget *= 1.0f / dist;
     }
@@ -1400,14 +1452,43 @@ RigidTransform PackingScene::NudgeToTarget(unsigned itemIdx,
     trajectory.push_back(RigidTransform(currentT,
         Matrix3f::rotation(currentQ.x(), currentQ.y(), currentQ.z(), currentQ.w())));
 
-    if (linearVel.dot(linearVel) < simParams.minVel && angularVel.dot(angularVel) < simParams.minVel) {
-      // N3: velocity died before arrival -- distinguish a genuine jam from
-      // simply having already arrived this step (toTarget's own check above
-      // already breaks the Arrived case first, but distance may have
-      // crossed epsArrive on this exact step before the velocity check).
-      float distNow = (target - currentT).norm();
-      localOutcome = (distNow < epsArrive) ? NudgeOutcome::Arrived : NudgeOutcome::Jammed;
+    // N1/N3: both checks are evaluated AFTER this step's force+contacts+
+    // integration, never before -- a caller that starts the item already at
+    // the target (e.g. TryFillSpot) has dist==0 on step 0, and arrival must
+    // not short-circuit before contacts get a chance to push it into a
+    // valid resting pose. Distance-based exit first (so a fast, unobstructed
+    // approach does not waste steps orbiting near the target once close),
+    // then the low-velocity jam check.
+    float distNow = (target - currentT).norm();
+    if (distNow < epsArrive) {
+      localOutcome = NudgeOutcome::Arrived;
       break;
+    }
+    if (linearVel.dot(linearVel) < simParams.minVel && angularVel.dot(angularVel) < simParams.minVel) {
+      localOutcome = NudgeOutcome::Jammed;
+      break;
+    }
+
+    // N2 extension check, see comment above the loop: only at the last step
+    // of the current window, and only if there is room under the hard cap.
+    if (step + 1 == stepsGranted && stepsGranted < HARD_STEP_CAP) {
+      size_t windowSteps = step + 1 - windowStartStep;
+      float closed = distAtWindowStart - distNow;
+      if (closed > 1e-4f) {
+        float rate = closed / float(windowSteps);
+        size_t stepsNeeded = size_t(distNow / rate) + 1;
+        // "near" means the window's own rate says arrival is roughly within
+        // another two windows -- a barely-moving trend extrapolates to a
+        // huge stepsNeeded and is correctly rejected here, so this cannot
+        // turn into an unbounded crawl for a truly stuck case.
+        if (stepsNeeded <= 2 * windowSteps) {
+          size_t extension = std::min(HARD_STEP_CAP - stepsGranted,
+                                      std::max(stepsNeeded, windowSteps));
+          stepsGranted += extension;
+          windowStartStep = step + 1;
+          distAtWindowStart = distNow;
+        }
+      }
     }
   }
 
@@ -1419,7 +1500,7 @@ RigidTransform PackingScene::NudgeToTarget(unsigned itemIdx,
   const char *outcomeStr = localOutcome == NudgeOutcome::Arrived ? "arrived" :
                            localOutcome == NudgeOutcome::Jammed ? "jammed" : "out_of_steps";
   LOGI("NudgeToTarget " << items[itemIdx].name
-       << " steps=" << trajectory.size() << "/" << maxSteps
+       << " steps=" << trajectory.size() << "/" << stepsGranted
        << " outcome=" << outcomeStr
        << " pos=(" << currentT[0] << "," << currentT[1] << "," << currentT[2] << ")"
        << " target=(" << target[0] << "," << target[1] << "," << target[2] << ")\n");
