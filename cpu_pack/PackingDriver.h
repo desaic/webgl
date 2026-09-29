@@ -77,6 +77,17 @@ std::vector<Vec3f> ComputeFreeContainerPoints(PackingScene &scene);
 /// calls ComputeFreeContainerPoints and writes the result to filename.
 void SaveFreeContainerSurface(PackingScene &scene, const std::string &filename);
 
+/// samples the CURRENT shrinkwrap surface of already-placed instances (see
+/// ComputeShrinkWrapDistField/ComputeShrinkWrapMesh, PackShrinkWrap.h) at
+/// shrinkRadius/voxelSize, and returns the sample points -- unlike
+/// ComputeFreeContainerPoints there is no occupancy filter, since the
+/// shrinkwrap hull's own outer surface is by construction not inside any
+/// placed instance. Used by PackStep's surface-guided targeting
+/// (PackingStep::useShrinkwrapSurfacePoints) so a bulk step can nestle a
+/// fruit tier onto the pack built so far instead of only the container.
+std::vector<Vec3f> ComputeShrinkwrapSurfacePoints(PackingScene &scene, float shrinkRadius,
+                                                  float voxelSize);
+
 /// sparse "claimed this round" tracker: a fruit was just placed here, so
 /// skip attempting a nearby candidate spot that turns out to be the same
 /// physical gap. Claim radius comes from the ACTUALLY PLACED item's own

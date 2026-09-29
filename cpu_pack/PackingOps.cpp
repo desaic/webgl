@@ -23,7 +23,7 @@ Vec3f GetDisplacement(Vec3u gridIdx, float dx, Vec3u fgSize, Vec3f fgOrigin, Vec
 
 // part is already rotated by the caller.
 bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos,
-              std::shared_ptr<AdapSDF> sdf, float factor) {
+              std::shared_ptr<AdapSDF> sdf, float factor, bool bgFftReady) {
   PROFILE_SCOPE("findspot.total");
   float dx = bg.dx;
 
@@ -40,7 +40,7 @@ bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos,
   Vec3u totalSize = bgSize;
   Vec3u gridSize = PadSizes(totalSize, FFT_ALIGNMENT);
 
-  {
+  if (!bgFftReady) {
     PROFILE_SCOPE("findspot.bg_fft");
     bg.FFT(gridSize);
   }
@@ -283,7 +283,8 @@ bool FindSpotSubgrid(MeshConvo &bg,
                      float factor,
                      float cellSize,
                      unsigned cellIdx,
-                     Vec3u numCells) {
+                     Vec3u numCells,
+                     SubgridBgCache *cache) {
   PROFILE_SCOPE("findspot_subgrid.total");
   Box3f itemBox = ComputeBBox(part.v);
   Vec3f itemExtent = itemBox.vmax - itemBox.vmin;
@@ -345,31 +346,62 @@ bool FindSpotSubgrid(MeshConvo &bg,
     return false;
   }
 
-  Array3D8u subVox;
-  subVox.Allocate(subSize, 0);
-  {
-  PROFILE_SCOPE("findspot_subgrid.crop");
-  for (unsigned z = 0; z < subSize[2]; z++) {
-    for (unsigned y = 0; y < subSize[1]; y++) {
-      for (unsigned x = 0; x < subSize[0]; x++) {
-        subVox(x, y, z) = bg.vox(
-          (unsigned)(voxMin[0] + (int)x),
-          (unsigned)(voxMin[1] + (int)y),
-          (unsigned)(voxMin[2] + (int)z)
-        );
+  // reuse the previous call's cropped+FFT'd background if nothing that
+  // would change it has: same cell, same crop bounds (elongated items can
+  // shift voxMin/voxMax slightly between rotations, in which case this
+  // just misses and recomputes, same as without a cache), and bg itself
+  // has not been mutated by a placement since.
+  bool cacheHit = cache != nullptr && cache->valid && cache->cellIdx == int(cellIdx) &&
+                 cache->bgVersion == bg.version && cache->voxMin == voxMin &&
+                 cache->voxMax == voxMax;
+
+  MeshConvo localTempConv;
+  MeshConvo &tempConv = (cache != nullptr) ? cache->tempConv : localTempConv;
+
+  if (!cacheHit) {
+    Array3D8u subVox;
+    subVox.Allocate(subSize, 0);
+    {
+    PROFILE_SCOPE("findspot_subgrid.crop");
+    for (unsigned z = 0; z < subSize[2]; z++) {
+      for (unsigned y = 0; y < subSize[1]; y++) {
+        for (unsigned x = 0; x < subSize[0]; x++) {
+          subVox(x, y, z) = bg.vox(
+            (unsigned)(voxMin[0] + (int)x),
+            (unsigned)(voxMin[1] + (int)y),
+            (unsigned)(voxMin[2] + (int)z)
+          );
+        }
       }
     }
-  }
-  }
+    }
 
-  MeshConvo tempConv;
-  tempConv.box.vmin = containerOrigin + voxMin.cast<float>() * dx;
-  tempConv.box.vmax = containerOrigin + (voxMax.cast<float>() + Vec3f(1.0f, 1.0f, 1.0f)) * dx;
-  tempConv.vox = subVox;
-  tempConv.dx = dx;
+    tempConv = MeshConvo();
+    tempConv.box.vmin = containerOrigin + voxMin.cast<float>() * dx;
+    tempConv.box.vmax = containerOrigin + (voxMax.cast<float>() + Vec3f(1.0f, 1.0f, 1.0f)) * dx;
+    tempConv.vox = subVox;
+    tempConv.dx = dx;
+
+    if (cache != nullptr) {
+      // FindSpot's own padded grid size depends only on bg's cropped grid
+      // size, not on part/fg -- safe to FFT here, once, for every trial
+      // this cache entry ends up serving.
+      const unsigned FFT_ALIGNMENT = 8;
+      Vec3u gridSize = PadSizes(subSize, FFT_ALIGNMENT);
+      {
+        PROFILE_SCOPE("findspot_subgrid.bg_fft_cached");
+        tempConv.FFT(gridSize);
+      }
+      cache->cellIdx = int(cellIdx);
+      cache->bgVersion = bg.version;
+      cache->voxMin = voxMin;
+      cache->voxMax = voxMax;
+      cache->valid = true;
+    }
+  }
 
   Vec3f foundPos;
-  bool found = FindSpot(tempConv, *partPtr, foundPos, sdf, factor);
+  bool found = FindSpot(tempConv, *partPtr, foundPos, sdf, factor, cache != nullptr);
   if (!found) {
     return false;
   }

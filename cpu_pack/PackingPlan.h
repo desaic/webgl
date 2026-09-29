@@ -34,11 +34,18 @@ struct PackingStep {
     // Bulk only: target the centroid of nearby free container-surface
     // points (see PackStep) instead of the default force field.
     bool useFreeSurfacePoints = false;
+    // Bulk only, mutually exclusive with useFreeSurfacePoints: target
+    // points on the CURRENT shrinkwrap surface of already-placed fruit
+    // (see ComputeShrinkwrapSurfacePoints) instead of the container wall --
+    // lets this tier nestle onto the pack built so far rather than just the
+    // container. Uses this step's own shrinkwrapRadius/shrinkwrapVoxelSize.
+    bool useShrinkwrapSurfacePoints = false;
 
     StepKind kind = StepKind::Bulk;
-    // Crevice only. Independent per step so a bigger-fruit crevice pass can
-    // use a coarser grid than a small-fruit one -- keeps the dense
-    // shrinkwrap field affordable as fruit/container size grows.
+    // Used by StepKind::Crevice, and by Bulk when useShrinkwrapSurfacePoints
+    // is set. Independent per step so a bigger-fruit step can use a coarser
+    // grid than a small-fruit one -- keeps the dense shrinkwrap field
+    // affordable as fruit/container size grows.
     float shrinkwrapRadius = 1.0f;
     float shrinkwrapVoxelSize = 0.2f;
     unsigned shrinkwrapOpenRadiusVoxels = 1;

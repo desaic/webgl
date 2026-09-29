@@ -96,8 +96,12 @@ bool PackingConfig::LoadFromFile(const std::string &path) {
       subgridCellSize = float(std::atof(value.c_str()));
     } else if (key == "maxTrialCount") {
       maxTrialCount = unsigned(std::atoi(value.c_str()));
+    } else if (key == "maxSecondsPerStep") {
+      maxSecondsPerStep = std::atof(value.c_str());
     } else if (key == "startStep") {
       startStep = unsigned(std::atoi(value.c_str()));
+    } else if (key == "endStep") {
+      endStep = unsigned(std::atoi(value.c_str()));
     } else if (key == "startItem") {
       startItem = unsigned(std::atoi(value.c_str()));
     } else if (key == "resumePackFile") {
@@ -176,8 +180,12 @@ std::string PackingConfig::toString() const {
   oss << "dx " << dx << " containerSDFDx " << containerSDFDx
       << " broadPhaseDx " << broadPhaseDx << " gridDx " << gridDx
       << " subgridCellSize " << subgridCellSize << "\n";
-  oss << "maxTrialCount " << maxTrialCount << " startStep " << startStep
-      << " startItem " << startItem << "\n";
+  oss << "maxTrialCount " << maxTrialCount << " maxSecondsPerStep " << maxSecondsPerStep
+      << " startStep " << startStep;
+  if (endStep != std::numeric_limits<unsigned>::max()) {
+    oss << " endStep " << endStep;
+  }
+  oss << " startItem " << startItem << "\n";
   oss << "resume " << resume;
   if (resume) {
     oss << " " << ResumePackPath();

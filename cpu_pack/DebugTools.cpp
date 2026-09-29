@@ -160,6 +160,19 @@ void DebugShrinkWrap(const PackingConfig &cfg, float shrinkRadius,
             << voxelSize << " cm)\n";
 }
 
+void DebugShrinkwrapAttractionPoints(const PackingConfig &cfg, float shrinkRadius,
+                                     float voxelSize) {
+  PackingScene scene;
+  if (!LoadPackedScene(scene, cfg)) {
+    return;
+  }
+  std::vector<Vec3f> pts = ComputeShrinkwrapSurfacePoints(scene, shrinkRadius, voxelSize);
+  std::string ptsFile = scene.outputFolder + "/shrinkwrap_attraction_points_debug.obj";
+  SaveVec3fObj(ptsFile, pts);
+  std::cout << "saved " << ptsFile << " (" << pts.size() << " points, radius "
+            << shrinkRadius << " cm, voxel size " << voxelSize << " cm)\n";
+}
+
 void DebugVoidField(const PackingConfig &cfg, float shrinkRadius, float voxelSize) {
   PackingScene scene;
   if (!LoadPackedScene(scene, cfg)) {
@@ -377,6 +390,88 @@ void DebugCreviceCoverage(const PackingConfig &cfg, size_t numBaseInstances,
   SaveCreviceCoverageReport(ComputeCreviceCoverage(scene, cfg, fp, baseline),
                             scene.outputFolder + "/" + outPrefix + "_coverage.txt",
                             scene.outputFolder + "/" + outPrefix + "_unnecessary.obj");
+}
+
+void DebugCreviceSpots(const PackingConfig &cfg, const CreviceFieldParams &fp) {
+  PackingScene scene;
+  if (!LoadPackedScene(scene, cfg)) {
+    return;
+  }
+  for (const InstanceInfo &inst : scene.instances) {
+    scene.EnsureItemSamples(inst.itemId);
+  }
+  SaveMergedItemMeshes(scene);
+
+  {
+    Array3D<short> dist;
+    Vec3f origin;
+    float distUnit;
+    ComputeShrinkWrapDistField(scene, fp.shrinkwrapRadius, fp.shrinkwrapVoxelSize, dist, origin,
+                               distUnit);
+    TrigMesh hull = ComputeShrinkWrapMesh(dist, origin, fp.shrinkwrapVoxelSize, distUnit);
+    if (hull.GetNumTrigs() > 0) {
+      std::string hullFile = scene.outputFolder + "/shrinkwrap_debug.obj";
+      SaveShrinkWrapMesh(hull, hullFile);
+    } else {
+      std::cout << "shrinkwrap produced an empty mesh at radius " << fp.shrinkwrapRadius
+                << " cm, voxel size " << fp.shrinkwrapVoxelSize << " cm\n";
+    }
+  }
+
+  CreviceBaseline baseline = ComputeCreviceBaseline(scene, cfg, fp, scene.instances.size());
+  std::cout << "crevice spots: " << baseline.spots.size() << " in-range ("
+            << cfg.creviceMinWidth << "-" << cfg.creviceMaxWidth << " cm wide) from "
+            << baseline.numBaseInstances << " instances, shrinkwrap radius "
+            << fp.shrinkwrapRadius << " cm, voxel size " << fp.shrinkwrapVoxelSize
+            << " cm, erode " << fp.shrinkwrapOpenRadiusVoxels << " voxel(s)\n";
+  for (size_t i = 0; i < baseline.spots.size(); i++) {
+    const VoidSpot &s = baseline.spots[i];
+    std::cout << "  spot " << i << " pos=(" << s.pos[0] << "," << s.pos[1] << ","
+              << s.pos[2] << ") radius=" << s.radius << " cm\n";
+  }
+
+  // same M1 bucketing DebugVoidSpots prints, so the two are directly
+  // comparable even though this one runs the real Phase 2 field.
+  {
+    const float BUCKET_EDGES[3] = {0.2f, 1.0f, 3.0f};
+    size_t bucketCount[4] = {0, 0, 0, 0};
+    float bucketVol[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float totalVol = 0.0f;
+    for (const VoidSpot &s : baseline.spots) {
+      float width = 2.0f * s.radius;
+      unsigned b = 3;
+      for (unsigned i = 0; i < 3; i++) {
+        if (width < BUCKET_EDGES[i]) {
+          b = i;
+          break;
+        }
+      }
+      float vol = (4.0f / 3.0f) * 3.14159265f * s.radius * s.radius * s.radius;
+      bucketCount[b]++;
+      bucketVol[b] += vol;
+      totalVol += vol;
+    }
+    const char *labels[4] = {"<0.2cm (ignore, self-fills)",
+                             "0.2-1cm (minimize count, no undercut)",
+                             "1-3cm (must survive, no overhang)",
+                             ">3cm (real void, Phase 2's problem)"};
+    std::cout << "M1 histogram (opening width = 2*radius, total inscribed volume "
+              << totalVol << " cm3):\n";
+    for (unsigned b = 0; b < 4; b++) {
+      float pct = totalVol > 0.0f ? 100.0f * bucketVol[b] / totalVol : 0.0f;
+      std::cout << "  " << labels[b] << ": " << bucketCount[b] << " spots, "
+                << bucketVol[b] << " cm3 (" << pct << "%)\n";
+    }
+  }
+
+  std::vector<Vec3f> points;
+  points.reserve(baseline.spots.size());
+  for (const VoidSpot &s : baseline.spots) {
+    points.push_back(s.pos);
+  }
+  std::string pointFile = scene.outputFolder + "/crevice_baseline_spots_debug.obj";
+  SaveVec3fObj(pointFile, points);
+  std::cout << "saved " << pointFile << " (" << points.size() << " points)\n";
 }
 
 void DebugValidatePlacementRange(const PackingConfig &cfg,

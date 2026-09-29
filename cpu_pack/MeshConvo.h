@@ -16,6 +16,11 @@ class MeshConvo {
     Array3D8u vox;
     Array3D<std::complex<float>> fft;
     float dx = 1e-3;
+    // bumped by Union/UnionReversed whenever vox is mutated -- lets a
+    // cache (see PackingOps.h's SubgridBgCache) tell "unchanged since I
+    // last cropped/FFT'd this region" from "something got placed, redo it"
+    // without diffing the grid itself.
+    unsigned version = 0;
 
     // for linear convolution,
     // the voxel grid is temporarily padded to the

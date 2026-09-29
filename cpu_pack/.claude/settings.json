@@ -68,7 +68,13 @@
       "Bash(awk '{k=\\($1>30?\">30\":\"30\"\\); c[k\" \"$2]++} END{for \\(x in c\\) print x, c[x]}')",
       "Bash(cd f:/github/webgl && grep -n \"operator\\\\*\\\\|normalize\\\\|norm\\(\\)\" Math/Vec3.h 2>/dev/null | head -30 || find . -iname \"Vec3.h\" | head)",
       "Bash(find f:/github/webgl -iname \"Vec3.h\" 2>/dev/null)",
-      "Bash(cp F:/meshes/fruit_hand/out_melone_test/pack_final.txt F:/meshes/fruit_hand/out_melone_test/pack_final_prevspawn.txt)"
+      "Bash(cp F:/meshes/fruit_hand/out_melone_test/pack_final.txt F:/meshes/fruit_hand/out_melone_test/pack_final_prevspawn.txt)",
+      "Bash(find \"F:\\\\meshes\\\\fruit_hand\" -name \"pack_final_finger_step3.txt\" 2>/dev/null)",
+      "Bash(find \"F:\\\\github\\\\webgl\" -name \"cpu_pack.exe\" 2>/dev/null | head -5)",
+      "Bash(cmake --build . --config Release --target cpu_pack)",
+      "Bash(F:/github/webgl/cpu_pack/build/Release/cpu_pack.exe)",
+      "Bash(cmake --build . --config Release --target finger_debug cpu_pack)",
+      "Bash(F:/github/webgl/cpu_pack/build/Release/finger_debug.exe)"
     ]
   }
 }

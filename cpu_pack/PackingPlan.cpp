@@ -22,6 +22,7 @@ std::string PackingStep::toString() const {
   oss << "count " << count;
   oss << " outwards " << outwards << " useInnerContainer " << useInnerContainer;
   oss << " useFreeSurfacePoints " << useFreeSurfacePoints;
+  oss << " useShrinkwrapSurfacePoints " << useShrinkwrapSurfacePoints;
   oss << " kind " << int(kind);
   oss << " shrinkwrapRadius " << shrinkwrapRadius;
   oss << " shrinkwrapVoxelSize " << shrinkwrapVoxelSize;
@@ -48,6 +49,8 @@ void PackingStep::Load(std::istream &in) {
   in >> useInnerContainer;
   in >> token; // "useFreeSurfacePoints"
   in >> useFreeSurfacePoints;
+  in >> token; // "useShrinkwrapSurfacePoints"
+  in >> useShrinkwrapSurfacePoints;
   in >> token; // "kind"
   int kindInt;
   in >> kindInt;
@@ -199,8 +202,8 @@ PackingPlan PlanPackingSteps(const std::string &meshDir) {
     return PackingPlan();
   }
 
-  // >20 large, medium large, medium small, small
-  std::vector<float> SIZE_THRESH = {20, 6, 3};
+  // >20 large, medium large, medium small, small, tiny
+  std::vector<float> SIZE_THRESH = {25, 14, 8, 4};
 
   PackingPlan plan;
   plan.groups.resize(SIZE_THRESH.size() + 1);
@@ -208,7 +211,8 @@ PackingPlan PlanPackingSteps(const std::string &meshDir) {
   // one pass: assign to a group and remember the extent for sorting.
   std::map<std::string, float> nameToLen;
   for (size_t i = 0; i < stats.size(); i++) {
-    float len = stats[i].MaxExtent();
+    Vec3f diagonal = stats[i].box.vmax - stats[i].box.vmin;
+    float len = diagonal.norm();
     nameToLen[stats[i].name] = len;
     unsigned gid = GetGroupIndex(len, SIZE_THRESH);
     plan.groups[gid].push_back(stats[i].name);
@@ -232,24 +236,23 @@ PackingPlan PlanPackingSteps(const std::string &meshDir) {
 
   // pack as many big then medium fruits as possible towards outside of container.
   const unsigned LARGE_INT = 1000000u;
-  for (unsigned g = 0; g < plan.groups.size() - 1; g++) {
+  for (unsigned g = 0; g < plan.groups.size() - 2; g++) {
     PackingStep step;
     step.names = plan.groups[g];
     step.count = LARGE_INT;
+    if (g == 2) {
+      // group[2] (10-6cm) is all bigger than 6cm, so it can nestle onto the
+      // shrinkwrap surface of the larger tiers already placed instead of
+      // just the container wall. Coarser grid than the crevice steps'
+      // default (3cm radius, 1cm voxels vs 1cm/0.2cm) since every fruit
+      // here is at least 6cm -- no need for berry-scale resolution, and it
+      // keeps the dense field affordable at this size.
+      step.useShrinkwrapSurfacePoints = true;
+      step.shrinkwrapRadius = 3.0f;
+      step.shrinkwrapVoxelSize = 1.0f;
+    }
     plan.steps.push_back(step);
   }
-
-  Vec3f finalForce(-0.1f, 0, 0);
-  // pack small fruits towards inside of container.
-  // add inner container to prevent wasting fruit near center of container.
-  PackingStep lastStep;
-  lastStep.names = plan.groups.back();
-  lastStep.outwards = false;
-  lastStep.useInnerContainer = true;
-  lastStep.count = LARGE_INT;
-  lastStep.force = finalForce;
-  lastStep.useFreeSurfacePoints = true;
-  plan.steps.push_back(lastStep);
 
   // Phase 2: crevice fill on the two smallest groups, using default
   // shrinkwrap settings -- mirrors the fixed two-call pipeline PackScene

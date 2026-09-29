@@ -6,9 +6,9 @@
 #include <iostream>
 
 int main(int argc, char *argv[]) {
-
   PackingConfig cfg;
-  cfg.ParseArgs(argc, argv);
+  const char * argvDebug [2] = {"", "F:/github/webgl/cpu_pack/configs/pack_finger.cfg"};
+  cfg.ParseArgs(2, (char**)argvDebug);
   std::cout << cfg.toString();
 
   std::string meshDir = cfg.MeshDir();

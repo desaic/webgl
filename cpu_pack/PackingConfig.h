@@ -1,5 +1,6 @@
 #pragma once
 
+#include <limits>
 #include <string>
 
 /// all tunable inputs for a packing run.
@@ -34,8 +35,20 @@ struct PackingConfig {
 
     // number of random rotations tried per item per spot search.
     unsigned maxTrialCount = 10;
+    // abandon a step after this many seconds, even if step.count has not
+    // been reached and kinds have not all retired. 0 means no limit. A
+    // LARGE_INT ("pack until it stops fitting") step has no other bound --
+    // an emptier container than expected (e.g. an earlier step placing
+    // fewer than intended) can let one kind keep finding room for far
+    // longer than intended before it finally, naturally exhausts.
+    double maxSecondsPerStep = 0.0;
     // first plan step to run. skips earlier steps.
     unsigned startStep = 3;
+    // one past the last plan step to run -- default (max) means run to the
+    // end of the plan. lets a run stop early (e.g. after the big/medium-big
+    // bulk steps, before crevice fill) to inspect the trajectory/pack state
+    // PackFruits always saves at the end, without editing the plan itself.
+    unsigned endStep = std::numeric_limits<unsigned>::max();
     // first item index to consider within a step.
     unsigned startItem = 0;
 

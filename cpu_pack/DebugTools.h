@@ -2,6 +2,7 @@
 
 #include "MeshInfo.h"
 #include "PackingConfig.h"
+#include "PackingDriver.h"
 
 #include <string>
 
@@ -28,6 +29,15 @@ void DebugItemVoxels(const PackingConfig &cfg, float voxelSize = 0.25f);
 /// hull can be checked against the geometry it wraps without running a pack.
 void DebugShrinkWrap(const PackingConfig &cfg, float shrinkRadius = 1.0f,
                      float voxelSize = 0.25f);
+
+/// loads the scene and its resume pack and saves the CURRENT shrinkwrap
+/// surface's own sample points (see ComputeShrinkwrapSurfacePoints,
+/// PackingDriver.h) to <outputFolder>/shrinkwrap_attraction_points_debug.obj
+/// -- the exact attraction-center candidates PackingStep's
+/// useShrinkwrapSurfacePoints targeting draws from, at the same
+/// shrinkRadius/voxelSize a real step would use.
+void DebugShrinkwrapAttractionPoints(const PackingConfig &cfg, float shrinkRadius = 1.0f,
+                                     float voxelSize = 0.25f);
 
 /// loads the scene and its resume pack, computes VoidField (see
 /// PackShrinkWrap.h), and writes its iso-0 surface to
@@ -96,3 +106,15 @@ void DebugValidatePlacementRange(const PackingConfig &cfg,
 /// <outputFolder>/<outPrefix>_coverage.txt and <outPrefix>_unnecessary.obj.
 void DebugCreviceCoverage(const PackingConfig &cfg, size_t numBaseInstances,
                           const std::string &outPrefix);
+
+/// loads cfg.resumePackFile and runs the REAL Phase 2 pipeline
+/// (ComputeCreviceBaseline, i.e. ComputeShrinkwrapField's subtract-fruit +
+/// erode + skin-band spot extraction -- see PackShrinkWrap.h), not the
+/// older volumetric ComputeVoidField DebugVoidSpots above still uses.
+/// fp lets shrinkwrap radius/voxel size/erode-voxels be sized for whichever
+/// fruit tier is about to target these spots (a bigger next tier can use a
+/// coarser grid -- see PackingStep's own per-step fields). Writes
+/// <outputFolder>/shrinkwrap_debug.obj and
+/// <outputFolder>/crevice_baseline_spots_debug.obj, plus the same M1
+/// bucket histogram DebugVoidSpots prints.
+void DebugCreviceSpots(const PackingConfig &cfg, const CreviceFieldParams &fp);

@@ -106,7 +106,20 @@ void PrepareBackground(PackingScene &scene, const PackingConfig &cfg) {
 
 void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig &cfg,
               const std::vector<Vec3f> &surfacePoints, PlacementTimer *timer) {
-  unsigned count = 0;
+  // per-step breakdown (findspot.*, findspot_subgrid.*, nudge.* -- see the
+  // PROFILE_SCOPE calls in PackingOps.cpp/PackingScene.cpp), printed at the
+  // end of this function. Reset here so each step's report is its own
+  // cost, not cumulative since process start; the real pipeline never
+  // called Profiler::Report before, only the benchmark harness did, so
+  // this was accumulating silently on every run without ever being shown.
+  Profiler::Reset();
+  // round counter (one round tries every kind in the step once), NOT a
+  // placement counter -- step.count is a placement cap, checked against
+  // placedCount below. A round can place up to numItems instances (one per
+  // kind), so bounding the loop on round count alone (as this used to do)
+  // let a small step.count place far more than intended once there were
+  // enough kinds in the step to place several per round.
+  unsigned round = 0;
   // first item to consider in the next iteration.
   unsigned startNameIndex = 0;
   if (step.names.size() == 0) {
@@ -159,6 +172,15 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
 
   unsigned long searches = 0;
   unsigned placedCount = 0;
+  // shared across every item/cell tried in this step -- its own key
+  // (cell, crop bounds, scene.bg's version) decides reuse, so interleaving
+  // between kinds/cells cannot make it serve a stale background crop.
+  SubgridBgCache subgridCache;
+  // non-subgrid ("large" tier) equivalent of subgridCache, against the
+  // WHOLE container grid instead of a cropped cell -- see the FindSpot
+  // call below.
+  unsigned bgFftVersion = 0;
+  bool bgFftValid = false;
   double lastReportMs = 0.0;
   const double REPORT_INTERVAL_MS = 2000.0;
   auto report = [&](const char *tag) {
@@ -179,9 +201,24 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
     lastReportMs = stepClock.ElapsedMS();
   };
 
-  for (; count < step.count; count++) {
+  for (; placedCount < step.count; round++) {
+    if (cfg.maxSecondsPerStep > 0.0 && stepClock.ElapsedMS() / 1000.0 > cfg.maxSecondsPerStep) {
+      outOfTime = true;
+      break;
+    }
     bool packSuccess = false;
     for (unsigned i = startItem; i < numItems; i++) {
+      if (placedCount >= step.count) {
+        break;
+      }
+      // checked per kind, not just once per round -- a single kind can walk
+      // its entire subgrid (up to numCells*maxTrialCount searches) before
+      // giving up, which on its own can take far longer than the round-level
+      // check above allows for.
+      if (cfg.maxSecondsPerStep > 0.0 && stepClock.ElapsedMS() / 1000.0 > cfg.maxSecondsPerStep) {
+        outOfTime = true;
+        break;
+      }
       unsigned nameIndex = (i + startNameIndex) % numItems;
       std::string name = step.names[nameIndex];
       unsigned itemIndex = scene.GetItemIndex(name);
@@ -243,15 +280,15 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
                          << ", settled " << moved.norm() << " cm in "
                          << settleMs << " ms, "
                          << placedCount << " this step\n");
-        if (cfg.trajSaveInterval > 0 && count % cfg.trajSaveInterval == 0 && count > 0) {
+        if (cfg.trajSaveInterval > 0 && placedCount % cfg.trajSaveInterval == 0 && placedCount > 0) {
           std::string trajFile = scene.trajFile
-                                 + std::to_string(int(count / cfg.trajSaveInterval) % 10)
+                                 + std::to_string(int(placedCount / cfg.trajSaveInterval) % 10)
                                  + ".txt";
           scene.SaveTrajectories(trajFile);
         }
-        if (cfg.packSaveInterval > 0 && count % cfg.packSaveInterval == 0 && count > 0) {
+        if (cfg.packSaveInterval > 0 && placedCount % cfg.packSaveInterval == 0 && placedCount > 0) {
           std::string packFile = scene.packFile
-                                 + std::to_string(int(count / cfg.packSaveInterval) % 10)
+                                 + std::to_string(int(placedCount / cfg.packSaveInterval) % 10)
                                  + ".txt";
           scene.SaveInstances(packFile);
         }
@@ -276,7 +313,7 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
                            RotationMatrixRad(rot[0], rot[1], rot[2]));
             if (FindSpotSubgrid(scene.bg, rotatedMesh, pos, scene.sdf,
                                 sdfFactor, scene.subgridCellSize,
-                                cellIdx, scene.numSubgridCells)) {
+                                cellIdx, scene.numSubgridCells, &subgridCache)) {
               if (placeItem(pos, rot)) {
                 itemPlaced = true;
                 cellSuccess = true;
@@ -291,6 +328,18 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
           item.nextCellIdx++;
         }
       } else {
+        // scene.bg's own FFT, valid until the next successful placement
+        // (bg.version bumps on Union/UnionReversed, see MeshConvo.h) --
+        // FindSpot otherwise recomputes it from scratch on every single
+        // trial, unconditionally, even though it is identical across all
+        // of them whenever nothing has been placed since (measured: 11%
+        // of one step's total wall time, entirely redundant work).
+        if (!bgFftValid || bgFftVersion != scene.bg.version) {
+          Vec3u bgGridSize = scene.bg.GridSize();
+          scene.bg.FFT(PadSizes(bgGridSize, 8));
+          bgFftVersion = scene.bg.version;
+          bgFftValid = true;
+        }
         for (unsigned trial = 0; trial < MAX_TRIAL_COUNT; trial++) {
           Vec3f pos;
           Vec3f rot = scene.randAngles[angleIndex];
@@ -302,7 +351,7 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
           TrigMesh rotatedMesh = item.mesh;
           TransformVerts(item.mesh.v, rotatedMesh.v,
                          RotationMatrixRad(rot[0], rot[1], rot[2]));
-          if (FindSpot(scene.bg, rotatedMesh, pos, scene.sdf, sdfFactor)) {
+          if (FindSpot(scene.bg, rotatedMesh, pos, scene.sdf, sdfFactor, /*bgFftReady=*/true)) {
             if (placeItem(pos, rot)) {
               itemPlaced = true;
               break;
@@ -319,6 +368,9 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
         }
         item.noMoreFit = true;
       }
+    }
+    if (outOfTime) {
+      break;
     }
     if (!packSuccess) {
       bool anySubgridRemaining = false;
@@ -344,12 +396,12 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
   const char *why = "all kinds retired";
   if (outOfTime) {
     why = "step time limit";
-  } else if (count >= step.count) {
+  } else if (placedCount >= step.count) {
     why = "target count reached";
   }
   report("step done");
-  LOGI("  reason: " << why << ", " << count << " of " << step.count
-                    << " rounds, " << placedCount << " placed, "
+  LOGI("  reason: " << why << ", " << round << " rounds, " << placedCount
+                    << " of " << step.count << " placed, "
                     << (placedCount > 0
                             ? (stepClock.ElapsedMS() / double(placedCount))
                             : 0.0)
@@ -358,6 +410,7 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
                             ? (double(searches) / double(placedCount))
                             : 0.0)
                     << " searches per placement\n");
+  Profiler::Report(std::cout, "step cost breakdown", stepClock.ElapsedMS());
 
   if (placedCount > 0) {
     if (cfg.trajSaveInterval > 0) {
@@ -1724,7 +1777,8 @@ void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig
   bool savedBeforeFill = false;
   unsigned creviceStepCount = 0;
 
-  for (size_t i = cfg.startStep; i < plan.steps.size(); i++) {
+  size_t endStep = std::min(plan.steps.size(), size_t(cfg.endStep));
+  for (size_t i = cfg.startStep; i < endStep; i++) {
     const PackingStep &step = plan.steps[i];
     LOGI("=== step " << i << " of " << plan.steps.size() << " ("
                      << (step.kind == StepKind::Crevice ? "crevice" : "bulk") << ") ===\n");
@@ -1768,6 +1822,16 @@ void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig
                                 scene.outputFolder + "/crevice_coverage" + suffix + ".txt",
                                 scene.outputFolder + "/crevice_unnecessary" + suffix + ".obj");
       creviceStepCount++;
+    } else if (step.useShrinkwrapSurfacePoints) {
+      // recomputed fresh every time -- unlike free container points, the
+      // shrinkwrap surface changes with every instance placed before this
+      // step, so nothing here can be cached across steps.
+      std::vector<Vec3f> shrinkPts =
+          ComputeShrinkwrapSurfacePoints(scene, step.shrinkwrapRadius, step.shrinkwrapVoxelSize);
+      LOGI("shrinkwrap surface: " << shrinkPts.size() << " points at radius "
+                                  << step.shrinkwrapRadius << " cm, voxel "
+                                  << step.shrinkwrapVoxelSize << " cm\n");
+      PackStep(scene, step, cfg, shrinkPts, &runTimer);
     } else {
       if (step.useFreeSurfacePoints && !haveSurfPts) {
         surfPts = ComputeFreeContainerPoints(scene);
@@ -1830,6 +1894,39 @@ void SaveFreeContainerSurface(PackingScene &scene, const std::string &filename) 
   SaveVec3fObj(filename, free);
   LOGI("free container surface: " << free.size() << " points unoccupied, saved "
                                   << filename << "\n");
+}
+
+std::vector<Vec3f> ComputeShrinkwrapSurfacePoints(PackingScene &scene, float shrinkRadius,
+                                                  float voxelSize) {
+  Array3D<short> dist;
+  Array3D<short> raw;
+  Vec3f origin;
+  float distUnit;
+  ComputeShrinkWrapDistField(scene, shrinkRadius, voxelSize, dist, origin, distUnit, &raw);
+  TrigMesh hull = ComputeShrinkWrapMesh(dist, origin, voxelSize, distUnit);
+
+  std::vector<SamplePoint> samples;
+  SamplePoints(hull, voxelSize, samples);
+  std::vector<Vec3f> pts;
+  pts.reserve(samples.size());
+  // raw(x) is the unsigned distance to the nearest ACTUAL fruit surface
+  // (pre-closing). Near 0 means some single fruit's own surface passes
+  // right through here -- closing did not have to bridge anything, so
+  // this point is just that fruit's own convex bump, not a gap between
+  // fruit worth nestling into. Without this the whole closed hull samples
+  // uniformly, including every single-fruit bump, which is why the
+  // unfiltered version covered the entire pack instead of just the
+  // valleys between fruit -- same distinction ComputeShrinkwrapField
+  // already makes for Phase 2's crevice spots (PackShrinkWrap.h).
+  const float kOnSkinThresh = voxelSize * 1.1f;
+  for (const SamplePoint &sp : samples) {
+    float rawDist = SampleDistField(raw, origin, voxelSize, distUnit, sp.x);
+    if (rawDist <= kOnSkinThresh) {
+      continue;
+    }
+    pts.push_back(sp.x);
+  }
+  return pts;
 }
 
 void PackFruits(const PackingPlan &plan, const PackingConfig &cfgIn) {

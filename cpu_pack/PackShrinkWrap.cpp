@@ -466,11 +466,22 @@ float SampleDistField(const Array3D<short> &dist, const Vec3f &origin, float vox
   int iy = int(std::floor(local[1]));
   int iz = int(std::floor(local[2]));
   Vec3u size = dist.GetSize();
-  if (ix < 0 || iy < 0 || iz < 0 || (unsigned)ix >= size[0] || (unsigned)iy >= size[1] ||
-      (unsigned)iz >= size[2]) {
+  if (ix < 0 || iy < 0 || iz < 0 ||
+      (unsigned)ix >= size[0] - 1 || (unsigned)iy >= size[1] - 1 ||
+      (unsigned)iz >= size[2] - 1) {
     return 1e4f;
   }
-  return float(dist((unsigned)ix, (unsigned)iy, (unsigned)iz)) * distUnit;
+  unsigned ux = (unsigned)ix, uy = (unsigned)iy, uz = (unsigned)iz;
+  float a = (ux + 1) - local[0];
+  float b = (uy + 1) - local[1];
+  float c = (uz + 1) - local[2];
+  float v00 = a * dist(ux, uy, uz)         + (1 - a) * dist(ux + 1, uy, uz);
+  float v10 = a * dist(ux, uy + 1, uz)     + (1 - a) * dist(ux + 1, uy + 1, uz);
+  float v01 = a * dist(ux, uy, uz + 1)     + (1 - a) * dist(ux + 1, uy, uz + 1);
+  float v11 = a * dist(ux, uy + 1, uz + 1) + (1 - a) * dist(ux + 1, uy + 1, uz + 1);
+  float v0 = b * v00 + (1 - b) * v10;
+  float v1 = b * v01 + (1 - b) * v11;
+  return (c * v0 + (1 - c) * v1) * distUnit;
 }
 
 

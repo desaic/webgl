@@ -113,6 +113,7 @@ void Union(MeshConvo &bg, Vec3i offset, const Array3D8u &fg) {
       }
     }
   }
+  bg.version++;
 }
 
 void UnionReversed(MeshConvo &bg, Vec3i offset, const MeshConvo &fg) {
@@ -139,4 +140,5 @@ void UnionReversed(MeshConvo &bg, Vec3i offset, const MeshConvo &fg) {
       }
     }
   }
+  bg.version++;
 }

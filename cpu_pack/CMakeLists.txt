@@ -4,17 +4,19 @@ set(BENCH_BIN "cpu_pack_bench")
 set(MELONE_TEST_BIN "melone_test")
 set(DEBUG_RAY_BIN "debug_ray_test")
 set(SPHERE_SHRINKWRAP_TEST_BIN "sphere_shrinkwrap_test")
+set(FINGER_DEBUG_BIN "finger_debug")
 PROJECT (CpuPack)
 FILE(GLOB CORE_SRC CONFIGURE_DEPENDS "*.cpp" "*.c" "quickhull/*.cpp")
-# main.cpp, benchmarks.cpp, melone_test.cpp, and debug_ray_test.cpp each
-# define main(), so they stay out of the shared library and link into
-# their own executable.
+# main.cpp, benchmarks.cpp, melone_test.cpp, debug_ray_test.cpp, and
+# finger_debug.cpp each define main(), so they stay out of the shared
+# library and link into their own executable.
 list(REMOVE_ITEM CORE_SRC
   "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/melone_test.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/debug_ray_test.cpp"
-  "${CMAKE_CURRENT_SOURCE_DIR}/sphere_shrinkwrap_test.cpp")
+  "${CMAKE_CURRENT_SOURCE_DIR}/sphere_shrinkwrap_test.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/finger_debug.cpp")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_CXX_STANDARD 20)
 
@@ -88,3 +90,8 @@ target_link_libraries(${DEBUG_RAY_BIN} pack_core)
 # independent of any container/fruit data files.
 add_executable(${SPHERE_SHRINKWRAP_TEST_BIN} sphere_shrinkwrap_test.cpp)
 target_link_libraries(${SPHERE_SHRINKWRAP_TEST_BIN} pack_core)
+
+# finger container: crevice spots + shrinkwrap mesh on the bulk-placement
+# result, sized for whichever fruit tier is about to target them next.
+add_executable(${FINGER_DEBUG_BIN} finger_debug.cpp)
+target_link_libraries(${FINGER_DEBUG_BIN} pack_core)
