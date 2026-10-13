@@ -1,0 +1,503 @@
+Sphere-cover plan for medium-fruit crevice filling
+==================================================
+
+Goal
+----
+Cover the remaining near-surface crevice samples with a small number of
+medium fruits. Large fruits stay fixed. Final fruit meshes may overlap existing
+fruits or each other by at most 0.2 cm. The configured exclusion mesh remains a
+hard obstacle; the inner-container mesh is only a target/density preference.
+
+1. Fruit size catalogue
+-----------------------
+For each medium fruit mesh, center an approximate bounding sphere at the
+center of its local bounding box. Record the maximum vertex distance from
+that center as the outer radius. Also record an effective coverage radius:
+the outer sphere is conservative for irregular or elongated fruit and should
+not by itself determine whether a fruit fits. Scales come from a small
+configurable discrete list (default 1.2, 1.1, 1.0, 0.9, 0.8). Each (fruit,
+scale) pair is a pre-scaled variant: its own mesh, SDF, bounding box, outer
+radius and effective radius, all computed once at load. The catalogue is the
+list of variants.
+
+2. Cover the target samples with spheres
+----------------------------------------
+Work from the currently uncovered crevice targets. Keep the existing surface,
+inner-container, and exclusion target masks, but ensure broad openings have
+samples; no covering method can fill a hole it never samples. Use spatially
+uniform target weights so dense triangulation does not dominate the score.
+
+Generate candidate sphere centers in free space around target clusters, not
+at the target positions themselves. Useful seeds include target positions
+offset along their free-space normals, local target centroids, and maxima of
+a local free-space distance field. Try discrete radii derived from the medium
+fruit catalogue and its allowed scales. A candidate covers a target when the
+target lies inside its sphere with a small numerical margin.
+
+Select candidates by weighted gain in *newly* covered targets, with a cost for
+fruit count and excessive size. After choosing a sphere, update coverage and
+locally relax neighboring sphere centers/radii; repeat until marginal gain is
+small. A spatial hash or KD-tree should limit candidate scoring to nearby
+targets rather than scanning the full target set for every candidate.
+
+Require new spheres to grow from the boundary: each should be able to touch
+an existing or newly accepted fruit, so the cover does not create floating
+fruit in the middle of a large void. This contact may be with a fruit of any
+size, not only a >14 cm support fruit.
+
+3. Sphere collision is only a proposal filter
+---------------------------------------------
+Bounding spheres are deliberately conservative. Requiring proxy spheres to
+remain within 0.2 cm of non-overlap would reject many valid mesh fits and
+leave seams. Permit limited proxy overlap during search, but enforce the
+0.2 cm bound on the actual fruit meshes. Reject centers that plainly violate
+the container or exclusion mesh. Use exact mesh/SDF checks after swapping in
+a fruit, including both candidate-to-existing and candidate-to-candidate
+overlap. Keep contact with some existing or newly placed fruit as a final
+acceptance condition.
+
+4. Replace each sphere with a fruit
+----------------------------------
+Choose the fruit variant (kind and discrete scale) by matching its effective
+radius to the selected sphere. Nudging adjusts position/orientation only; to
+change size, swap in a neighboring scale variant and re-score. Align the scaled fruit's bounding-box center with the sphere
+center. Try several orientations, then nudge position/orientation/scale within
+a small trust region. Score the actual mesh for target coverage, contact,
+container fit, exclusion fit, and overlap. If no fruit fits, leave those
+targets uncovered and try another candidate rather than committing a proxy
+that does not materialize as a valid fruit.
+
+5. Scale via pre-scaled variants
+--------------------------------
+Do not make the geometry paths scale-aware. Instead, build each variant by
+scaling the fruit mesh about its local origin (the same pivot Blender uses
+for the scale field, so exported poses match) at load, then generate its SDF, samples and bounds from the
+scaled mesh. Instances then use scale 1 in RigidTransform, so
+RigidTransform::Apply, RightMultRigid, PackingScene::Put, SDF lookups, overlap
+fractions, support-gap checks and NudgeToTarget need no changes.
+
+Remaining work:
+- Variant bookkeeping: variant id -> (base fruit, scale, mesh, SDF). Variants
+  are created only for medium fruits; large fruits are untouched.
+- Save/load: SaveInstances/LoadPack must round-trip the variant. Either store
+  the base mesh name plus the scale field and have LoadPack resolve it to the
+  variant (Blender's load_pack.py already applies scale), or save the variant
+  mesh name. Prefer the first: the scale field already exists in the format.
+  Export therefore writes the prototype fruit name with scale = variant
+  scale; the translation is the variant's own pose, not rescaled.
+- Check that no code path double-applies scale (variant mesh already scaled
+  and the transform scale field also applied) when loading in the packer.
+
+Verify by saving and reloading a pack with variants, then comparing bounds and
+overlap results before/after reload, and checking Blender shows the same size.
+
+6. Debug and validation
+----------------------
+Export proposed spheres as a Blender-visible mesh, chosen fruit instances as
+a pack, and initially/finally uncovered targets as separate point objects.
+Record per-candidate rejection reasons: container, exclusion, overlap,
+missing contact, or insufficient coverage. First validate the strawberry2
+opening around (-168.154, -60.4725, -48.5998), then test the full hand and
+record runtime, fruit count, target coverage, and maximum measured overlap.
+
+7. Wavefront cover, tucking and spawning (revised approach)
+-----------------------------------------------------------
+Seeding and growth. Seeds touch a fixed fruit; every later sphere is grown from
+a wavefront so that it touches an existing sphere (gap about 0). A front
+sphere with no uncovered targets within reach is retired. Targets are swept
+min x, then y, then z. Proxy limits are tight: sphere-fruit and sphere-sphere
+overlap at most 15% of the radius, container wall at most 30%.
+
+Tucking (relaxation). After the wavefront, move the spheres together to remove
+gaps, solving small spatial groups (about 20-50 spheres with a halo) rather
+than all spheres at once. Neighboring spheres outside the group are fixed.
+Per group, minimize over centers (optionally radii in a continuous range):
+  - squared sphere-sphere overlap beyond the allowed slack;
+  - squared overlap with fixed fruit, container and exclusion mesh;
+  - a pull of near-touching pairs to exact contact, and covered targets kept
+    covered.
+Use projected gradient or L-BFGS, a few hundred iterations per group, and sweep
+the groups Gauss-Seidel style until the energy stops dropping. The sphere-sphere
+and sphere-container "phi functions" (Stoyan et al., Axioms 13(6) 396, 2024)
+are just signed distances here: |ci-cj| - ri - rj and -containerSDF(c) - r.
+The useful ideas taken from that work are the smooth overlap measure and the
+decomposition into small subproblems.
+
+How tucking treats existing fruit. Existing large fruit are static obstacles
+and never move. Only spheres move.
+  - Obstacle term: max(0, r - d(c) - slack)^2, where d is the signed distance
+    to the nearest large fruit (the same SDF NearestFruit uses); its gradient is
+    the SDF gradient, which pushes the sphere out along the fruit normal. The
+    slack is the allowed fruit overlap (0.2 cm plus proxy error), so a sphere
+    may rest against fruit without being pushed away.
+  - Contact term: spheres within the contact tolerance of a fruit get a mild
+    pull toward exact contact, (d - r)^2, so they stay tucked against it.
+  - Support: a sphere stays valid only while it touches fruit or a chain of
+    spheres that reaches fruit. Check after each sweep; drop or re-grow spheres
+    that lose their chain.
+  - Container wall and exclusion mesh are fixed obstacles with the same form
+    (the exclusion mesh with a stricter slack). Medium fruit already in the pack
+    are not obstacles: they are what this cover replaces (sphereSupportMinDiag).
+  - Limit: the fruit SDF is coarse, so near-fruit results are accurate to about
+    0.1 to 0.2 cm and the gradient may jitter at that scale.
+
+Spawning. Tucking moves spheres, so targets may become uncovered again and new
+gaps open. After each tuck sweep, regrow from the tucked spheres on whatever is
+still uncovered, then tuck again. Alternate tuck and spawn until nothing
+changes or an iteration cap is hit.
+
+Targets (experiment). The old targets are hull triangle centroids from a 1 cm
+marching-cubes closing (voxel stair error, uneven density, no size or depth
+information). Replace them with a deterministic lattice of free-space points
+inside the closing-minus-fruit volume at a finer grid:
+  - fruit set: large fruit only (box diagonal above 14 cm), optionally only
+    those with center x < sphereMaxX for local experiments;
+  - crevice mask = closed(R) <= 0 and rawDistToFruit > minClearance, inside the
+    container (approximately) and outside the exclusion mesh;
+  - keep a regular lattice (sphereFieldSpacing) of mask voxel centers, so
+    coverage is measured by volume, not by triangle count.
+The inner 12 cm container mesh is ignored for this experiment.
+
+8. Progress and learnings so far
+--------------------------------
+Implemented (SphereCover.cpp/.h, sphere* keys in PackingConfig, configs/pack_hand.cfg):
+  - Radii: volume-equivalent radius of each medium kind times sphereScales
+    (1.2 .. 0.8), merged within 0.25 cm: 12 radii, 1.78 to 4.80 cm.
+  - Advancing-front cover (section 7): sweep seeds, grow touching spheres,
+    retire exhausted front spheres. Proxy limits: sphere-fruit and
+    sphere-sphere overlap 15% of radius, wall/exclusion 30%, contact within 0.8.
+  - Debug region (sphereMaxX) and probe points (sphereProbe) that print nearby
+    fruit, spheres, targets and a per-reason rejection tally for candidates.
+  - Fast path for experiments: BuildSphereCoverScene loads only the meshes it
+    needs plus the container SDF; RunSphereCoverFast adds only the large fruit
+    with center x < sphereMaxX for distance queries (no background voxelization,
+    no Put). 12 large fruit with x < -208: about 6 s end to end, down from 52 s.
+  - Outputs: sphere_cover.txt (x y z r), sphere_cover_spheres.obj (merged ico
+    spheres), sphere_cover_fruit.txt (the region's fruit, loadable with
+    bpy_scripts/load_pack.py), sphere_cover_targets.obj,
+    sphere_cover_uncovered.obj; bpy_scripts/load_spheres.py instances spheres.
+  - Targets can be loaded from mediumTargetsFile (vertices of an obj) or
+    regenerated at a fine voxel size (sphereFieldVoxel > 0).
+
+Learnings:
+  - Obstacles are only the fixed LARGE fruit (box diagonal > 14 cm). The pack
+    already contained many medium fruit (orange, peach, plum, ...) around the
+    probe points; treating them as obstacles made nearly every candidate fail
+    the fruit-overlap check. Medium fruit are what this cover replaces.
+  - Targets inside existing fruit are not targets. The loaded hull points had
+    about 8,000 of 38,000 inside large fruit by the exact SDF.
+  - Strict whole-sphere containment (75% -> 15% overlap) leaves gaps; loose
+    overlap gives heavy overlap. Neither is right: the sphere proxy needs a
+    better coverage definition, not just different thresholds.
+  - Global greedy by gain always picks the largest sphere. A sweep plus a
+    wavefront gives spheres that touch, which was the requirement.
+  - Wall-ray targets (march from the container wall to the first fruit, keep
+    columns deeper than their neighbors, count a target covered when a sphere
+    blocks its line to the wall) were worse than the hull points and were
+    removed. Most wall columns are deep everywhere, and a neighbor-median
+    threshold mostly picked smooth bulk voids, not crevices.
+  - Original hull targets are triangle centroids of a 1 cm marching-cubes
+    closing: voxel stair error, uneven density, no size or depth information.
+  - The shrinkwrap raw distance field is UNSIGNED: it is positive inside fruit.
+    Using raw > 0 as "not inside fruit" puts fruit interiors in the crevice
+    mask (11,000 of 13,450 lattice points were inside fruit). The mask must be
+    restricted to voxels a flood from outside through free space reaches (which
+    also drops sealed pockets). ComputeShrinkwrapField's raw > 0 test may have
+    the same flaw; not checked.
+  - A finer grid shrinks the real crevice volume: 12 fruit with x < -208 give
+    1,986 free lattice points (1 cm, 0.4 cm voxels) after the flood fix.
+  - Result on that region: 102 spheres cover 1,154 of 1,986 points (58%). The
+    uncovered points are mostly within 1 to 2 cm of fruit, narrower than the
+    smallest radius (1.78) under the overlap limits. Smaller radii (scales to
+    about 0.5) or dropping sub-1 cm slivers are the open options.
+  - Speed: do experiments on a small region. The full pipeline setup (all
+    meshes, background grid, 1,104 Put calls) dominated the run time, not the
+    cover itself (under 3 s).
+
+9. Next idea: manufacturability from local convex hulls
+-------------------------------------------------------
+The manufacturing process has no difficulty making convex parts. So measure
+how hard a spot is by how far it lies from the convex shape the surrounding
+fruit would support locally, instead of from the 6/12 cm closing hull alone:
+  - Take small groups of nearby large fruit (for example a fruit and its
+    touching neighbors, or all fruit within a radius) and compute the convex
+    hull of each group.
+  - Regions far from a local hull surface are hard to make, so they are spots
+    to plug. A plane pressed against a few fruit (a supporting plane of the
+    group's hull) bridges the gap between them; the hard regions are the
+    spaces between that plane and the fruit surfaces, and anything not
+    reachable by such a plane.
+  - Difficulty value per free-space point: distance from the point to the
+    nearest local hull surface (or, equivalently, how deep the point lies in
+    the pocket between a supporting plane and the fruit). Targets are the
+    lattice points with difficulty above a threshold, weighted by it; spheres
+    are sized and ordered by it.
+  - Group choice matters: too large a group gives a hull that bridges real
+    crevices; too small a group makes every dimple look hard. Sweep the group
+    size (for example 2 to 6 fruit, or a radius of 6 to 12 cm) and keep points
+    that stay hard across scales.
+  - Tests on the x < -208 region first: compute hulls per group, color the
+    lattice by difficulty, and compare to the closing-hull targets.
+
+10. Crevice faces from a fruit neighbor graph (implemented, first pass)
+----------------------------------------------------------------------
+Design (agreed):
+  - Fruit set: the large and medium-large fruit from step 2 (about 1k on the
+    full hand, all of pack_filtered_step2). For experiments, only those with
+    center x < sphereMaxX (12 fruit for x < -208).
+  - Neighbor graph: two fruit are neighbors when their SURFACE gap is at most
+    hullGap (1.5 cm), not by center distance (eggplant/zucchini are long).
+    Gap = min of one fruit's vertex samples against the other's SDF, both ways.
+    The gap threshold is what prevents arches: no edge across a wide void.
+  - Groups: the pack is 3D, so "every polygon of the graph" is not defined
+    (no faces, exponentially many cycles). Use graph triangles (3-cliques) and
+    chordless 4-cycles; skip a quad that has a chord (its triangles cover it).
+    Longer cycles bring arches back.
+  - Each crevice may need more than one fruit, often many, to fill.
+  - A pressed plane that does not touch some fruit still leaves a crevice under
+    it; that space still needs filling. Unbounded pockets are kept, capped.
+  - Faces with any corner inside the inner container do not matter. Space near
+    the exclusion mesh does not matter.
+  - The goal is to fill as much crevice as possible with medium fruit.
+
+Why it helps the plug check: a crevice becomes a concrete object, a mouth
+polygon with an inward normal, a depth map and a width. To test whether a new
+fruit or sphere plugged it, cast short rays inward from samples on the mouth
+and sphere-trace them against the fruit SDFs plus the new object; the crevice
+is plugged when the max ray depth falls below a tolerance (about 1 cm). Only
+mouths near the new object need re-tracing. This is local, needs no voxel grid
+or flood fill, and counts "under a sphere" automatically (a sphere in the mouth
+stops the rays). It works the same for real fruit, given their SDF.
+
+Implementation (CreviceFaces.cpp/.h, runs from the fast path when
+sphereHullFaces is set; keys hullGap, hullSamples, hullMinDepth, hullExposeDist,
+hullExclMargin):
+  1. neighbor graph by surface gap (300 vertex samples per fruit);
+  2. triangles and chordless quads, each found once;
+  3. quickhull of each group's samples; keep faces whose corners come from at
+     least two fruit (bridging faces);
+  4. outside-facing: marching from the face center along its normal reaches the
+     container wall before any fruit, within 30 cm; drop faces with a corner
+     inside the inner container or within 2 cm of the exclusion mesh;
+  5. pocket depth: 15 inward rays from the face to the first fruit; keep faces
+     at least hullMinDepth deep (capped at 16 cm, capped faces kept);
+  6. drop duplicates by quantized center and normal.
+Outputs: crevice_faces.obj (fan-triangulated from v0), crevice_faces.txt
+(depth, normal, group instance ids), fruit_graph.obj (one vertex per fruit at
+its center of mass, one line per neighbor edge).
+
+First result, x < -208 (12 fruit), 0.8 s: 23 edges, 13 triangles, 4 chordless
+quads; 1,412 bridging faces, dropped 266 inner, 251 not facing outside, 373
+duplicates, 0 shallow; 522 kept. Depths mostly 4 to 16 cm, 41 at the cap.
+Total face area about 12,500 cm2, far too much for 12 fruit: neighboring groups
+share fruit and produce overlapping faces over the same pocket with different
+centers, which the duplicate key does not catch.
+
+Next:
+  - Overlap reduction: where faces from different groups overlap over the same
+    pocket, keep only the outermost one (the plate a manufactured surface would
+    follow).
+  - Merge adjacent near-coplanar faces into one polygon per mouth.
+  - Check the graph and faces in Blender against the visible crevices before
+    using the mouths as the cover's targets and plug test.
+
+11. Local hull-face revision (x < -208 experiment)
+-------------------------------------------------
+The first-pass whole-face test kept large overlapping internal sheets while
+missing visible gaps. The current CreviceFaces implementation uses:
+  - Surface-gap graph edges up to 1.5 cm for triangles and chordless quads,
+    plus up to four sparse pair neighbors per fruit across gaps up to 8 cm.
+    The wider pairs catch two-fruit grooves without creating high-order hulls
+    across large arbitrary regions.
+  - Convex-hull triangles split into approximately 2 cm patches. Each patch
+    must be near the outer container surface, outside the inner/exclusion
+    masks and all fruit, open in its outward normal direction, and over at
+    least one free crevice lattice point.
+  - A lattice point is assigned to a patch only when its projection along the
+    patch normal falls within the triangle (with a small seam tolerance) and
+    is within 16 cm. The second-nearest fruit in the hull group must be within
+    12 cm OF THE TARGET, not the patch. A broad hull mouth may be far from its
+    second fruit while the pocket beneath lies tightly between two fruit.
+  - Inward ray depth is a quality cutoff for the patch; it is not used to
+    truncate target assignment, because the centroid ray can strike a fruit
+    shoulder beside a deeper channel. Select patches greedily by the number
+    of new lattice points they represent. This removes redundant faces from
+    overlapping group hulls.
+
+The largest previously missed cluster was between watermelon3 and watermelon2
+around (-222.8, -48.9, -52.3). All 53 examined targets lay inside the pair
+hull and projected beneath mixed-owner hull faces. The patch-centroid support
+test rejected their mouths because one fruit was over 12 cm from the patch;
+checking support at the target restored this gap. Relaxing the container band
+from 12 to 100 cm recovered only one target, so it was not the main issue.
+
+The final x < -208 scene selects 13 fruit by world-space bounding-box center.
+It yielded 932 selected patches representing 1953/1980 free lattice targets
+(98.6%); the remaining 27 are small scattered clusters. Face generation took
+3.5 s and the full fast-path run about 8.1 s. These counts measure which
+sampled pockets have candidate mouth patches, NOT actual medium-fruit
+coverage. The sphere cover algorithm is unchanged and still covered 1093/1980
+samples with 106 spheres. The earlier position-based 12-fruit selection had
+1965/1986 candidate-covered targets; its count is not directly comparable
+because the fruit subset and target lattice changed.
+
+Debug outputs: crevice_faces.obj (selected patches),
+crevice_faces_raw_bridges.obj (unfiltered mixed-owner hull triangles),
+crevice_faces_claimed_targets.obj and crevice_faces_unclaimed_targets.obj,
+fruit_graph.obj, and crevice_faces.txt (depth, container distance, target count,
+normal and group IDs). The Blender inspection script is
+bpy_scripts/inspect_crevice_faces.py. It imports OBJ with Y-forward/Z-up,
+which is required to preserve this pack's coordinates.
+
+12. Replace hull patches with surface-derived passage centers
+---------------------------------------------------------------
+The hull triangles are artificial bridging planes, not crevice surfaces. A
+target up to 16 cm behind a triangle could justify a patch far from the
+visible opening. They are useful as a diagnostic only and are disabled in the
+new local experiment (sphereHullFaces 0, sphereMouths 1).
+
+The outer hand mesh is the container; anything inside
+hand4.8m_inner12cm.obj is outside our objective. GenerateFieldTargets now
+rejects points inside the inner mesh. On x < -208 this removes 317 lattice
+points before sphere fitting.
+
+CreviceMouths.cpp instead starts with the remaining exposed, fruit-free
+crevice samples. For each sample it finds the nearest two fruit SDFs and their
+surface normals. It keeps pairs whose normals face each other (dot < -0.2),
+projects toward each surface, and uses the midpoint of those surface points
+as a passage center. The midpoint must be free of fruit and exclusion mesh,
+outside the inner mesh, and within 12 cm of the outer hand surface. Repeated
+centers are collapsed by fruit pair and 1.5 cm cell; short same-pair links
+form a graph of local grooves. This produces points in the visible seams,
+without long or remote triangles.
+
+The center-to-center surface distance estimates passage width. Centers at
+least 2*(smallest medium sphere radius - 0.2 cm) wide are potentially useful
+for medium spheres; this is only a width screen, not a full collision test.
+The sphere cover can multiply nearby volume-target weights by
+mouthTargetWeight and seed those targets first. Its normal collision and
+container checks still decide whether a sphere can be placed.
+
+Local test, 13 fruit whose world-space bounding-box center has x < -208:
+  - 1,690 fruit-free outer-shell targets, 558 distinct passage centers, 204
+    with estimated width >= 3.166 cm for the smallest medium sphere.
+  - Baseline with mouth guidance off: 108 spheres, 985/1690 volume targets
+    and 121/204 medium-width passage centers covered.
+  - mouthTargetWeight 2: 114 spheres, 1026/1690 targets, 144/204 centers.
+  - mouthTargetWeight 4: 117 spheres, 1022/1690 targets, 151/204 centers.
+  - mouthTargetWeight 8: 114 spheres, 1003/1690 targets, 148/204 centers.
+Weight 4 is the current local setting because it covers the most passage
+centers while retaining more overall target coverage than the baseline.
+The full run takes about 6 s on this subset. The remaining 53 medium-width
+centers form 32 spatial clusters at a 2.5 cm link distance (largest cluster
+has four centers). They are saved separately for visual inspection; width
+alone does not prove they are fillable without a more detailed collision
+search.
+
+Outputs in out_hand_mouth_x208: crevice_mouth_points.obj (all centers),
+crevice_mouth_medium_width.obj, crevice_mouth_medium_covered.obj,
+crevice_mouth_medium_uncovered.obj, crevice_mouth_graph.obj,
+crevice_mouth_points.txt (width, outer distance, fruit pair, source target),
+and sphere_cover.txt. bpy_scripts/inspect_crevice_mouths.py makes a Blender
+scene with separate collections for fruit, all centers, covered/uncovered
+medium-width centers, and wireframe spheres.
+
+13. Direct mouth coverage and tight sphere contacts
+---------------------------------------------------
+The previous mouth weight only marked the nearest lattice target, and 69 of
+the 387 medium-width centers in the wider field had no target within 2 cm.
+It did not reward a sphere for plugging those centers. Coverer now adds a
+direct gain for each uncovered mouth center inside a candidate sphere, keeps
+the covered state incrementally, and runs a global mouth-first greedy phase
+before the older local front-growth phase. Candidates are evaluated across
+all open centers and medium radii; local refinement improves the best one.
+
+Sphere-to-fruit and sphere-to-sphere overlap is limited to 0.2 cm absolute,
+and a new sphere must contact a fruit or an existing sphere within 0.15 cm.
+The coarse fruit SDF can err by several millimeters, so each accepted sphere
+is also checked against the actual fruit triangles. On the 13-fruit x < -208
+subset, the resulting spheres have nearest sphere gap >= -0.199 cm and
+nearest fruit mesh-vertex gap >= -0.194 cm; nearest contact gap <= 0.036 cm.
+
+Use radius 12 cm with 1 cm field voxels. A 12 cm radius with 0.4 cm voxels
+exceeds AdapDF's 16-voxel band and produces an invalid closing field. The
+12/1 field gives 4063 fruit-free outer-shell samples and 387 nominally
+medium-width mouth centers. With mouthGainWeight 6 and 14 candidate positions,
+109 spheres cover 3041/4063 samples and 336/387 centers in about 13 s total.
+For comparison, the stricter 0.2 cm overlap version without a mouth-first
+phase covered 2576/4063 samples and 251/387 centers. The remaining 51 open
+centers include cases that pass the two-fruit width estimate but may fail the
+full fruit, container, and already-placed-sphere checks. More candidate
+offsets alone are unlikely to resolve all of them.
+
+The tested configuration is configs/pack_hand_mouth_x208.cfg, and the debug
+output is out_hand_mouth_r12v1_gain14w6_x208. Blender scene and renders are
+under debug_crevice_faces_x208/gain14w6_r12. pack_hand.cfg uses the same
+packing parameters; its exclusion and inner-container meshes are retained.
+
+14. Reject low-gain front placements
+------------------------------------
+The front-growth and seed paths previously accepted any collision-valid
+candidate, even when Gain - Cost <= 0. Sphere #77 in the previous local run,
+at (-222.627, -49.788, -31.517), had radius 1.783 cm and covered only one
+new lattice target and zero medium-width mouths. Its unweighted gain was 1,
+versus cost 1.178, so the placement was counterproductive. It did contact two
+earlier spheres (gaps -0.082 and -0.050 cm) and a fruit (nearest sampled
+vertex gap 0.013 cm), but contact alone did not make it useful. Seeds and
+front growth now require strictly positive score. The corrected local run
+has 103 spheres instead of 109, covers 3045/4063 targets instead of 3041,
+and still covers 336/387 medium-width mouths. Nine candidate placement
+attempts were rejected for nonpositive gain. The corrected debug output is
+out_hand_mouth_r12v1_positive_x208 and the Blender scene is under
+debug_crevice_faces_x208/positive_r12.
+
+15. Audit the objective mismatch in the front phase
+---------------------------------------------------
+The spheres at (-245.299, -53.035, -51.977) and
+(-250.016, -42.814, -56.575) were both radius 1.783 cm. Each gained two
+lattice targets and zero medium-width crevice centers. Their nearest
+detected mouths were about 2.99 and 3.94 cm away. Both touched an earlier
+sphere at -0.05 cm gap, so collision/contact was not the failure. Their
+volume gain of 2 exceeded cost 1.178, allowing the front phase to keep them.
+
+An audit of every sphere in the positive-score run shows the systematic
+problem: the 55 mouth-first spheres gained 333 medium-width mouth centers;
+the next 48 front-growth spheres gained only three more, while 45 gained
+none. Those 45 gained 377 shrinkwrap lattice samples, so the front phase
+was optimizing a different objective. The 12 cm closing field contains
+1337/4063 samples farther than 2 cm from any detected mouth and 198 farther
+than 4 cm. These samples may represent open volume, but they are not proof
+of a useful medium-fruit crevice placement.
+
+The new optional sphereFrontRequireMouth setting requires each front-phase
+sphere to cover at least one previously uncovered medium-width mouth. On the
+same x < -208 subset it produces 59 spheres total, covering 337/387 mouths
+and 2694/4063 lattice samples. The two cited spheres are absent, and all
+four front-phase spheres gain a mouth. This prioritizes visible crevices
+over broad shrinkwrap volume. The tested output is
+out_hand_mouth_r12v1_mouthfront_x208 and the Blender scene is under
+debug_crevice_faces_x208/mouthfront_r12.
+
+16. Feasibility before and after packing; local repair
+------------------------------------------------------
+A 1 cm center grid over all radii found a legal, positive-score medium
+sphere covering 385/387 mouth centers before packing. After the 59-sphere
+mouth-focused pack, it found none for the 50 open centers. Candidate
+rejection counts for those 50 were 107003 fruit-SDF clearance, 6711
+container, and 2086 existing-sphere overlap, with zero legal positions.
+Thus the two-fruit width heuristic does not certify fit, but the main
+failure is greedy arrangement: most centers are individually fillable yet
+become blocked by earlier spheres that do not cover them. CSV diagnostics
+are sphere_open_mouth_feasibility_before.csv and _after.csv.
+
+A bounded local repair now searches a 1 cm grid around each open center,
+allows a candidate to replace at most two conflicting spheres, and accepts
+a swap only if the total number of covered mouth centers increases. It
+also checks that removing support spheres does not leave retained spheres
+without a fruit or sphere contact. On the local region, two one-for-one
+swaps raised coverage from 337/387 to 340/387 without increasing the 59
+spheres. The remaining 47 centers have no legal candidate on the same grid
+after repair. Overall lattice coverage is 2642/4063; this target count is
+intentionally lower than the volume-oriented cover because the objective
+now prioritizes visible crevices. The current Blender scene is under
+debug_crevice_faces_x208/mouthfront_repair_r12.
