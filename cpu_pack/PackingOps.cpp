@@ -12,6 +12,28 @@
 #include <cmath>
 #include <iostream>
 
+static void ErodeVox(Array3D8u &vox, unsigned n) {
+  Vec3u size = vox.GetSize();
+  for (unsigned iter = 0; iter < n; iter++) {
+    Array3D8u out;
+    out.Allocate(size, 0);
+    const int nb[6][3] = {{1,0,0},{-1,0,0},{0,1,0},{0,-1,0},{0,0,1},{0,0,-1}};
+    for (unsigned z = 0; z < size[2]; z++)
+      for (unsigned y = 0; y < size[1]; y++)
+        for (unsigned x = 0; x < size[0]; x++) {
+          if (!vox(x,y,z)) continue;
+          bool ok = true;
+          for (int ni = 0; ni < 6 && ok; ni++) {
+            int nx = int(x)+nb[ni][0], ny = int(y)+nb[ni][1], nz = int(z)+nb[ni][2];
+            if (nx<0||ny<0||nz<0||(unsigned)nx>=size[0]||(unsigned)ny>=size[1]||(unsigned)nz>=size[2]||!vox(nx,ny,nz))
+              ok = false;
+          }
+          out(x,y,z) = ok ? 1 : 0;
+        }
+    vox = out;
+  }
+}
+
 // from x y z index in convolved image to translation for fg mesh.
 Vec3f GetDisplacement(Vec3u gridIdx, float dx, Vec3u fgSize, Vec3f fgOrigin, Vec3f bgOrigin) {
   Vec3f dxVec(dx);
@@ -23,7 +45,8 @@ Vec3f GetDisplacement(Vec3u gridIdx, float dx, Vec3u fgSize, Vec3f fgOrigin, Vec
 
 // part is already rotated by the caller.
 bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos,
-              std::shared_ptr<AdapSDF> sdf, float factor, bool bgFftReady) {
+              std::shared_ptr<AdapSDF> sdf, float factor, bool bgFftReady,
+              unsigned erodeVoxels, bool overlapHeuristic, MeshConvo *itemsConv) {
   PROFILE_SCOPE("findspot.total");
   float dx = bg.dx;
 
@@ -33,6 +56,9 @@ bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos,
     PROFILE_SCOPE("findspot.fg_voxelize");
     fg.Voxelize(dx);
     ThreshInPlace(fg.vox, 1);
+    if (erodeVoxels > 0) {
+      ErodeVox(fg.vox, erodeVoxels);
+    }
   }
   const unsigned FFT_ALIGNMENT = 8;
   Vec3u bgSize = bg.GridSize();
@@ -52,6 +78,12 @@ bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos,
     fg.FFT(gridSize);
   }
 
+  // the heuristic's second convolution reuses the foreground FFT, so copy it
+  // before Dot overwrites it.
+  Array3D<std::complex<float>> fgFftItems;
+  if (overlapHeuristic && itemsConv) {
+    fgFftItems = fg.fft;
+  }
   {
     PROFILE_SCOPE("findspot.dot");
     Dot(bg.fft, fg.fft);
@@ -62,6 +94,14 @@ bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos,
     PROFILE_SCOPE("findspot.ifft");
     conv = IFFT(fg.fft);
   }
+  // overlap counts against fruit and the exclusion mesh only.
+  Array3Df convItems;
+  if (overlapHeuristic && itemsConv) {
+    PROFILE_SCOPE("findspot.items_conv");
+    Dot(itemsConv->fft, fgFftItems);
+    convItems = IFFT(fgFftItems);
+  }
+  const Array3Df &nbrConv = (overlapHeuristic && itemsConv) ? convItems : conv;
   Array3D8u collision;
   {
     PROFILE_SCOPE("findspot.quantize");
@@ -71,6 +111,9 @@ bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos,
   
   float highScore = score0;
   Vec3u bestPos(0);
+  // overlapHeuristic: best neighbor overlap count so far (voxels), -1 = none.
+  int bestOverlap = -1;
+  bool havePos = false;
 
   Vec3f meshCenter = fg.GetMeshCenter();
 
@@ -96,6 +139,29 @@ bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos,
         if (collision(x, y, z) > 0) {
           continue;
         }
+        if (overlapHeuristic) {
+          // conv holds the overlap voxel count at every displacement. a free
+          // position next to a heavily overlapping one touches a lot of bg.
+          float nbr = 0.0f;
+          if (x > fgSize[0] - 1) nbr = std::max(nbr, nbrConv(x - 1, y, z));
+          if (x + 1 < searchEnd[0]) nbr = std::max(nbr, nbrConv(x + 1, y, z));
+          if (y > fgSize[1] - 1) nbr = std::max(nbr, nbrConv(x, y - 1, z));
+          if (y + 1 < searchEnd[1]) nbr = std::max(nbr, nbrConv(x, y + 1, z));
+          if (z > fgSize[2] - 1) nbr = std::max(nbr, nbrConv(x, y, z - 1));
+          if (z + 1 < searchEnd[2]) nbr = std::max(nbr, nbrConv(x, y, z + 1));
+          const int overlap = int(std::lround(nbr));
+          // ties: min x first, then y, then z.
+          const bool better =
+              overlap > bestOverlap ||
+              (overlap == bestOverlap &&
+               (x < bestPos[0] || (x == bestPos[0] && (y < bestPos[1] || (y == bestPos[1] && z < bestPos[2])))));
+          if (better) {
+            bestOverlap = overlap;
+            bestPos = Vec3u(x, y, z);
+            havePos = true;
+          }
+          continue;
+        }
         Vec3f disp = GetDisplacement(Vec3u(x,y,z), dx, fgSize, fg.GetOrigin(), bg.GetOrigin());
         Vec3f coord = disp + meshCenter;
     
@@ -117,7 +183,7 @@ bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos,
 
   (void)debugSlice;
   (void)collSlice;
-  bool found = (highScore > score0);
+  bool found = overlapHeuristic ? havePos : (highScore > score0);
   if (found) {
     pos = GetDisplacement(bestPos, dx, fg.vox.GetSize(), fg.GetOrigin(), bg.GetOrigin());
   }
@@ -284,7 +350,10 @@ bool FindSpotSubgrid(MeshConvo &bg,
                      float cellSize,
                      unsigned cellIdx,
                      Vec3u numCells,
-                     SubgridBgCache *cache) {
+                     SubgridBgCache *cache,
+                     unsigned erodeVoxels,
+                     bool overlapHeuristic,
+                     MeshConvo *itemsBg) {
   PROFILE_SCOPE("findspot_subgrid.total");
   Box3f itemBox = ComputeBBox(part.v);
   Vec3f itemExtent = itemBox.vmax - itemBox.vmin;
@@ -392,6 +461,7 @@ bool FindSpotSubgrid(MeshConvo &bg,
         PROFILE_SCOPE("findspot_subgrid.bg_fft_cached");
         tempConv.FFT(gridSize);
       }
+      cache->itemsValid = false;
       cache->cellIdx = int(cellIdx);
       cache->bgVersion = bg.version;
       cache->voxMin = voxMin;
@@ -400,8 +470,34 @@ bool FindSpotSubgrid(MeshConvo &bg,
     }
   }
 
+  // items-only crop of the same region, cached under the same key as tempConv.
+  MeshConvo *itemsConvPtr = nullptr;
+  if (overlapHeuristic && itemsBg != nullptr && cache != nullptr) {
+    if (!cacheHit || !cache->itemsValid) {
+      PROFILE_SCOPE("findspot_subgrid.items_crop_fft");
+      Array3D8u itemsVox;
+      itemsVox.Allocate(subSize, 0);
+      for (unsigned z = 0; z < subSize[2]; z++)
+        for (unsigned y = 0; y < subSize[1]; y++)
+          for (unsigned x = 0; x < subSize[0]; x++)
+            itemsVox(x, y, z) = itemsBg->vox((unsigned)(voxMin[0] + (int)x),
+                                              (unsigned)(voxMin[1] + (int)y),
+                                              (unsigned)(voxMin[2] + (int)z));
+      cache->itemsConv = MeshConvo();
+      cache->itemsConv.box = tempConv.box;
+      cache->itemsConv.vox = itemsVox;
+      cache->itemsConv.dx = dx;
+      const unsigned FFT_ALIGNMENT = 8;
+      Vec3u itemsGridSize = PadSizes(subSize, FFT_ALIGNMENT);
+      cache->itemsConv.FFT(itemsGridSize);
+      cache->itemsValid = true;
+    }
+    itemsConvPtr = &cache->itemsConv;
+  }
+
   Vec3f foundPos;
-  bool found = FindSpot(tempConv, *partPtr, foundPos, sdf, factor, cache != nullptr);
+  bool found = FindSpot(tempConv, *partPtr, foundPos, sdf, factor, cache != nullptr, erodeVoxels,
+                         overlapHeuristic, itemsConvPtr);
   if (!found) {
     return false;
   }

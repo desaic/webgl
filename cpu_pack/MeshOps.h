@@ -15,3 +15,7 @@ Matrix3f RotationMatrixRad(float rx, float ry, float rz);
 void TransformVerts(const std::vector<float> &verts, std::vector<float> &dst, const Matrix3f mat);
 
 void VoxelizeMesh(const TrigMesh &m, Array3D8u &grid, VoxConf conf);
+
+// Returns the inner offset surface of mesh at the given offset distance,
+// computed via SDF marching cubes. h is the voxel size for SDF computation.
+TrigMesh ComputeInnerSurface(TrigMesh &mesh, float h, float offset);

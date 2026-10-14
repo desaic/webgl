@@ -26,6 +26,42 @@ Vec3i roundf(const Vec3f &fvec) {
   return Vec3i(std::round(fvec[0]), std::round(fvec[1]), std::round(fvec[2]));
 }
 
+// separable 1-voxel erosion along each axis: 3 passes, each shrinks by 1 on
+// both sides of that axis. boundary voxels (no neighbor on one side) are
+// always cleared, so the result is 2 voxels smaller per axis end-to-end.
+static void ErodeBgVox(Array3D8u &vox) {
+  Vec3u size = vox.GetSize();
+  if (size[0] < 3 || size[1] < 3 || size[2] < 3) return;
+  Array3D8u tmp;
+
+  // X pass
+  tmp.Allocate(size, 0);
+  for (unsigned z = 0; z < size[2]; z++)
+    for (unsigned y = 0; y < size[1]; y++)
+      for (unsigned x = 1; x + 1 < size[0]; x++)
+        if (vox(x,y,z) && vox(x-1,y,z) && vox(x+1,y,z))
+          tmp(x,y,z) = 1;
+  vox = std::move(tmp);
+
+  // Y pass
+  tmp.Allocate(size, 0);
+  for (unsigned z = 0; z < size[2]; z++)
+    for (unsigned y = 1; y + 1 < size[1]; y++)
+      for (unsigned x = 0; x < size[0]; x++)
+        if (vox(x,y,z) && vox(x,y-1,z) && vox(x,y+1,z))
+          tmp(x,y,z) = 1;
+  vox = std::move(tmp);
+
+  // Z pass
+  tmp.Allocate(size, 0);
+  for (unsigned z = 1; z + 1 < size[2]; z++)
+    for (unsigned y = 0; y < size[1]; y++)
+      for (unsigned x = 0; x < size[0]; x++)
+        if (vox(x,y,z) && vox(x,y,z-1) && vox(x,y,z+1))
+          tmp(x,y,z) = 1;
+  vox = std::move(tmp);
+}
+
 unsigned PackingScene::Put(unsigned itemIdx, const RigidTransform &tran) {
   PROFILE_SCOPE("put.total");
   TrigMesh inst = MakeTransformedMesh(items[itemIdx].mesh, tran);
@@ -43,10 +79,16 @@ unsigned PackingScene::Put(unsigned itemIdx, const RigidTransform &tran) {
   vox.Allocate(conf.gridSize, 0);
   VoxelizeMesh(inst, vox, conf);
   FloodOutside8u(vox, 1, 2);
+  if (itemIdx != exclusionItemIndex) {
+    ErodeBgVox(vox);
+  }
 
   // e.g. if item origin is same as world origin, then offset is 0.
   Vec3i offset = roundf((1.0f / dx) * (conf.origin - WorldOrigin()));
   Union(bg, offset, vox);
+  if (!itemsBg.vox.GetData().empty()) {
+    Union(itemsBg, offset, vox);
+  }
 
   unsigned instId = instances.size();
   if (placed.size() != items.size()) {
@@ -95,10 +137,15 @@ void PackingScene::InitDataStructures() {
   }
   // SDF must be computed before reversing the container winding, since
   // AdapSDF bakes its sign convention from the original outward normals.
+  Utils::Stopwatch initClock;
+  initClock.Start();
   ComputeContainerSDF();
+  LOGI("init: container sdf " << initClock.ElapsedMS() / 1000.0 << " s\n");
   ReverseWinding(container.mesh);
   InitContainerGrids();
+  LOGI("init: container grids " << initClock.ElapsedMS() / 1000.0 << " s\n");
   InitRigidBodies();
+  LOGI("init: rigid bodies " << initClock.ElapsedMS() / 1000.0 << " s\n");
 
   for (size_t i = 0; i < items.size(); i++) {
     items[i].mesh.ComputeTrigNormals();
@@ -118,6 +165,10 @@ void PackingScene::InitDataStructures() {
 
 void PackingScene::InitRigidBodies() {
   for (size_t i = 0; i < items.size(); i++) {
+    // the exclusion mesh is an obstacle at its authored world position. moving
+    // it into its own inertia frame would shift it by its center of mass and
+    // leave the real exclusion region empty.
+    if (i == exclusionItemIndex) continue;
     auto &item = items[i];
     item.rb.ToInertiaFrame(item.mesh);
   }
@@ -1518,7 +1569,7 @@ static bool ReadMatrix3f(std::istream &in, Matrix3f &m) {
 }
 
 void LoadPack(PackingScene &scene, const std::string &packFile) {
-  PROFILE_SCOPE("loadpack.total");
+  PROFILE_SCOPE("loadpack.total");  
   std::ifstream in(packFile);
   if (!in.good()) {
     return;
@@ -1527,6 +1578,8 @@ void LoadPack(PackingScene &scene, const std::string &packFile) {
   // Initialize placed vector with empty vectors for each item
   scene.placed.resize(scene.items.size());
 
+  std::cout << "Load pack" << std::endl << "\n";
+  
   std::string line;
   while (std::getline(in, line)) {
     std::istringstream iss(line);
@@ -1603,9 +1656,14 @@ void PackingScene::SaveTrajectories(const std::string &filename) const {
 }
 
 void PackingScene::SaveInstances(const std::string &packFile) const {
+  unsigned count = 0;
+  for (const auto &inst : instances) {
+    if (!inst.isExclusion) count++;
+  }
   std::ofstream out(packFile);
-  out << instances.size() << "\n";
+  out << count << "\n";
   for (size_t i = 0; i < instances.size(); i++) {
+    if (instances[i].isExclusion) continue;
     const auto &item = items[instances[i].itemId];
     std::string name = item.name;
     RigidTransform tran = instances[i].tran;

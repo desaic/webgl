@@ -113,6 +113,7 @@ std::string MeshStat::toString() const {
       << " " << box.vmax[0] << " " << box.vmax[1] << " " << box.vmax[2];
   Vec3f boxSize = box.vmax - box.vmin;
   oss << " size " << boxSize[0] << " " << boxSize[1] << " " << boxSize[2];
+  oss << " radius " << radius;
   return oss.str();
 }
 
@@ -127,6 +128,21 @@ void MeshStat::Parse(std::istream &in) {
   in >> token;
   Vec3f size;
   in >> size[0] >> size[1] >> size[2];
+  // older stats files end here and leave radius < 0.
+  if (in >> token && token == "radius") {
+    in >> radius;
+  }
+}
+
+/// radius of the sphere centered at the bounding box center that holds every
+/// vertex.
+static float BoundingSphereRadius(const TrigMesh &mesh, const Box3f &box) {
+  const Vec3f center = (box.vmin + box.vmax) * 0.5f;
+  float r2 = 0.0f;
+  for (size_t i = 0; i < mesh.GetNumVerts(); i++) {
+    r2 = std::max(r2, (mesh.GetVertex(unsigned(i)) - center).norm2());
+  }
+  return std::sqrt(r2);
 }
 
 static bool IsMeshExt(const fs::path &p) {
@@ -164,6 +180,7 @@ void ComputeMeshStats(const std::string &meshDir) {
     MeshStat stat;
     stat.name = p.stem().string();
     stat.box = ComputeBBox(mesh.v);
+    stat.radius = BoundingSphereRadius(mesh, stat.box);
     out << stat.toString() << "\n";
   }
   out.close();
@@ -195,6 +212,31 @@ unsigned GetGroupIndex(float len, const std::vector<float> &thresh) {
   return unsigned(thresh.size());
 }
 
+void SaveSizeGroups(const std::string &meshDir, const std::string &path) {
+  const std::vector<MeshStat> stats = LoadMeshStats(meshDir);
+  std::map<std::string, float> diameter;
+  for (const MeshStat &s : stats) {
+    diameter[s.name] = s.radius >= 0.0f ? 2.0f * s.radius : (s.box.vmax - s.box.vmin).norm();
+  }
+  const PackingPlan plan = PlanPackingSteps(meshDir);
+  const char *labels[] = {"large", "medium large", "medium small", "small", "tiny"};
+  const char *ranges[] = {"> 25", "14 to 25", "8 to 14", "4 to 8", "<= 4"};
+  std::ofstream out(path);
+  out << "# size groups by bounding sphere diameter (cm), sphere centered at the bounding box center\n";
+  for (size_t g = 0; g < plan.groups.size(); g++) {
+    out << "\ngroup " << g << " " << (g < 5 ? labels[g] : "") << " (diameter " << (g < 5 ? ranges[g] : "") << " cm), "
+        << plan.groups[g].size() << " meshes\n";
+    for (const std::string &name : plan.groups[g]) {
+      // the stem is what stats.txt stores; recover the actual file name.
+      std::string file = name + ".obj";
+      if (!fs::exists(fs::path(meshDir) / file)) {
+        file = name + ".stl";
+      }
+      out << file << " " << diameter[name] << "\n";
+    }
+  }
+}
+
 PackingPlan PlanPackingSteps(const std::string &meshDir) {
   std::vector<MeshStat> stats = LoadMeshStats(meshDir);
   LOGI("loaded " << stats.size() << " stats\n");
@@ -202,17 +244,25 @@ PackingPlan PlanPackingSteps(const std::string &meshDir) {
     return PackingPlan();
   }
 
-  // >20 large, medium large, medium small, small, tiny
+  // by bounding sphere diameter: >25 large, medium large, medium small, small, tiny
   std::vector<float> SIZE_THRESH = {25, 14, 8, 4};
 
   PackingPlan plan;
   plan.groups.resize(SIZE_THRESH.size() + 1);
 
-  // one pass: assign to a group and remember the extent for sorting.
+  // one pass: assign to a group and remember the size for sorting. size is the
+  // bounding sphere diameter (sphere centered at the bounding box center).
   std::map<std::string, float> nameToLen;
   for (size_t i = 0; i < stats.size(); i++) {
-    Vec3f diagonal = stats[i].box.vmax - stats[i].box.vmin;
-    float len = diagonal.norm();
+    float len;
+    if (stats[i].radius >= 0.0f) {
+      len = 2.0f * stats[i].radius;
+    } else {
+      // stats.txt without a radius: rerun with computeStats 1. the box
+      // diagonal overestimates a round fruit's diameter by up to 1.7x.
+      LOGI("stats for " << stats[i].name << " have no radius, using box diagonal\n");
+      len = (stats[i].box.vmax - stats[i].box.vmin).norm();
+    }
     nameToLen[stats[i].name] = len;
     unsigned gid = GetGroupIndex(len, SIZE_THRESH);
     plan.groups[gid].push_back(stats[i].name);
@@ -241,15 +291,17 @@ PackingPlan PlanPackingSteps(const std::string &meshDir) {
     step.names = plan.groups[g];
     step.count = LARGE_INT;
     if (g == 2) {
-      // group[2] (10-6cm) is all bigger than 6cm, so it can nestle onto the
-      // shrinkwrap surface of the larger tiers already placed instead of
-      // just the container wall. Coarser grid than the crevice steps'
-      // default (3cm radius, 1cm voxels vs 1cm/0.2cm) since every fruit
-      // here is at least 6cm -- no need for berry-scale resolution, and it
-      // keeps the dense field affordable at this size.
-      step.useShrinkwrapSurfacePoints = true;
-      step.shrinkwrapRadius = 3.0f;
+      // 8-14cm box-diagonal fruits bridge patches of the fixed larger-fruit
+      // pack. The broad 12cm sweep is only for discovering additional mouths;
+      // its points still need support and fit checks before placement.
+      step.kind = StepKind::MediumPatch;
+      // A previous medium pass added 3,602 fruits and still left open gaps.
+      step.count = 4000;
+      step.shrinkwrapRadius = 6.0f;
       step.shrinkwrapVoxelSize = 1.0f;
+      // The inner mesh is only a density preference at this tier. Keep the
+      // actual container and configured exclusion mesh as hard constraints.
+      step.useInnerContainer = false;
     }
     plan.steps.push_back(step);
   }
@@ -263,12 +315,14 @@ PackingPlan PlanPackingSteps(const std::string &meshDir) {
     PackingStep creviceMed;
     creviceMed.kind = StepKind::Crevice;
     creviceMed.names = plan.groups[plan.groups.size() - 2];
+    creviceMed.useInnerContainer = true;
     plan.steps.push_back(creviceMed);
   }
   if (!plan.groups.empty()) {
     PackingStep creviceSmall;
     creviceSmall.kind = StepKind::Crevice;
     creviceSmall.names = plan.groups.back();
+    creviceSmall.useInnerContainer = true;
     plan.steps.push_back(creviceSmall);
   }
 

@@ -12,6 +12,7 @@ enum class StepKind {
   Bulk,     // PackStep: force/gravity-driven placement.
   Crevice,  // PackFillCrevices: small fruit resting on this step's own
             // crevice baseline (names is the small-fruit kind list).
+  MediumPatch, // Cover fixed 6/12cm support-fruit shrinkwrap patches.
 };
 
 struct PackingStep {
@@ -41,8 +42,18 @@ struct PackingStep {
     // container. Uses this step's own shrinkwrapRadius/shrinkwrapVoxelSize.
     bool useShrinkwrapSurfacePoints = false;
 
+    // voxels to erode from the item footprint before FindSpot FFT.
+    // 1 means ~2 voxels smaller per axis (1 removed from each side).
+    unsigned erodeVoxels = 0;
+    // Bulk only: settle toward the container interior (against the container
+    // SDF gradient, no force bias), whatever outwards says for spot search.
+    bool nudgeInward = false;
+    // FindSpot picks the free position next to the largest convolution
+    // overlap (min xyz on ties) instead of the sdf/position score.
+    bool overlapHeuristic = false;
+
     StepKind kind = StepKind::Bulk;
-    // Used by StepKind::Crevice, and by Bulk when useShrinkwrapSurfacePoints
+    // Used by StepKind::Crevice and MediumPatch, and by Bulk when useShrinkwrapSurfacePoints
     // is set. Independent per step so a bigger-fruit step can use a coarser
     // grid than a small-fruit one -- keeps the dense shrinkwrap field
     // affordable as fruit/container size grows.
@@ -72,8 +83,11 @@ struct MeshStat {
     std::string type;
     std::string name;
     Box3f box;
+    /// bounding sphere radius about the bounding box center: the farthest
+    /// vertex distance. < 0 when stats.txt predates it. decides the size group.
+    float radius = -1.0f;
 
-    /// max side of the bounding box. decides the size group.
+    /// max side of the bounding box.
     float MaxExtent() const;
 
     std::string toString() const;
@@ -92,3 +106,7 @@ unsigned GetGroupIndex(float len, const std::vector<float> &thresh);
 
 /// groups meshes by size and builds the ordered list of packing steps.
 PackingPlan PlanPackingSteps(const std::string &meshDir);
+
+/// writes the size groups PlanPackingSteps builds: one section per group with
+/// the mesh file names (largest first) and each bounding sphere diameter.
+void SaveSizeGroups(const std::string &meshDir, const std::string &path);

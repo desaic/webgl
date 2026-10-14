@@ -48,6 +48,12 @@ void SavePlacementTimer(const PlacementTimer &timer, const std::string &filename
 void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig &cfg,
               const std::vector<Vec3f> &surfacePoints = {}, PlacementTimer *timer = nullptr);
 
+/// Bounded, coverage-driven placement of the 8-14cm medium-small tier on a
+/// frozen large/medium-large support pack. Retains the configured exclusion
+/// obstacle and uses the actual container for containment.
+void PackMediumPatches(PackingScene &scene, const PackingStep &step,
+                       const PackingConfig &cfg, PlacementTimer *timer = nullptr);
+
 /// prepares the background, optionally resumes from a pack file,
 /// then runs plan steps starting at cfg.startStep.
 void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig &cfg);

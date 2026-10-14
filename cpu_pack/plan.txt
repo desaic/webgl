@@ -4,6 +4,168 @@ PACKING IMPROVEMENT PLAN
 Goal: combine the pieces that already exist into one loop with feedback,
 instead of a straight line of independent passes.
 
+MEDIUM DIVIDE-AND-CONQUER SAMPLE STRATEGY (2026-10-07)
+----------------------------------------------------
+Keep the fixed-support shrinkwrap and target mask global. Export target
+position, normal, clearance, wrap radius, and initial coverage before any
+fruit is placed. Build a local surface graph between nearby samples only
+when wrap radius matches, normals agree, and the connection lies mostly in
+both tangent planes. This rejects common shortcuts between nearby surfaces.
+Choose a deterministic maximal geodesic Poisson
+subset at 0.7 times the median eligible medium-fruit box diagonal (about
+7.76cm for this hand pack's 11.09cm median). Every original sample is then
+within one spacing of a graph node.
+Assign original samples to nearest nodes by graph distance. Connect two
+nodes when their graph-Voronoi regions touch; retain the surface path,
+geodesic length, and each node's owned-sample count and neighbors.
+
+Use windows 10 fruit diameters wide (about 111cm here) with stride
+9 diameters, giving one diameter (about 11cm) of overlap. Core ownership is
+disjoint, while the half-diameter halo on every side supplies neighboring
+targets and collision context. Process cores with the most uncovered owned
+samples first; commit placements only for targets owned by that core and
+always check collisions against the full, current pack. Recompute coverage
+globally after each core and reconcile open graph paths across adjacent
+cores. The debug export selects the core with most initially uncovered raw
+samples and writes raw/resampled points, graph paths, boxes, node/edge CSV,
+and a manifest for inspection before changing the placement loop itself.
+
+MEDIUM PATCH PLACEMENT CHECK (2026-10-07)
+----------------------------------------
+Step 3 now samples the 6cm and 12cm wraps of the fixed >14cm fruit tier
+on a 1cm grid, requires a raw-surface gap and at least two nearby support
+fruits, and greedily places 8-14cm fruits for target coverage. The configured
+exclusion mesh remains a hard obstacle; the inner mesh is not enforced at
+this tier.
+The cap is 4,000 new fruits, 25,000 target attempts, and one hour. Every
+accepted fruit logs attempt time, settling time, cumulative time, and
+coverage. A saved test from pack_step3_filtered.txt added 4,000 fruits
+(2,181 to 6,181) in 256s for the medium step, including 110s target setup;
+whole-program wall time was about 310s. Covered target samples increased
+from 10,157 to 38,623 of 60,633. The 4,000-fruit cap was reached, so the
+remaining samples do not by themselves prove that the gaps are unfillable.
+The smoke config and output are pack_hand_medium_smoke.cfg and
+out_hand_medium_patch_smoke. No medium-fruit removal is implemented yet.
+
+MULTI-SCALE CREVICE DETECTION EXPERIMENT
+-------------------------------------
+The small-radius shrinkwrap follows the walls of large holes, so those
+holes disappear from the surface-gap mask. Raising a spot-width cutoff
+cannot recover them. Before medium-fruit graph refinement, inspect several
+larger-radius hulls against the same fixed large/medium-large pack.
+
+Implemented debug experiment: cpu_pack --debug-crevice-sweep loads
+pack_filtered_step2.txt and exports radii 3, 6, 12cm at voxel size 1cm to
+crevice_radius_sweep beside the pack. This is a coarser grid than the
+previous 0.5cm export (larger voxels, fewer cells). Reuse one raw distance
+field built for the largest radius; skip baseline voxel-to-spot attribution
+when only exporting diagnostics. Never silently exceed the distance band.
+Each radius retains its own hull, candidate surface patches, patches more
+than one voxel outside the 3cm hull, and the existing detector's points.
+Patch surface clearance and area are distinct from spot radius: the latter
+measures the thin mask's thickness, not the hole's physical opening size.
+These are inspection candidates, not approved placements. Container
+centroid filtering is coarse; support around patch boundaries still needs
+validation so a large wrap cannot create bridges across unrelated fingers.
+
+For the medium fill stage, retain targets from every useful scale, merge
+overlapping patches, and cover patch interiors as well as graph edges.
+Do not let a smaller-radius wrap erase a larger-radius opening target.
+Measured on the 1103-instance pack: 132.4s shared setup, 197.1s total.
+  radius 3cm:   81,210 cm2 candidate patch area; 1,926 detector points.
+  radius 6cm:  143,761 cm2 candidate patch area; 5,474 detector points.
+  radius 12cm: 183,483 cm2 candidate patch area; 6,850 detector points.
+Outside-container candidate area rejected rises from 43 to 1,554 to
+12,269 cm2, illustrating why the largest radius needs tighter validation.
+These are surface-area diagnostics, not hole counts or achieved fill.
+Blender inspection: 3cm mostly follows seams; 6cm bridges broader gaps;
+12cm covers broad regions. Proposed next placement experiment: use 6cm
+as the main scale and retain 12cm patches for large openings, with boundary
+support checks. The pack remains the same fixed baseline for all radii.
+bpy_scripts/inspect_crevice_sweep.py creates a .blend with four scenes
+(original, 3, 6, 12cm) and matching PNGs; full hulls and new-vs-3 patches
+are hidden overlays. Raw OBJ/CSV outputs live in crevice_radius_sweep.
+
+Fine small-fruit work is deferred to overlapping spatial voxel chunks:
+give each chunk a halo sufficient for closing, erosion, and candidate
+support; commit ownership only in its core, reconcile duplicate targets
+and cross-chunk fruit contacts, and compare against a monolithic reference
+on a small scene before relying on the divide-and-conquer path.
+
+PLANNED STEP: GLOBAL MEDIUM-FRUIT REFINEMENT (2026-10-06)
+-------------------------------------------------------
+Insert after the existing medium-fruit placement step and before the
+smaller-fruit crevice passes. This is a joint refinement of the medium
+layer: move/rotate existing medium fruits, spawn additional medium fruits,
+and optionally remove unhelpful ones. Optimize coverage across the graph,
+rather than accepting isolated one-fruit nudges independently.
+This section describes a new step to implement, not existing behavior;
+historical phase numbers and status entries below remain as recorded.
+
+1. Fixed support and crevice baseline.
+   Keep large fruits fixed. Treat the medium-large tier as fixed support
+   too for this step; the medium tier is the editable/spawnable tier.
+   Build the shrinkwrap from the large and medium-large fruits only.
+   Set shrinkwrap radius to approximately 0.5 * the smallest eligible
+   medium fruit's size. Proposed size convention: mesh MaxExtent (the
+   length used for tier assignment), so this is half a full extent, not
+   half a fruit radius. Expose the multiplier for tuning and log the
+   resulting physical radius. Use a voxel size fine enough to resolve
+   that radius and verify the distance-field band supports it.
+   Crevices are patches ON the shrinkwrap skin that bridge a gap between
+   support surfaces, separated from the raw fruit surfaces beyond the
+   voxel/error tolerance. A lone convex fruit flank is not a crevice;
+   neither is arbitrary empty volume behind the skin. Reuse the
+   shrinkwrap-surface field machinery, with this step's support set and
+   radius. Freeze these target patches throughout refinement so medium
+   fruits cannot manufacture new targets by being added or moved.
+
+2. Connect the medium fruits into a spatial graph.
+   Nodes are existing medium-fruit instances. Associate each with the
+   baseline crevice patches it overlies. Proposed edge rule: connect local
+   neighbors along the same connected crevice patch; reject shortcuts
+   through support fruit, outside the container, or across unrelated
+   surfaces. Store the actual crevice-surface path for each edge, rather
+   than using the straight center-to-center segment as the fill target.
+   Cover branches and exposed ends of each patch as well. A patch with
+   no medium node needs a seed placement; a patch with only one node must
+   still expose its remaining uncovered paths as targets.
+
+3. Cover every graph edge with appropriately sized medium fruits.
+   Measure the union of medium-fruit coverage along each edge path and
+   find all uncovered intervals. Choose eligible medium kinds and poses
+   based on the local gap, footprint, and available clearance; spawn a
+   chain as needed until the whole edge is covered, with no gaps beyond
+   a stated sampling/geometry tolerance. Use actual transformed geometry
+   to validate coverage, overlap, and containment, not center spacing or
+   bounding-sphere overlap alone. Fruits bridge the crevice mouth; they
+   need not fit inside the cavity underneath it.
+   Jointly relax neighboring medium fruits and new candidates while all
+   support fruits stay fixed. Evaluate and accept a batch against total
+   baseline coverage and physical validity. Split/update graph edges as
+   nodes are inserted or moved without losing their original target paths.
+
+4. Allow removal of unhelpful medium fruits.
+   A medium fruit that overlies no baseline crevice is eligible for
+   removal, not automatically deleted. Evaluate removal together with
+   neighboring moves/replacements; preserve valid placement and avoid
+   reopening covered edge intervals. Prefer fewer fruits when crevice
+   coverage is equivalent. Recompute graph adjacency and coverage after
+   accepted changes, always against the same fixed target patches.
+
+5. Iterate and report.
+   Alternate graph-wide move/spawn/remove proposals until all target
+   paths are covered or improvement/attempt budgets are exhausted.
+   If no eligible medium geometry can close an interval without invalid
+   overlap or leaving the container, report that interval as unresolved;
+   do not silently drop the edge or claim gap-free coverage.
+   Report before/after crevice area covered, uncovered edge length and
+   largest remaining gap, medium counts moved/added/removed, and runtime.
+   Verify unchanged support poses, valid collisions/containment, a chain
+   needing multiple insertions, removable off-crevice fruit, branched and
+   unseeded patches, and a genuinely unfillable edge. Then compute fresh
+   baselines for the subsequent smaller-fruit passes from the refined pack.
+
 PHASE 3 FIXED CREVICE SET (current procedure, per user):
   1. After Phase 1, compute the crevice field ONCE (ComputeCreviceBaseline):
      cleaned VoidField mask + spots, keep spots with width 0.2-3cm (S0).

@@ -5,6 +5,8 @@
 #include "PackingDriver.h"
 
 #include <string>
+#include <utility>
+#include <vector>
 
 /// one-off helpers kept out of main.cpp. not part of the packing pipeline.
 
@@ -117,4 +119,29 @@ void DebugCreviceCoverage(const PackingConfig &cfg, size_t numBaseInstances,
 /// <outputFolder>/shrinkwrap_debug.obj and
 /// <outputFolder>/crevice_baseline_spots_debug.obj, plus the same M1
 /// bucket histogram DebugVoidSpots prints.
-void DebugCreviceSpots(const PackingConfig &cfg, const CreviceFieldParams &fp);
+/// saveItemMeshes optionally writes item_meshes.obj for overlay inspection.
+void DebugCreviceSpots(const PackingConfig &cfg, const CreviceFieldParams &fp,
+                       bool saveItemMeshes = true);
+
+/// Standalone multi-radius inspection: shared raw field, per-radius hull,
+/// candidate mouth patches, patches outside the smallest hull, and spot OBJs.
+/// Writes sweep.csv; no placement or expensive baseline voxel attribution.
+/// Radii must ascend and fit the distance-field band at the supplied voxel size.
+bool DebugCreviceRadiusSweep(const PackingConfig &cfg,
+                             const std::vector<float> &radii, float voxelSize);
+
+/// loads packFile and trajFile, removes instances whose voxels overlap the
+/// cfg exclusion mesh by more than overlapThresh (0..1), and writes
+/// pack_filtered.txt and traj_filtered.txt to cfg.OutputFolder().
+void FilterPackFromIndex(const PackingConfig &cfg,
+                         const std::string &packFile,
+                         const std::string &trajFile,
+                         const std::vector<std::pair<std::string,float>> &obstacles,
+                         int fromLine,
+                         const std::string &outPackSuffix,
+                         const std::string &outTrajSuffix);
+
+void FilterPackByExclusion(const PackingConfig &cfg,
+                           const std::string &packFile,
+                           const std::string &trajFile,
+                           float overlapThresh = 0.1f);

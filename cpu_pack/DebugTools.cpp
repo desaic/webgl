@@ -1,6 +1,9 @@
 #include "DebugTools.h"
 
 #include "AdapSDF.h"
+#include "FastSweep.h"
+#include "FloodOutside.h"
+#include "GridUtils.h"
 #include "MarchingCubes.h"
 #include "MeshOps.h"
 #include "PackShrinkWrap.h"
@@ -11,10 +14,141 @@
 #include "meshutil.h"
 
 #include <algorithm>
+#include <chrono>
+#include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <sstream>
 
 namespace fs = std::filesystem;
+
+bool DebugCreviceRadiusSweep(const PackingConfig &cfg,
+                             const std::vector<float> &radii, float voxelSize) {
+  using Clock = std::chrono::steady_clock;
+  const auto start = Clock::now();
+  auto seconds = [](auto since) {
+    return std::chrono::duration<double>(Clock::now() - since).count();
+  };
+  if (radii.empty() || !std::isfinite(voxelSize) || voxelSize <= 0) return false;
+  for (size_t i = 0; i < radii.size(); ++i) {
+    if (!std::isfinite(radii[i]) || radii[i] <= 0 ||
+        std::max(2.0f, radii[i] / voxelSize) + 2 > AdapDF::MAX_BAND ||
+        (i && radii[i] <= radii[i - 1])) {
+      std::cerr << "sweep radii must ascend and fit the distance-field band\n";
+      return false;
+    }
+  }
+  PackingScene scene;
+  if (!BuildScene(scene, cfg)) return false;
+  PrepareBackground(scene, cfg);
+  LoadPack(scene, cfg.ResumePackPath());
+  if (scene.instances.empty()) return false;
+  fs::create_directories(cfg.OutputFolder());
+  std::ofstream report(cfg.OutputFolder() + "sweep.csv");
+  if (!report) return false;
+  report << "radius_cm,voxel_cm,hull_triangles,patch_triangles,patch_area_cm2,"
+            "outside_smallest_hull_area_cm2,outside_container_area_cm2,"
+            "max_surface_clearance_cm,spots,seconds\n";
+
+  // Build once at the maximum band/padding; every radius uses this same grid.
+  VoidField largest;
+  largest.voxelSize = voxelSize;
+  Array3D<short> raw;
+  std::cout << "sweep: building shared raw field at radius " << radii.back() << "\n";
+  ComputeShrinkWrapDistField(scene, radii.back(), voxelSize, largest.dist,
+                            largest.origin, largest.distUnit, &raw);
+  if (raw.GetData().empty()) return false;
+  const double setupSeconds = seconds(start);
+  std::cout << "sweep: setup " << setupSeconds << " s; grid "
+            << raw.GetSize()[0] << "x" << raw.GetSize()[1] << "x"
+            << raw.GetSize()[2] << "\n";
+  Array3D<short> smallest;
+  for (size_t ri = 0; ri < radii.size(); ++ri) {
+    const auto roundStart = Clock::now();
+    const float radius = radii[ri];
+    std::ostringstream label;
+    label << "r" << radius << "_dx" << voxelSize;
+    const std::string prefix = cfg.OutputFolder() + label.str();
+    VoidField closed;
+    closed.origin = largest.origin;
+    closed.voxelSize = voxelSize;
+    closed.distUnit = largest.distUnit;
+    closed.dist = ri + 1 == radii.size() ? std::move(largest.dist) :
+        CloseShrinkwrapField(raw, voxelSize, radius, closed.distUnit);
+    if (ri == 0) smallest = closed.dist;
+    TrigMesh hull = ComputeShrinkWrapMesh(closed.dist, closed.origin,
+                                        voxelSize, closed.distUnit);
+    const size_t hullCount = hull.GetNumTrigs();
+    if (!hullCount) return false;
+    SaveShrinkWrapMesh(hull, prefix + "_hull.obj");
+
+    // Surface patches, not blobs of bulk interior. A triangle's centroid must
+    // stand off actual fruit by >1.1 voxels. These are candidates: multi-fruit
+    // support at their boundaries still needs checking before actual filling.
+    std::vector<size_t> patchIds, newIds;
+    double area = 0, newArea = 0, outsideArea = 0;
+    float maxClearance = 0;
+    for (size_t ti = 0; ti < hullCount; ++ti) {
+      const Triangle tri = hull.GetTriangleVerts(ti);
+      const Vec3f p = (tri[0] + tri[1] + tri[2]) * (1.0f / 3.0f);
+      const float clearance = SampleDistField(raw, closed.origin, voxelSize,
+                                              closed.distUnit, p);
+      if (clearance <= 1.1f * voxelSize) continue;
+      const double triArea = hull.GetArea(unsigned(ti));
+      if (scene.sdf->GetCoarseDist(p) > 0) {
+        outsideArea += triArea;
+        continue;
+      }
+      patchIds.push_back(ti);
+      area += triArea;
+      maxClearance = std::max(maxClearance, clearance);
+      if (ri && SampleDistField(smallest, closed.origin, voxelSize,
+                               closed.distUnit, p) > voxelSize) {
+        newIds.push_back(ti);
+        newArea += triArea;
+      }
+    }
+    SubSet(hull, patchIds).SaveObj(prefix + "_patches.obj");
+    SubSet(hull, newIds).SaveObj(prefix + "_new_patches.obj");
+    hull.Clear();
+
+    // Identical field/extraction parameters to ComputeCurrentVoid, without
+    // ComputeCreviceBaseline's O(open voxels * spots) coverage attribution.
+    VoidField vf = ComputeShrinkwrapField(std::move(closed), raw, 1, 1);
+    VoidSpotResult extracted = ExtractVoidSpots(vf, 1.1f * voxelSize, 0);
+    std::vector<Vec3f> points;
+    for (const auto &spot : extracted.spots) {
+      if (2 * spot.radius >= cfg.creviceMinWidth &&
+          2 * spot.radius <= cfg.creviceMaxWidth &&
+          scene.sdf->GetCoarseDist(spot.pos) <= 0) points.push_back(spot.pos);
+    }
+    SaveVec3fObj(prefix + "_points.obj", points);
+    for (const char *suffix : {"_hull.obj", "_patches.obj", "_new_patches.obj", "_points.obj"}) {
+      if (!fs::exists(prefix + suffix)) return false;
+    }
+    const double elapsed = seconds(roundStart);
+    report << radius << ',' << voxelSize << ',' << hullCount << ',' << patchIds.size()
+           << ',' << area << ',' << newArea << ',' << outsideArea << ',' << maxClearance
+           << ',' << points.size() << ',' << elapsed << '\n';
+    report.flush();
+    if (!report) return false;
+    std::cout << "sweep " << label.str() << ": patch area " << area
+              << " cm2, new vs smallest " << newArea << " cm2, " << points.size()
+              << " points, " << elapsed << " s\n";
+  }
+  std::ofstream notes(cfg.OutputFolder() + "sweep_notes.txt");
+  notes << "Source: " << cfg.ResumePackPath() << "\nInstances: " << scene.instances.size()
+        << "\nShared setup seconds: " << setupSeconds << "\nTotal seconds: " << seconds(start)
+        << "\nPatch criterion: hull triangle centroid farther than 1.1 voxels from fruit."
+        << "\nContainer filter: centroid signed distance <=0; coarse, not exact clipping."
+        << "\nNew patches: candidate surface >1 voxel outside the smallest-radius hull."
+        << "\nThis measures relocated/new bridge surfaces, not unique hole count or fill gain."
+        << "\nSpot radius measures thin-mask thickness, not the physical hole opening."
+        << "\nAll radii retained separately; no fine-scale target can erase a coarse patch."
+        << "\nCandidates need boundary support validation before placement. No fruits moved.\n";
+  return bool(notes);
+}
 
 void MakeInnerMesh(const PackingConfig &cfg, float insetVoxels) {
   TrigMesh container;
@@ -392,7 +526,8 @@ void DebugCreviceCoverage(const PackingConfig &cfg, size_t numBaseInstances,
                             scene.outputFolder + "/" + outPrefix + "_unnecessary.obj");
 }
 
-void DebugCreviceSpots(const PackingConfig &cfg, const CreviceFieldParams &fp) {
+void DebugCreviceSpots(const PackingConfig &cfg, const CreviceFieldParams &fp,
+                       bool saveItemMeshes) {
   PackingScene scene;
   if (!LoadPackedScene(scene, cfg)) {
     return;
@@ -400,7 +535,9 @@ void DebugCreviceSpots(const PackingConfig &cfg, const CreviceFieldParams &fp) {
   for (const InstanceInfo &inst : scene.instances) {
     scene.EnsureItemSamples(inst.itemId);
   }
-  SaveMergedItemMeshes(scene);
+  if (saveItemMeshes) {
+    SaveMergedItemMeshes(scene);
+  }
 
   {
     Array3D<short> dist;
@@ -525,4 +662,291 @@ void DebugValidatePlacementRange(const PackingConfig &cfg,
             << ": " << violations << " with a violation, worst overlap depth "
             << worstOverlap << " cm, worst outside depth " << worstOutside
             << " cm\n";
+}
+
+// builds a signed distance field for a mesh. negative = inside.
+static std::shared_ptr<AdapSDF> BuildExclusionSDF(TrigMesh &mesh, float h) {
+  const float distUnit = 0.01f;
+  auto sdf = std::make_shared<AdapSDF>();
+  sdf->voxSize = h;
+  sdf->band = 16;
+  sdf->distUnit = distUnit;
+  sdf->BuildTrigList(&mesh);
+  sdf->Compress();
+  mesh.ComputePseudoNormals();
+  sdf->ComputeCoarseDist();
+  CloseExterior(sdf->dist, sdf->MAX_DIST);
+  Array3D8u frozen;
+  FastSweepPar(sdf->dist, h, distUnit, 1000, frozen);
+  return sdf;
+}
+
+// fraction of the item's occupied voxels (at voxelSize resolution) whose
+// centers land inside the exclusion SDF (dist <= 0).
+static float ExclusionOverlapFraction(const TrigMesh &transformedMesh,
+                                      const AdapSDF &exclSdf, float voxelSize) {
+  Box3f bbox = ComputeBBox(transformedMesh.v);
+  VoxConf conf;
+  conf.origin = ToArray(AlignOriginToGrid(bbox.vmin, voxelSize));
+  conf.unit = {voxelSize, voxelSize, voxelSize};
+  conf.gridSize = ComputeGridSize(bbox, voxelSize, 1);
+  Array3D8u vox;
+  vox.Allocate(conf.gridSize, 0);
+  VoxelizeMesh(transformedMesh, vox, conf);
+  FloodOutside8u(vox, 1, 2);
+
+  Vec3f origin(conf.origin[0], conf.origin[1], conf.origin[2]);
+  Vec3u size = conf.gridSize;
+  unsigned total = 0, inside = 0;
+  for (unsigned z = 0; z < size[2]; z++)
+    for (unsigned y = 0; y < size[1]; y++)
+      for (unsigned x = 0; x < size[0]; x++) {
+        if (vox(x, y, z) == 0) continue;
+        total++;
+        Vec3f p = origin + Vec3f((x + 0.5f) * voxelSize,
+                                 (y + 0.5f) * voxelSize,
+                                 (z + 0.5f) * voxelSize);
+        if (exclSdf.GetCoarseDist(p) <= 0.0f) inside++;
+      }
+  return total == 0 ? 0.0f : float(inside) / float(total);
+}
+
+// like FilterPackByExclusion but only checks instances starting at fromLine
+// (0-indexed in the pack file), keeps everything before that untouched.
+// obstacles: list of (meshPath, threshold) pairs. an instance is removed if
+// its overlap fraction exceeds the threshold for ANY obstacle.
+void FilterPackFromIndex(const PackingConfig &cfg,
+                         const std::string &packFile,
+                         const std::string &trajFile,
+                         const std::vector<std::pair<std::string,float>> &obstacles,
+                         int fromLine,
+                         const std::string &outPackSuffix,
+                         const std::string &outTrajSuffix) {
+  PackingScene scene;
+  if (!BuildScene(scene, cfg)) return;
+
+  std::vector<std::shared_ptr<AdapSDF>> sdfs;
+  std::vector<float> thresholds;
+  for (const auto &obs : obstacles) {
+    TrigMesh mesh;
+    if (LoadMesh(mesh, fs::path(obs.first)) != 0) {
+      std::cout << "cannot load obstacle mesh: " << obs.first << "\n";
+      return;
+    }
+    std::cout << "building obstacle SDF from " << obs.first << "\n";
+    sdfs.push_back(BuildExclusionSDF(mesh, cfg.containerSDFDx));
+    thresholds.push_back(obs.second);
+  }
+
+  std::ifstream packIn(packFile);
+  if (!packIn.good()) { std::cout << "cannot open: " << packFile << "\n"; return; }
+  int packCount = 0;
+  packIn >> packCount;
+  packIn.ignore(1024, '\n');
+
+  struct Entry { std::string line; bool keep; };
+  std::vector<Entry> entries;
+  entries.reserve(packCount);
+
+  const float kVox = 1.0f;
+  int removed = 0;
+  for (int k = 0; k < packCount; k++) {
+    std::string line;
+    while (line.empty()) std::getline(packIn, line);
+
+    bool keep = true;
+    if (k >= fromLine) {
+      std::istringstream ls(line);
+      std::string name; ls >> name;
+      RigidTransform tran;
+      std::string tok; float vals[9];
+      ls >> tok;
+      for (int i = 0; i < 3; i++) { float v; ls >> v; tran.position[i] = v; }
+      ls >> tok;
+      for (int i = 0; i < 9; i++) ls >> vals[i];
+      tran.rotation = Matrix3f(vals[0],vals[1],vals[2],vals[3],vals[4],vals[5],vals[6],vals[7],vals[8]);
+      ls >> tok; ls >> tran.scale;
+
+      unsigned itemIdx = scene.GetItemIndex(name);
+      if (itemIdx < scene.items.size()) {
+        TrigMesh xf = MakeTransformedMesh(scene.items[itemIdx].mesh, tran);
+        for (size_t si = 0; si < sdfs.size() && keep; si++) {
+          float frac = ExclusionOverlapFraction(xf, *sdfs[si], kVox);
+          if (frac > thresholds[si]) {
+            keep = false; removed++;
+            std::cout << "  remove [" << k << "] " << name << " obstacle=" << si
+                      << " overlap=" << frac << "\n";
+          }
+        }
+      }
+    }
+    entries.push_back({line, keep});
+  }
+  std::cout << "removed " << removed << " / " << packCount << " (checked " << (packCount - fromLine) << ")\n";
+
+  // write filtered pack (no exclusion instance header, just fruits)
+  std::string outPack = cfg.OutputFolder() + outPackSuffix;
+  {
+    int kept = packCount - removed;
+    std::ofstream out(outPack);
+    out << kept << "\n";
+    for (const auto &e : entries) if (e.keep) out << e.line << "\n";
+  }
+  std::cout << "saved " << outPack << "\n";
+
+  // filter trajectory: instance 0 = exclusion, instances 1..N = pack lines 0..N-1
+  std::ifstream trajIn(trajFile);
+  if (!trajIn.good()) { std::cout << "cannot open: " << trajFile << "\n"; return; }
+  std::string outTraj = cfg.OutputFolder() + outTrajSuffix;
+  std::ofstream trajOut(outTraj);
+
+  std::string curLine;
+  int newIdx = 0, instIdx = -1;
+  std::vector<std::string> block;
+  auto flushBlock = [&]() {
+    if (block.empty()) return;
+    // instIdx 0 = exclusion (always keep); instIdx k corresponds to pack line k-1
+    int packLine = instIdx - 1;
+    bool keep = (instIdx == 0) || (packLine >= 0 && packLine < (int)entries.size() && entries[packLine].keep);
+    if (keep) {
+      std::string rest = block[0].substr(block[0].find(' ', block[0].find(' ')+1));
+      trajOut << "Instance " << newIdx++ << rest << "\n";
+      for (size_t i = 1; i < block.size(); i++) trajOut << block[i] << "\n";
+      trajOut << "\n";
+    }
+    block.clear();
+  };
+  while (std::getline(trajIn, curLine)) {
+    if (curLine.size() >= 8 && curLine.substr(0,8) == "Instance") {
+      flushBlock();
+      std::istringstream ls(curLine); std::string tok; ls >> tok >> instIdx;
+    }
+    if (!curLine.empty()) block.push_back(curLine);
+  }
+  flushBlock();
+  std::cout << "saved " << outTraj << "\n";
+}
+
+void FilterPackByExclusion(const PackingConfig &cfg,
+                           const std::string &packFile,
+                           const std::string &trajFile,
+                           float overlapThresh) {
+  // load items so we can look up mesh paths by name
+  PackingScene scene;
+  if (!BuildScene(scene, cfg)) return;
+
+  // build exclusion mesh SDF
+  std::string exclPath = cfg.ExclusionMeshPath();
+  TrigMesh exclMesh;
+  if (LoadMesh(exclMesh, fs::path(exclPath)) != 0) {
+    std::cout << "exclusion mesh not found: " << exclPath << "\n";
+    return;
+  }
+  std::cout << "building exclusion SDF from " << exclPath << "\n";
+  auto exclSdf = BuildExclusionSDF(exclMesh, cfg.containerSDFDx);
+
+  // read pack file
+  std::ifstream packIn(packFile);
+  if (!packIn.good()) {
+    std::cout << "cannot open pack file: " << packFile << "\n";
+    return;
+  }
+  int packCount = 0;
+  packIn >> packCount;
+  packIn.ignore(1024, '\n');
+
+  struct FruitEntry { std::string line; bool keep; };
+  std::vector<FruitEntry> fruits;
+  fruits.reserve(packCount);
+
+  const float kVoxelSize = 1.0f;  // 1 cm for overlap check
+  int removed = 0;
+  for (int k = 0; k < packCount; k++) {
+    std::string line;
+    std::getline(packIn, line);
+    if (line.empty()) { k--; continue; }
+
+    // parse name and transform
+    std::istringstream ls(line);
+    std::string name;
+    ls >> name;
+    RigidTransform tran;
+    std::string tok;
+    float vals[9];
+    ls >> tok;  // "pos"
+    for (int i = 0; i < 3; i++) { float v; ls >> v; tran.position[i] = v; }
+    ls >> tok;  // "rot"
+    for (int i = 0; i < 9; i++) ls >> vals[i];
+    tran.rotation = Matrix3f(vals[0],vals[1],vals[2],vals[3],vals[4],vals[5],vals[6],vals[7],vals[8]);
+    ls >> tok; ls >> tran.scale;  // "scale" val
+
+    unsigned itemIdx = scene.GetItemIndex(name);
+    bool keep = true;
+    if (itemIdx < scene.items.size()) {
+      TrigMesh xformed = MakeTransformedMesh(scene.items[itemIdx].mesh, tran);
+      float frac = ExclusionOverlapFraction(xformed, *exclSdf, kVoxelSize);
+      if (frac > overlapThresh) {
+        keep = false;
+        removed++;
+        std::cout << "  remove " << name << " overlap=" << frac << "\n";
+      }
+    }
+    fruits.push_back({line, keep});
+  }
+  std::cout << "removed " << removed << " / " << packCount << " fruits\n";
+
+  // write filtered pack
+  std::string outPack = cfg.OutputFolder() + "pack_filtered.txt";
+  {
+    int kept = packCount - removed;
+    std::ofstream out(outPack);
+    out << kept << "\n";
+    for (const auto &f : fruits)
+      if (f.keep) out << f.line << "\n";
+  }
+  std::cout << "saved filtered pack to " << outPack << "\n";
+
+  // filter trajectory: parse instance blocks, re-number kept ones 0,1,...
+  std::ifstream trajIn(trajFile);
+  if (!trajIn.good()) {
+    std::cout << "cannot open trajectory: " << trajFile << "\n";
+    return;
+  }
+  std::string outTraj = cfg.OutputFolder() + "traj_filtered.txt";
+  std::ofstream trajOut(outTraj);
+
+  // instance 0 = exclusion mesh (always output as instance 0)
+  // instances 1..N = fruits matching fruits[0..N-1]
+  std::string curLine;
+  int newIdx = 0;
+  int instIdx = -1;
+  std::vector<std::string> block;
+  auto flushBlock = [&]() {
+    if (block.empty()) return;
+    // instIdx 0 = exclusion: always keep, emit as-is with new index
+    bool keep = (instIdx == 0) || (instIdx >= 1 && instIdx-1 < (int)fruits.size() && fruits[instIdx-1].keep);
+    if (keep) {
+      // replace "Instance N" with "Instance newIdx"
+      std::string header = "Instance " + std::to_string(newIdx);
+      std::string rest = block[0].substr(block[0].find(' ', block[0].find(' ')+1));
+      trajOut << header << rest << "\n";
+      for (size_t i = 1; i < block.size(); i++) trajOut << block[i] << "\n";
+      trajOut << "\n";
+      newIdx++;
+    }
+    block.clear();
+  };
+
+  while (std::getline(trajIn, curLine)) {
+    if (curLine.substr(0, 8) == "Instance") {
+      flushBlock();
+      std::istringstream ls(curLine);
+      std::string tok; int idx;
+      ls >> tok >> idx;
+      instIdx = idx;
+    }
+    if (!curLine.empty()) block.push_back(curLine);
+  }
+  flushBlock();
+  std::cout << "saved filtered trajectory to " << outTraj << "\n";
 }

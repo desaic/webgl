@@ -1,6 +1,8 @@
 #include "PackingDriver.h"
 
 #include "AdapSDF.h"
+#include "FastSweep.h"
+#include "FloodOutside.h"
 #include "GridUtils.h"
 #include "Log.h"
 #include "MarchingCubes.h"
@@ -9,13 +11,22 @@
 #include "PackingOps.h"
 #include "PackShrinkWrap.h"
 #include "Profiler.h"
+#include "SphereCover.h"
 #include "Stopwatch.h"
 
 #include <algorithm>
 #include <cmath>
+#include <deque>
+#include <execution>
 #include <filesystem>
+#include <sstream>
 #include <fstream>
+#include <limits>
+#include <map>
+#include <numeric>
+#include <cstdint>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace fs = std::filesystem;
 
@@ -59,16 +70,145 @@ static Vec3f NearestKCenter(const std::vector<Vec3f> &pts, const Vec3f &pos, uns
   return center;
 }
 
+// counts free (value 0) voxels within each subgrid cell of bg.
+// free voxels of one subgrid cell.
+static unsigned CountCellEmpty(const MeshConvo &bg, float cellSize, const Vec3u &numCells,
+                               unsigned cellIdx) {
+  const float dx = bg.dx;
+  const Vec3u bgSize = bg.GridSize();
+  const unsigned cx = cellIdx % numCells[0];
+  const unsigned cy = (cellIdx / numCells[0]) % numCells[1];
+  const unsigned cz = cellIdx / (numCells[0] * numCells[1]);
+  const int x0 = int(cx * cellSize / dx);
+  const int y0 = int(cy * cellSize / dx);
+  const int z0 = int(cz * cellSize / dx);
+  const int x1 = std::min(int((cx + 1) * cellSize / dx), (int)bgSize[0]);
+  const int y1 = std::min(int((cy + 1) * cellSize / dx), (int)bgSize[1]);
+  const int z1 = std::min(int((cz + 1) * cellSize / dx), (int)bgSize[2]);
+  unsigned empty = 0;
+  for (int z = z0; z < z1; z++)
+    for (int y = y0; y < y1; y++)
+      for (int x = x0; x < x1; x++)
+        if (bg.vox((unsigned)x, (unsigned)y, (unsigned)z) == 0) empty++;
+  return empty;
+}
+
+// full recount, cells in parallel.
+static void UpdateCellEmptyCounts(SubgridBgCache &cache, const MeshConvo &bg,
+                                  float cellSize, const Vec3u &numCells) {
+  PROFILE_SCOPE("subgrid.empty_counts_full");
+  const unsigned totalCells = numCells[0] * numCells[1] * numCells[2];
+  cache.cellEmptyCounts.assign(totalCells, 0u);
+  std::vector<unsigned> order(totalCells);
+  std::iota(order.begin(), order.end(), 0u);
+  std::for_each(std::execution::par, order.begin(), order.end(), [&](unsigned cellIdx) {
+    cache.cellEmptyCounts[cellIdx] = CountCellEmpty(bg, cellSize, numCells, cellIdx);
+  });
+  cache.dirtyCells.clear();
+  cache.emptyCacheVersion = bg.version;
+  cache.emptyCacheNumCells = numCells;
+}
+
+// recount only the cells that a placement touched.
+static void UpdateDirtyCellEmptyCounts(SubgridBgCache &cache, const MeshConvo &bg,
+                                       float cellSize, const Vec3u &numCells) {
+  PROFILE_SCOPE("subgrid.empty_counts_dirty");
+  std::sort(cache.dirtyCells.begin(), cache.dirtyCells.end());
+  cache.dirtyCells.erase(std::unique(cache.dirtyCells.begin(), cache.dirtyCells.end()),
+                         cache.dirtyCells.end());
+  std::for_each(std::execution::par, cache.dirtyCells.begin(), cache.dirtyCells.end(),
+                [&](unsigned cellIdx) {
+                  cache.cellEmptyCounts[cellIdx] = CountCellEmpty(bg, cellSize, numCells, cellIdx);
+                });
+  cache.dirtyCells.clear();
+  cache.emptyCacheVersion = bg.version;
+}
+
+// remembers the cells overlapped by a freshly placed fruit (world box, padded
+// by two voxels for the erosion and union margins).
+static void MarkDirtyCells(SubgridBgCache &cache, const PackingScene &scene, const Box3f &box) {
+  const MeshConvo &bg = scene.bg;
+  const Vec3u numCells = scene.numSubgridCells;
+  const Vec3f origin = bg.GetOrigin();
+  const float dx = bg.dx;
+  int lo[3], hi[3];
+  for (int a = 0; a < 3; ++a) {
+    const float vmin = (box.vmin[a] - origin[a]) / dx - 2.0f;
+    const float vmax = (box.vmax[a] - origin[a]) / dx + 2.0f;
+    lo[a] = std::max(0, int(std::floor(vmin * dx / scene.subgridCellSize)));
+    hi[a] = std::min(int(numCells[a]) - 1, int(std::floor(vmax * dx / scene.subgridCellSize)));
+  }
+  for (int z = lo[2]; z <= hi[2]; ++z)
+    for (int y = lo[1]; y <= hi[1]; ++y)
+      for (int x = lo[0]; x <= hi[0]; ++x)
+        cache.dirtyCells.push_back(unsigned(x) + numCells[0] * (unsigned(y) + numCells[1] * unsigned(z)));
+}
+
+// counts filled voxels in axis-aligned voxelization of item at resolution dx.
+static unsigned CountItemVoxels(const MeshInfo &item, float dx) {
+  Box3f bbox = item.box;
+  VoxConf conf;
+  conf.origin = ToArray(AlignOriginToGrid(bbox.vmin, dx));
+  conf.unit = {dx, dx, dx};
+  conf.gridSize = ComputeGridSize(bbox, dx, 1);
+  Array3D8u vox;
+  vox.Allocate(conf.gridSize, 0);
+  VoxelizeMesh(item.mesh, vox, conf);
+  FloodOutside8u(vox, 1, 2);
+  unsigned count = 0;
+  for (uint8_t v : vox.GetData()) if (v != 0) count++;
+  return count;
+}
+
+static void DownsampleBg2x(const MeshConvo &fine, MeshConvo &coarse) {
+  Vec3u fs = fine.GridSize();
+  Vec3u cs((fs[0]+1)/2, (fs[1]+1)/2, (fs[2]+1)/2);
+  coarse.box = fine.box;
+  coarse.dx = fine.dx * 2.0f;
+  coarse.vox.Allocate(cs, 0);
+  for (unsigned z = 0; z < cs[2]; z++)
+    for (unsigned y = 0; y < cs[1]; y++)
+      for (unsigned x = 0; x < cs[0]; x++) {
+        uint8_t v = 0;
+        for (unsigned dz = 0; dz < 2 && !v; dz++)
+        for (unsigned dy = 0; dy < 2 && !v; dy++)
+        for (unsigned dx2 = 0; dx2 < 2 && !v; dx2++) {
+          unsigned fx=2*x+dx2, fy=2*y+dy, fz=2*z+dz;
+          if (fx<fs[0] && fy<fs[1] && fz<fs[2])
+            v = fine.vox(fx, fy, fz);
+        }
+        coarse.vox(x, y, z) = v;
+      }
+}
+
+static const float kLargeMedLargeThresh = 14.0f;
+
+static bool IsNearSpherical(const MeshInfo &item) {
+  Vec3f ext = item.box.vmax - item.box.vmin;
+  float minE = std::min({ext[0], ext[1], ext[2]});
+  float maxE = std::max({ext[0], ext[1], ext[2]});
+  return maxE > 0.0f && (maxE - minE) / maxE < 0.25f;
+}
+
+static const Vec3f kSphereRotations[3] = {
+  {0.0f, 0.0f, 0.0f},
+  {1.5707963f, 0.0f, 0.0f},
+  {0.0f, 1.5707963f, 0.0f}
+};
+
 bool BuildScene(PackingScene &scene, const PackingConfig &cfg) {
   std::string meshDir = cfg.MeshDir();
   if (!fs::exists(meshDir)) {
     std::cout << "item directory missing " << meshDir << "\n";
     return false;
   }
+  Utils::Stopwatch loadClock;
+  loadClock.Start();
   {
     PROFILE_SCOPE("init.load_items");
     scene.items = LoadAllMeshInfo(meshDir);
   }
+  LOGI("init: loaded items " << loadClock.ElapsedMS() / 1000.0 << " s\n");
   if (scene.items.empty()) {
     std::cout << "no items loaded from " << meshDir << "\n";
     return false;
@@ -90,6 +230,25 @@ bool BuildScene(PackingScene &scene, const PackingConfig &cfg) {
   scene.containerSDFDx = cfg.containerSDFDx;
   scene.subgridCellSize = cfg.subgridCellSize;
   scene.outputFolder = cfg.OutputFolder();
+  std::error_code outputError;
+  fs::create_directories(scene.outputFolder, outputError);
+  if (outputError) {
+    LOGI("could not create output folder " << scene.outputFolder << ": "
+         << outputError.message() << "\n");
+    return false;
+  }
+
+  if (!cfg.exclusionMeshFile.empty()) {
+    MeshInfo excl;
+    if (LoadMeshInfo(excl, fs::path(cfg.ExclusionMeshPath())) == 0) {
+      excl.name = "_exclusion";
+      scene.exclusionItemIndex = scene.items.size();
+      scene.items.push_back(std::move(excl));
+      LOGI("exclusion mesh loaded: " << cfg.ExclusionMeshPath() << "\n");
+    } else {
+      LOGI("exclusion mesh not found: " << cfg.ExclusionMeshPath() << "\n");
+    }
+  }
 
   scene.broadPhase.Init(scene.container.box, cfg.broadPhaseDx);
   scene.InitDataStructures();
@@ -102,6 +261,13 @@ void PrepareBackground(PackingScene &scene, const PackingConfig &cfg) {
   scene.bg.SetMeshPtr(&scene.container.mesh);
   scene.bg.Voxelize(scene.dx);
   InvertContainer(scene.bg.vox, 1);
+  if (cfg.oldWayOverlap) {
+    // second grid without the container wall, for the overlap heuristic.
+    scene.itemsBg = MeshConvo();
+    scene.itemsBg.box = scene.bg.box;
+    scene.itemsBg.dx = scene.bg.dx;
+    scene.itemsBg.vox.Allocate(scene.bg.vox.GetSize(), 0);
+  }
 }
 
 void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig &cfg,
@@ -172,15 +338,22 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
 
   unsigned long searches = 0;
   unsigned placedCount = 0;
+  std::map<std::string, double> itemSearchMs;
+  std::unordered_map<unsigned, unsigned> itemVoxCounts;
   // shared across every item/cell tried in this step -- its own key
   // (cell, crop bounds, scene.bg's version) decides reuse, so interleaving
   // between kinds/cells cannot make it serve a stale background crop.
   SubgridBgCache subgridCache;
+  SubgridBgCache coarseSubgridCache;
+  MeshConvo coarseBg;
+  unsigned coarseBgVersion = ~0u;
   // non-subgrid ("large" tier) equivalent of subgridCache, against the
   // WHOLE container grid instead of a cropped cell -- see the FindSpot
   // call below.
   unsigned bgFftVersion = 0;
   bool bgFftValid = false;
+  unsigned coarseBgFftVersion = ~0u;
+  bool coarseBgFftValid = false;
   double lastReportMs = 0.0;
   const double REPORT_INTERVAL_MS = 2000.0;
   auto report = [&](const char *tag) {
@@ -243,10 +416,33 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
           Vec3f target = NearestKCenter(surfacePoints, p, 5);
           newTran = scene.NudgeToTarget(itemIndex, tran, target, trajectory);
         } else {
-          Vec3f pushDir = scene.ForceDirection(itemIndex, step.force, step.biasW, sdfFactor, tran);
+          Vec3f pushDir = step.nudgeInward
+                              ? scene.ForceDirection(itemIndex, Vec3f(0, 0, 0), 0.0f, -1.0f, tran)
+                              : scene.ForceDirection(itemIndex, step.force, step.biasW, sdfFactor, tran);
           newTran = scene.Nudge(itemIndex, tran, pushDir, step.forceW, trajectory);
         }
         double settleMs = stepClock.ElapsedMS() - settleStartMs;
+        if (cfg.oldWayMedium && newTran.position[0] >= cfg.sphereMaxX) {
+          LOGI("  rejected " << item.name << ": settled outside the x < " << cfg.sphereMaxX << " region\n");
+          return false;
+        }
+        // no fruit may be wasted inside the exclusion mesh: reject any settle
+        // whose surface samples penetrate it. (its SDF is negative inside.)
+        if (cfg.oldWayMedium && scene.exclusionItemIndex != ~0u && !item.samples.empty()) {
+          MeshInfo &ex = scene.items[scene.exclusionItemIndex];
+          if (!ex.sdf) ex.ComputeSDFCached();
+          if (ex.sdf) {
+            float worst = 0.0f;
+            for (const SamplePoint &sp : item.samples) {
+              const Vec3f w = newTran.rotation * sp.x + newTran.position;
+              worst = std::min(worst, ex.sdf->GetCoarseDist(w));
+            }
+            if (worst < -0.1f) {
+              LOGI("  rejected " << item.name << ": " << -worst << " cm inside the exclusion mesh\n");
+              return false;
+            }
+          }
+        }
         if (timer) {
           timer->Record(item.name, settleMs);
         }
@@ -270,6 +466,8 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
         }
         packSuccess = true;
         unsigned instanceId = scene.Put(itemIndex, newTran);
+        MarkDirtyCells(subgridCache, scene,
+                       ComputeBBox(MakeTransformedMesh(scene.items[itemIndex].mesh, newTran).v));
         scene.instances[instanceId].trajectory = trajectory;
         placedCount++;
         Vec3f moved = newTran.position - p;
@@ -296,24 +494,95 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
       };
 
       bool itemPlaced = false;
+      double itemSearchStart = stepClock.ElapsedMS();
+
+      // opt 1: per-item voxel count, computed once at the item's first trial
+      if (useSubgrid && itemVoxCounts.find(itemIndex) == itemVoxCounts.end()) {
+        itemVoxCounts[itemIndex] = CountItemVoxels(item, scene.dx);
+      }
+      unsigned itemVox = useSubgrid ? itemVoxCounts[itemIndex] : 0u;
+
+      // opt 1: refresh empty count cache whenever bg changes
+      if (useSubgrid &&
+          (subgridCache.emptyCacheVersion != scene.bg.version ||
+           subgridCache.emptyCacheNumCells != scene.numSubgridCells)) {
+        const unsigned totalCellsNow =
+            scene.numSubgridCells[0] * scene.numSubgridCells[1] * scene.numSubgridCells[2];
+        const bool canUpdateDirty = subgridCache.emptyCacheVersion != ~0u &&
+                                    subgridCache.emptyCacheNumCells == scene.numSubgridCells &&
+                                    subgridCache.cellEmptyCounts.size() == totalCellsNow &&
+                                    !subgridCache.dirtyCells.empty();
+        if (canUpdateDirty) {
+          UpdateDirtyCellEmptyCounts(subgridCache, scene.bg, scene.subgridCellSize,
+                                     scene.numSubgridCells);
+        } else {
+          UpdateCellEmptyCounts(subgridCache, scene.bg, scene.subgridCellSize,
+                                scene.numSubgridCells);
+        }
+      }
+
+      // opt 2: spherical items need only 3 axis-aligned rotation trials
+      bool spherical = IsNearSpherical(item);
+      unsigned trialLimit = spherical ? 3u : MAX_TRIAL_COUNT;
+
+      // opt 3+4: large/medium-large items use 2x coarser bg + 1-voxel erosion
+      float itemDiag = (item.box.vmax - item.box.vmin).norm();
+      bool isLargeMedLarge = itemDiag >= kLargeMedLargeThresh;
+      if (isLargeMedLarge && coarseBgVersion != scene.bg.version) {
+        DownsampleBg2x(scene.bg, coarseBg);
+        coarseBg.version = scene.bg.version;
+        coarseBgVersion = scene.bg.version;
+        coarseBgFftValid = false;
+      }
+      // step-level erosion takes precedence over the item-size heuristic
+      unsigned erode = (step.erodeVoxels > 0) ? step.erodeVoxels
+                       : (isLargeMedLarge ? 1u : 0u);
+
       if (useSubgrid) {
         while (!itemPlaced && item.nextCellIdx < totalCells) {
           unsigned cellIdx = item.nextCellIdx;
+          // region test run: skip cells that start at or past the x limit.
+          if (cfg.oldWayMedium) {
+            const float cellMinX = scene.bg.box.vmin[0] +
+                                   float(cellIdx % scene.numSubgridCells[0]) * scene.subgridCellSize;
+            if (cellMinX >= cfg.sphereMaxX) {
+              item.nextCellIdx++;
+              continue;
+            }
+          }
+          // opt 1: skip cell if it has fewer free voxels than the item needs
+          if (subgridCache.emptyCacheVersion == scene.bg.version &&
+              cellIdx < subgridCache.cellEmptyCounts.size() &&
+              subgridCache.cellEmptyCounts[cellIdx] < itemVox) {
+            item.nextCellIdx++;
+            continue;
+          }
           bool cellSuccess = false;
-          for (unsigned trial = 0; trial < MAX_TRIAL_COUNT; trial++) {
+          for (unsigned trial = 0; trial < trialLimit; trial++) {
             Vec3f pos;
-            Vec3f rot = scene.randAngles[angleIndex];
-            angleIndex++;
-            if (angleIndex >= scene.randAngles.size()) {
-              angleIndex = 0;
+            Vec3f rot;
+            if (spherical) {
+              rot = kSphereRotations[trial];
+            } else {
+              rot = scene.randAngles[angleIndex];
+              angleIndex++;
+              if (angleIndex >= scene.randAngles.size()) {
+                angleIndex = 0;
+              }
             }
             searches++;
             TrigMesh rotatedMesh = item.mesh;
             TransformVerts(item.mesh.v, rotatedMesh.v,
                            RotationMatrixRad(rot[0], rot[1], rot[2]));
-            if (FindSpotSubgrid(scene.bg, rotatedMesh, pos, scene.sdf,
+            MeshConvo &subBg = isLargeMedLarge ? coarseBg : scene.bg;
+            SubgridBgCache *subCache = isLargeMedLarge ? &coarseSubgridCache : &subgridCache;
+            if (FindSpotSubgrid(subBg, rotatedMesh, pos, scene.sdf,
                                 sdfFactor, scene.subgridCellSize,
-                                cellIdx, scene.numSubgridCells, &subgridCache)) {
+                                cellIdx, scene.numSubgridCells, subCache, erode,
+                                step.overlapHeuristic,
+                                (step.overlapHeuristic && !isLargeMedLarge &&
+                                 !scene.itemsBg.vox.GetData().empty())
+                                    ? &scene.itemsBg : nullptr)) {
               if (placeItem(pos, rot)) {
                 itemPlaced = true;
                 cellSuccess = true;
@@ -325,6 +594,9 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
             // stay on this cell -- it can hold more than one item.
             break;
           }
+          double cellMs = stepClock.ElapsedMS() - itemSearchStart;
+          LOGD("  no fit " << item.name << " cell " << cellIdx
+                           << " " << cellMs << " ms\n");
           item.nextCellIdx++;
         }
       } else {
@@ -334,24 +606,40 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
         // trial, unconditionally, even though it is identical across all
         // of them whenever nothing has been placed since (measured: 11%
         // of one step's total wall time, entirely redundant work).
-        if (!bgFftValid || bgFftVersion != scene.bg.version) {
-          Vec3u bgGridSize = scene.bg.GridSize();
-          scene.bg.FFT(PadSizes(bgGridSize, 8));
-          bgFftVersion = scene.bg.version;
-          bgFftValid = true;
+        MeshConvo &activeBg = isLargeMedLarge ? coarseBg : scene.bg;
+        if (isLargeMedLarge) {
+          if (!coarseBgFftValid || coarseBgFftVersion != scene.bg.version) {
+            Vec3u gs = coarseBg.GridSize();
+            coarseBg.FFT(PadSizes(gs, 8));
+            coarseBgFftVersion = scene.bg.version;
+            coarseBgFftValid = true;
+          }
+        } else {
+          if (!bgFftValid || bgFftVersion != scene.bg.version) {
+            Vec3u bgGridSize = scene.bg.GridSize();
+            scene.bg.FFT(PadSizes(bgGridSize, 8));
+            bgFftVersion = scene.bg.version;
+            bgFftValid = true;
+          }
         }
-        for (unsigned trial = 0; trial < MAX_TRIAL_COUNT; trial++) {
+        for (unsigned trial = 0; trial < trialLimit; trial++) {
           Vec3f pos;
-          Vec3f rot = scene.randAngles[angleIndex];
-          angleIndex++;
-          if (angleIndex >= scene.randAngles.size()) {
-            angleIndex = 0;
+          Vec3f rot;
+          if (spherical) {
+            rot = kSphereRotations[trial];
+          } else {
+            rot = scene.randAngles[angleIndex];
+            angleIndex++;
+            if (angleIndex >= scene.randAngles.size()) {
+              angleIndex = 0;
+            }
           }
           searches++;
           TrigMesh rotatedMesh = item.mesh;
           TransformVerts(item.mesh.v, rotatedMesh.v,
                          RotationMatrixRad(rot[0], rot[1], rot[2]));
-          if (FindSpot(scene.bg, rotatedMesh, pos, scene.sdf, sdfFactor, /*bgFftReady=*/true)) {
+          if (FindSpot(activeBg, rotatedMesh, pos, scene.sdf, sdfFactor, /*bgFftReady=*/true, erode,
+                      step.overlapHeuristic)) {
             if (placeItem(pos, rot)) {
               itemPlaced = true;
               break;
@@ -359,12 +647,18 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
           }
         }
       }
+      double roundMs = stepClock.ElapsedMS() - itemSearchStart;
+      itemSearchMs[item.name] += roundMs;
+      if (!itemPlaced && !useSubgrid) {
+        LOGI("  no fit " << item.name << " full search " << roundMs << " ms\n");
+      }
       if (!itemPlaced && (!useSubgrid || item.nextCellIdx >= totalCells)) {
         if (!item.noMoreFit) {
           LOGI("  retired " << item.name << ": no fit in "
                             << (useSubgrid ? totalCells : 1u)
                             << (useSubgrid ? " cells" : " full container search")
-                            << " after " << searches << " searches this step\n");
+                            << " after " << searches << " searches this step"
+                            << ", search time " << itemSearchMs[item.name] << " ms\n");
         }
         item.noMoreFit = true;
       }
@@ -379,7 +673,7 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
       for (unsigned nameIndex = 0; nameIndex < numItems; nameIndex++) {
         unsigned itemIdx = scene.GetItemIndex(step.names[nameIndex]);
         MeshInfo &it = scene.items[itemIdx];
-        if (tCells > 0 && it.nextCellIdx < tCells) {
+        if (!it.noMoreFit && tCells > 0 && it.nextCellIdx < tCells) {
           anySubgridRemaining = true;
           break;
         }
@@ -1229,6 +1523,594 @@ CreviceBaseline ComputeCreviceBaseline(PackingScene &scene, const PackingConfig 
   return base;
 }
 
+namespace {
+
+struct MediumPatchPoint {
+  Vec3f pos;
+  Vec3f normal;
+  float clearance;
+  unsigned radius;
+  bool covered = false;
+  unsigned owner = ~0u;
+};
+
+bool MediumPointCovered(const MediumPatchPoint &point, const MeshInfo &item,
+                        const RigidTransform &pose) {
+  if (!item.sdf || (point.pos - pose.position).norm2() >
+                       0.6f * 0.6f * item.BoxDiagonal() * item.BoxDiagonal()) return false;
+  const Vec3f local = pose.rotation.transposed() * (point.pos - pose.position);
+  return item.sdf->GetCoarseDist(local) <= 0.2f;
+}
+
+float MediumSupportGap(PackingScene &scene, const MeshInfo &item,
+                       const RigidTransform &pose) {
+  const Box3f box = WorldBox(item.box, pose.rotation, pose.position);
+  const auto nearby = scene.broadPhase.GetNearby(box, 1.0f);
+  float bestGap = std::numeric_limits<float>::max();
+  for (unsigned id : nearby) {
+    const auto &inst = scene.instances[id];
+    if (inst.isExclusion) continue;
+    const auto &existing = scene.items[inst.itemId];
+    if (!existing.sdf) continue;
+    const size_t stride = std::max<size_t>(1, item.mesh.v.size() / 2048);
+    for (size_t vi = 0; vi < item.mesh.v.size(); vi += stride) {
+      Vec3f vertex = item.mesh.v[vi];
+      Vec3f w = pose.rotation * vertex + pose.position;
+      Vec3f local = inst.tran.rotation.transposed() * (w - inst.tran.position);
+      bestGap = std::min(bestGap, std::fabs(existing.sdf->GetCoarseDist(local)));
+      if (bestGap <= 0.30f) return bestGap;
+    }
+  }
+  return bestGap;
+}
+
+bool MediumOverlapsTooDeeply(PackingScene &scene, const MeshInfo &item,
+                             const RigidTransform &pose) {
+  const Box3f box = WorldBox(item.box, pose.rotation, pose.position);
+  const auto nearby = scene.broadPhase.GetNearby(box, 0.2f);
+  const size_t stride = std::max<size_t>(1, item.mesh.v.size() / 2048);
+  for (unsigned id : nearby) {
+    const auto &inst = scene.instances[id];
+    const auto &existing = scene.items[inst.itemId];
+    if (!existing.sdf) continue;
+    for (size_t vi = 0; vi < item.mesh.v.size(); vi += stride) {
+      Vec3f vertex = item.mesh.v[vi];
+      Vec3f w = pose.rotation * vertex + pose.position;
+      Vec3f local = inst.tran.rotation.transposed() * (w - inst.tran.position);
+      // 0.2cm allowed physical overlap plus 0.15cm SDF/sample error.
+      if (existing.sdf->GetCoarseDist(local) < -0.35f) return true;
+    }
+  }
+  return false;
+}
+
+// Gradient of the nearest existing fruit's signed distance field.
+// A goal shifted along this direction is more likely to settle in contact
+// than a goal on the shrinkwrap skin alone.
+bool MediumNearestSupport(PackingScene &scene, const Vec3f &p,
+                          float &distance, Vec3f &away) {
+  Box3f query;
+  query.vmin = query.vmax = p;
+  distance = std::numeric_limits<float>::max();
+  for (unsigned id : scene.broadPhase.GetNearby(query, 18.0f)) {
+    const auto &inst = scene.instances[id];
+    const auto &support = scene.items[inst.itemId];
+    if (inst.isExclusion || !support.sdf) continue;
+    Vec3f local = inst.tran.rotation.transposed() * (p - inst.tran.position);
+    float d = support.sdf->GetCoarseDist(local);
+    if (d < 0.0f || d >= distance) continue;
+    const float h = 0.5f;
+    Vec3f g(support.sdf->GetCoarseDist(local + Vec3f(h, 0, 0)) -
+            support.sdf->GetCoarseDist(local - Vec3f(h, 0, 0)),
+            support.sdf->GetCoarseDist(local + Vec3f(0, h, 0)) -
+            support.sdf->GetCoarseDist(local - Vec3f(0, h, 0)),
+            support.sdf->GetCoarseDist(local + Vec3f(0, 0, h)) -
+            support.sdf->GetCoarseDist(local - Vec3f(0, 0, h)));
+    if (g.norm2() < 1e-6f) continue;
+    g.normalize();
+    away = inst.tran.rotation * g;
+    distance = d;
+  }
+  return distance < std::numeric_limits<float>::max();
+}
+
+bool MediumOutsideExclusion(PackingScene &scene, const MeshInfo &item,
+                            const RigidTransform &pose) {
+  if (scene.exclusionItemIndex == ~0u) return true;
+  const auto &excl = scene.items[scene.exclusionItemIndex];
+  if (!excl.sdf) return false; // never silently discard the hard obstacle
+  for (const auto &sp : item.samples) {
+    Vec3f w = pose.rotation * sp.x + pose.position;
+    if (excl.sdf->GetCoarseDist(w) < 0.0f) return false;
+  }
+  return true;
+}
+
+unsigned MediumCoverageGain(const std::vector<MediumPatchPoint> &points,
+                             const MeshInfo &item, const RigidTransform &pose) {
+  unsigned gain = 0;
+  for (const auto &p : points) {
+    if (!p.covered && MediumPointCovered(p, item, pose)) gain++;
+  }
+  return gain;
+}
+
+struct MediumGraphResult {
+  std::vector<unsigned> order;
+  unsigned components = 0;
+  unsigned fruitEdges = 0;
+  unsigned openSampleEdges = 0;
+  unsigned openComponents = 0;
+  unsigned largestOpenComponent = 0;
+};
+
+// The crevice skin is the routing graph; medium fruits are seeds/owners on
+// that graph. Its edges stay on the same wrap and cannot jump across free
+// space as straight center-to-center fruit edges can.
+MediumGraphResult BuildMediumPatchGraph(const std::vector<MediumPatchPoint> &points,
+                                      const Vec3f &origin, float cellSize,
+                                      const PackingScene &scene,
+                                      const std::string &graphFile) {
+  MediumGraphResult result;
+  const unsigned n = unsigned(points.size());
+  result.order.resize(n);
+  std::iota(result.order.begin(), result.order.end(), 0u);
+  auto coord = [&](const Vec3f &p, unsigned axis) {
+    return int(std::floor((p[axis] - origin[axis]) / cellSize));
+  };
+  auto key = [](int x, int y, int z, unsigned radius) {
+    return (uint64_t(radius == 12) << 60) |
+           (uint64_t(x) << 40) | (uint64_t(y) << 20) | uint64_t(z);
+  };
+  std::unordered_map<uint64_t, unsigned> cells;
+  cells.reserve(n * 2);
+  for (unsigned i = 0; i < n; ++i)
+    cells.emplace(key(coord(points[i].pos, 0), coord(points[i].pos, 1),
+                      coord(points[i].pos, 2), points[i].radius), i);
+  std::vector<std::vector<unsigned>> links(n);
+  for (unsigned i = 0; i < n; ++i) {
+    const auto &p = points[i];
+    int x = coord(p.pos, 0), y = coord(p.pos, 1), z = coord(p.pos, 2);
+    for (int dz = -1; dz <= 1; ++dz)
+      for (int dy = -1; dy <= 1; ++dy)
+        for (int dx = -1; dx <= 1; ++dx) {
+          if (x + dx < 0 || y + dy < 0 || z + dz < 0) continue;
+          auto it = cells.find(key(x + dx, y + dy, z + dz, p.radius));
+          if (it == cells.end() || it->second <= i) continue;
+          unsigned j = it->second;
+          Vec3f delta = points[j].pos - p.pos;
+          float length = delta.norm();
+          if (length > 5.5f || length < 1e-5f ||
+              p.normal.dot(points[j].normal) < 0.25f ||
+              std::fabs(p.normal.dot(delta)) > 0.6f * length ||
+              std::fabs(points[j].normal.dot(delta)) > 0.6f * length) continue;
+          links[i].push_back(j);
+          links[j].push_back(i);
+        }
+  }
+  std::vector<unsigned> component(n, ~0u), componentSize;
+  std::deque<unsigned> queue;
+  for (unsigned i = 0; i < n; ++i) {
+    if (component[i] != ~0u) continue;
+    unsigned cid = result.components++;
+    unsigned size = 0;
+    component[i] = cid;
+    queue.push_back(i);
+    while (!queue.empty()) {
+      unsigned u = queue.front(); queue.pop_front(); ++size;
+      for (unsigned v : links[u]) if (component[v] == ~0u) {
+        component[v] = cid;
+        queue.push_back(v);
+      }
+    }
+    componentSize.push_back(size);
+  }
+  std::vector<int> distance(n, -1);
+  std::vector<unsigned> owner(n, ~0u);
+  for (unsigned i = 0; i < n; ++i) if (points[i].covered) {
+    distance[i] = 0;
+    owner[i] = points[i].owner;
+    queue.push_back(i);
+  }
+  std::unordered_set<uint64_t> fruitEdges;
+  while (!queue.empty()) {
+    unsigned u = queue.front(); queue.pop_front();
+    for (unsigned v : links[u]) {
+      if (distance[v] < 0) {
+        distance[v] = distance[u] + 1;
+        owner[v] = owner[u];
+        queue.push_back(v);
+      } else if (owner[u] != ~0u && owner[v] != ~0u && owner[u] != owner[v]) {
+        unsigned a = std::min(owner[u], owner[v]);
+        unsigned b = std::max(owner[u], owner[v]);
+        fruitEdges.insert((uint64_t(a) << 32) | b);
+      }
+    }
+  }
+  std::stable_sort(result.order.begin(), result.order.end(), [&](unsigned a, unsigned b) {
+    // Midpoints of long uncovered graph paths go first. Unseeded patches
+    // get a seed before short gaps; isolated single samples go last.
+    int da = distance[a] < 0 ? (componentSize[component[a]] > 1 ? 1000 : 0) : distance[a];
+    int db = distance[b] < 0 ? (componentSize[component[b]] > 1 ? 1000 : 0) : distance[b];
+    if (da != db) return da > db;
+    if (componentSize[component[a]] != componentSize[component[b]])
+      return componentSize[component[a]] > componentSize[component[b]];
+    return points[a].clearance > points[b].clearance;
+  });
+  std::unordered_map<unsigned, unsigned> vertex;
+  std::ofstream out(graphFile);
+  for (unsigned id : owner) if (id != ~0u && !vertex.count(id)) {
+    vertex[id] = unsigned(vertex.size()) + 1;
+    const Vec3f &p = scene.instances[id].tran.position;
+    out << "v " << p[0] << ' ' << p[1] << ' ' << p[2] << '\n';
+  }
+  for (uint64_t edge : fruitEdges) {
+    unsigned a = unsigned(edge >> 32), b = unsigned(edge);
+    out << "l " << vertex[a] << ' ' << vertex[b] << '\n';
+  }
+  result.fruitEdges = unsigned(fruitEdges.size());
+  std::vector<Vec3f> openEdgeMidpoints;
+  for (unsigned i = 0; i < n; ++i) for (unsigned j : links[i]) {
+    if (j <= i) continue;
+    bool covered = points[i].covered && points[j].covered;
+    if (covered && points[i].owner != points[j].owner) {
+      MediumPatchPoint mid = points[i];
+      mid.pos = (points[i].pos + points[j].pos) * 0.5f;
+      covered = false;
+      for (unsigned id : {points[i].owner, points[j].owner}) {
+        if (id != ~0u && MediumPointCovered(mid, scene.items[scene.instances[id].itemId],
+                                             scene.instances[id].tran)) {
+          covered = true;
+          break;
+        }
+      }
+    }
+    if (!covered) {
+      ++result.openSampleEdges;
+      openEdgeMidpoints.push_back((points[i].pos + points[j].pos) * 0.5f);
+    }
+  }
+  if (!graphFile.empty())
+    SaveVec3fObj(graphFile + "_open_edges.obj", openEdgeMidpoints);
+  std::vector<bool> seen(n, false);
+  for (unsigned i = 0; i < n; ++i) {
+    if (points[i].covered || seen[i]) continue;
+    unsigned openSize = 0;
+    seen[i] = true;
+    queue.push_back(i);
+    while (!queue.empty()) {
+      unsigned u = queue.front(); queue.pop_front(); ++openSize;
+      for (unsigned v : links[u]) if (!points[v].covered && !seen[v]) {
+        seen[v] = true;
+        queue.push_back(v);
+      }
+    }
+    ++result.openComponents;
+    result.largestOpenComponent = std::max(result.largestOpenComponent, openSize);
+  }
+  return result;
+}
+
+} // namespace
+
+void PackMediumPatches(PackingScene &scene, const PackingStep &step,
+                       const PackingConfig &cfg, PlacementTimer *timer) {
+  Utils::Stopwatch clock;
+  clock.Start();
+  const double maxSeconds = cfg.maxSecondsPerStep > 0 ?
+      std::min(3600.0, cfg.maxSecondsPerStep) : 3600.0;
+  const unsigned maxAttempts = 25000;
+  std::vector<unsigned> kinds;
+  for (const auto &name : step.names) {
+    auto it = scene.nameToIndex.find(name);
+    if (it != scene.nameToIndex.end()) kinds.push_back(it->second);
+  }
+  if (kinds.empty()) return;
+  for (unsigned kind : kinds) scene.EnsureItemSamples(kind);
+  float maxDiag = 0.0f;
+  for (unsigned kind : kinds) maxDiag = std::max(maxDiag, scene.items[kind].BoxDiagonal());
+  std::shared_ptr<AdapSDF> innerSdf;
+  if (!scene.containerInner.mesh.v.empty()) {
+    LOGI("medium patches: computing inner-container target mask\n");
+    innerSdf = ComputeSDF(0.002f, 2.0f, scene.containerInner.mesh);
+  }
+
+  std::vector<MediumPatchPoint> points;
+  std::unordered_set<uint64_t> sampled;
+  const float sampleDx = 3.0f;
+  unsigned filteredInner = 0, filteredExclusion = 0, filteredDeep = 0;
+  Vec3f origin(0.0f, 0.0f, 0.0f);
+  const std::string targetsPath = cfg.MediumTargetsPath();
+  if (!targetsPath.empty()) {
+    std::vector<Vec3f> loaded;
+    if (!LoadObjVertices(targetsPath, loaded) || loaded.empty()) {
+      LOGI("medium patches: failed to load targets from " << targetsPath << '\n');
+      return;
+    }
+    origin = loaded[0];
+    for (const auto &q : loaded)
+      for (int c = 0; c < 3; ++c) origin[c] = std::min(origin[c], q[c]);
+    for (const auto &q : loaded) {
+      // Only positions are stored. Derive the free-space normal and the
+      // void clearance from the nearest support fruit.
+      float supportDist = 0.0f;
+      Vec3f away(0.0f, 0.0f, 1.0f);
+      if (!MediumNearestSupport(scene, q, supportDist, away)) supportDist = 0.0f;
+      points.push_back({q, away, std::max(supportDist, 1.0f), 6u});
+    }
+    LOGI("medium patches: loaded " << points.size() << " targets from " << targetsPath << '\n');
+    std::stable_sort(points.begin(), points.end(), [](const auto &a, const auto &b) {
+      return a.clearance > b.clearance;
+    });
+  } else {
+    // Snapshot only the fixed >14cm support tier for target generation. The
+    // full instance vector and broad phase are restored before any placement.
+    // Existing medium-small fruits may already be present in a resumed pack;
+    // they count as coverage, never as generators of new baseline targets.
+    std::vector<InstanceInfo> original;
+    original.swap(scene.instances);
+    for (const auto &inst : original) {
+      if (!inst.isExclusion && scene.items[inst.itemId].BoxDiagonal() > 14.0f)
+        scene.instances.push_back(inst);
+    }
+    VoidField large;
+    large.voxelSize = step.shrinkwrapVoxelSize;
+    Array3D<short> raw;
+    try {
+      ComputeShrinkWrapDistField(scene, 12.0f, step.shrinkwrapVoxelSize,
+                                 large.dist, large.origin, large.distUnit, &raw);
+    } catch (...) {
+      scene.instances.swap(original);
+      throw;
+    }
+    scene.instances.swap(original);
+    if (raw.GetData().empty()) {
+      LOGI("medium patches: no fixed support fruit\n");
+      return;
+    }
+    Array3D<short> closed6 = CloseShrinkwrapField(raw, step.shrinkwrapVoxelSize,
+                                                   step.shrinkwrapRadius, large.distUnit);
+    const Vec3f origin = large.origin;
+    const float dx = step.shrinkwrapVoxelSize, distUnit = large.distUnit;
+
+    for (unsigned scale : {6u, 12u}) {
+      const Array3D<short> &closed = scale == 6 ? closed6 : large.dist;
+      TrigMesh hull = ComputeShrinkWrapMesh(closed, origin, dx, distUnit);
+      for (size_t ti = 0; ti < hull.GetNumTrigs(); ++ti) {
+        const Triangle tri = hull.GetTriangleVerts(ti);
+        const Vec3f p = (tri[0] + tri[1] + tri[2]) * (1.0f / 3.0f);
+        float gap = SampleDistField(raw, origin, dx, distUnit, p);
+        if (gap <= 1.1f * dx || gap > 0.75f * maxDiag) continue;
+        const float containerDist = scene.sdf->GetCoarseDist(p);
+        if (containerDist > 0.0f) continue;
+        // Only the outer shell matters for this pass. The inner mesh is a
+        // target mask, not a collision boundary for the fruit itself.
+        if (containerDist < -16.0f) { filteredDeep++; continue; }
+        if (innerSdf && innerSdf->GetCoarseDist(p) <= 1.0f) {
+          filteredInner++; continue;
+        }
+        if (scene.exclusionItemIndex != ~0u) {
+          const auto &excl = scene.items[scene.exclusionItemIndex];
+          if (excl.sdf && excl.sdf->GetCoarseDist(p) <= 2.5f) {
+            filteredExclusion++; continue;
+          }
+        }
+        if (scale == 12 && SampleDistField(closed6, origin, dx, distUnit, p) <= dx)
+          continue;
+        Vec3f n = (tri[1] - tri[0]).cross(tri[2] - tri[0]);
+        if (n.norm2() < 1e-8f) continue;
+        n.normalize();
+        if (SampleDistField(closed, origin, dx, distUnit, p + 2.0f * n) <
+            SampleDistField(closed, origin, dx, distUnit, p - 2.0f * n)) n *= -1.0f;
+        Vec3f g = (p - origin) * (1.0f / sampleDx);
+        const uint64_t x = uint64_t(std::max(0, int(std::floor(g[0]))));
+        const uint64_t y = uint64_t(std::max(0, int(std::floor(g[1]))));
+        const uint64_t z = uint64_t(std::max(0, int(std::floor(g[2]))));
+        const uint64_t key = (uint64_t(scale == 12) << 48) | (x << 32) | (y << 16) | z;
+        if (!sampled.insert(key).second) continue;
+        points.push_back({p, n, gap, scale});
+      }
+    }
+    raw = Array3D<short>();
+    closed6 = Array3D<short>();
+    large.dist = Array3D<short>();
+    std::stable_sort(points.begin(), points.end(), [](const auto &a, const auto &b) {
+      if (a.radius != b.radius) return a.radius < b.radius;
+      return a.clearance > b.clearance;
+    });
+  }
+
+  std::unordered_set<unsigned> mediumKinds(kinds.begin(), kinds.end());
+  unsigned initiallyCovered = 0;
+  for (auto &p : points) {
+    Box3f query;
+    query.vmin = query.vmax = p.pos;
+    for (unsigned id : scene.broadPhase.GetNearby(query, maxDiag)) {
+      const auto &inst = scene.instances[id];
+      if (mediumKinds.count(inst.itemId) &&
+          MediumPointCovered(p, scene.items[inst.itemId], inst.tran)) {
+        p.covered = true;
+        p.owner = id;
+        initiallyCovered++;
+        break;
+      }
+    }
+  }
+  std::vector<Vec3f> baselinePts;
+  baselinePts.reserve(points.size());
+  for (const auto &p : points) baselinePts.push_back(p.pos);
+  SaveVec3fObj(scene.outputFolder + "/medium_patch_targets.obj", baselinePts);
+  {
+    std::ofstream targetCsv(scene.outputFolder + "/medium_patch_targets.csv");
+    targetCsv << "x,y,z,nx,ny,nz,clearance_cm,wrap_radius_cm,initially_covered\n";
+    for (const auto &p : points)
+      targetCsv << p.pos[0] << ',' << p.pos[1] << ',' << p.pos[2] << ','
+                << p.normal[0] << ',' << p.normal[1] << ',' << p.normal[2] << ','
+                << p.clearance << ',' << p.radius << ',' << unsigned(p.covered) << '\n';
+  }
+  MediumGraphResult initialGraph = BuildMediumPatchGraph(
+      points, origin, sampleDx, scene, scene.outputFolder + "/medium_fruit_graph_before.obj");
+  LOGI("medium patches: " << points.size() << " targets (" << initiallyCovered
+       << " already covered), " << initialGraph.components << " surface components, "
+       << initialGraph.fruitEdges << " fruit-graph edges; masked " << filteredInner
+       << " inner, " << filteredExclusion << " exclusion, " << filteredDeep
+       << " deep targets; setup " << clock.ElapsedMS() / 1000.0 << " s\n");
+  const double setupSeconds = clock.ElapsedMS() / 1000.0;
+  LOGI("medium patches: budget " << step.count << " placements, " << maxAttempts
+       << " target attempts, " << maxSeconds << " s wall time\n");
+
+  unsigned attempts = 0, placed = 0, covered = initiallyCovered;
+  MediumGraphResult activeGraph = std::move(initialGraph);
+  for (unsigned round = 0; round < 12; ++round) {
+    const unsigned placedBeforeRound = placed;
+    const unsigned attemptsBeforeRound = attempts;
+    LOGI("medium graph refinement round " << round + 1 << ": "
+         << activeGraph.openComponents << " open components, largest "
+         << activeGraph.largestOpenComponent << " samples\n");
+  for (unsigned targetIndex : activeGraph.order) {
+    const auto &target = points[targetIndex];
+    if (clock.ElapsedMS() / 1000.0 >= maxSeconds || attempts >= maxAttempts ||
+        placed >= step.count || placed - placedBeforeRound >= 600 ||
+        attempts - attemptsBeforeRound >= 5000) break;
+    if (target.covered) continue;
+    attempts++;
+    const double attemptStartMs = clock.ElapsedMS();
+    double settleMs = 0.0;
+    unsigned settleCalls = 0;
+    std::vector<unsigned> selected = kinds;
+    const float desiredDiag = 2.5f * target.clearance;
+    std::sort(selected.begin(), selected.end(), [&](unsigned a, unsigned b) {
+      return std::fabs(scene.items[a].BoxDiagonal() - desiredDiag) <
+             std::fabs(scene.items[b].BoxDiagonal() - desiredDiag);
+    });
+    if (selected.size() > 4) {
+      unsigned largest = *std::max_element(selected.begin(), selected.end(),
+          [&](unsigned a, unsigned b) {
+            return scene.items[a].BoxDiagonal() < scene.items[b].BoxDiagonal();
+          });
+      selected.resize(3);
+      if (std::find(selected.begin(), selected.end(), largest) == selected.end())
+        selected.push_back(largest);
+    }
+    struct Proposal { unsigned kind = ~0u; unsigned gain = 0; float supportGap = 0;
+                      RigidTransform pose;
+                      std::vector<RigidTransform> trajectory; } best;
+    for (size_t ki = 0; ki < selected.size(); ++ki) {
+      if (clock.ElapsedMS() / 1000.0 >= maxSeconds) break;
+      const unsigned kind = selected[ki];
+      MeshInfo &item = scene.items[kind];
+      float supportDist;
+      Vec3f away;
+      if (!MediumNearestSupport(scene, target.pos, supportDist, away)) continue;
+      for (unsigned rotation = 0; rotation < 2; ++rotation) {
+        if (clock.ElapsedMS() / 1000.0 >= maxSeconds) break;
+        Vec3f outward = target.normal;
+        const Vec3f angles = scene.randAngles[(attempts * 11 + ki * 3 + rotation) % scene.randAngles.size()];
+        RigidTransform start;
+        start.rotation = RotationMatrixRad(angles[0], angles[1], angles[2]);
+        const float supportShift = std::clamp(0.30f * item.BoxDiagonal() - supportDist - 0.2f,
+                                              -3.0f, 3.0f);
+        const Vec3f goal = target.pos + away * supportShift +
+                           outward * (rotation == 0 ? 0.1f * item.BoxDiagonal() : 0.0f);
+        start.position = goal + outward * 1.5f;
+        if (ContainerOutsideFraction(item.samples, start.rotation, start.position, scene.sdf) > 0.2f ||
+            !MediumOutsideExclusion(scene, item, start) ||
+            SignedOverlapFraction(scene, item.box, item.samples, start.rotation, start.position) > 0.6f)
+          continue;
+        std::vector<RigidTransform> trajectory;
+        NudgeOutcome outcome;
+        Utils::Stopwatch settleClock;
+        settleClock.Start();
+        RigidTransform pose = scene.NudgeToTarget(kind, start, goal, trajectory, &outcome);
+        const double thisSettleMs = settleClock.ElapsedMS();
+        settleMs += thisSettleMs;
+        settleCalls++;
+        if (timer) timer->Record(item.name, thisSettleMs);
+        if (ContainerOutsideFraction(item.samples, pose.rotation, pose.position, scene.sdf) >
+                kContainerOutsideThresh ||
+            !MediumOutsideExclusion(scene, item, pose) ||
+            SignedOverlapFraction(scene, item.box, item.samples, pose.rotation, pose.position) >
+                kOccupiedThresh ||
+            ExistingInsideCandidateFraction(scene, item.box, pose.rotation, pose.position,
+                                            item.sdf) > kOccupiedThresh) continue;
+        const unsigned gain = MediumCoverageGain(points, item, pose);
+        if (gain < 2 || gain < best.gain) continue;
+        const float supportGap = MediumSupportGap(scene, item, pose);
+        if ((gain == best.gain && best.kind != ~0u &&
+             item.BoxDiagonal() <= scene.items[best.kind].BoxDiagonal()) ||
+            supportGap > 0.30f ||
+            MediumOverlapsTooDeeply(scene, item, pose))
+          continue;
+        best.kind = kind;
+        best.pose = pose;
+        best.gain = gain;
+        best.supportGap = supportGap;
+        best.trajectory = std::move(trajectory);
+      }
+    }
+    if (best.kind == ~0u) {
+      if (attempts % 50 == 0) {
+        LOGI("medium patches: " << attempts << " targets tried, " << placed
+             << " placed, " << covered << "/" << points.size()
+             << " covered, elapsed " << clock.ElapsedMS() / 1000.0
+             << " s, latest attempt " << (clock.ElapsedMS() - attemptStartMs) / 1000.0
+             << " s (settle " << settleMs / 1000.0 << " s in " << settleCalls
+             << " calls)\n");
+      }
+      continue;
+    }
+    unsigned id = scene.Put(best.kind, best.pose);
+    scene.instances[id].trajectory = std::move(best.trajectory);
+    placed++;
+    for (auto &p : points) {
+      if (!p.covered && MediumPointCovered(p, scene.items[best.kind], best.pose)) {
+        p.covered = true;
+        p.owner = id;
+        covered++;
+      }
+    }
+    const double elapsedSeconds = clock.ElapsedMS() / 1000.0;
+    const double activeSeconds = elapsedSeconds - setupSeconds;
+    LOGI("medium placement " << placed << "/" << step.count << " "
+         << scene.items[best.kind].name << " diag "
+         << scene.items[best.kind].BoxDiagonal() << " cm: gain " << best.gain
+         << ", support gap " << best.supportGap << " cm, covered "
+         << covered << "/" << points.size() << ", target " << attempts
+         << ", attempt " << (clock.ElapsedMS() - attemptStartMs) / 1000.0
+         << " s, settle " << settleMs / 1000.0 << " s/" << settleCalls
+         << " calls, elapsed " << elapsedSeconds << " s, active average "
+         << activeSeconds / placed << " s/placement\n");
+    if (placed % 25 == 0) scene.SaveInstances(scene.packFile + "_medium_checkpoint.txt");
+  }
+    if (clock.ElapsedMS() / 1000.0 >= maxSeconds || attempts >= maxAttempts ||
+        placed >= step.count || placed == placedBeforeRound) break;
+    activeGraph = BuildMediumPatchGraph(points, origin, sampleDx, scene,
+        scene.outputFolder + "/medium_fruit_graph_round" + std::to_string(round + 1) + ".obj");
+  }
+  scene.SaveInstances(scene.packFile + "_after_medium.txt");
+  MediumGraphResult finalGraph = BuildMediumPatchGraph(
+      points, origin, sampleDx, scene, scene.outputFolder + "/medium_fruit_graph_after.obj");
+  std::ofstream report(scene.outputFolder + "/medium_patch_coverage.txt");
+  report << "source " << cfg.ResumePackPath() << '\n'
+         << "targets " << points.size() << '\n'
+         << "initially_covered " << initiallyCovered << '\n'
+         << "final_covered " << covered << '\n'
+         << "filtered_inner " << filteredInner << '\n'
+         << "filtered_exclusion " << filteredExclusion << '\n'
+         << "filtered_deep " << filteredDeep << '\n'
+         << "graph_components " << finalGraph.components << '\n'
+         << "graph_fruit_edges " << finalGraph.fruitEdges << '\n'
+         << "open_graph_sample_edges " << finalGraph.openSampleEdges << '\n'
+         << "open_graph_components " << finalGraph.openComponents << '\n'
+         << "largest_open_component_samples " << finalGraph.largestOpenComponent << '\n'
+         << "placed " << placed << '\n'
+         << "targets_tried " << attempts << '\n'
+         << "elapsed_seconds " << clock.ElapsedMS() / 1000.0 << '\n';
+  LOGI("medium patches: finished with " << placed << " fruit, " << covered << "/"
+       << points.size() << " target samples covered in " << clock.ElapsedMS() / 1000.0
+       << " s\n");
+}
+
 void PackFillCrevices(PackingScene &scene, const PackingConfig &cfg,
                       const CreviceFieldParams &fp,
                       const std::vector<std::string> &smallItemNames,
@@ -1764,6 +2646,13 @@ void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig
 
   PlacementTimer runTimer;
 
+  if (scene.exclusionItemIndex != ~0u) {
+    RigidTransform identity;
+    unsigned instId = scene.Put(scene.exclusionItemIndex, identity);
+    scene.instances[instId].isExclusion = true;
+    LOGI("exclusion mesh placed at identity\n");
+  }
+
   if (cfg.resume) {
     LoadPack(scene, cfg.ResumePackPath());
     // force samples/sdf population for resumed kinds -- LoadPack's Put()
@@ -1781,12 +2670,18 @@ void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig
   for (size_t i = cfg.startStep; i < endStep; i++) {
     const PackingStep &step = plan.steps[i];
     LOGI("=== step " << i << " of " << plan.steps.size() << " ("
-                     << (step.kind == StepKind::Crevice ? "crevice" : "bulk") << ") ===\n");
+                     << (step.kind == StepKind::Crevice ? "crevice" :
+                         step.kind == StepKind::MediumPatch ? "medium patches" : "bulk") << ") ===\n");
     Utils::Stopwatch clock;
     clock.Start();
     size_t before = scene.instances.size();
 
-    if (step.kind == StepKind::Crevice) {
+    if (step.kind == StepKind::MediumPatch) {
+      PackMediumPatches(scene, step, cfg, &runTimer);
+    } else if (step.kind == StepKind::Crevice) {
+      if (step.useInnerContainer && !scene.innerContainerEnabled) {
+        AddInnerContainer(scene);
+      }
       if (!savedBeforeFill) {
         scene.SaveTrajectories(scene.trajFile + "_before_ray.txt");
         scene.SaveInstances(scene.packFile + "_before_ray.txt");
@@ -1831,6 +2726,8 @@ void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig
       LOGI("shrinkwrap surface: " << shrinkPts.size() << " points at radius "
                                   << step.shrinkwrapRadius << " cm, voxel "
                                   << step.shrinkwrapVoxelSize << " cm\n");
+      SaveVec3fObj(scene.outputFolder + "/shrinkwrap_surface_step" + std::to_string(i) + ".obj",
+                   shrinkPts);
       PackStep(scene, step, cfg, shrinkPts, &runTimer);
     } else {
       if (step.useFreeSurfacePoints && !haveSurfPts) {
@@ -1848,12 +2745,25 @@ void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig
                      << scene.instances.size() << " instances total ===\n");
   }
 
-  PackQualityReport finalReport = ComputePackQuality(scene, cfg);
-  SavePackQualityReport(finalReport, scene.outputFolder + "/pack_quality_final.txt");
   SavePlacementTimer(runTimer, scene.outputFolder + "/timing.txt");
-  LOGI("=== final quality: fill " << (finalReport.fillFraction * 100.0f)
-                                  << "%, open " << (finalReport.openFraction * 100.0f)
-                                  << "%, saved pack_quality_final.txt / timing.txt ===\n");
+  // ComputePackQuality uses the small-fruit grid (0.2cm by default). On the
+  // whole hand this exceeds billions of voxels and can dwarf or exhaust a
+  // medium-only run. Its own patch-coverage report above is the right metric.
+  bool mediumOnly = false;
+  if (endStep > cfg.startStep) {
+    mediumOnly = true;
+    for (size_t i = cfg.startStep; i < endStep; ++i)
+      mediumOnly &= plan.steps[i].kind == StepKind::MediumPatch;
+  }
+  // the region-limited old-way test is also partial: no whole-hand report.
+  if (cfg.oldWayMedium) mediumOnly = true;
+  if (!mediumOnly) {
+    PackQualityReport finalReport = ComputePackQuality(scene, cfg);
+    SavePackQualityReport(finalReport, scene.outputFolder + "/pack_quality_final.txt");
+    LOGI("=== final quality: fill " << (finalReport.fillFraction * 100.0f)
+                                    << "%, open " << (finalReport.openFraction * 100.0f)
+                                    << "%, saved pack_quality_final.txt / timing.txt ===\n");
+  }
 }
 
 std::vector<Vec3f> ComputeFreeContainerPoints(PackingScene &scene) {
@@ -1933,6 +2843,11 @@ void PackFruits(const PackingPlan &plan, const PackingConfig &cfgIn) {
   PackingConfig cfg = cfgIn;
   cfg.ClampStartStep(plan.steps.size());
   PackingScene scene;
+  if (cfg.sphereCover) {
+    if (!BuildSphereCoverScene(scene, plan, cfg)) return;
+    RunSphereCoverFast(scene, plan, cfg);
+    return;
+  }
   if (!BuildScene(scene, cfg)) {
     return;
   }

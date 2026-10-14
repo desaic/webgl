@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <iostream>
 #include <map>
+#include <stdexcept>
 #include <vector>
 
 // M2: measure the net growth of ComputeShrinkWrapDistField / MarchingCubes
@@ -121,7 +122,31 @@ void RunCase(float sphereRadius, float shrinkRadius, float voxelSize) {
   Array3D<short> dist;
   Vec3f fieldOrigin;
   float distUnit;
-  ComputeShrinkWrapDistField(scene, shrinkRadius, voxelSize, dist, fieldOrigin, distUnit);
+  Array3D<short> raw;
+  ComputeShrinkWrapDistField(scene, shrinkRadius, voxelSize, dist, fieldOrigin, distUnit, &raw);
+  if (shrinkRadius / voxelSize <= 14) {
+    auto cached = CloseShrinkwrapField(raw, voxelSize, shrinkRadius, distUnit);
+    if (cached.GetData() != dist.GetData()) {
+      throw std::runtime_error("cached closing differs from original path");
+    }
+    VoidField closed;
+    closed.dist = dist;
+    closed.origin = fieldOrigin;
+    closed.voxelSize = voxelSize;
+    closed.distUnit = distUnit;
+    auto fromCache = ComputeShrinkwrapField(std::move(closed), raw, 1, 1);
+    auto direct = ComputeShrinkwrapField(scene, shrinkRadius, voxelSize, 1, 1);
+    if (fromCache.origin != direct.origin ||
+        fromCache.dist.GetSize() != direct.dist.GetSize() ||
+        fromCache.dist.GetData() != direct.dist.GetData()) {
+      throw std::runtime_error("cached crevice field differs from original path");
+    }
+  } else {
+    bool rejected = false;
+    try { CloseShrinkwrapField(raw, voxelSize, shrinkRadius, distUnit); }
+    catch (const std::invalid_argument &) { rejected = true; }
+    if (!rejected) throw std::runtime_error("unsupported cached radius accepted");
+  }
   TrigMesh hull = ComputeShrinkWrapMesh(dist, fieldOrigin, voxelSize, distUnit);
   if (hull.GetNumTrigs() == 0) {
     std::cout << "sphereR=" << sphereRadius << " shrinkR=" << shrinkRadius

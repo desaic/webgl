@@ -22,6 +22,7 @@ class AdapSDF;
 struct InstanceInfo{
   unsigned itemId = 0;
   RigidTransform tran;
+  bool isExclusion = false;
   InstanceInfo(unsigned i, const RigidTransform & t):itemId(i), tran(t){}
 
   // for debug visualization.
@@ -140,6 +141,9 @@ class PackingScene {
     std::string outputFolder;
     float dx = 1.0f;
     MeshConvo bg;
+    // only placed fruit and the exclusion mesh, no container wall. same grid as
+    // bg. empty unless PrepareBackground allocated it (cfg.oldWayOverlap).
+    MeshConvo itemsBg;
     float gridDx = 1.0f;
     BroadPhaseGrid broadPhase;
     // container acceleration grid for collission.
@@ -162,6 +166,8 @@ class PackingScene {
     std::string trajFile;
     unsigned trajFileIndex = 0;
     std::string packFile;
+    // item index of the exclusion mesh, or ~0u if none.
+    unsigned exclusionItemIndex = ~0u;
 };
 
 

@@ -2,6 +2,7 @@
 
 #include <limits>
 #include <string>
+#include <vector>
 
 /// all tunable inputs for a packing run.
 /// pulled out of main.cpp so benchmarks can build a scenario
@@ -14,6 +15,12 @@ struct PackingConfig {
     // container meshes, relative to dataDir.
     std::string containerFile = "hands/finger4.8m.stl";
     std::string innerContainerFile = "hands/finger_4.8m_inner.stl";
+    // optional mesh treated as a pre-placed fixed obstacle (not saved in pack
+    // output). placed at its original world position before any packing starts.
+    std::string exclusionMeshFile;
+    // optional .obj whose vertices are the medium-patch target points,
+    // relative to dataDir. when set, targets are loaded instead of recomputed.
+    std::string mediumTargetsFile;
     // output directory, relative to dataDir.
     std::string outSubdir = "out";
 
@@ -111,10 +118,102 @@ struct PackingConfig {
     // (cm^3) is reported as unnecessary by the coverage metric.
     float creviceUsefulVolume = 0.05f;
 
+    // sphere cover (SphereCover.h): when sphereCover is set, PackScene skips the
+    // plan steps and instead covers the medium targets with spheres, writing
+    // sphere_cover.txt (x y z r per line) and sphere_cover_uncovered.obj.
+    bool sphereCover = false;
+    // uniform scales applied to each medium fruit's effective radius to get the
+    // discrete sphere radii.
+    std::vector<float> sphereScales = {1.2f, 1.1f, 1.0f, 0.9f, 0.8f};
+    // max proxy overlap (sphere-fruit, sphere-sphere) as a fraction of radius. proxies
+    // are only a search filter, so this is loose; exact fruit checks come later.
+    float sphereOverlapCm = 0.2f;
+    // max depth of a sphere into the container wall / exclusion mesh as a fraction of
+    // radius.
+    float sphereHardFrac = 0.3f;
+    // a sphere must come within this many cm of a fruit or accepted sphere.
+    float sphereContactTol = 0.15f;
+    // score = newly covered target weight - sphereCost - sphereSizeCost * r.
+    float sphereCost = 3.0f;
+    float sphereSizeCost = 0.2f;
+    unsigned sphereMaxCount = 5000;
+    // Low-poly outer container shell (ContainerShell.h). shellVoxel <= 0 is off.
+    float shellVoxel = 0.0f;     // SDF voxel size (cm)
+    float shellOutset = 0.5f;    // marching-cubes level outside the container (cm)
+    float shellError = 1.0f;     // simplification error bound (cm)
+    float shellFraction = 0.02f; // target triangle count fraction
+    // inside/outside from voxelization + flood fill only, ignoring the triangle SDF sign
+    bool shellFromVoxels = true;
+    float patchRadius = 12.0f; // shell patch extent from its seed triangle (cm)
+    float patchAngle = 35.0f;  // max normal deviation from the seed (degrees)
+    // shell passes (ShellPasses.h): filler fruit diagonal range, 8 to 14 cm group.
+    bool shellPasses = false;
+    float fillMinDiag = 8.0f;
+    float fillMaxDiag = 14.0f;
+    float shellSampleSpacing = 1.5f; // ray lattice spacing on the shell (cm)
+    float holeMinArea = 30.0f;       // min open blob area (cm2)
+    float crevDepth = 4.0f;      // min hull-relative depth (cm) for a pass 2 crevice sample
+    float crevMinArea = 30.0f;   // min crevice blob area (cm2)
+    unsigned crevGroupMax = 3;   // max fruit in a hull group
+    // old FFT FindSpot + Nudge on the 8 to 14 cm group only, limited to x < sphereMaxX
+    bool oldWayMedium = false;
+    bool oldWayOverlap = false;   // FindSpot overlap heuristic (see PackingOps.h)
+    unsigned oldWayErode = 1;     // voxels eroded from the candidate fruit before the FFT search
+    float graphGap = 3.0f;        // medium graph: max surface gap (cm) for an edge
+    bool shellEvalOnly = false;    // only report ray metrics for the loaded pack
+    bool shellSwap = false;        // swap balls for fruit and nudge them inward
+    unsigned swapTrials = 24;      // orientations tried per ball
+    float swapForceW = 0.5f;       // Nudge direction weight vs contact attraction
+    float swapMaxOverlap = 0.4f;   // max accepted penetration after nudging (cm)
+    float shellFruitMargin = 25.0f;  // load fruit this far past sphereMaxX for ray queries (cm)
+    // only existing fruit with box diagonal above this (cm) are obstacles and
+    // support; smaller (medium) fruit already in the pack are what this
+    // cover replaces, so they are ignored.
+    float sphereSupportMinDiag = 14.0f;
+    // field targets: when sphereFieldVoxel > 0, regenerate targets from the large
+    // fruit instead of loading mediumTargetsFile. a lattice (sphereFieldSpacing cm)
+    // of points where the shrinkwrap closing of radius sphereFieldRadius is
+    // filled but no fruit is, at least sphereFieldMinClear cm from any fruit.
+    float sphereFieldVoxel = 0.0f;
+    float sphereFieldRadius = 6.0f;
+    float sphereFieldSpacing = 1.0f;
+    float sphereFieldMinClear = 0.5f;
+    // crevice faces (CreviceFaces.h): when sphereHullFaces is set, export the
+    // external convex-hull faces of small fruit groups that cover a pocket.
+    bool sphereHullFaces = false;
+    float hullGap = 1.5f;          // max surface gap (cm) for two fruit to be neighbors
+    float hullBridgeGap = 8.0f;    // sparse two-fruit groups across wider mouths
+    unsigned hullMaxNeighbors = 4; // cap wide-mouth neighbors per fruit
+    unsigned hullSamples = 300;    // vertex samples per fruit
+    float hullMinDepth = 1.0f;     // min pocket depth (cm) under a kept face
+    float hullExclMargin = 2.0f;   // drop faces within this (cm) of the exclusion mesh
+    float hullSurfaceBand = 12.0f; // only mouths this close to container surface
+    float hullPatchSize = 2.0f;    // subdivision edge length for face validation
+    float hullSupportDist = 12.0f; // second group fruit must be this close to a target
+    // Surface-derived passage centers between opposing fruit, exported as
+    // mouth points and a short same-pair graph (CreviceMouths.h).
+    bool sphereMouths = false;
+    float mouthNeighborDist = 12.0f;
+    float mouthMaxNormalDot = -0.2f;
+    float mouthOuterBand = 12.0f;
+    float mouthCell = 1.5f;
+    float mouthTargetWeight = 1.0f; // >1 prioritizes nearby volume targets
+    float mouthGainWeight = 0.0f; // direct reward for each uncovered medium-width mouth
+    unsigned mouthPlacementLimit = 0; // greedy sphere placements across mouth centers
+    bool sphereFrontRequireMouth = false; // front spheres must cover a new medium-width mouth
+    bool sphereAuditOpenMouths = false; // grid-search remaining mouths for feasible spheres
+    unsigned sphereMouthRepairPasses = 0; // local swaps that improve mouth coverage
+    // debug: only use targets and fruit with x < sphereMaxX.
+    float sphereMaxX = std::numeric_limits<float>::max();
+    // debug: flat x y z triples; each is probed after the cover (see SphereCover.cpp).
+    std::vector<float> sphereProbes;
+
     // path helpers. all return absolute paths.
     std::string MeshDir() const;
     std::string ContainerPath() const;
     std::string InnerContainerPath() const;
+    std::string ExclusionMeshPath() const;
+    std::string MediumTargetsPath() const;
     std::string OutputFolder() const;
     std::string ResumePackPath() const;
 

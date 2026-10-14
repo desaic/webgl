@@ -74,7 +74,21 @@
       "Bash(cmake --build . --config Release --target cpu_pack)",
       "Bash(F:/github/webgl/cpu_pack/build/Release/cpu_pack.exe)",
       "Bash(cmake --build . --config Release --target finger_debug cpu_pack)",
-      "Bash(F:/github/webgl/cpu_pack/build/Release/finger_debug.exe)"
+      "Bash(F:/github/webgl/cpu_pack/build/Release/finger_debug.exe)",
+      "Read(//f/meshes/fruit_hand/out/**)",
+      "Read(//f/meshes/fruit_hand/run_logs/**)",
+      "Bash(grep -rn \"offset\\\\|erode\\\\|shrink\\\\|inset\\\\|shell\\\\|thick\" F:/github/webgl/ --include=\"*.h\" --include=\"*.cpp\" -l | grep -iv \"pocketfft\\\\|packing\\\\|debug\\\\|bench\\\\|test\\\\|melone\\\\|bones\" | head -20)",
+      "Read(//f/github/webgl/MeshDebugger/**)",
+      "Bash(xargs grep -l \"SDFMesh\\\\|SDFImpAdap\")",
+      "Bash(cmake --build . --config Release --target pack_core)",
+      "Bash(grep -E \"error|warning|\\\\.cpp$|Generating|cpu_pack\\\\.exe\")",
+      "Bash(grep -E \"error|warning C|\\\\.cpp$|cpu_pack\\\\.exe\")",
+      "Read(//f/meshes/fruit_hand/out_hand/**)",
+      "Bash(ls F:/meshes/fruit_hand/out_hand/traj* 2>/dev/null | head -5)",
+      "Bash(head -20 F:/meshes/fruit_hand/out_hand/traj_final_large_medium.txt)",
+      "Bash(grep -E \"error C|\\\\.cpp$|cpu_pack\\\\.exe\")",
+      "Bash(grep -n \"move\\\\|operator=\\\\|Array3D\\(\" F:/github/webgl/cpu_pack/../SparseSDF/Array3D.h 2>/dev/null | head -15)",
+      "Bash(find F:/github/webgl -name \"Array3D.h\" 2>/dev/null | head -3)"
     ]
   }
 }

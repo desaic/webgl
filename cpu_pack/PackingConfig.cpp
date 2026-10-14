@@ -29,6 +29,14 @@ std::string PackingConfig::InnerContainerPath() const {
   return Join(dataDir, innerContainerFile);
 }
 
+std::string PackingConfig::MediumTargetsPath() const {
+  return mediumTargetsFile.empty() ? std::string() : Join(dataDir, mediumTargetsFile);
+}
+
+std::string PackingConfig::ExclusionMeshPath() const {
+  return Join(dataDir, exclusionMeshFile);
+}
+
 std::string PackingConfig::OutputFolder() const {
   return Join(dataDir, outSubdir) + "/";
 }
@@ -82,6 +90,10 @@ bool PackingConfig::LoadFromFile(const std::string &path) {
       containerFile = value;
     } else if (key == "innerContainerFile") {
       innerContainerFile = value;
+    } else if (key == "exclusionMeshFile") {
+      exclusionMeshFile = value;
+    } else if (key == "mediumTargetsFile") {
+      mediumTargetsFile = value;
     } else if (key == "outSubdir") {
       outSubdir = value;
     } else if (key == "dx") {
@@ -112,6 +124,137 @@ bool PackingConfig::LoadFromFile(const std::string &path) {
       trajSaveInterval = unsigned(std::atoi(value.c_str()));
     } else if (key == "packSaveInterval") {
       packSaveInterval = unsigned(std::atoi(value.c_str()));
+    } else if (key == "sphereCover") {
+      sphereCover = ParseBool(value);
+    } else if (key == "sphereScales") {
+      std::istringstream vs(value);
+      sphereScales.clear();
+      float s;
+      while (vs >> s) sphereScales.push_back(s);
+    } else if (key == "sphereOverlapCm") {
+      sphereOverlapCm = float(std::atof(value.c_str()));
+    } else if (key == "sphereHardFrac") {
+      sphereHardFrac = float(std::atof(value.c_str()));
+    } else if (key == "sphereContactTol") {
+      sphereContactTol = float(std::atof(value.c_str()));
+    } else if (key == "sphereCost") {
+      sphereCost = float(std::atof(value.c_str()));
+    } else if (key == "sphereSizeCost") {
+      sphereSizeCost = float(std::atof(value.c_str()));
+    } else if (key == "sphereSupportMinDiag") {
+      sphereSupportMinDiag = float(std::atof(value.c_str()));
+    } else if (key == "sphereFieldVoxel") {
+      sphereFieldVoxel = float(std::atof(value.c_str()));
+    } else if (key == "sphereFieldRadius") {
+      sphereFieldRadius = float(std::atof(value.c_str()));
+    } else if (key == "sphereFieldSpacing") {
+      sphereFieldSpacing = float(std::atof(value.c_str()));
+    } else if (key == "sphereFieldMinClear") {
+      sphereFieldMinClear = float(std::atof(value.c_str()));
+    } else if (key == "sphereHullFaces") {
+      sphereHullFaces = ParseBool(value);
+    } else if (key == "hullGap") {
+      hullGap = float(std::atof(value.c_str()));
+    } else if (key == "hullBridgeGap") {
+      hullBridgeGap = float(std::atof(value.c_str()));
+    } else if (key == "hullMaxNeighbors") {
+      hullMaxNeighbors = unsigned(std::atoi(value.c_str()));
+    } else if (key == "hullSamples") {
+      hullSamples = unsigned(std::atoi(value.c_str()));
+    } else if (key == "hullMinDepth") {
+      hullMinDepth = float(std::atof(value.c_str()));
+    } else if (key == "hullExclMargin") {
+      hullExclMargin = float(std::atof(value.c_str()));
+    } else if (key == "hullSurfaceBand") {
+      hullSurfaceBand = float(std::atof(value.c_str()));
+    } else if (key == "hullPatchSize") {
+      hullPatchSize = float(std::atof(value.c_str()));
+    } else if (key == "hullSupportDist") {
+      hullSupportDist = float(std::atof(value.c_str()));
+    } else if (key == "sphereMouths") {
+      sphereMouths = ParseBool(value);
+    } else if (key == "mouthNeighborDist") {
+      mouthNeighborDist = float(std::atof(value.c_str()));
+    } else if (key == "mouthMaxNormalDot") {
+      mouthMaxNormalDot = float(std::atof(value.c_str()));
+    } else if (key == "mouthOuterBand") {
+      mouthOuterBand = float(std::atof(value.c_str()));
+    } else if (key == "mouthCell") {
+      mouthCell = float(std::atof(value.c_str()));
+    } else if (key == "mouthTargetWeight") {
+      mouthTargetWeight = float(std::atof(value.c_str()));
+    } else if (key == "mouthGainWeight") {
+      mouthGainWeight = float(std::atof(value.c_str()));
+    } else if (key == "mouthPlacementLimit") {
+      mouthPlacementLimit = unsigned(std::atoi(value.c_str()));
+    } else if (key == "sphereFrontRequireMouth") {
+      sphereFrontRequireMouth = std::atoi(value.c_str()) != 0;
+    } else if (key == "sphereAuditOpenMouths") {
+      sphereAuditOpenMouths = std::atoi(value.c_str()) != 0;
+    } else if (key == "sphereMouthRepairPasses") {
+      sphereMouthRepairPasses = unsigned(std::atoi(value.c_str()));
+    } else if (key == "shellVoxel") {
+      shellVoxel = float(std::atof(value.c_str()));
+    } else if (key == "shellOutset") {
+      shellOutset = float(std::atof(value.c_str()));
+    } else if (key == "shellError") {
+      shellError = float(std::atof(value.c_str()));
+    } else if (key == "shellPasses") {
+      shellPasses = ParseBool(value);
+    } else if (key == "fillMinDiag") {
+      fillMinDiag = float(std::atof(value.c_str()));
+    } else if (key == "fillMaxDiag") {
+      fillMaxDiag = float(std::atof(value.c_str()));
+    } else if (key == "shellSampleSpacing") {
+      shellSampleSpacing = float(std::atof(value.c_str()));
+    } else if (key == "crevDepth") {
+      crevDepth = float(std::atof(value.c_str()));
+    } else if (key == "crevMinArea") {
+      crevMinArea = float(std::atof(value.c_str()));
+    } else if (key == "crevGroupMax") {
+      crevGroupMax = unsigned(std::atoi(value.c_str()));
+    } else if (key == "oldWayMedium") {
+      oldWayMedium = ParseBool(value);
+    } else if (key == "oldWayOverlap") {
+      oldWayOverlap = ParseBool(value);
+    } else if (key == "graphGap") {
+      graphGap = float(std::atof(value.c_str()));
+    } else if (key == "oldWayErode") {
+      oldWayErode = unsigned(std::atoi(value.c_str()));
+    } else if (key == "shellEvalOnly") {
+      shellEvalOnly = ParseBool(value);
+    } else if (key == "shellSwap") {
+      shellSwap = ParseBool(value);
+    } else if (key == "swapTrials") {
+      swapTrials = unsigned(std::atoi(value.c_str()));
+    } else if (key == "swapForceW") {
+      swapForceW = float(std::atof(value.c_str()));
+    } else if (key == "swapMaxOverlap") {
+      swapMaxOverlap = float(std::atof(value.c_str()));
+    } else if (key == "shellFruitMargin") {
+      shellFruitMargin = float(std::atof(value.c_str()));
+    } else if (key == "holeMinArea") {
+      holeMinArea = float(std::atof(value.c_str()));
+    } else if (key == "patchRadius") {
+      patchRadius = float(std::atof(value.c_str()));
+    } else if (key == "patchAngle") {
+      patchAngle = float(std::atof(value.c_str()));
+    } else if (key == "shellFromVoxels") {
+      shellFromVoxels = ParseBool(value);
+    } else if (key == "shellFraction") {
+      shellFraction = float(std::atof(value.c_str()));
+    } else if (key == "sphereMaxX") {
+      sphereMaxX = float(std::atof(value.c_str()));
+    } else if (key == "sphereProbe") {
+      std::istringstream vs(value);
+      float x, y, z;
+      if (vs >> x >> y >> z) {
+        sphereProbes.push_back(x);
+        sphereProbes.push_back(y);
+        sphereProbes.push_back(z);
+      }
+    } else if (key == "sphereMaxCount") {
+      sphereMaxCount = unsigned(std::atoi(value.c_str()));
     } else if (key == "computeStats") {
       computeStats = ParseBool(value);
     } else {
@@ -176,6 +319,9 @@ std::string PackingConfig::toString() const {
   oss << "meshDir " << MeshDir() << "\n";
   oss << "container " << ContainerPath() << "\n";
   oss << "innerContainer " << InnerContainerPath() << "\n";
+  if (!exclusionMeshFile.empty()) {
+    oss << "exclusionMesh " << ExclusionMeshPath() << "\n";
+  }
   oss << "output " << OutputFolder() << "\n";
   oss << "dx " << dx << " containerSDFDx " << containerSDFDx
       << " broadPhaseDx " << broadPhaseDx << " gridDx " << gridDx

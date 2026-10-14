@@ -33,6 +33,11 @@ void ComputeShrinkWrapDistField(PackingScene &scene, float shrinkRadius,
                                 Vec3f &origin, float &distUnit,
                                 Array3D<short> *rawOut = nullptr);
 
+/// Close a copy of a cached raw field. The caller must build raw with a band
+/// and padding sufficient for the largest requested radius (use rawOut above).
+Array3D<short> CloseShrinkwrapField(const Array3D<short> &raw, float voxelSize,
+                                   float shrinkRadius, float distUnit);
+
 /// debug helper: marching-cubes an already-computed shrinkwrap field (see
 /// ComputeShrinkWrapDistField) at iso 0.
 TrigMesh ComputeShrinkWrapMesh(const Array3D<short> &dist, const Vec3f &origin,
@@ -99,6 +104,11 @@ VoidField ComputeVoidField(PackingScene &scene, float shrinkRadius = 1.0f,
 VoidField ComputeShrinkwrapField(PackingScene &scene, float shrinkRadius = 1.0f,
                                  float voxelSize = 0.25f, unsigned erodeVoxels = 2,
                                  unsigned skinBandVoxels = 2);
+
+/// Same crevice mask from fields already computed on an identical grid.
+/// Takes ownership of closed.dist; avoids rebuilding the fruit distance field.
+VoidField ComputeShrinkwrapField(VoidField closed, const Array3D<short> &raw,
+                                 unsigned erodeVoxels, unsigned skinBandVoxels);
 
 /// plain unsigned distance to the nearest placed fruit surface, no closing
 /// applied (unlike VoidField, nothing here is masked to a hull interior or

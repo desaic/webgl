@@ -14,6 +14,8 @@
 
 #include <algorithm>
 #include <deque>
+#include <cmath>
+#include <stdexcept>
 
 namespace {
 
@@ -217,6 +219,7 @@ Vec3i RoundVec(const Vec3f &fvec) {
 TrigMesh MergeInstanceMeshes(const PackingScene &scene) {
   TrigMesh merged;
   for (const auto &inst : scene.instances) {
+    if (inst.isExclusion) continue;
     merged.append(MakeTransformedMesh(scene.items[inst.itemId].mesh, inst.tran));
   }
   return merged;
@@ -390,7 +393,8 @@ void ComputeShrinkWrapDistField(PackingScene &scene, float shrinkRadius,
   distUnit = 0.01f;
   dist = Array3D<short>();
   origin = Vec3f(0.0f, 0.0f, 0.0f);
-  if (scene.instances.empty()) {
+  if (std::none_of(scene.instances.begin(), scene.instances.end(),
+                   [](const InstanceInfo &inst) { return !inst.isExclusion; })) {
     return;
   }
   TrigMesh merged = MergeInstanceMeshes(scene);
@@ -403,6 +407,20 @@ void ComputeShrinkWrapDistField(PackingScene &scene, float shrinkRadius,
     *rawOut = dist;
   }
   ApplyShrinkWrapClosing(dist, voxelSize, shrinkRadius, distUnit);
+}
+
+Array3D<short> CloseShrinkwrapField(const Array3D<short> &raw, float voxelSize,
+                                   float shrinkRadius, float distUnit) {
+  if (!std::isfinite(voxelSize) || voxelSize <= 0 ||
+      !std::isfinite(shrinkRadius) || shrinkRadius <= 0 ||
+      !std::isfinite(distUnit) || distUnit <= 0 ||
+      std::max(2.0f, shrinkRadius / voxelSize) + 2 > AdapDF::MAX_BAND) {
+    throw std::invalid_argument("unsupported shrinkwrap radius / voxel size / distance unit");
+  }
+  Array3D<short> closed = raw;
+  if (closed.GetData().empty()) return closed;
+  ApplyShrinkWrapClosing(closed, voxelSize, shrinkRadius, distUnit);
+  return closed;
 }
 
 TrigMesh ComputeShrinkWrapMesh(const Array3D<short> &dist, const Vec3f &origin,
@@ -699,6 +717,15 @@ VoidField ComputeShrinkwrapField(PackingScene &scene, float shrinkRadius, float 
   Array3D<short> raw;
   ComputeShrinkWrapDistField(scene, shrinkRadius, voxelSize, vf.dist, vf.origin,
                              vf.distUnit, &raw);
+  return ComputeShrinkwrapField(std::move(vf), raw, erodeVoxels, skinBandVoxels);
+}
+
+VoidField ComputeShrinkwrapField(VoidField vf, const Array3D<short> &raw,
+                                 unsigned erodeVoxels, unsigned skinBandVoxels) {
+  const float voxelSize = vf.voxelSize;
+  if (vf.dist.GetSize() != raw.GetSize()) {
+    throw std::invalid_argument("shrinkwrap closed/raw grid sizes differ");
+  }
   if (vf.dist.GetSize()[0] == 0) {
     return vf;
   }

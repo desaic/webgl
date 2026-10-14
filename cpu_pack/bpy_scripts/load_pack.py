@@ -1,9 +1,17 @@
+"""Load a cpu_pack instance file in Blender.
+
+In Blender's Text Editor, open this script and press Run Script to load the
+current medium-support smoke pack. For another pack, run Blender with:
+  blender --python load_pack.py -- PACK_FILE MESH_DIR
+"""
+
 import bpy
 import os
+import sys
 from mathutils import Matrix, Vector
 
-PACK_FILE = "/media/desaic/WD/meshes/fruit_hand/pack_debug_60.txt"
-MESH_DIR = "/media/desaic/WD/meshes/fruit_hand/fruits_1/"
+PACK_FILE = "F:/meshes/fruit_hand/out_hand_oldway_ov1/pack_final.txt"
+MESH_DIR = "F:/meshes/fruit_hand/fruits_1/"
 
 
 def parse_transformation(tokens):
@@ -107,7 +115,9 @@ def instantiate(instances, mesh_dir, collection):
 
 
 def main():
-    pack_path = PACK_FILE
+    args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+    pack_path = args[0] if args else PACK_FILE
+    mesh_dir = args[1] if len(args) > 1 else MESH_DIR
     if pack_path.startswith("//"):
         pack_path = bpy.path.abspath(pack_path)
 
@@ -115,8 +125,8 @@ def main():
     print(f"Loaded {len(instances)} instances from {pack_path}")
 
     collection = bpy.context.collection
-    count = instantiate(instances, MESH_DIR, collection)
-    print(f"Instantiated {count} objects from {MESH_DIR}")
+    count = instantiate(instances, mesh_dir, collection)
+    print(f"Instantiated {count} objects from {mesh_dir}")
 
 
 if __name__ == "__main__":

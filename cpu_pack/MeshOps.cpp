@@ -1,5 +1,9 @@
 #include "MeshOps.h"
+#include "AdapSDF.h"
+#include "FastSweep.h"
+#include "MarchingCubes.h"
 #include "Matrix3f.h"
+#include "meshutil.h"
 
 TrigMesh MakeTransformedMesh(const TrigMesh & mesh, const RigidTransform & tran){
   TrigMesh transformedMesh = mesh;
@@ -45,4 +49,24 @@ void VoxelizeMesh(const TrigMesh &m, Array3D8u &grid, VoxConf conf)
 {
   grid.Allocate(conf.gridSize, 0);
   cpu_voxelize_grid(conf, &m, grid);
+}
+
+TrigMesh ComputeInnerSurface(TrigMesh &mesh, float h, float offset) {
+  const float distUnit = 0.005f;
+  std::shared_ptr<AdapSDF> sdf = std::make_shared<AdapSDF>();
+  sdf->voxSize = h;
+  sdf->band = 16;
+  sdf->distUnit = distUnit;
+  sdf->BuildTrigList(&mesh);
+  sdf->Compress();
+  mesh.ComputePseudoNormals();
+  sdf->ComputeCoarseDist();
+  CloseExterior(sdf->dist, sdf->MAX_DIST);
+  Array3D8u frozen;
+  FastSweepPar(sdf->dist, h, distUnit, 1000, frozen);
+
+  TrigMesh surf;
+  MarchingCubes(sdf->dist, -offset, distUnit, h, sdf->origin, &surf);
+  MergeCloseVertices(surf);
+  return surf;
 }
