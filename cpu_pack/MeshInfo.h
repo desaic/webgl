@@ -14,6 +14,8 @@ class AdapSDF;
 
 class MeshInfo {
   public:
+    /// false for a stub made by a lazy load (name and filePath only, empty mesh).
+    bool IsLoaded() const { return !mesh.v.empty(); }
     Box3f box;
     std::string name;
     std::string filePath;
@@ -35,6 +37,8 @@ int LoadMesh(TrigMesh &m, const std::filesystem::path &p);
 
 int LoadMeshInfo(MeshInfo &info, const std::filesystem::path &p);
 
-std::vector<MeshInfo> LoadAllMeshInfo(const std::string &meshDir);
+/// lazy: only registers name and filePath per mesh, leaving the mesh empty.
+/// PackingScene::EnsureItemLoaded loads one on first use.
+std::vector<MeshInfo> LoadAllMeshInfo(const std::string &meshDir, bool lazy = false);
 
 std::vector<int> SortBySize(const std::vector<MeshInfo> &items);

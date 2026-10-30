@@ -158,8 +158,38 @@ struct PackingConfig {
     // old FFT FindSpot + Nudge on the 8 to 14 cm group only, limited to x < sphereMaxX
     bool oldWayMedium = false;
     bool oldWayOverlap = false;   // FindSpot overlap heuristic (see PackingOps.h)
+    std::string oldWayKinds;      // comma separated kind names to restrict the old way step to (empty: whole 8 to 14 group)
+    bool oldWayInner = false;     // also treat the inner container (innerContainerFile) as an exclusion zone
+    bool clearanceGate = false;   // skip subgrid cells without free space for the fruit's inscribed sphere (ClearanceGate.h)
+    unsigned oldWayGroup = 2;     // size group of the old way step: 2 is 8 to 14 cm, 3 is 4 to 8 cm
     unsigned oldWayErode = 1;     // voxels eroded from the candidate fruit before the FFT search
-    float graphGap = 3.0f;        // medium graph: max surface gap (cm) for an edge
+    std::string forceKind = "LightGreen";  // inner force field: kind whose leftmost instance is saved
+    float forceGridDx = 0.5f;      // inner force field: local grid voxel size (cm)
+    float forceGridMargin = 20.0f; // inner force field: local grid margin around the fruit (cm)
+    unsigned vhacdMaxHulls = 16;   // vhacd: max convex hulls per mesh
+    unsigned vhacdResolution = 200000; // vhacd: voxel resolution
+    float vhacdErrorPct = 2.0f;    // vhacd: hull is close enough within this percent of the voxel volume
+    std::string vhacdFill = "flood"; // vhacd: interior fill, flood | raycast | surface
+    std::string vhacdOnly;         // vhacd: comma separated mesh names to process (empty: all)
+    unsigned vhacdDepth = 10;      // vhacd: max recursion depth
+    unsigned vhacdMaxVerts = 48;   // vhacd: max vertices per hull
+    std::string hullDir;           // inner nudge: subfolder of dataDir with <name>.hulls.txt; empty = triangle grid nudge
+    float hullInset = 0.2f;        // inner nudge: hulls shrink by this many cm
+    float hullSampleSpacing = 0.8f; // inner nudge: spacing of the hull surface samples
+    float forceExclusionSkip = 5.0f; // inner nudge: skip fruit whose surface is within this many cm of the exclusion mesh
+    unsigned forcePasses = 3;      // inner nudge: passes over all fruit
+    float graphGap = 3.0f;       // medium graph: max surface gap (cm) for an edge
+    // cavity refine (CavityRefine.h)
+    float cavDx = 0.4f;        // occupancy voxel size (cm)
+    float cavBand = 10.0f;     // only cavities this close to the container wall (cm)
+    float cavR = 1.0f;         // tool ball and shaft radius: free space it cannot reach from outside is a cavity (cm)
+    float cavCone = 70.0f;     // tool axis tilt limit from the outward direction (degrees)
+    float cavObjClear = 0.3f;  // unreachable voxels count in the objective above this clearance (cm)
+    float cavMinClear = 1.0f;  // anchors need a free ball this big, narrower pockets are left to small fruit (cm)
+    unsigned cavPasses = 2;
+    unsigned cavTrials = 16;   // candidate poses per cavity
+    float cavMinGain = 4.0f;   // min cavity volume removed (cm3) to accept a pose
+    unsigned cavMaxPerPass = 0; // cap on cavities per pass, 0 = all
     bool shellEvalOnly = false;    // only report ray metrics for the loaded pack
     bool shellSwap = false;        // swap balls for fruit and nudge them inward
     unsigned swapTrials = 24;      // orientations tried per ball

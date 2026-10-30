@@ -13,6 +13,7 @@
 #include <iomanip>
 #include <iostream>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <memory>
 #include <unordered_map>
@@ -56,6 +57,9 @@ class PackingScene {
     void InitContainerGrids();
     /// transform packing meshes into inertia frame
     void InitRigidBodies();
+    /// loads the mesh of a lazily registered item and moves it into its inertia frame. no-op
+    /// if already loaded.
+    void EnsureItemLoaded(unsigned itemIdx);
     void ComputeContainerSDF();
     /// @brief put a copy of itemIdx at the given transformation
     /// revoxelizes because it's not a bottleneck.
@@ -63,6 +67,9 @@ class PackingScene {
     /// @param tran 
     /// @return instance index
     unsigned Put(unsigned itemIdx, const RigidTransform &tran);
+    /// bookkeeping half of Put: instance list, placed list and broad phase. no voxelization,
+    /// so it works without a background grid.
+    unsigned AddInstance(unsigned itemIdx, const RigidTransform &tran);
 
     /// heuristic force direction
     Vec3f ForceDirection(
@@ -71,12 +78,18 @@ class PackingScene {
     /// @param itemIdx 
     /// @param tran 
     /// @param dirWeight betwee 0-1, weight of dir vs dynamic attraction force.
+    /// @param forceField if set, replaces dir and the attraction: the field is evaluated at every
+    /// surface sample each step; the mean force is the linear acceleration direction and the mean
+    /// torque about the center of mass is the angular acceleration. zero means no push.
+    /// @param maxSteps if nonzero, overrides the size-based step budget.
     /// @return
     RigidTransform Nudge(unsigned itemIdx,
                          const RigidTransform &tran,
                          const Vec3f &dir,
                          float dirWeight,
-                         std::vector<RigidTransform> &trajectory);
+                         std::vector<RigidTransform> &trajectory,
+                         const std::function<Vec3f(const Vec3f &)> *forceField = nullptr,
+                         size_t maxSteps = 0);
 
     RigidTransform NudgeConstrained(unsigned itemIdx, const RigidTransform & tran,
                                     const Vec3f & dir0, const PackingConstraints & constraints,
@@ -186,7 +199,11 @@ std::vector<CreviceSurface> FindDeepCreviceSurface(
     float minDepth,
     float exclusionDist);
 
-void LoadPack(PackingScene & scene, const std::string & packFile);
+/// voxelize = false adds the instances with AddInstance, leaving bg untouched.
+/// separable 1-voxel erosion of a solid voxelization, applied to placed fruit by Put.
+void ErodeBgVox(Array3D8u &vox);
+
+void LoadPack(PackingScene & scene, const std::string & packFile, bool voxelize = true);
 
 /// @brief once added, irreversible.
 void AddInnerContainer(PackingScene & scene);

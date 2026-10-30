@@ -1,4 +1,5 @@
 #include "ContainerShell.h"
+#include "ClearanceGate.h"
 
 #include "FloodOutside.h"
 #include "GridUtils.h"
@@ -65,7 +66,7 @@ static void Edt1D(const float *f, float *d, int n, int *v, float *z) {
 }
 
 // distance in voxels from every voxel to the nearest voxel with source != 0.
-static Array3D<float> DistanceToSource(const Array3D8u &source) {
+Array3D<float> DistanceToSource(const Array3D8u &source) {
   const Vec3u size = source.GetSize();
   const float INF = 1e12f;
   Array3D<float> g;

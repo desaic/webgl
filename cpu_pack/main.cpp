@@ -4,10 +4,16 @@
 #include "PackingDriver.h"
 #include "PackingPlan.h"
 
+#include "ClearanceGate.h"
 #include "MediumGraph.h"
+#include "CavityRefine.h"
+#include "InnerForce.h"
+#include "Vhacd.h"
 #include "MeshOps.h"
 
+#include <algorithm>
 #include <iostream>
+#include <sstream>
 #include <filesystem>
 #include <limits>
 
@@ -66,6 +72,7 @@ int main(int argc, char *argv[]) {
     SaveSizeGroups(cfg.MeshDir(), cfg.MeshDir() + "/size_groups.txt");
     return 0;
   }
+  std::cout.setf(std::ios::unitbuf);
   std::cout << cfg.toString();
 
   std::string meshDir = cfg.MeshDir();
@@ -77,20 +84,76 @@ int main(int argc, char *argv[]) {
     std::cout << "empty packing plan. nothing to do.\n";
     return 1;
   }
-  if (argc > 1 && std::string(argv[1]) == "--medium-graph") {
+  if (argc > 1 && (std::string(argv[1]) == "--medium-graph" ||
+                    std::string(argv[1]) == "--medium-nudge")) {
     // graph of placed 8 to 14 cm fruit with x < sphereMaxX, from cfg.resumePackFile.
+    std::cout.setf(std::ios::unitbuf);
     SetLogLevel(LOG_INFO);
     if (argc > 2) cfg.ParseArgs(argc - 1, argv + 1);
-    return RunMediumGraph(cfg, plan.groups[2]) ? 0 : 1;
+    return RunMediumGraph(cfg, plan.groups[2], std::string(argv[1]) == "--medium-nudge") ? 0 : 1;
+  }
+  if (argc > 1 && (std::string(argv[1]) == "--cavity-metric" || std::string(argv[1]) == "--cavity-refine")) {
+    std::cout.setf(std::ios::unitbuf);
+    SetLogLevel(LOG_INFO);
+    if (argc > 2) cfg.ParseArgs(argc - 1, argv + 1);
+    return RunCavityRefine(cfg, plan.groups[cfg.oldWayGroup], std::string(argv[1]) == "--cavity-metric") ? 0 : 1;
+  }
+  if (argc > 1 && std::string(argv[1]) == "--vhacd") {
+    std::cout.setf(std::ios::unitbuf);
+    SetLogLevel(LOG_INFO);
+    if (argc > 2) cfg.ParseArgs(argc - 1, argv + 1);
+    return RunVhacd(cfg) ? 0 : 1;
+  }
+  if (argc > 1 && (std::string(argv[1]) == "--inner-force" || std::string(argv[1]) == "--inner-nudge" || std::string(argv[1]) == "--inner-free" || std::string(argv[1]) == "--hull-check" || std::string(argv[1]) == "--hull-pair" || std::string(argv[1]) == "--sdf-check" || std::string(argv[1]) == "--deep-compare" || std::string(argv[1]) == "--filter-touch")) {
+    std::cout.setf(std::ios::unitbuf);
+    SetLogLevel(LOG_INFO);
+    if (argc > 2) cfg.ParseArgs(argc - 1, argv + 1);
+    if (std::string(argv[1]) == "--inner-free") return RunInnerFree(cfg) ? 0 : 1;
+    if (std::string(argv[1]) == "--hull-check") return RunHullCheck(cfg) ? 0 : 1;
+    if (std::string(argv[1]) == "--filter-touch") {
+      // --filter-touch cfg packIn packOut [tol minTouch]
+      if (argc < 5) return 1;
+      return RunFilterTouch(cfg, argv[3], argv[4], argc > 5 ? float(atof(argv[5])) : 0.5f, argc > 6 ? unsigned(atoi(argv[6])) : 2u) ? 0 : 1;
+    }
+    if (std::string(argv[1]) == "--deep-compare") {
+      // --deep-compare cfg watermelonId packA packB id id id ...
+      if (argc < 7) return 1;
+      std::vector<unsigned> ids;
+      for (int i = 6; i < argc; i++) ids.push_back(unsigned(atoi(argv[i])));
+      return RunDeepCompare(cfg, {argv[4], argv[5]}, ids, unsigned(atoi(argv[3]))) ? 0 : 1;
+    }
+    if (std::string(argv[1]) == "--sdf-check") {
+      if (argc < 12) return 1;
+      return RunSdfCheck(cfg, argv[3], argv[4], Vec3f(float(atof(argv[5])), float(atof(argv[6])), float(atof(argv[7]))), argv[8],
+                         Vec3f(float(atof(argv[9])), float(atof(argv[10])), float(atof(argv[11])))) ? 0 : 1;
+    }
+    if (std::string(argv[1]) == "--hull-pair") {
+      // --hull-pair cfg pack nameA x y z nameB x y z
+      if (argc < 12) return 1;
+      return RunHullPair(cfg, argv[3], argv[4], Vec3f(float(atof(argv[5])), float(atof(argv[6])), float(atof(argv[7]))), argv[8],
+                         Vec3f(float(atof(argv[9])), float(atof(argv[10])), float(atof(argv[11])))) ? 0 : 1;
+    }
+    return RunInnerForce(cfg, std::string(argv[1]) == "--inner-nudge") ? 0 : 1;
   }
   if (cfg.oldWayMedium) {
-    // one bulk step on the 8 to 14 cm group (plan group 2): FFT spot search on
+    // one bulk step on one size group (cfg.oldWayGroup, default 2: 8 to 14 cm): FFT spot search on
     // the eroded fruit, then Nudge toward the container interior.
     PackingStep step;
-    step.names = plan.groups[2];
+    if (cfg.oldWayGroup >= plan.groups.size()) return 1;
+    step.names = plan.groups[cfg.oldWayGroup];
+    if (!cfg.oldWayKinds.empty()) {
+      std::vector<std::string> keep;
+      std::stringstream ss(cfg.oldWayKinds);
+      for (std::string name; std::getline(ss, name, ',');) {
+        if (std::find(step.names.begin(), step.names.end(), name) != step.names.end()) keep.push_back(name);
+        else std::cout << "oldWayKinds: " << name << " is not in the oldWayGroup size group, ignored" << std::endl;
+      }
+      step.names = keep;
+    }
     step.count = 1000000u;
     step.erodeVoxels = cfg.oldWayErode;
     step.nudgeInward = true;
+    step.useInnerContainer = cfg.oldWayInner;
     step.overlapHeuristic = cfg.oldWayOverlap;
     plan.steps.clear();
     plan.steps.push_back(step);

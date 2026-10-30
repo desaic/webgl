@@ -1,4 +1,5 @@
 #include "PackingScene.h"
+#include "NudgeInternal.h"
 #include "AdapSDF.h"
 #include "FastSweep.h"
 #include "Log.h"
@@ -29,7 +30,7 @@ Vec3i roundf(const Vec3f &fvec) {
 // separable 1-voxel erosion along each axis: 3 passes, each shrinks by 1 on
 // both sides of that axis. boundary voxels (no neighbor on one side) are
 // always cleared, so the result is 2 voxels smaller per axis end-to-end.
-static void ErodeBgVox(Array3D8u &vox) {
+void ErodeBgVox(Array3D8u &vox) {
   Vec3u size = vox.GetSize();
   if (size[0] < 3 || size[1] < 3 || size[2] < 3) return;
   Array3D8u tmp;
@@ -66,8 +67,6 @@ unsigned PackingScene::Put(unsigned itemIdx, const RigidTransform &tran) {
   PROFILE_SCOPE("put.total");
   TrigMesh inst = MakeTransformedMesh(items[itemIdx].mesh, tran);
   Box3f bbox = ComputeBBox(inst.v);
-  // saved for broad phase.
-  Box3f meshBox = bbox;
   bbox.vmin = AlignOriginToGrid(bbox.vmin, dx);
 
   VoxConf conf;
@@ -90,6 +89,11 @@ unsigned PackingScene::Put(unsigned itemIdx, const RigidTransform &tran) {
     Union(itemsBg, offset, vox);
   }
 
+  return AddInstance(itemIdx, tran);
+}
+
+unsigned PackingScene::AddInstance(unsigned itemIdx, const RigidTransform &tran) {
+  const Box3f meshBox = ComputeBBox(MakeTransformedMesh(items[itemIdx].mesh, tran).v);
   unsigned instId = instances.size();
   if (placed.size() != items.size()) {
     placed.resize(items.size());
@@ -148,6 +152,7 @@ void PackingScene::InitDataStructures() {
   LOGI("init: rigid bodies " << initClock.ElapsedMS() / 1000.0 << " s\n");
 
   for (size_t i = 0; i < items.size(); i++) {
+    if (!items[i].IsLoaded()) continue;
     items[i].mesh.ComputeTrigNormals();
     items[i].mesh.ComputeVertNormals();
   }
@@ -163,6 +168,23 @@ void PackingScene::InitDataStructures() {
        << " cellSize=" << subgridCellSize << "\n");
 }
 
+void PackingScene::EnsureItemLoaded(unsigned itemIdx) {
+  MeshInfo &item = items[itemIdx];
+  if (item.IsLoaded() || item.filePath.empty()) return;
+  Utils::Stopwatch clock;
+  clock.Start();
+  const std::string path = item.filePath;
+  if (LoadMeshInfo(item, std::filesystem::path(path)) != 0) {
+    LOGI("could not load " << path << char(10));
+    return;
+  }
+  item.filePath = path;
+  item.rb.ToInertiaFrame(item.mesh);
+  item.mesh.ComputeTrigNormals();
+  item.mesh.ComputeVertNormals();
+  LOGI("lazy loaded " << item.name << " in " << clock.ElapsedMS() << " ms" << char(10));
+}
+
 void PackingScene::InitRigidBodies() {
   for (size_t i = 0; i < items.size(); i++) {
     // the exclusion mesh is an obstacle at its authored world position. moving
@@ -170,6 +192,7 @@ void PackingScene::InitRigidBodies() {
     // leave the real exclusion region empty.
     if (i == exclusionItemIndex) continue;
     auto &item = items[i];
+    if (!item.IsLoaded()) continue;
     item.rb.ToInertiaFrame(item.mesh);
   }
 }
@@ -261,13 +284,6 @@ void SaveGradientObj(
   out.close();
   std::cout << "saved gradient debug to " << filename << "\n";
 }
-
-struct Contact {
-    Vec3f worldPos;
-    Vec3f normal;
-    float distance;
-    int meshIndex = -1;
-};
 
 float distSq(const Vec3f &a, const Vec3f &b) {
   return (a - b).norm2();
@@ -460,7 +476,7 @@ static std::vector<Vec3f> TransformPoints(const std::vector<Vec3f> &points, cons
   }
   return transformed;
 }
-static Quat4f IntegrateAngularVelocity(Vec3f angVel, float dt) {
+Quat4f IntegrateAngularVelocity(Vec3f angVel, float dt) {
   Quat4f q_delta = Quat4f::IDENTITY;
   float angle = std::sqrt(angVel.dot(angVel));
   if (angle > 1e-6f) {
@@ -541,7 +557,7 @@ static std::vector<Contact> GatherActiveContacts(
   return reduceContactManifold(activeContacts, contactAngleThreshDeg);
 }
 
-static void SolveContactConstraintsPGS(
+void SolveContactConstraintsPGS(
     const std::vector<Contact> &contacts,
     const Vec3f &currentT,
     const Matrix3f &currentRotMat,
@@ -678,15 +694,6 @@ std::string RigidBodyStateToString(const std::vector<RigidBodyState> & debugStep
   return out.str();
 }
 
-struct RBSimParams {
-  size_t steps = 100;
-  float damping = 0.85f;
-  float pgsPasses = 8;
-  float minVel = 1e-4f;
-  unsigned contactGatherInterval = 1;
-  RBSimParams(){}
-};
-
 //heuristics
 void SetSimParams(RBSimParams & params, float minBoxSize){
   if (minBoxSize < 3.0f) {
@@ -714,7 +721,9 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
                                    const RigidTransform &tran,
                                    const Vec3f &dir0,
                                    float dirWeight,
-                                   std::vector<RigidTransform> &trajectory) {
+                                   std::vector<RigidTransform> &trajectory,
+                                   const std::function<Vec3f(const Vec3f &)> *forceField,
+                                   size_t maxSteps) {
   PROFILE_SCOPE("nudge.total");
   RigidTransform tOut = tran;
 
@@ -742,6 +751,7 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   // Small fruits need fewer steps to settle and coarser approximation is fine.
   RBSimParams simParams;
   SetSimParams(simParams, minExtent);
+  if (maxSteps > 0) simParams.steps = maxSteps;
   float dt = 1.0f / 60.0f;          // Fixed time step
   float nudgeAcceleration = 200.0f; // Accelerate at 200 cm/s^2 (which is 2 m/s^2)
   // attraction towards contacting object.
@@ -785,6 +795,12 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
   Vec3f linearVel(0.0f);
   Vec3f angularVel(0.0f);
   std::vector<Contact> prevContacts;
+  // settle test of field-driven nudges: movement over the last settleWindow steps.
+  const size_t settleWindow = 5;
+  const float settlePosTol = 0.1f;     // cm
+  const float settleAngleTol = 0.0087f;  // rad, 0.5 degrees
+  std::vector<Vec3f> recentPos;
+  std::vector<Quat4f> recentQ;
 
   Utils::Stopwatch nudgeTotal;
   nudgeTotal.Start();
@@ -799,7 +815,28 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
 
     // 1. Apply External Forces
     Vec3f forceDir = dirWeight *dir0 + (1-dirWeight) * attractionDir;
-    forceDir.normalize();
+    if (forceField) {
+      // per-sample forces summarized into one linear acceleration (mean force) and one angular
+      // acceleration (mean torque about the center of mass). the torque is scaled by the
+      // inverse squared radius of gyration (inertia / volume), so a unit force at lever arm r
+      // spins the fruit as fast as it accelerates linearly.
+      Vec3f forceSum(0.0f), torqueSum(0.0f);
+      for (const SamplePoint &sp : samples) {
+        const Vec3f r = currentRotMat * sp.x;
+        const Vec3f f = (*forceField)(currentT + r);
+        forceSum += f;
+        torqueSum += r.cross(f);
+      }
+      const float inv = samples.empty() ? 0.0f : 1.0f / float(samples.size());
+      forceDir = forceSum * inv;
+      const Vec3f torqueLocal = Rinv * (torqueSum * inv);
+      const Vec3f angAccLocal(torqueLocal[0] * invI_local[0] * item.rb.vol,
+                              torqueLocal[1] * invI_local[1] * item.rb.vol,
+                              torqueLocal[2] * invI_local[2] * item.rb.vol);
+      angularVel += (currentRotMat * angAccLocal) * (nudgeAcceleration * dt);
+    } else if (forceDir.norm() > 1e-6f) {
+      forceDir.normalize();
+    }
     linearVel += (forceDir * nudgeAcceleration) * dt;
 
     // 2. DYNAMIC BROADPHASE STEP
@@ -912,6 +949,20 @@ RigidTransform PackingScene::Nudge(unsigned itemIdx,
     // Early exit if the fruit has completely settled into a snug spot
     if (linearVel.dot(linearVel) < simParams.minVel && angularVel.dot(angularVel) <  simParams.minVel) {
         break; 
+    }
+    // field-driven nudges also stop when the pose barely changed over the last few steps, so a
+    // fruit that wiggles in place against its neighbors does not use the whole step budget.
+    if (forceField) {
+      recentPos.push_back(currentT);
+      recentQ.push_back(currentQ);
+      if (recentPos.size() > settleWindow) {
+        const size_t old = recentPos.size() - 1 - settleWindow;
+        const Quat4f &q0 = recentQ[old];
+        const float qdot = std::min(1.0f, std::fabs(q0.w() * currentQ.w() + q0.x() * currentQ.x() +
+                                                     q0.y() * currentQ.y() + q0.z() * currentQ.z()));
+        const float angle = 2.0f * std::acos(qdot);
+        if ((currentT - recentPos[old]).norm() < settlePosTol && angle < settleAngleTol) break;
+      }
     }
   }
 
@@ -1296,6 +1347,7 @@ std::vector<CreviceSurface> FindDeepCreviceSurface(
 }
 
 void PackingScene::EnsureItemSamples(unsigned itemIdx) {
+  EnsureItemLoaded(itemIdx);
   MeshInfo &meshInfo = items[itemIdx];
   if (!meshInfo.samples.empty()) {
     return;
@@ -1568,7 +1620,7 @@ static bool ReadMatrix3f(std::istream &in, Matrix3f &m) {
                  >> m(2,0) >> m(2,1) >> m(2,2));
 }
 
-void LoadPack(PackingScene &scene, const std::string &packFile) {
+void LoadPack(PackingScene &scene, const std::string &packFile, bool voxelize) {
   PROFILE_SCOPE("loadpack.total");  
   std::ifstream in(packFile);
   if (!in.good()) {
@@ -1598,12 +1650,18 @@ void LoadPack(PackingScene &scene, const std::string &packFile) {
         break;
       }
     }
+    if (itemIndex < 0) {
+      std::cout << "Warning: item " << itemName << " not found in scene" << std::endl;
+      continue;
+    }
+    scene.EnsureItemLoaded(itemIndex);
     // convert from model coordinate to inertia coordiante
     const auto & item = scene.items[itemIndex];
     const auto & rb = item.rb;
     trans = rb.GetInertiaTran(trans);
     if (itemIndex >= 0) {
-      scene.Put(itemIndex, trans);
+      if (voxelize) scene.Put(itemIndex, trans);
+      else scene.AddInstance(itemIndex, trans);
     } else {
       std::cout << "Warning: item " << itemName << " not found in scene\n";
     }

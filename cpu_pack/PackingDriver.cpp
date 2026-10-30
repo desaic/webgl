@@ -10,6 +10,7 @@
 #include "MeshOps.h"
 #include "PackingOps.h"
 #include "PackShrinkWrap.h"
+#include "ClearanceGate.h"
 #include "Profiler.h"
 #include "SphereCover.h"
 #include "Stopwatch.h"
@@ -145,16 +146,21 @@ static void MarkDirtyCells(SubgridBgCache &cache, const PackingScene &scene, con
 }
 
 // counts filled voxels in axis-aligned voxelization of item at resolution dx.
-static unsigned CountItemVoxels(const MeshInfo &item, float dx) {
-  Box3f bbox = item.box;
+static unsigned CountItemVoxels(const MeshInfo &item, float dx, unsigned erode) {
+  Box3f bbox = ComputeBBox(item.mesh.v);  // item.box can be stale after the inertia shift
+  // same alignment as PackingScene::Put. sizing the grid from the unaligned box clips the
+  // surface at the grid wall, the flood fill then leaks inside and only the shell is counted.
+  bbox.vmin = AlignOriginToGrid(bbox.vmin, dx);
   VoxConf conf;
   conf.origin = ToArray(AlignOriginToGrid(bbox.vmin, dx));
   conf.unit = {dx, dx, dx};
   conf.gridSize = ComputeGridSize(bbox, dx, 1);
   Array3D8u vox;
   vox.Allocate(conf.gridSize, 0);
-  VoxelizeMesh(item.mesh, vox, conf);
+  VoxelizeMesh(MakeTransformedMesh(item.mesh, RigidTransform()), vox, conf);
   FloodOutside8u(vox, 1, 2);
+  // the candidate is eroded before the FFT search, so that is the volume it needs.
+  for (unsigned e = 0; e < erode; e++) ErodeBgVox(vox);
   unsigned count = 0;
   for (uint8_t v : vox.GetData()) if (v != 0) count++;
   return count;
@@ -196,7 +202,7 @@ static const Vec3f kSphereRotations[3] = {
   {0.0f, 1.5707963f, 0.0f}
 };
 
-bool BuildScene(PackingScene &scene, const PackingConfig &cfg) {
+bool BuildScene(PackingScene &scene, const PackingConfig &cfg, bool lazyItems) {
   std::string meshDir = cfg.MeshDir();
   if (!fs::exists(meshDir)) {
     std::cout << "item directory missing " << meshDir << "\n";
@@ -206,7 +212,7 @@ bool BuildScene(PackingScene &scene, const PackingConfig &cfg) {
   loadClock.Start();
   {
     PROFILE_SCOPE("init.load_items");
-    scene.items = LoadAllMeshInfo(meshDir);
+    scene.items = LoadAllMeshInfo(meshDir, lazyItems);
   }
   LOGI("init: loaded items " << loadClock.ElapsedMS() / 1000.0 << " s\n");
   if (scene.items.empty()) {
@@ -307,7 +313,10 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
 
   float sdfFactor = step.outwards ? 1.0f : -1.0f;
   if (step.useInnerContainer) {
+    Utils::Stopwatch innerClock;
+    innerClock.Start();
     AddInnerContainer(scene);
+    LOGI("inner container added to the background in " << innerClock.ElapsedMS() / 1000.0 << " s" << char(10));
   }
 
   Utils::Stopwatch stepClock;
@@ -345,6 +354,9 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
   // between kinds/cells cannot make it serve a stale background crop.
   SubgridBgCache subgridCache;
   SubgridBgCache coarseSubgridCache;
+  ClearanceGate clearance;
+  std::unordered_map<unsigned, float> inscribedRadius;
+  unsigned long gateSkips = 0;
   MeshConvo coarseBg;
   unsigned coarseBgVersion = ~0u;
   // non-subgrid ("large" tier) equivalent of subgridCache, against the
@@ -498,7 +510,10 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
 
       // opt 1: per-item voxel count, computed once at the item's first trial
       if (useSubgrid && itemVoxCounts.find(itemIndex) == itemVoxCounts.end()) {
-        itemVoxCounts[itemIndex] = CountItemVoxels(item, scene.dx);
+        const float diag = (item.box.vmax - item.box.vmin).norm();
+        const unsigned eroded = step.erodeVoxels > 0 ? step.erodeVoxels : (diag >= kLargeMedLargeThresh ? 1u : 0u);
+        itemVoxCounts[itemIndex] = CountItemVoxels(item, scene.dx, eroded);
+        LOGI("  " << item.name << " needs " << itemVoxCounts[itemIndex] << " free voxels" << char(10));
       }
       unsigned itemVox = useSubgrid ? itemVoxCounts[itemIndex] : 0u;
 
@@ -518,6 +533,23 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
         } else {
           UpdateCellEmptyCounts(subgridCache, scene.bg, scene.subgridCellSize,
                                 scene.numSubgridCells);
+        }
+      }
+
+      // clearance gate: needs the inscribed radius of this kind and a map that is current.
+      float rIn = 0.0f;
+      if (useSubgrid && cfg.clearanceGate) {
+        auto found = inscribedRadius.find(itemIndex);
+        if (found == inscribedRadius.end()) {
+          found = inscribedRadius.emplace(itemIndex, InscribedRadius(item)).first;
+          LOGI("  " << item.name << " inscribed radius " << found->second << " cm" << char(10));
+        }
+        rIn = found->second;
+        if (clearance.version != scene.bg.version) {
+          Utils::Stopwatch gateClock;
+          gateClock.Start();
+          clearance.Rebuild(scene.bg, scene.subgridCellSize, scene.numSubgridCells);
+          LOGI("  clearance map rebuilt in " << gateClock.ElapsedMS() / 1000.0 << " s" << char(10));
         }
       }
 
@@ -554,6 +586,11 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
           if (subgridCache.emptyCacheVersion == scene.bg.version &&
               cellIdx < subgridCache.cellEmptyCounts.size() &&
               subgridCache.cellEmptyCounts[cellIdx] < itemVox) {
+            item.nextCellIdx++;
+            continue;
+          }
+          if (cfg.clearanceGate && !clearance.MayFit(cellIdx, rIn)) {
+            gateSkips++;
             item.nextCellIdx++;
             continue;
           }
@@ -647,6 +684,9 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
           }
         }
       }
+      if (stepClock.ElapsedMS() - lastReportMs > 15000.0) {
+        report("progress");
+      }
       double roundMs = stepClock.ElapsedMS() - itemSearchStart;
       itemSearchMs[item.name] += roundMs;
       if (!itemPlaced && !useSubgrid) {
@@ -692,6 +732,9 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
     why = "step time limit";
   } else if (placedCount >= step.count) {
     why = "target count reached";
+  }
+  if (cfg.clearanceGate) {
+    LOGI("  clearance gate skipped " << gateSkips << " cell slots" << char(10));
   }
   report("step done");
   LOGI("  reason: " << why << ", " << round << " rounds, " << placedCount
@@ -2638,7 +2681,14 @@ void SeedSmallFruitCrevices(PackingScene &scene,
 }
 
 void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig &cfg) {
+  Utils::Stopwatch setupClock;
+  setupClock.Start();
+  auto lap = [&](const char *what) {
+    LOGI("time " << what << ": " << setupClock.ElapsedMS() / 1000.0 << " s" << char(10));
+    setupClock.Start();
+  };
   PrepareBackground(scene, cfg);
+  lap("prepare background (voxelize container)");
 
   scene.packFile = scene.outputFolder + "/pack";
   scene.trajFile = scene.outputFolder + "/traj";
@@ -2651,15 +2701,18 @@ void PackScene(PackingScene &scene, const PackingPlan &plan, const PackingConfig
     unsigned instId = scene.Put(scene.exclusionItemIndex, identity);
     scene.instances[instId].isExclusion = true;
     LOGI("exclusion mesh placed at identity\n");
+    lap("put exclusion mesh");
   }
 
   if (cfg.resume) {
     LoadPack(scene, cfg.ResumePackPath());
     // force samples/sdf population for resumed kinds -- LoadPack's Put()
     // does not, and downstream overlap checks need it.
+    lap("load pack");
     for (const InstanceInfo &inst : scene.instances) {
       scene.EnsureItemSamples(inst.itemId);
     }
+    lap("item samples");
   }
   std::vector<Vec3f> surfPts;
   bool haveSurfPts = false;

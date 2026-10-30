@@ -39,6 +39,20 @@ void Dot(const Array3D<std::complex<float>> &src, Array3D<std::complex<float>> &
   }
 }
 
+void DotInto(const Array3D<std::complex<float>> &a, const Array3D<std::complex<float>> &b,
+             Array3D<std::complex<float>> &out) {
+  if (a.GetSize() != b.GetSize()) {
+    return;
+  }
+  out.Allocate(a.GetSize(), std::complex<float>(0.0f, 0.0f));
+  const auto &da = a.GetData();
+  const auto &db = b.GetData();
+  auto &o = out.GetData();
+  for (size_t i = 0; i < da.size(); i++) {
+    o[i] = da[i] * db[i];
+  }
+}
+
 void Scale(Array3Df &arr, float scale) {
   for (auto &f : arr.GetData()) {
     f *= scale;

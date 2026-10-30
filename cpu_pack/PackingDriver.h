@@ -12,7 +12,9 @@
 /// and acceleration grids. does not voxelize the packing background.
 /// benchmarks call this to get a ready scene without packing anything.
 /// @return false if the item directory or container mesh is missing.
-bool BuildScene(PackingScene &scene, const PackingConfig &cfg);
+/// lazyItems: item meshes load on first use (see PackingScene::EnsureItemLoaded). only for
+/// tools that never look at items they did not place.
+bool BuildScene(PackingScene &scene, const PackingConfig &cfg, bool lazyItems = false);
 
 /// voxelizes the container into the packing occupancy grid and inverts it
 /// so that the exterior is unavailable.

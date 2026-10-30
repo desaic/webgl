@@ -38,6 +38,8 @@ class BroadPhaseGrid {
     }
     // Adds a finalized mesh instance into all grid cells overlapping its AABB bounds
     void Add(const Box3f &box, unsigned instId) ;
+    // removes instId from the cells that Add(box, instId) filled.
+    void Remove(const Box3f &box, unsigned instId);
 
     /**
      * Queries all unique instances residing inside or near the query box expanded by maxDistance.

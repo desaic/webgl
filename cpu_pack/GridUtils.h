@@ -24,6 +24,10 @@ Array3D8u ThreshLessThan(const Array3Df &f, float thresh);
 
 void Dot(const Array3D<std::complex<float>> &src, Array3D<std::complex<float>> &dst);
 
+/// out = a * b elementwise, leaving both inputs intact (Dot would overwrite one).
+void DotInto(const Array3D<std::complex<float>> &a, const Array3D<std::complex<float>> &b,
+             Array3D<std::complex<float>> &out);
+
 void Scale(Array3Df &arr, float scale);
 
 void Reverse(Array3D8u &arr);

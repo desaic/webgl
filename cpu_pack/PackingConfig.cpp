@@ -219,6 +219,64 @@ bool PackingConfig::LoadFromFile(const std::string &path) {
       oldWayOverlap = ParseBool(value);
     } else if (key == "graphGap") {
       graphGap = float(std::atof(value.c_str()));
+    } else if (key == "forceKind") {
+      forceKind = value;
+    } else if (key == "forceGridDx") {
+      forceGridDx = float(std::atof(value.c_str()));
+    } else if (key == "forceGridMargin") {
+      forceGridMargin = float(std::atof(value.c_str()));
+    } else if (key == "vhacdMaxHulls") {
+      vhacdMaxHulls = unsigned(std::atoi(value.c_str()));
+    } else if (key == "vhacdResolution") {
+      vhacdResolution = unsigned(std::atoi(value.c_str()));
+    } else if (key == "vhacdErrorPct") {
+      vhacdErrorPct = float(std::atof(value.c_str()));
+    } else if (key == "vhacdFill") {
+      vhacdFill = value;
+    } else if (key == "vhacdOnly") {
+      vhacdOnly = value;
+    } else if (key == "vhacdDepth") {
+      vhacdDepth = unsigned(std::atoi(value.c_str()));
+    } else if (key == "vhacdMaxVerts") {
+      vhacdMaxVerts = unsigned(std::atoi(value.c_str()));
+    } else if (key == "hullDir") {
+      hullDir = value;
+    } else if (key == "hullInset") {
+      hullInset = float(std::atof(value.c_str()));
+    } else if (key == "hullSampleSpacing") {
+      hullSampleSpacing = float(std::atof(value.c_str()));
+    } else if (key == "forceExclusionSkip") {
+      forceExclusionSkip = float(std::atof(value.c_str()));
+    } else if (key == "cavDx") {
+      cavDx = float(std::atof(value.c_str()));
+    } else if (key == "cavBand") {
+      cavBand = float(std::atof(value.c_str()));
+    } else if (key == "cavR") {
+      cavR = float(std::atof(value.c_str()));
+    } else if (key == "cavMinClear") {
+      cavMinClear = float(std::atof(value.c_str()));
+    } else if (key == "cavPasses") {
+      cavPasses = unsigned(std::atoi(value.c_str()));
+    } else if (key == "cavTrials") {
+      cavTrials = unsigned(std::atoi(value.c_str()));
+    } else if (key == "cavMinGain") {
+      cavMinGain = float(std::atof(value.c_str()));
+    } else if (key == "cavMaxPerPass") {
+      cavMaxPerPass = unsigned(std::atoi(value.c_str()));
+    } else if (key == "cavCone") {
+      cavCone = float(std::atof(value.c_str()));
+    } else if (key == "cavObjClear") {
+      cavObjClear = float(std::atof(value.c_str()));
+    } else if (key == "forcePasses") {
+      forcePasses = unsigned(std::atoi(value.c_str()));
+    } else if (key == "oldWayKinds") {
+      oldWayKinds = value;
+    } else if (key == "oldWayInner") {
+      oldWayInner = ParseBool(value);
+    } else if (key == "clearanceGate") {
+      clearanceGate = ParseBool(value);
+    } else if (key == "oldWayGroup") {
+      oldWayGroup = unsigned(std::atoi(value.c_str()));
     } else if (key == "oldWayErode") {
       oldWayErode = unsigned(std::atoi(value.c_str()));
     } else if (key == "shellEvalOnly") {

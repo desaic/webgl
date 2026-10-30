@@ -37,6 +37,21 @@ void BroadPhaseGrid::Add(const Box3f &box, unsigned instId) {
   }
 }
 
+void BroadPhaseGrid::Remove(const Box3f &box, unsigned instId) {
+  int minX, minY, minZ;
+  int maxX, maxY, maxZ;
+  PosToCell(box.vmin, minX, minY, minZ);
+  PosToCell(box.vmax, maxX, maxY, maxZ);
+  for (int z = minZ; z <= maxZ; ++z) {
+    for (int y = minY; y <= maxY; ++y) {
+      for (int x = minX; x <= maxX; ++x) {
+        auto &c = m_cells(x, y, z);
+        c.erase(std::remove(c.begin(), c.end(), instId), c.end());
+      }
+    }
+  }
+}
+
 std::vector<unsigned> BroadPhaseGrid::GetNearby(const Box3f &queryBox, float maxDistance) const {
   std::vector<unsigned> nearbyIds;
 

@@ -3,7 +3,10 @@
 class AdapSDF;
 struct PackingConstraints;
 
+#include <cstdint>
+#include <functional>
 #include <memory>
+#include <unordered_map>
 // itemsConv (heuristic only): items-only background, already cropped and FFT'd at
 // this call's padded grid size. its convolution, not the full bg's (which
 // includes the container wall), supplies the neighbor overlap counts.
@@ -15,6 +18,19 @@ struct PackingConstraints;
 // padded grid size (see FindSpotSubgrid's cache) -- skips recomputing it.
 // Only ever pass true when the caller can guarantee that, since a stale
 // bg.fft silently produces wrong collision results, not an error.
+// voxelization of a rotated fruit, after thresholding and erosion and before the FFT reversal.
+// the same (kind, rotation) recurs for every cell, so FindSpot keeps these by mesh hash.
+struct FgCacheEntry {
+  Array3D8u vox;
+  Box3f box;
+  Box3f meshBox;
+};
+using FgCache = std::unordered_map<uint64_t, FgCacheEntry>;
+
+// fgCache (optional): voxelization cache, see FgCacheEntry.
+// itemsProvider (optional, heuristic only): returns the items-only background when first
+// needed. FindSpot returns before calling it if the trial has no collision-free position, so
+// the crop and FFT behind it are only paid for in cells that can actually take the fruit.
 bool FindSpot(MeshConvo &bg,
               const TrigMesh &part,
               Vec3f &pos,
@@ -23,7 +39,9 @@ bool FindSpot(MeshConvo &bg,
               bool bgFftReady = false,
               unsigned erodeVoxels = 0,
               bool overlapHeuristic = false,
-              MeshConvo *itemsConv = nullptr);
+              MeshConvo *itemsConv = nullptr,
+              FgCache *fgCache = nullptr,
+              const std::function<MeshConvo *()> *itemsProvider = nullptr);
 
 // caches one cropped-background MeshConvo (voxels + FFT) across repeated
 // FindSpotSubgrid calls at the same cell, as long as the crop's own voxel
@@ -53,6 +71,7 @@ struct SubgridBgCache {
   // cell above; valid under the same key as tempConv.
   MeshConvo itemsConv;
   bool itemsValid = false;
+  FgCache fgCache;
 };
 
 // part must be pre-rotated by the caller.

@@ -1,0 +1,1947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RTS Pointer Lock Edge Scrolling Demo</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Three.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <style>
+    * {
+      user-select: none;
+      -webkit-user-select: none;
+      box-sizing: border-box;
+    }
+
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #0b0f0b;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+
+    #game-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: crosshair;
+    }
+
+    /* Hardware accelerated custom RTS cursor */
+    #virtual-cursor {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 32px;
+      height: 32px;
+      pointer-events: none;
+      z-index: 9999;
+      display: none;
+      will-change: transform;
+      transform: translate3d(-100px, -100px, 0);
+    }
+
+    /* Edge scroll visual indicators */
+    .edge-indicator {
+      position: absolute;
+      pointer-events: none;
+      transition: opacity 0.15s ease-out;
+      opacity: 0;
+      z-index: 40;
+    }
+    .edge-top { top: 0; left: 0; right: 0; height: 18px; background: linear-gradient(to bottom, rgba(52, 211, 153, 0.45), transparent); }
+    .edge-bottom { bottom: 0; left: 0; right: 0; height: 18px; background: linear-gradient(to top, rgba(52, 211, 153, 0.45), transparent); }
+    .edge-left { top: 0; bottom: 0; left: 0; width: 18px; background: linear-gradient(to right, rgba(52, 211, 153, 0.45), transparent); }
+    .edge-right { top: 0; bottom: 0; right: 0; width: 18px; background: linear-gradient(to left, rgba(52, 211, 153, 0.45), transparent); }
+
+    .edge-active {
+      opacity: 1 !important;
+    }
+
+    /* Warning alert pulse banner */
+    @keyframes alert-pulse {
+      0%, 100% { border-color: rgba(239, 68, 68, 0.8); background-color: rgba(127, 29, 29, 0.85); box-shadow: 0 0 20px rgba(239, 68, 68, 0.6); }
+      50% { border-color: rgba(248, 113, 113, 1); background-color: rgba(185, 28, 28, 0.95); box-shadow: 0 0 30px rgba(239, 68, 68, 0.9); }
+    }
+    .eva-alert-active {
+      animation: alert-pulse 0.8s infinite ease-in-out;
+    }
+
+    /* Scanline retro effect */
+    .crt-overlay {
+      pointer-events: none;
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.22) 50%);
+      background-size: 100% 4px;
+      z-index: 30;
+      opacity: 0.6;
+    }
+
+    /* Custom styled UI elements */
+    .rts-panel {
+      background: rgba(15, 23, 18, 0.9);
+      border: 1px solid rgba(52, 211, 153, 0.4);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.8), inset 0 0 12px rgba(16, 185, 129, 0.1);
+    }
+
+    /* Production Sidebar Styles */
+    .sidebar-panel {
+      background: linear-gradient(180deg, rgba(16, 26, 20, 0.96) 0%, rgba(9, 14, 11, 0.98) 100%);
+      border-left: 2px solid rgba(52, 211, 153, 0.4);
+      box-shadow: -6px 0 24px rgba(0, 0, 0, 0.85);
+    }
+
+    .tab-btn.active {
+      background: rgba(16, 185, 129, 0.25);
+      border-bottom: 2px solid #34d399;
+      color: #34d399;
+    }
+
+    /* Unit Card & Radial Cooldown Sweep */
+    .unit-card {
+      position: relative;
+      background: rgba(10, 18, 14, 0.98);
+      border: 1px solid rgba(52, 211, 153, 0.35);
+      transition: all 0.15s ease-out;
+      overflow: hidden;
+      min-height: 82px;
+    }
+    .unit-card:hover {
+      border-color: #34d399;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+    }
+    .unit-card:active {
+      transform: translateY(0);
+    }
+
+    /* High-contrast Radial Clock Wipe (whiter, less transparent, noticeable contrast) */
+    .cooldown-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 20;
+      /* Sweeps clockwise: dense white/light-cyan veil over unbuilt area, transparent where complete */
+      background: conic-gradient(
+        rgba(220, 252, 231, 0.85) var(--sweep-progress, 0%),
+        rgba(6, 78, 59, 0.15) var(--sweep-progress, 0%)
+      );
+    }
+
+    /* Bright white & neon green leading clock hand line */
+    .cooldown-overlay::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: conic-gradient(
+        transparent 0deg,
+        rgba(255, 255, 255, 0.95) calc(var(--sweep-progress, 0%) * 3.6deg - 1.5deg),
+        #ffffff calc(var(--sweep-progress, 0%) * 3.6deg),
+        transparent calc(var(--sweep-progress, 0%) * 3.6deg + 3.5deg)
+      );
+      filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.9));
+    }
+
+    /* Classic Marquee Drag Selection Box */
+    #selection-marquee {
+      position: absolute;
+      border: 1.5px solid #34d399;
+      background: rgba(52, 211, 153, 0.15);
+      box-shadow: 0 0 8px rgba(52, 211, 153, 0.4);
+      pointer-events: none;
+      display: none;
+      z-index: 45;
+    }
+  </style>
+</head>
+<body class="relative">
+
+  <!-- Three.js Canvas -->
+  <canvas id="game-canvas"></canvas>
+
+  <!-- CRT Scanline overlay -->
+  <div class="crt-overlay"></div>
+
+  <!-- Marquee Selection Rectangle Overlay -->
+  <div id="selection-marquee"></div>
+
+  <!-- Edge scroll directional glows -->
+  <div id="edge-top" class="edge-indicator edge-top"></div>
+  <div id="edge-bottom" class="edge-indicator edge-bottom"></div>
+  <div id="edge-left" class="edge-indicator edge-left"></div>
+  <div id="edge-right" class="edge-indicator edge-right"></div>
+
+  <!-- Retro Vector RTS Cursor -->
+  <div id="virtual-cursor">
+    <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- Triangle Pointer / Crosshair -->
+      <path d="M2 2L13 28L18 18L28 13L2 2Z" fill="#22c55e" stroke="#052e16" stroke-width="2" />
+      <circle cx="18" cy="18" r="4" stroke="#4ade80" stroke-width="1.5" stroke-dasharray="2 2" fill="rgba(74,222,128,0.2)"/>
+      <path d="M18 10V14M18 22V26M10 18H14M22 18H26" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+  </div>
+
+  <!-- Top Status HUD -->
+  <header class="absolute top-3 left-3 right-3 flex flex-wrap justify-between items-center z-50 pointer-events-none gap-2">
+    <div class="rts-panel rounded px-3 py-2 text-xs text-emerald-400 flex items-center space-x-4 border border-emerald-800">
+      <div class="flex items-center space-x-2">
+        <span class="w-2.5 h-2.5 rounded-full inline-block" id="lock-badge" style="background-color: #ef4444;"></span>
+        <span class="font-bold tracking-wider" id="lock-status-text">UNLOCKED (CLICK TO ENGAGE)</span>
+      </div>
+      <div class="h-4 w-px bg-emerald-800/80"></div>
+      <div>V-MOUSE: <span id="hud-mouse" class="text-white font-mono">0, 0</span></div>
+      <div class="h-4 w-px bg-emerald-800/80"></div>
+      <div>CAM: <span id="hud-cam" class="text-white font-mono">0.0, 0.0</span></div>
+    </div>
+
+    <!-- Center EVA Warning Alert Notification -->
+    <div id="eva-alert-banner" class="hidden pointer-events-auto flex items-center space-x-3 px-4 py-1.5 rounded border border-rose-500 text-rose-100 font-bold text-xs tracking-widest eva-alert-active cursor-pointer transition">
+      <span class="inline-block w-2.5 h-2.5 bg-rose-400 rounded-full animate-ping"></span>
+      <span id="eva-alert-text">EVA WARNING: HARVESTER UNDER ATTACK</span>
+      <span class="text-[10px] bg-rose-950 px-2 py-0.5 rounded border border-rose-600 text-rose-300 ml-2">PRESS SPACE TO JUMP</span>
+    </div>
+
+    <div class="rts-panel rounded px-3 py-2 text-xs text-emerald-300 pointer-events-auto flex items-center space-x-3 border border-emerald-800">
+      <!-- Credits ticker -->
+      <div class="flex items-center space-x-1.5 font-bold font-mono">
+        <span class="text-amber-400">$</span>
+        <span id="credits-display" class="text-white text-sm">5,000</span>
+      </div>
+      <div class="h-4 w-px bg-emerald-800/80"></div>
+      <button id="trigger-attack-btn" class="px-2.5 py-1 bg-rose-950 hover:bg-rose-900 active:bg-rose-800 text-rose-300 border border-rose-600 rounded transition font-semibold text-xs tracking-wider flex items-center space-x-1.5">
+        <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+        <span>TEST ATTACK PING [T]</span>
+      </button>
+      <span class="hidden sm:inline text-emerald-500">ESC: Settings</span>
+      <button id="menu-btn" class="px-2.5 py-1 bg-emerald-950 hover:bg-emerald-900 active:bg-emerald-800 text-emerald-300 border border-emerald-600 rounded transition font-semibold text-xs tracking-wider">
+        SETTINGS [ESC]
+      </button>
+    </div>
+  </header>
+
+  <!-- Production Sidebar (Right Side C&C Layout) -->
+  <aside class="absolute top-16 bottom-4 right-3 w-72 z-50 pointer-events-auto sidebar-panel rounded-lg flex flex-col p-2.5 space-y-2 select-none border border-emerald-700/60">
+    <div class="flex items-center justify-between border-b border-emerald-800/80 pb-1.5 text-xs">
+      <span class="font-bold tracking-widest text-emerald-400 uppercase text-[11px]">CONSTRUCTION QUEUE</span>
+      <span id="queue-status-text" class="text-[10px] text-emerald-500 font-mono">IDLE</span>
+    </div>
+
+    <!-- Category Tabs -->
+    <div class="grid grid-cols-2 gap-1 bg-emerald-950/60 p-1 rounded border border-emerald-800/70 text-xs font-bold text-center">
+      <button id="tab-infantry" class="tab-btn active py-1.5 rounded transition text-emerald-300 text-[11px] tracking-wider uppercase">
+        Infantry
+      </button>
+      <button id="tab-vehicles" class="tab-btn py-1.5 rounded transition text-emerald-500 hover:text-emerald-300 text-[11px] tracking-wider uppercase">
+        Vehicles
+      </button>
+    </div>
+
+    <!-- Active Build Progress Bar for currently building item in selected tab -->
+    <div class="bg-black/60 border border-emerald-900 rounded p-1.5 flex flex-col space-y-1">
+      <div class="flex justify-between items-center text-[10px] text-emerald-400 font-mono">
+        <span id="active-build-name">NO ACTIVE PRODUCTION</span>
+        <span id="active-build-time">--</span>
+      </div>
+      <div class="w-full bg-emerald-950/80 h-1.5 rounded overflow-hidden">
+        <div id="linear-progress-bar" class="bg-emerald-400 h-full w-0 transition-all duration-75"></div>
+      </div>
+    </div>
+
+    <!-- Unit Cards Grid Container (2 Columns per tab) -->
+    <div id="unit-cards-container" class="flex-1 overflow-y-auto grid grid-cols-2 gap-2 content-start pr-1">
+      <!-- Injected dynamically via JS based on selected tab -->
+    </div>
+
+    <!-- Instructions at bottom of sidebar -->
+    <div class="text-[9px] text-emerald-500/80 border-t border-emerald-900/80 pt-1 text-center font-mono">
+      L-CLICK: BUILD / QUEUE | R-CLICK: CANCEL
+    </div>
+  </aside>
+
+  <!-- Minimap Panel (Bottom Left) -->
+  <div class="absolute bottom-4 left-4 z-50 pointer-events-auto">
+    <div class="rts-panel p-2 rounded-lg flex flex-col space-y-1.5 border border-emerald-600/50">
+      <div class="flex justify-between items-center text-[10px] text-emerald-400 tracking-wider font-semibold border-b border-emerald-800/60 pb-1">
+        <span>TACTICAL RADAR</span>
+        <span id="minimap-zoom">GRID 200x200</span>
+      </div>
+      <!-- Minimap 2D Canvas -->
+      <canvas id="minimap-canvas" width="160" height="160" class="border border-emerald-900 bg-black/80 rounded cursor-crosshair"></canvas>
+      <div class="text-[9px] text-emerald-500/80 text-center">
+        CLICK & DRAG TO TEST EDGE SCROLL
+      </div>
+      <div class="text-[9px] text-emerald-400 text-center font-mono font-semibold">
+        L-DRAG: Box Select | R-CLICK: Move Units
+      </div>
+      <div class="text-[9px] text-rose-400/90 text-center font-mono">
+        HOTKEYS: [T] Attack Ping | [SPACE] Jump Cam
+      </div>
+    </div>
+  </div>
+
+  <!-- Interaction / Click Prompt Modal (When Unlocked) -->
+  <div id="unlock-prompt" class="absolute inset-0 z-40 flex items-center justify-center bg-black/60 pointer-events-auto cursor-pointer transition-opacity">
+    <div class="rts-panel max-w-md p-6 rounded-lg text-center space-y-4 shadow-2xl border-2 border-emerald-500/80 m-4">
+      <div class="inline-flex p-3 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-600">
+        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+        </svg>
+      </div>
+      <h2 class="text-lg font-bold text-emerald-300 tracking-wider">WINDOWED POINTER LOCK RTS</h2>
+      <p class="text-xs text-emerald-400/80 leading-relaxed">
+        Click anywhere on this screen to engage <strong class="text-emerald-300">Windowed Pointer Lock</strong>.<br>
+        Your mouse will stay strictly bounded within the window, permitting edge-scrolling without full-screen mode.
+      </p>
+      <div class="py-2 px-3 bg-black/40 rounded border border-emerald-900 text-left text-xs text-emerald-400/90 space-y-1">
+        <div>• <strong>Edge Scroll:</strong> Push cursor within 24px of any border</div>
+        <div>• <strong>Pause / Free Cursor:</strong> Press <kbd class="px-1.5 py-0.5 bg-emerald-950 border border-emerald-700 rounded text-emerald-300 text-[10px]">ESC</kbd></div>
+        <div>• <strong>WASD / Arrow Keys:</strong> Auxiliary pan controls</div>
+      </div>
+      <button id="start-btn" class="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-black font-bold text-sm tracking-wider uppercase rounded shadow transition">
+        Engage Tactical View
+      </button>
+    </div>
+  </div>
+
+  <!-- Settings / Pause Modal (ESC) -->
+  <div id="pause-modal" class="absolute inset-0 z-50 flex items-center justify-center bg-black/75 hidden pointer-events-auto">
+    <div class="rts-panel max-w-sm w-full p-6 rounded-lg text-emerald-300 space-y-4 border-2 border-emerald-500 shadow-2xl">
+      <div class="flex justify-between items-center border-b border-emerald-800 pb-2">
+        <h3 class="font-bold tracking-wider text-base text-emerald-400">OPERATION PAUSED</h3>
+        <span class="text-xs text-emerald-600 font-mono">[STANDBY]</span>
+      </div>
+      
+      <p class="text-xs text-emerald-400/80">
+        The hardware mouse cursor has been released. You can now freely interact with window menus, tabs, or settings.
+      </p>
+
+      <div class="space-y-3 pt-2 text-xs">
+        <div>
+          <label class="block text-emerald-400 mb-1 font-semibold flex justify-between">
+            <span>Scroll Speed</span>
+            <span id="speed-val" class="font-mono text-emerald-200">55</span>
+          </label>
+          <input type="range" id="scroll-speed-slider" min="20" max="120" value="55" class="w-full accent-emerald-500 cursor-pointer">
+        </div>
+        <div>
+          <label class="block text-emerald-400 mb-1 font-semibold flex justify-between">
+            <span>Edge Scroll Threshold</span>
+            <span id="edge-val" class="font-mono text-emerald-200">24px</span>
+          </label>
+          <input type="range" id="edge-slider" min="10" max="60" value="24" class="w-full accent-emerald-500 cursor-pointer">
+        </div>
+      </div>
+
+      <div class="pt-4 flex space-x-2">
+        <button id="resume-btn" class="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-black font-bold rounded text-xs tracking-wider uppercase transition">
+          Resume Game
+        </button>
+        <button id="recenter-btn" class="px-3 py-2 bg-emerald-950 hover:bg-emerald-900 border border-emerald-700 text-emerald-300 font-semibold rounded text-xs transition">
+          Recenter
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- Application State ---
+    const STATE = {
+      isLocked: false,
+      isMenuOpen: false,
+      scrollSpeed: 55,
+      edgeMargin: 24,
+      mapBounds: 95, // World size is 200x200 (-100 to 100)
+      credits: 5000,
+      activeTab: 'infantry', // 'infantry' | 'vehicles'
+      queues: {
+        infantry: [],
+        vehicles: []
+      },
+      virtualMouse: {
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2
+      },
+      scrollDir: { x: 0, z: 0 },
+      keys: { w: false, a: false, s: false, d: false, ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false },
+      alerts: [],
+      latestAlertPos: null,
+      selectedUnits: [],
+      dragSelect: {
+        isDragging: false,
+        startX: 0,
+        startY: 0
+      }
+    };
+
+    // --- Web Audio Synthesized Sound Effects (No external URLs) ---
+    const SFX = {
+      ctx: null,
+      init() {
+        if (!this.ctx) {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (AudioContextClass) {
+            this.ctx = new AudioContextClass();
+          }
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      },
+      playSelect() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(480, now);
+        osc.frequency.exponentialRampToValueAtTime(720, now + 0.08);
+        gain.gain.setValueAtTime(0.08, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.08);
+      },
+      playMoveOrder() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        // Two-tone classic "Roger / Acknowledged" radio chirp
+        const osc1 = this.ctx.createOscillator();
+        const osc2 = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc1.type = 'triangle';
+        osc2.type = 'square';
+        osc1.frequency.setValueAtTime(560, now);
+        osc1.frequency.setValueAtTime(840, now + 0.06);
+        osc2.frequency.setValueAtTime(280, now);
+        gain.gain.setValueAtTime(0.06, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+        osc1.connect(gain);
+        osc2.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc1.start(now);
+        osc2.start(now);
+        osc1.stop(now + 0.14);
+        osc2.stop(now + 0.14);
+      },
+      playUnitReady() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        // Ascending 3-tone GDI chime
+        [523.25, 659.25, 783.99].forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.09);
+          gain.gain.setValueAtTime(0.09, now + idx * 0.09);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.09 + 0.12);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now + idx * 0.09);
+          osc.stop(now + idx * 0.09 + 0.12);
+        });
+      },
+      playAttackAlert() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        // Urgent descending siren chirp
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(880, now);
+        osc.frequency.linearRampToValueAtTime(320, now + 0.25);
+        gain.gain.setValueAtTime(0.12, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.25);
+      }
+    };
+
+    // --- Unit Definitions & Tech Tree ---
+    const UNIT_TYPES = {
+      // Infantry Category (Spawned at Barracks)
+      inf_light: {
+        id: 'inf_light',
+        category: 'infantry',
+        name: 'Light Infantry',
+        cost: 100,
+        buildTime: 3.0, // seconds
+        hotkey: '1',
+        iconSvg: `<svg viewBox="0 0 24 24" fill="currentColor" class="w-7 h-7 text-emerald-400"><path d="M12 2a3 3 0 100 6 3 3 0 000-6zm-4 8a2 2 0 00-2 2v4a2 2 0 002 2h1v5a1 1 0 002 0v-5h2v5a1 1 0 002 0v-5h1a2 2 0 002-2v-4a2 2 0 00-2-2H8z"/></svg>`
+      },
+      inf_rocket: {
+        id: 'inf_rocket',
+        category: 'infantry',
+        name: 'Rocket Soldier',
+        cost: 250,
+        buildTime: 5.0,
+        hotkey: '2',
+        iconSvg: `<svg viewBox="0 0 24 24" fill="currentColor" class="w-7 h-7 text-amber-400"><path d="M19.7 4.3a1 1 0 00-1.4 0L14 8.6V7a1 1 0 00-2 0v3.6L7.7 6.3a1 1 0 00-1.4 1.4L10.6 12H7a1 1 0 000 2h1.6l-4.3 4.3a1 1 0 101.4 1.4L10 15.4V17a1 1 0 002 0v-3.6l4.3 4.3a1 1 0 001.4-1.4L13.4 12H17a1 1 0 000-2h-1.6l4.3-4.3a1 1 0 000-1.4z"/></svg>`
+      },
+      inf_engineer: {
+        id: 'inf_engineer',
+        category: 'infantry',
+        name: 'Engineer',
+        cost: 500,
+        buildTime: 8.0,
+        hotkey: '3',
+        iconSvg: `<svg viewBox="0 0 24 24" fill="currentColor" class="w-7 h-7 text-cyan-400"><path d="M21.7 17.3l-3-3a1 1 0 00-1.4 0l-1.6 1.6-4.6-4.6 1.6-1.6a1 1 0 000-1.4l-3-3a1 1 0 00-1.4 0L6 7.6 4.4 6A2 2 0 001.6 8.8L3.2 10.4 1 12.6a1 1 0 000 1.4l3 3a1 1 0 001.4 0l2.2-2.2 1.6 1.6a2 2 0 002.8-2.8L10.4 12l4.6 4.6-1.6 1.6a1 1 0 000 1.4l3 3a1 1 0 001.4 0l3.9-3.9a1 1 0 000-1.4z"/></svg>`
+      },
+
+      // Vehicle Category (Spawned at War Factory)
+      veh_scout: {
+        id: 'veh_scout',
+        category: 'vehicles',
+        name: 'Light Scout Buggy',
+        cost: 400,
+        buildTime: 6.0,
+        hotkey: '4',
+        iconSvg: `<svg viewBox="0 0 24 24" fill="currentColor" class="w-7 h-7 text-emerald-400"><path d="M19 6h-2V4a2 2 0 00-2-2H9a2 2 0 00-2 2v2H5a3 3 0 00-3 3v8a3 3 0 003 3h14a3 3 0 003-3V9a3 3 0 00-3-3zM9 4h6v2H9V4zm11 13a1 1 0 01-1 1H5a1 1 0 01-1-1V9a1 1 0 011-1h14a1 1 0 011 1v8zm-8-7a2 2 0 100 4 2 2 0 000-4z"/></svg>`
+      },
+      veh_medium: {
+        id: 'veh_medium',
+        category: 'vehicles',
+        name: 'Medium Battle Tank',
+        cost: 800,
+        buildTime: 10.0,
+        hotkey: '5',
+        iconSvg: `<svg viewBox="0 0 24 24" fill="currentColor" class="w-7 h-7 text-lime-400"><path d="M20 10V8h-6V4h-2v4H4a2 2 0 00-2 2v6a3 3 0 003 3h14a3 3 0 003-3v-6zm-2 7a1 1 0 01-1 1H5a1 1 0 01-1-1v-5h14v5zm-5-3a2 2 0 11-4 0 2 2 0 014 0z"/></svg>`
+      },
+      veh_heavy: {
+        id: 'veh_heavy',
+        category: 'vehicles',
+        name: 'Heavy Mammoth Tank',
+        cost: 1500,
+        buildTime: 16.0,
+        hotkey: '6',
+        iconSvg: `<svg viewBox="0 0 24 24" fill="currentColor" class="w-7 h-7 text-rose-400"><path d="M21 9V7h-7V3h-2v4H9V5H7v2H3a2 2 0 00-2 2v8a3 3 0 003 3h16a3 3 0 003-3V9zm-2 8a1 1 0 01-1 1H4a1 1 0 01-1-1v-6h16v6z"/></svg>`
+      },
+      veh_harvester: {
+        id: 'veh_harvester',
+        category: 'vehicles',
+        name: 'Ore Harvester',
+        cost: 1400,
+        buildTime: 14.0,
+        hotkey: '7',
+        iconSvg: `<svg viewBox="0 0 24 24" fill="currentColor" class="w-7 h-7 text-amber-500"><path d="M20 7h-4V4a1 1 0 00-1-1H9a1 1 0 00-1 1v3H4a2 2 0 00-2 2v9a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zm-10-2h4v2h-4V5zm10 13H4V9h16v9z"/></svg>`
+      }
+    };
+
+    // --- DOM Elements ---
+    const canvas = document.getElementById('game-canvas');
+    const virtualCursor = document.getElementById('virtual-cursor');
+    const unlockPrompt = document.getElementById('unlock-prompt');
+    const pauseModal = document.getElementById('pause-modal');
+    const resumeBtn = document.getElementById('resume-btn');
+    const startBtn = document.getElementById('start-btn');
+    const menuBtn = document.getElementById('menu-btn');
+    const recenterBtn = document.getElementById('recenter-btn');
+    const triggerAttackBtn = document.getElementById('trigger-attack-btn');
+    const evaAlertBanner = document.getElementById('eva-alert-banner');
+    const creditsDisplay = document.getElementById('credits-display');
+    const speedSlider = document.getElementById('scroll-speed-slider');
+    const speedVal = document.getElementById('speed-val');
+    const edgeSlider = document.getElementById('edge-slider');
+    const edgeVal = document.getElementById('edge-val');
+    const lockBadge = document.getElementById('lock-badge');
+    const lockStatusText = document.getElementById('lock-status-text');
+    const hudMouse = document.getElementById('hud-mouse');
+    const hudCam = document.getElementById('hud-cam');
+    const minimapCanvas = document.getElementById('minimap-canvas');
+    const minimapCtx = minimapCanvas.getContext('2d');
+
+    const tabInfantry = document.getElementById('tab-infantry');
+    const tabVehicles = document.getElementById('tab-vehicles');
+    const unitCardsContainer = document.getElementById('unit-cards-container');
+    const queueStatusText = document.getElementById('queue-status-text');
+    const activeBuildName = document.getElementById('active-build-name');
+    const activeBuildTime = document.getElementById('active-build-time');
+    const linearProgressBar = document.getElementById('linear-progress-bar');
+
+    const edgeTop = document.getElementById('edge-top');
+    const edgeBottom = document.getElementById('edge-bottom');
+    const edgeLeft = document.getElementById('edge-left');
+    const edgeRight = document.getElementById('edge-right');
+    const selectionMarquee = document.getElementById('selection-marquee');
+
+    // --- Production Buildings & Rally Point Locations ---
+    const BASE_LOCATIONS = {
+      barracks: { x: -28, z: -15, rallyX: -28, rallyZ: 2 },
+      warFactory: { x: -10, z: -25, rallyX: -10, rallyZ: 8 }
+    };
+
+    // --- Procedural Terrain Texture Generator ---
+    function generateTerrainTexture() {
+      const texCanvas = document.createElement('canvas');
+      texCanvas.width = 1024;
+      texCanvas.height = 1024;
+      const ctx = texCanvas.getContext('2d');
+
+      // Base terrain color (tactical olive-drab camo)
+      ctx.fillStyle = '#1c261e';
+      ctx.fillRect(0, 0, 1024, 1024);
+
+      // Procedural noise patches
+      for (let i = 0; i < 400; i++) {
+        const x = Math.random() * 1024;
+        const y = Math.random() * 1024;
+        const r = 20 + Math.random() * 80;
+        const col = Math.random() > 0.5 ? 'rgba(23, 40, 27, 0.45)' : 'rgba(38, 54, 39, 0.45)';
+        ctx.fillStyle = col;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Tactical grid lines (C&C style cells)
+      ctx.strokeStyle = 'rgba(52, 211, 153, 0.12)';
+      ctx.lineWidth = 1;
+      const step = 32;
+      for (let x = 0; x <= 1024; x += step) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, 1024);
+        ctx.stroke();
+      }
+      for (let y = 0; y <= 1024; y += step) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(1024, y);
+        ctx.stroke();
+      }
+
+      // Contour accent marks
+      ctx.strokeStyle = 'rgba(110, 231, 183, 0.22)';
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 20; i++) {
+        ctx.beginPath();
+        const startX = Math.random() * 1024;
+        const startY = Math.random() * 1024;
+        ctx.moveTo(startX, startY);
+        ctx.bezierCurveTo(startX + 120, startY - 40, startX + 200, startY + 60, startX + 280, startY);
+        ctx.stroke();
+      }
+
+      const texture = new THREE.CanvasTexture(texCanvas);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(4, 4);
+      return { texture, canvasSource: texCanvas };
+    }
+
+    // --- Three.js Setup ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a100d);
+    scene.fog = new THREE.FogExp2(0x0a100d, 0.0075);
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    // Classic Isometric RTS Camera
+    const aspect = window.innerWidth / window.innerHeight;
+    const camera = new THREE.PerspectiveCamera(45, aspect, 1, 1000);
+    // Positioned high up and back at a 55 degree isometric tilt
+    const CAMERA_OFFSET = new THREE.Vector3(0, 52, 42);
+    const cameraTarget = new THREE.Vector3(0, 0, 0);
+    camera.position.copy(cameraTarget).add(CAMERA_OFFSET);
+    camera.lookAt(cameraTarget);
+
+    // Lighting
+    const hemiLight = new THREE.HemisphereLight(0x86efac, 0x142017, 0.6);
+    scene.add(hemiLight);
+
+    const dirLight = new THREE.DirectionalLight(0xfffaed, 0.9);
+    dirLight.position.set(40, 80, 30);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 1024;
+    dirLight.shadow.mapSize.height = 1024;
+    dirLight.shadow.camera.near = 10;
+    dirLight.shadow.camera.far = 200;
+    dirLight.shadow.camera.left = -70;
+    dirLight.shadow.camera.right = 70;
+    dirLight.shadow.camera.top = 70;
+    dirLight.shadow.camera.bottom = -70;
+    scene.add(dirLight);
+
+    // Terrain Plane
+    const terrainData = generateTerrainTexture();
+    const terrainGeo = new THREE.PlaneGeometry(200, 200, 64, 64);
+    terrainGeo.rotateX(-Math.PI / 2);
+
+    const terrainMat = new THREE.MeshStandardMaterial({
+      map: terrainData.texture,
+      roughness: 0.85,
+      metalness: 0.1
+    });
+    const terrainMesh = new THREE.Mesh(terrainGeo, terrainMat);
+    terrainMesh.receiveShadow = true;
+    scene.add(terrainMesh);
+
+    // Scatter props (Bunkers, Tanks, Radar Dishes) for visual landmarks
+    const entities = [];
+    const tankGeo = new THREE.BoxGeometry(3.5, 1.8, 4.5);
+    const turretGeo = new THREE.CylinderGeometry(1.2, 1.4, 0.8, 8);
+    const barrelGeo = new THREE.CylinderGeometry(0.2, 0.2, 3, 6);
+    barrelGeo.rotateX(Math.PI / 2);
+
+    const greenArmorMat = new THREE.MeshStandardMaterial({ color: 0x2e7d32, roughness: 0.5 });
+    const blueArmorMat = new THREE.MeshStandardMaterial({ color: 0x1e40af, roughness: 0.5 });
+    const metalMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.7, roughness: 0.4 });
+    const concreteMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.9 });
+    const harvesterMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.4 }); // Amber/gold Harvester
+
+    // Unit Selection Ring Indicator Helper
+    const selectionRingGeo = new THREE.RingGeometry(1.6, 2.0, 24);
+    selectionRingGeo.rotateX(-Math.PI / 2);
+    const selectionRingMat = new THREE.MeshBasicMaterial({ color: 0x34d399, side: THREE.DoubleSide });
+
+    function attachSelectionRing(entity, radius = 2.2) {
+      const ring = new THREE.Mesh(selectionRingGeo, selectionRingMat);
+      ring.scale.set(radius / 2.0, radius / 2.0, radius / 2.0);
+      ring.position.y = 0.08;
+      ring.visible = false;
+      entity.group.add(ring);
+      entity.selectionRing = ring;
+      entity.radius = radius;
+      return ring;
+    }
+
+    // Helper: spawn units/buildings
+    function spawnTank(x, z, colorMat, name = "Medium Tank") {
+      const group = new THREE.Group();
+      const body = new THREE.Mesh(tankGeo, colorMat);
+      body.position.y = 0.9;
+      body.castShadow = true;
+      body.receiveShadow = true;
+
+      const turret = new THREE.Mesh(turretGeo, metalMat);
+      turret.position.y = 2.0;
+      turret.castShadow = true;
+
+      const barrel = new THREE.Mesh(barrelGeo, metalMat);
+      barrel.position.set(0, 2.1, 1.8);
+      barrel.castShadow = true;
+
+      group.add(body, turret, barrel);
+      group.position.set(x, 0, z);
+      group.rotation.y = Math.random() * Math.PI * 2;
+      scene.add(group);
+      const entity = { group, type: 'tank', name, x, z, isSelectable: true };
+      attachSelectionRing(entity, 2.4);
+      entities.push(entity);
+      return entity;
+    }
+
+    // Heavy Harvester Unit
+    let harvesterUnit = null;
+    function spawnHarvester(x, z) {
+      const group = new THREE.Group();
+      // Main chassis
+      const body = new THREE.Mesh(new THREE.BoxGeometry(4.8, 2.2, 7.0), harvesterMat);
+      body.position.y = 1.1;
+      body.castShadow = true;
+      body.receiveShadow = true;
+
+      // Front intake treads / harvesting scoop
+      const scoop = new THREE.Mesh(new THREE.BoxGeometry(5.2, 1.5, 2.5), metalMat);
+      scoop.position.set(0, 0.75, 3.8);
+      scoop.castShadow = true;
+
+      // Rear ore hopper
+      const hopper = new THREE.Mesh(new THREE.BoxGeometry(4.0, 1.8, 3.5), new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.7 }));
+      hopper.position.set(0, 2.0, -1.2);
+      hopper.castShadow = true;
+
+      group.add(body, scoop, hopper);
+      group.position.set(x, 0, z);
+      scene.add(group);
+
+      harvesterUnit = { group, type: 'harvester', name: 'Ore Harvester', x, z, targetX: x, targetZ: z, isSelectable: true };
+      attachSelectionRing(harvesterUnit, 3.2);
+      entities.push(harvesterUnit);
+      return harvesterUnit;
+    }
+
+    function spawnBunker(x, z) {
+      const group = new THREE.Group();
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(4.5, 5.5, 2.4, 8), concreteMat);
+      base.position.y = 1.2;
+      base.castShadow = true;
+      base.receiveShadow = true;
+
+      const dome = new THREE.Mesh(new THREE.SphereGeometry(3, 8, 8, 0, Math.PI * 2, 0, Math.PI / 2), metalMat);
+      dome.position.y = 2.4;
+      dome.castShadow = true;
+
+      group.add(base, dome);
+      group.position.set(x, 0, z);
+      scene.add(group);
+      entities.push({ group, type: 'bunker', x, z });
+    }
+
+    // Spawn Military Base Buildings
+    function spawnMilitaryBase() {
+      // 1. Barracks Structure (with dual blast doors)
+      const barracksGroup = new THREE.Group();
+      const bMain = new THREE.Mesh(new THREE.BoxGeometry(10, 4.5, 8), concreteMat);
+      bMain.position.y = 2.25;
+      bMain.castShadow = true;
+      bMain.receiveShadow = true;
+
+      const bRoof = new THREE.Mesh(new THREE.BoxGeometry(9.6, 0.8, 7.6), greenArmorMat);
+      bRoof.position.y = 4.8;
+
+      const door = new THREE.Mesh(new THREE.BoxGeometry(3, 3, 0.4), metalMat);
+      door.position.set(0, 1.5, 4.1);
+
+      barracksGroup.add(bMain, bRoof, door);
+      barracksGroup.position.set(BASE_LOCATIONS.barracks.x, 0, BASE_LOCATIONS.barracks.z);
+      scene.add(barracksGroup);
+      entities.push({ group: barracksGroup, type: 'building', name: 'Barracks', x: BASE_LOCATIONS.barracks.x, z: BASE_LOCATIONS.barracks.z });
+
+      // 2. War Factory (large hangar with roll-up bay doors)
+      const factoryGroup = new THREE.Group();
+      const fMain = new THREE.Mesh(new THREE.BoxGeometry(14, 6.5, 12), concreteMat);
+      fMain.position.y = 3.25;
+      fMain.castShadow = true;
+      fMain.receiveShadow = true;
+
+      const fRoof = new THREE.Mesh(new THREE.BoxGeometry(13.6, 1.2, 11.6), metalMat);
+      fRoof.position.y = 7.0;
+
+      const bayDoor = new THREE.Mesh(new THREE.BoxGeometry(7, 4.5, 0.4), new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 }));
+      bayDoor.position.set(0, 2.25, 6.1);
+
+      factoryGroup.add(fMain, fRoof, bayDoor);
+      factoryGroup.position.set(BASE_LOCATIONS.warFactory.x, 0, BASE_LOCATIONS.warFactory.z);
+      scene.add(factoryGroup);
+      entities.push({ group: factoryGroup, type: 'building', name: 'War Factory', x: BASE_LOCATIONS.warFactory.x, z: BASE_LOCATIONS.warFactory.z });
+
+      // Rally Point Marker flag poles
+      createRallyFlag(BASE_LOCATIONS.barracks.rallyX, BASE_LOCATIONS.barracks.rallyZ, 0x10b981);
+      createRallyFlag(BASE_LOCATIONS.warFactory.rallyX, BASE_LOCATIONS.warFactory.rallyZ, 0x3b82f6);
+    }
+
+    function createRallyFlag(x, z, colorHex) {
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 4), metalMat);
+      pole.position.set(x, 2, z);
+      const flag = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.8, 0.1), new THREE.MeshBasicMaterial({ color: colorHex }));
+      flag.position.set(x + 0.6, 3.4, z);
+      scene.add(pole, flag);
+    }
+
+    spawnMilitaryBase();
+
+    // Spawn sample military base formations
+    spawnBunker(-25, -20);
+    spawnBunker(30, 25);
+    spawnTank(-18, -12, greenArmorMat);
+    spawnTank(-12, -22, greenArmorMat);
+    spawnTank(-28, -5, greenArmorMat);
+    spawnTank(25, 15, blueArmorMat);
+    spawnTank(35, 18, blueArmorMat);
+
+    // Spawn Harvester harvesting far away in Tiberium/ore fields
+    spawnHarvester(45, -50);
+
+    // --- Dynamic 3D Unit Spawning from Production Queue ---
+
+    // Animated marching units array
+    const movingUnits = [];
+
+    function spawnBuiltUnit(unitType) {
+      const isInfantry = unitType.category === 'infantry';
+      const spawnOrigin = isInfantry ? BASE_LOCATIONS.barracks : BASE_LOCATIONS.warFactory;
+      const startX = spawnOrigin.x;
+      const startZ = spawnOrigin.z + 4.5;
+      const targetX = spawnOrigin.rallyX + (Math.random() - 0.5) * 6;
+      const targetZ = spawnOrigin.rallyZ + (Math.random() - 0.5) * 6;
+
+      if (isInfantry) {
+        // Spawn 3D Infantry Figure
+        const group = new THREE.Group();
+        const bodyMat = unitType.id === 'inf_engineer' 
+          ? new THREE.MeshStandardMaterial({ color: 0x06b6d4, roughness: 0.4 }) // Cyan
+          : (unitType.id === 'inf_rocket' 
+            ? new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.4 }) // Amber
+            : greenArmorMat);
+
+        // Torso/Legs Capsule
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.35, 1.4, 8), bodyMat);
+        body.position.y = 0.7;
+        body.castShadow = true;
+
+        // Helmet/Head
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 8), metalMat);
+        head.position.y = 1.6;
+        head.castShadow = true;
+
+        // Gun / Tool
+        const weapon = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 1.0), metalMat);
+        weapon.position.set(0.35, 0.9, 0.4);
+
+        group.add(body, head, weapon);
+        group.position.set(startX, 0, startZ);
+        scene.add(group);
+
+        const entity = { group, type: 'infantry', name: unitType.name, x: startX, z: startZ, isSelectable: true };
+        attachSelectionRing(entity, 1.3);
+        entities.push(entity);
+        movingUnits.push({
+          entity,
+          targetX,
+          targetZ,
+          speed: 12 + Math.random() * 2
+        });
+      } else {
+        // Spawn 3D Tank or Harvester
+        if (unitType.id === 'veh_harvester') {
+          const harv = spawnHarvester(startX, startZ);
+          movingUnits.push({
+            entity: harv,
+            targetX,
+            targetZ,
+            speed: 9
+          });
+        } else {
+          const group = new THREE.Group();
+          let mat = greenArmorMat;
+          let scale = 1.0;
+
+          if (unitType.id === 'veh_heavy') {
+            mat = new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.5 }); // Heavy Red
+            scale = 1.35;
+          } else if (unitType.id === 'veh_scout') {
+            mat = new THREE.MeshStandardMaterial({ color: 0x10b981, roughness: 0.4 });
+            scale = 0.75;
+          }
+
+          const body = new THREE.Mesh(tankGeo, mat);
+          body.position.y = 0.9 * scale;
+          body.scale.set(scale, scale, scale);
+          body.castShadow = true;
+          body.receiveShadow = true;
+
+          const turret = new THREE.Mesh(turretGeo, metalMat);
+          turret.position.y = 2.0 * scale;
+          turret.scale.set(scale, scale, scale);
+          turret.castShadow = true;
+
+          const barrel = new THREE.Mesh(barrelGeo, metalMat);
+          barrel.position.set(0, 2.1 * scale, 1.8 * scale);
+          barrel.scale.set(scale, scale, scale);
+          barrel.castShadow = true;
+
+          group.add(body, turret, barrel);
+          group.position.set(startX, 0, startZ);
+          scene.add(group);
+
+          const entity = { group, type: 'tank', name: unitType.name, x: startX, z: startZ, isSelectable: true };
+          attachSelectionRing(entity, scale * 2.2);
+          entities.push(entity);
+          movingUnits.push({
+            entity,
+            targetX,
+            targetZ,
+            speed: unitType.id === 'veh_scout' ? 18 : (unitType.id === 'veh_heavy' ? 7 : 11)
+          });
+        }
+      }
+
+      // Play audio chime when unit completes construction
+      SFX.playUnitReady();
+    }
+
+    // --- Production Sidebar & Queue Logic ---
+
+    function setCredits(amount) {
+      STATE.credits = Math.max(0, amount);
+      creditsDisplay.textContent = STATE.credits.toLocaleString();
+    }
+
+    function renderUnitCards() {
+      unitCardsContainer.innerHTML = '';
+      const category = STATE.activeTab;
+      const availableUnits = Object.values(UNIT_TYPES).filter(u => u.category === category);
+
+      availableUnits.forEach(unit => {
+        const card = document.createElement('div');
+        card.className = 'unit-card rounded p-1.5 flex flex-col justify-between cursor-pointer select-none';
+        card.id = `card-${unit.id}`;
+
+        // Count how many of this unit type are queued in this category
+        const queueCount = STATE.queues[category].filter(task => task.unit.id === unit.id).length;
+
+        card.innerHTML = `
+          <!-- Radial Cooldown Sweep Overlay -->
+          <div class="cooldown-overlay hidden" id="sweep-${unit.id}"></div>
+
+          <!-- Top row: Hotkey & Queue Counter -->
+          <div class="relative z-10 flex items-center justify-between w-full pointer-events-none font-mono">
+            <span class="text-[9px] text-emerald-400 bg-black/60 px-1 py-0.2 rounded border border-emerald-800/80">
+              [${unit.hotkey}]
+            </span>
+            <span class="queue-badge ${queueCount > 0 ? '' : 'hidden'} px-1.5 py-0.2 bg-emerald-400 text-black font-extrabold text-[10px] rounded shadow">
+              x${queueCount}
+            </span>
+          </div>
+
+          <!-- Center Icon -->
+          <div class="relative z-10 flex justify-center py-1 pointer-events-none">
+            <div class="p-1 bg-black/40 border border-emerald-900/60 rounded">
+              ${unit.iconSvg}
+            </div>
+          </div>
+
+          <!-- Bottom: Unit Title & Cost -->
+          <div class="relative z-10 flex flex-col text-center pointer-events-none">
+            <div class="text-[10.5px] font-bold text-emerald-200 truncate leading-tight">${unit.name}</div>
+            <div class="text-[9.5px] text-amber-400 font-mono font-semibold">$${unit.cost} <span class="text-emerald-500 font-normal">(${unit.buildTime}s)</span></div>
+          </div>
+        `;
+
+        // Left Click: Build / Add to Queue
+        card.addEventListener('click', (e) => {
+          e.stopPropagation();
+          queueUnitBuild(unit);
+        });
+
+        // Right Click: Cancel / Refund from Queue
+        card.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          cancelUnitBuild(unit);
+        });
+
+        unitCardsContainer.appendChild(card);
+      });
+
+      updateQueueUI();
+    }
+
+    // Add unit to category build queue
+    function queueUnitBuild(unit) {
+      if (STATE.credits < unit.cost) {
+        // Flash red credit display (Insufficient Funds)
+        creditsDisplay.classList.add('text-rose-500');
+        setTimeout(() => creditsDisplay.classList.remove('text-rose-500'), 250);
+        return;
+      }
+
+      setCredits(STATE.credits - unit.cost);
+
+      const queue = STATE.queues[unit.category];
+      queue.push({
+        id: Math.random().toString(36).slice(2),
+        unit,
+        elapsed: 0
+      });
+
+      renderUnitCards();
+    }
+
+    // Cancel unit from category queue
+    function cancelUnitBuild(unit) {
+      const queue = STATE.queues[unit.category];
+      const index = queue.findLastIndex(task => task.unit.id === unit.id);
+      if (index === -1) return;
+
+      // Refund credits
+      setCredits(STATE.credits + unit.cost);
+      queue.splice(index, 1);
+
+      renderUnitCards();
+    }
+
+    // Sidebar Tab Switching
+    tabInfantry.addEventListener('click', (e) => {
+      e.stopPropagation();
+      STATE.activeTab = 'infantry';
+      tabInfantry.className = 'tab-btn active py-1.5 rounded transition text-emerald-300 text-[11px] tracking-wider uppercase';
+      tabVehicles.className = 'tab-btn py-1.5 rounded transition text-emerald-500 hover:text-emerald-300 text-[11px] tracking-wider uppercase';
+      renderUnitCards();
+    });
+
+    tabVehicles.addEventListener('click', (e) => {
+      e.stopPropagation();
+      STATE.activeTab = 'vehicles';
+      tabVehicles.className = 'tab-btn active py-1.5 rounded transition text-emerald-300 text-[11px] tracking-wider uppercase';
+      tabInfantry.className = 'tab-btn py-1.5 rounded transition text-emerald-500 hover:text-emerald-300 text-[11px] tracking-wider uppercase';
+      renderUnitCards();
+    });
+
+    // Update Queues per frame
+    function updateProductionQueues(delta) {
+      ['infantry', 'vehicles'].forEach(cat => {
+        const queue = STATE.queues[cat];
+        if (queue.length === 0) return;
+
+        // Only the first item in queue builds at one time (C&C style)
+        const currentTask = queue[0];
+        currentTask.elapsed += delta;
+
+        const progress = Math.min(1.0, currentTask.elapsed / currentTask.unit.buildTime);
+
+        // Update radial wipe overlay if this unit's card is rendered on the active tab
+        if (STATE.activeTab === cat) {
+          const sweepOverlay = document.getElementById(`sweep-${currentTask.unit.id}`);
+          if (sweepOverlay) {
+            sweepOverlay.classList.remove('hidden');
+            sweepOverlay.style.setProperty('--sweep-progress', `${(progress * 100).toFixed(1)}%`);
+          }
+        }
+
+        // Check completion
+        if (progress >= 1.0) {
+          spawnBuiltUnit(currentTask.unit);
+          queue.shift(); // Remove completed task
+          renderUnitCards();
+        }
+      });
+
+      updateQueueUI();
+    }
+
+    function updateQueueUI() {
+      const activeQueue = STATE.queues[STATE.activeTab];
+      if (activeQueue.length > 0) {
+        const task = activeQueue[0];
+        const remaining = Math.max(0, task.unit.buildTime - task.elapsed);
+        const percent = Math.min(100, (task.elapsed / task.unit.buildTime) * 100);
+
+        queueStatusText.textContent = `BUILDING (${activeQueue.length})`;
+        queueStatusText.className = 'text-[10px] text-emerald-400 font-mono font-bold animate-pulse';
+
+        activeBuildName.textContent = task.unit.name.toUpperCase();
+        activeBuildTime.textContent = `${remaining.toFixed(1)}s (${percent.toFixed(0)}%)`;
+        linearProgressBar.style.width = `${percent}%`;
+      } else {
+        queueStatusText.textContent = 'IDLE';
+        queueStatusText.className = 'text-[10px] text-emerald-600 font-mono';
+
+        activeBuildName.textContent = 'NO ACTIVE PRODUCTION';
+        activeBuildTime.textContent = '--';
+        linearProgressBar.style.width = '0%';
+      }
+    }
+
+    // Hotkey listener for Unit Production (Keys 1..7)
+    window.addEventListener('keydown', (e) => {
+      const key = e.key;
+      const unit = Object.values(UNIT_TYPES).find(u => u.hotkey === key);
+      if (unit) {
+        queueUnitBuild(unit);
+      }
+    });
+
+    // Initial render of cards
+    renderUnitCards();
+
+    // 3D In-World Attack Pulse Hologram Marker
+    const alertBeaconGeo = new THREE.RingGeometry(2, 2.6, 32);
+    alertBeaconGeo.rotateX(-Math.PI / 2);
+    const alertBeaconMat = new THREE.MeshBasicMaterial({
+      color: 0xff2222,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false
+    });
+    const alertBeaconMesh = new THREE.Mesh(alertBeaconGeo, alertBeaconMat);
+    alertBeaconMesh.position.set(0, 0.2, 0);
+    scene.add(alertBeaconMesh);
+
+    // 3D In-World Move Target Order Marker (Expanding holographic square)
+    const moveMarkerGeo = new THREE.RingGeometry(1.2, 1.6, 4);
+    moveMarkerGeo.rotateX(-Math.PI / 2);
+    const moveMarkerMat = new THREE.MeshBasicMaterial({
+      color: 0x34d399,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false
+    });
+    const moveMarkerMesh = new THREE.Mesh(moveMarkerGeo, moveMarkerMat);
+    moveMarkerMesh.position.set(0, 0.2, 0);
+    scene.add(moveMarkerMesh);
+    let moveMarkerStartTime = 0;
+
+    function triggerMoveMarker(wx, wz) {
+      moveMarkerMesh.position.set(wx, 0.15, wz);
+      moveMarkerStartTime = performance.now();
+      moveMarkerMat.opacity = 0.95;
+      SFX.playMoveOrder();
+    }
+
+    // Raycasting Helpers for Ground Plane Intersection
+    const raycaster = new THREE.Raycaster();
+    const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+
+    function getRayIntersectionAt(screenX, screenY) {
+      const ndcX = (screenX / window.innerWidth) * 2 - 1;
+      const ndcY = -(screenY / window.innerHeight) * 2 + 1;
+      raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
+      const target = new THREE.Vector3();
+      return raycaster.ray.intersectPlane(groundPlane, target);
+    }
+
+    // --- Selection System (Screen-space 2D Box & Click Picking) ---
+    function clearSelection() {
+      STATE.selectedUnits.forEach(u => {
+        if (u.selectionRing) u.selectionRing.visible = false;
+      });
+      STATE.selectedUnits = [];
+    }
+
+    function selectUnit(unit) {
+      if (!unit || !unit.isSelectable) return;
+      if (!STATE.selectedUnits.includes(unit)) {
+        STATE.selectedUnits.push(unit);
+        if (unit.selectionRing) unit.selectionRing.visible = true;
+      }
+    }
+
+    function performBoxSelection(x1, y1, x2, y2) {
+      clearSelection();
+      const minX = Math.min(x1, x2);
+      const maxX = Math.max(x1, x2);
+      const minY = Math.min(y1, y2);
+      const maxY = Math.max(y1, y2);
+      const isDrag = Math.abs(x2 - x1) > 6 || Math.abs(y2 - y1) > 6;
+
+      const tempVec = new THREE.Vector3();
+
+      if (isDrag) {
+        // Multi-unit marquee box check
+        entities.forEach(ent => {
+          if (!ent.isSelectable) return;
+          tempVec.set(ent.x, 0, ent.z).project(camera);
+          // Check if behind camera
+          if (tempVec.z > 1.0) return;
+
+          const sx = ((tempVec.x + 1) * window.innerWidth) / 2;
+          const sy = ((-tempVec.y + 1) * window.innerHeight) / 2;
+
+          if (sx >= minX && sx <= maxX && sy >= minY && sy <= maxY) {
+            selectUnit(ent);
+          }
+        });
+      } else {
+        // Single unit click selection (find closest unit within click tolerance)
+        let closest = null;
+        let minDist = 30; // 30px click radius
+        entities.forEach(ent => {
+          if (!ent.isSelectable) return;
+          tempVec.set(ent.x, 0, ent.z).project(camera);
+          if (tempVec.z > 1.0) return;
+
+          const sx = ((tempVec.x + 1) * window.innerWidth) / 2;
+          const sy = ((-tempVec.y + 1) * window.innerHeight) / 2;
+          const dist = Math.hypot(sx - x1, sy - y1);
+          if (dist < minDist) {
+            minDist = dist;
+            closest = ent;
+          }
+        });
+
+        if (closest) {
+          selectUnit(closest);
+        }
+      }
+
+      if (STATE.selectedUnits.length > 0) {
+        SFX.playSelect();
+      }
+    }
+
+    // Command Selected Units to Move
+    function issueMoveOrder(destX, destZ) {
+      if (STATE.selectedUnits.length === 0) return;
+      triggerMoveMarker(destX, destZ);
+
+      const count = STATE.selectedUnits.length;
+      const cols = Math.ceil(Math.sqrt(count));
+      const spacing = 3.8;
+
+      STATE.selectedUnits.forEach((unit, idx) => {
+        // Offset formation grid
+        const row = Math.floor(idx / cols);
+        const col = idx % cols;
+        const targetX = destX + (col - (cols - 1) / 2) * spacing;
+        const targetZ = destZ + (row - (cols - 1) / 2) * spacing;
+
+        // Harvester has special handling if actively moving
+        if (unit.type === 'harvester') {
+          unit.targetX = targetX;
+          unit.targetZ = targetZ;
+        }
+
+        // Add or redirect in movingUnits list
+        const existing = movingUnits.find(m => m.entity === unit);
+        const speed = unit.type === 'infantry' ? 12 : (unit.name && unit.name.includes('Heavy') ? 7 : 12);
+
+        if (existing) {
+          existing.targetX = targetX;
+          existing.targetZ = targetZ;
+        } else {
+          movingUnits.push({
+            entity: unit,
+            targetX,
+            targetZ,
+            speed
+          });
+        }
+      });
+    }
+
+    // Decorative Rocks/Pillars
+    const rockGeo = new THREE.DodecahedronGeometry(2);
+    for (let i = 0; i < 35; i++) {
+      const rock = new THREE.Mesh(rockGeo, concreteMat);
+      const rx = (Math.random() - 0.5) * 160;
+      const rz = (Math.random() - 0.5) * 160;
+      const scale = 0.6 + Math.random() * 1.5;
+      rock.scale.set(scale, scale * (0.8 + Math.random() * 1.2), scale);
+      rock.position.set(rx, scale, rz);
+      rock.rotation.set(Math.random(), Math.random(), Math.random());
+      rock.castShadow = true;
+      rock.receiveShadow = true;
+      scene.add(rock);
+    }
+
+    // --- Pointer Lock Engine (Windowed) ---
+
+    function engagePointerLock() {
+      SFX.init();
+      if (STATE.isMenuOpen) return;
+      try {
+        canvas.requestPointerLock();
+      } catch (e) {
+        console.warn("Pointer lock request failed:", e);
+      }
+    }
+
+    function jumpCameraToAlert() {
+      if (!STATE.latestAlertPos) return;
+      cameraTarget.x = Math.max(-STATE.mapBounds, Math.min(STATE.mapBounds, STATE.latestAlertPos.x));
+      cameraTarget.z = Math.max(-STATE.mapBounds, Math.min(STATE.mapBounds, STATE.latestAlertPos.z));
+      camera.position.copy(cameraTarget).add(CAMERA_OFFSET);
+      hudCam.textContent = `${cameraTarget.x.toFixed(1)}, ${cameraTarget.z.toFixed(1)}`;
+    }
+
+    // Trigger Minimap Alert Ping
+    function triggerAlert(worldX, worldZ, title = "HARVESTER UNDER ATTACK") {
+      STATE.latestAlertPos = { x: worldX, z: worldZ };
+      
+      STATE.alerts.push({
+        id: Math.random().toString(36).substring(2, 9),
+        worldX,
+        worldZ,
+        startTime: performance.now(),
+        duration: 900, // Duration per pulse (ms)
+        repeatCount: 4, // Pulses 4 times
+        color: '#ef4444'
+      });
+
+      // Position in-world 3D holographic ring
+      alertBeaconMesh.position.set(worldX, 0.3, worldZ);
+      alertBeaconMat.opacity = 0.9;
+      SFX.playAttackAlert();
+
+      // Show top EVA banner
+      evaAlertBanner.classList.remove('hidden');
+      document.getElementById('eva-alert-text').textContent = `EVA WARNING: ${title}`;
+
+      // Auto-hide banner after alert sequence
+      clearTimeout(triggerAlert._timer);
+      triggerAlert._timer = setTimeout(() => {
+        evaAlertBanner.classList.add('hidden');
+      }, 3800);
+    }
+
+    function releasePointerLock() {
+      if (document.pointerLockElement === canvas) {
+        document.exitPointerLock();
+      }
+    }
+
+    function openPauseMenu() {
+      STATE.isMenuOpen = true;
+      pauseModal.classList.remove('hidden');
+      unlockPrompt.classList.add('hidden');
+      releasePointerLock();
+      updateLockStatusUI();
+    }
+
+    function closePauseMenu() {
+      STATE.isMenuOpen = false;
+      pauseModal.classList.add('hidden');
+      engagePointerLock();
+    }
+
+    // Event: Pointer Lock State Change (handles both API and hardware ESC)
+    document.addEventListener('pointerlockchange', () => {
+      STATE.isLocked = (document.pointerLockElement === canvas);
+
+      if (STATE.isLocked) {
+        // Active in game
+        virtualCursor.style.display = 'block';
+        unlockPrompt.classList.add('hidden');
+        pauseModal.classList.add('hidden');
+      } else {
+        // Cursor released
+        virtualCursor.style.display = 'none';
+        if (!STATE.isMenuOpen) {
+          openPauseMenu();
+        }
+      }
+      updateLockStatusUI();
+    });
+
+    // Handle ESC and WASD Pan shortcuts
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Escape') {
+        e.preventDefault();
+        if (STATE.isMenuOpen) {
+          closePauseMenu();
+        } else {
+          openPauseMenu();
+        }
+        return;
+      }
+
+      // Spacebar: Instant Jump to latest alert
+      if (e.code === 'Space') {
+        e.preventDefault();
+        jumpCameraToAlert();
+        return;
+      }
+
+      // 'T' Hotkey: Test Attack Alert
+      if (e.key === 't' || e.key === 'T') {
+        if (harvesterUnit) {
+          triggerAlert(harvesterUnit.x, harvesterUnit.z, "HARVESTER UNDER ATTACK");
+        } else {
+          triggerAlert(35, 18, "OUTPOST UNDER ATTACK");
+        }
+        return;
+      }
+
+      if (e.key in STATE.keys) {
+        STATE.keys[e.key] = true;
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (e.key in STATE.keys) {
+        STATE.keys[e.key] = false;
+      }
+    });
+
+    // Mouse Movement Tracking & Edge Boundary Clamping
+    window.addEventListener('mousemove', (e) => {
+      if (!STATE.isLocked) return;
+
+      // 1. Accumulate physical movement deltas
+      STATE.virtualMouse.x += e.movementX;
+      STATE.virtualMouse.y += e.movementY;
+
+      // 2. Strict window boundary clamp
+      STATE.virtualMouse.x = Math.max(0, Math.min(window.innerWidth, STATE.virtualMouse.x));
+      STATE.virtualMouse.y = Math.max(0, Math.min(window.innerHeight, STATE.virtualMouse.y));
+
+      // 3. Fast hardware-accelerated CSS translation
+      virtualCursor.style.transform = `translate3d(${STATE.virtualMouse.x}px, ${STATE.virtualMouse.y}px, 0)`;
+
+      // 4. Calculate Edge Scrolling Vector
+      const margin = STATE.edgeMargin;
+      let dirX = 0;
+      let dirZ = 0;
+
+      const atLeft = STATE.virtualMouse.x <= margin;
+      const atRight = STATE.virtualMouse.x >= (window.innerWidth - margin);
+      const atTop = STATE.virtualMouse.y <= margin;
+      const atBottom = STATE.virtualMouse.y >= (window.innerHeight - margin);
+
+      if (atLeft) dirX -= 1;
+      if (atRight) dirX += 1;
+      if (atTop) dirZ -= 1;
+      if (atBottom) dirZ += 1;
+
+      STATE.scrollDir.x = dirX;
+      STATE.scrollDir.z = dirZ;
+
+      // Visual edge feedback
+      edgeTop.classList.toggle('edge-active', atTop);
+      edgeBottom.classList.toggle('edge-active', atBottom);
+      edgeLeft.classList.toggle('edge-active', atLeft);
+      edgeRight.classList.toggle('edge-active', atRight);
+
+      // Update HUD coordinate metrics
+      hudMouse.textContent = `${Math.round(STATE.virtualMouse.x)}, ${Math.round(STATE.virtualMouse.y)}`;
+
+      // Update Marquee Drag Rectangle Selection UI
+      if (STATE.dragSelect.isDragging) {
+        const x1 = STATE.dragSelect.startX;
+        const y1 = STATE.dragSelect.startY;
+        const x2 = STATE.virtualMouse.x;
+        const y2 = STATE.virtualMouse.y;
+
+        const left = Math.min(x1, x2);
+        const top = Math.min(y1, y2);
+        const width = Math.abs(x2 - x1);
+        const height = Math.abs(y2 - y1);
+
+        selectionMarquee.style.left = `${left}px`;
+        selectionMarquee.style.top = `${top}px`;
+        selectionMarquee.style.width = `${width}px`;
+        selectionMarquee.style.height = `${height}px`;
+
+        if (width > 4 || height > 4) {
+          selectionMarquee.style.display = 'block';
+        }
+      }
+    });
+
+    // Mouse Down / Up Handlers for Selection and Move Orders
+    window.addEventListener('mousedown', (e) => {
+      SFX.init();
+
+      // If unlocked, click prompts and modals handle their own clicks
+      if (!STATE.isLocked) return;
+      if (STATE.isMenuOpen) return;
+
+      // Determine what element is under the virtual cursor
+      virtualCursor.style.display = 'none'; // Temporarily hide to probe underlying elements
+      const targetEl = document.elementFromPoint(STATE.virtualMouse.x, STATE.virtualMouse.y);
+      virtualCursor.style.display = 'block';
+
+      // Check if clicking inside interactive UI elements (Sidebar, HUD buttons, Minimap)
+      const clickedCard = targetEl ? targetEl.closest('.unit-card') : null;
+      const clickedBtn = targetEl ? targetEl.closest('button, #eva-alert-banner, #minimap-canvas') : null;
+
+      if (clickedCard) {
+        const unitId = clickedCard.id.replace('card-', '');
+        const unit = UNIT_TYPES[unitId];
+        if (unit) {
+          if (e.button === 0) queueUnitBuild(unit);
+          else if (e.button === 2) cancelUnitBuild(unit);
+        }
+        return;
+      }
+
+      if (clickedBtn) {
+        if (e.button === 0) {
+          clickedBtn.click();
+        }
+        return;
+      }
+
+      // Check if clicking on the minimap
+      const minimapRect = minimapCanvas.getBoundingClientRect();
+      if (
+        STATE.virtualMouse.x >= minimapRect.left &&
+        STATE.virtualMouse.x <= minimapRect.right &&
+        STATE.virtualMouse.y >= minimapRect.top &&
+        STATE.virtualMouse.y <= minimapRect.bottom
+      ) {
+        const clickX = STATE.virtualMouse.x - minimapRect.left;
+        const clickY = STATE.virtualMouse.y - minimapRect.top;
+        const worldX = (clickX / minimapRect.width) * 200 - 100;
+        const worldZ = (clickY / minimapRect.height) * 200 - 100;
+
+        cameraTarget.x = Math.max(-STATE.mapBounds, Math.min(STATE.mapBounds, worldX));
+        cameraTarget.z = Math.max(-STATE.mapBounds, Math.min(STATE.mapBounds, worldZ));
+        camera.position.copy(cameraTarget).add(CAMERA_OFFSET);
+        return;
+      }
+
+      // Left Click on World: Begin Marquee Selection
+      if (e.button === 0) {
+        STATE.dragSelect.isDragging = true;
+        STATE.dragSelect.startX = STATE.virtualMouse.x;
+        STATE.dragSelect.startY = STATE.virtualMouse.y;
+      }
+
+      // Right Click on World: Issue Move Order to ground intersection
+      if (e.button === 2) {
+        e.preventDefault();
+        const groundHit = getRayIntersectionAt(STATE.virtualMouse.x, STATE.virtualMouse.y);
+        if (groundHit) {
+          issueMoveOrder(groundHit.x, groundHit.z);
+        }
+      }
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (!STATE.isLocked) return;
+
+      if (e.button === 0 && STATE.dragSelect.isDragging) {
+        STATE.dragSelect.isDragging = false;
+        selectionMarquee.style.display = 'none';
+
+        performBoxSelection(
+          STATE.dragSelect.startX,
+          STATE.dragSelect.startY,
+          STATE.virtualMouse.x,
+          STATE.virtualMouse.y
+        );
+      }
+    });
+
+    // Prevent default context menu on right click in game canvas
+    window.addEventListener('contextmenu', (e) => {
+      if (STATE.isLocked) {
+        e.preventDefault();
+      }
+    });
+
+    // UI Click Listeners
+    unlockPrompt.addEventListener('click', engagePointerLock);
+    startBtn.addEventListener('click', (e) => { e.stopPropagation(); engagePointerLock(); });
+    resumeBtn.addEventListener('click', closePauseMenu);
+    menuBtn.addEventListener('click', openPauseMenu);
+
+    triggerAttackBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (harvesterUnit) {
+        triggerAlert(harvesterUnit.x, harvesterUnit.z, "HARVESTER UNDER ATTACK");
+      }
+    });
+
+    evaAlertBanner.addEventListener('click', (e) => {
+      e.stopPropagation();
+      jumpCameraToAlert();
+    });
+
+    recenterBtn.addEventListener('click', () => {
+      cameraTarget.set(0, 0, 0);
+      camera.position.copy(cameraTarget).add(CAMERA_OFFSET);
+      closePauseMenu();
+    });
+
+    // Slider settings
+    speedSlider.addEventListener('input', (e) => {
+      STATE.scrollSpeed = parseFloat(e.target.value);
+      speedVal.textContent = STATE.scrollSpeed;
+    });
+
+    edgeSlider.addEventListener('input', (e) => {
+      STATE.edgeMargin = parseInt(e.target.value, 10);
+      edgeVal.textContent = `${STATE.edgeMargin}px`;
+    });
+
+    function updateLockStatusUI() {
+      if (STATE.isLocked) {
+        lockBadge.style.backgroundColor = '#10b981';
+        lockStatusText.textContent = 'POINTER LOCKED (CONFINED)';
+        lockStatusText.className = 'font-bold tracking-wider text-emerald-400';
+      } else {
+        lockBadge.style.backgroundColor = '#ef4444';
+        lockStatusText.textContent = 'UNLOCKED [ESC]';
+        lockStatusText.className = 'font-bold tracking-wider text-rose-400';
+      }
+    }
+
+    // --- Minimap System ---
+    function renderMinimap() {
+      const mw = minimapCanvas.width;
+      const mh = minimapCanvas.height;
+      const mapHalf = 100; // Total world is 200 (-100 to 100)
+
+      // Draw background
+      minimapCtx.fillStyle = '#111a14';
+      minimapCtx.fillRect(0, 0, mw, mh);
+
+      // Grid markers
+      minimapCtx.strokeStyle = 'rgba(52, 211, 153, 0.2)';
+      minimapCtx.lineWidth = 1;
+      minimapCtx.beginPath();
+      minimapCtx.moveTo(mw / 2, 0); minimapCtx.lineTo(mw / 2, mh);
+      minimapCtx.moveTo(0, mh / 2); minimapCtx.lineTo(mw, mh / 2);
+      minimapCtx.stroke();
+
+      // World to minimap transform
+      function worldToMinimap(wx, wz) {
+        return {
+          x: ((wx + mapHalf) / 200) * mw,
+          y: ((wz + mapHalf) / 200) * mh
+        };
+      }
+
+      // Render entity blips
+      entities.forEach(ent => {
+        const pt = worldToMinimap(ent.x, ent.z);
+        const isSelected = STATE.selectedUnits.includes(ent);
+
+        if (ent.type === 'bunker') {
+          minimapCtx.fillStyle = '#64748b';
+          minimapCtx.fillRect(pt.x - 3, pt.y - 3, 6, 6);
+        } else if (ent.type === 'building') {
+          minimapCtx.fillStyle = '#10b981';
+          minimapCtx.fillRect(pt.x - 4, pt.y - 4, 8, 8);
+        } else if (ent.type === 'harvester') {
+          minimapCtx.fillStyle = isSelected ? '#ffffff' : '#fbbf24'; // Golden Harvester pip
+          minimapCtx.fillRect(pt.x - 3, pt.y - 3, 6, 6);
+        } else if (ent.type === 'infantry') {
+          minimapCtx.fillStyle = isSelected ? '#ffffff' : '#6ee7b7';
+          minimapCtx.fillRect(pt.x - 1.5, pt.y - 1.5, 3, 3);
+        } else {
+          minimapCtx.fillStyle = isSelected ? '#ffffff' : '#22c55e';
+          minimapCtx.beginPath();
+          minimapCtx.arc(pt.x, pt.y, 2.5, 0, Math.PI * 2);
+          minimapCtx.fill();
+        }
+
+        // Draw small selection outline on minimap if selected
+        if (isSelected) {
+          minimapCtx.strokeStyle = '#ffffff';
+          minimapCtx.lineWidth = 1;
+          minimapCtx.strokeRect(pt.x - 4, pt.y - 4, 8, 8);
+        }
+      });
+
+      // --- Minimap Alert System (Zooming Inward Tactical Target Box) ---
+      const now = performance.now();
+      for (let i = STATE.alerts.length - 1; i >= 0; i--) {
+        const alert = STATE.alerts[i];
+        const elapsed = now - alert.startTime;
+        const totalDuration = alert.duration * alert.repeatCount;
+
+        if (elapsed >= totalDuration) {
+          STATE.alerts.splice(i, 1);
+          continue;
+        }
+
+        // Pulse progress 0 to 1 per cycle
+        const cycleProgress = (elapsed % alert.duration) / alert.duration;
+        const pt = worldToMinimap(alert.worldX, alert.worldZ);
+
+        // Zooming Inward Ease: 56px down to 8px
+        const easeOut = 1 - Math.pow(1 - cycleProgress, 3);
+        const boxSize = 56 - (56 - 9) * easeOut;
+        const half = boxSize / 2;
+        const bracketLen = Math.max(3, boxSize * 0.28);
+        const alpha = 1.0 - (cycleProgress * 0.65);
+
+        minimapCtx.save();
+        minimapCtx.strokeStyle = alert.color;
+        minimapCtx.lineWidth = 1.8;
+        minimapCtx.globalAlpha = alpha;
+
+        // Draw tactical corner brackets zooming into unit
+        minimapCtx.beginPath();
+        // Top-Left
+        minimapCtx.moveTo(pt.x - half, pt.y - half + bracketLen);
+        minimapCtx.lineTo(pt.x - half, pt.y - half);
+        minimapCtx.lineTo(pt.x - half + bracketLen, pt.y - half);
+        // Top-Right
+        minimapCtx.moveTo(pt.x + half - bracketLen, pt.y - half);
+        minimapCtx.lineTo(pt.x + half, pt.y - half);
+        minimapCtx.lineTo(pt.x + half, pt.y - half + bracketLen);
+        // Bottom-Left
+        minimapCtx.moveTo(pt.x - half, pt.y + half - bracketLen);
+        minimapCtx.lineTo(pt.x - half, pt.y + half);
+        minimapCtx.lineTo(pt.x - half + bracketLen, pt.y + half);
+        // Bottom-Right
+        minimapCtx.moveTo(pt.x + half - bracketLen, pt.y + half);
+        minimapCtx.lineTo(pt.x + half, pt.y + half);
+        minimapCtx.lineTo(pt.x + half, pt.y + half - bracketLen);
+        minimapCtx.stroke();
+
+        // Inner translucent pulsing diamond
+        minimapCtx.fillStyle = alert.color;
+        minimapCtx.globalAlpha = (1 - cycleProgress) * 0.4;
+        minimapCtx.beginPath();
+        minimapCtx.arc(pt.x, pt.y, Math.max(2, half * 0.5), 0, Math.PI * 2);
+        minimapCtx.fill();
+
+        // Flashing center cross pip
+        minimapCtx.globalAlpha = Math.sin(now * 0.02) > 0 ? 1 : 0.3;
+        minimapCtx.fillRect(pt.x - 1.5, pt.y - 1.5, 3, 3);
+
+        minimapCtx.restore();
+      }
+
+      // Render Camera Frustum Trapezoid / Center Eye
+      const camCenter = worldToMinimap(cameraTarget.x, cameraTarget.z);
+      
+      // Calculate view field approximation on minimap
+      const fovRad = (camera.fov * Math.PI) / 180;
+      const frustumHeight = 2 * Math.tan(fovRad / 2) * CAMERA_OFFSET.y;
+      const frustumWidth = frustumHeight * aspect;
+
+      const fW = (frustumWidth / 200) * mw;
+      const fH = (frustumHeight / 200) * mh;
+
+      minimapCtx.strokeStyle = '#34d399';
+      minimapCtx.lineWidth = 1.5;
+      minimapCtx.strokeRect(camCenter.x - fW / 2, camCenter.y - fH / 2, fW, fH);
+
+      minimapCtx.fillStyle = '#a7f3d0';
+      minimapCtx.fillRect(camCenter.x - 2, camCenter.y - 2, 4, 4);
+    }
+
+    // Minimap click navigation
+    minimapCanvas.addEventListener('mousedown', (e) => {
+      const rect = minimapCanvas.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const clickY = e.clientY - rect.top;
+
+      const worldX = (clickX / rect.width) * 200 - 100;
+      const worldZ = (clickY / rect.height) * 200 - 100;
+
+      cameraTarget.x = Math.max(-STATE.mapBounds, Math.min(STATE.mapBounds, worldX));
+      cameraTarget.z = Math.max(-STATE.mapBounds, Math.min(STATE.mapBounds, worldZ));
+      camera.position.copy(cameraTarget).add(CAMERA_OFFSET);
+    });
+
+    // --- Game / Render Loop ---
+    const clock = new THREE.Clock();
+
+    function updateCameraMovement(delta) {
+      let moveX = 0;
+      let moveZ = 0;
+
+      // 1. Edge scroll contribution
+      if (STATE.isLocked) {
+        moveX += STATE.scrollDir.x;
+        moveZ += STATE.scrollDir.z;
+      }
+
+      // 2. Keyboard fallback contribution (WASD / Arrows)
+      if (STATE.keys.w || STATE.keys.ArrowUp) moveZ -= 1;
+      if (STATE.keys.s || STATE.keys.ArrowDown) moveZ += 1;
+      if (STATE.keys.a || STATE.keys.ArrowLeft) moveX -= 1;
+      if (STATE.keys.d || STATE.keys.ArrowRight) moveX += 1;
+
+      if (moveX !== 0 || moveZ !== 0) {
+        // Normalize diagonal speed
+        const length = Math.sqrt(moveX * moveX + moveZ * moveZ);
+        const normX = moveX / length;
+        const normZ = moveZ / length;
+
+        const distance = STATE.scrollSpeed * delta;
+        cameraTarget.x += normX * distance;
+        cameraTarget.z += normZ * distance;
+
+        // Hard clamp camera to world bounds
+        cameraTarget.x = Math.max(-STATE.mapBounds, Math.min(STATE.mapBounds, cameraTarget.x));
+        cameraTarget.z = Math.max(-STATE.mapBounds, Math.min(STATE.mapBounds, cameraTarget.z));
+
+        // Smoothly position camera along with target
+        camera.position.copy(cameraTarget).add(CAMERA_OFFSET);
+
+        // Update HUD
+        hudCam.textContent = `${cameraTarget.x.toFixed(1)}, ${cameraTarget.z.toFixed(1)}`;
+      }
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const delta = Math.min(clock.getDelta(), 0.1);
+
+      updateCameraMovement(delta);
+      updateProductionQueues(delta);
+
+      // Update Moving / Spawned Units marching to rally points
+      for (let i = movingUnits.length - 1; i >= 0; i--) {
+        const mu = movingUnits[i];
+        const dx = mu.targetX - mu.entity.x;
+        const dz = mu.targetZ - mu.entity.z;
+        const dist = Math.hypot(dx, dz);
+
+        if (dist < 0.6) {
+          // Reached rally point
+          movingUnits.splice(i, 1);
+        } else {
+          const moveStep = Math.min(dist, mu.speed * delta);
+          mu.entity.x += (dx / dist) * moveStep;
+          mu.entity.z += (dz / dist) * moveStep;
+          mu.entity.group.position.x = mu.entity.x;
+          mu.entity.group.position.z = mu.entity.z;
+          mu.entity.group.rotation.y = Math.atan2(dx, dz);
+        }
+      }
+
+      // Animate Harvester slow patrol if not actively commanded to move
+      if (harvesterUnit && !movingUnits.some(m => m.entity === harvesterUnit)) {
+        const time = performance.now() * 0.0006;
+        harvesterUnit.x = 45 + Math.sin(time) * 16;
+        harvesterUnit.z = -50 + Math.cos(time * 0.7) * 12;
+        harvesterUnit.group.position.x = harvesterUnit.x;
+        harvesterUnit.group.position.z = harvesterUnit.z;
+        harvesterUnit.group.rotation.y = Math.atan2(Math.sin(time), Math.cos(time * 0.7));
+      }
+
+      // Animate Selection Rings (subtle rotation & pulse)
+      STATE.selectedUnits.forEach(u => {
+        if (u.selectionRing) {
+          u.selectionRing.rotation.z += delta * 1.5;
+        }
+      });
+
+      // Animate In-World 3D Move Order Marker
+      if (moveMarkerMat.opacity > 0) {
+        const elapsed = (performance.now() - moveMarkerStartTime) / 1000;
+        if (elapsed > 0.6) {
+          moveMarkerMat.opacity = 0;
+        } else {
+          const s = 1.0 + elapsed * 1.8;
+          moveMarkerMesh.scale.set(s, s, s);
+          moveMarkerMat.opacity = Math.max(0, 1.0 - elapsed * 1.7);
+        }
+      }
+
+      // Animate In-World 3D holographic attack ring beacon
+      if (STATE.alerts.length > 0) {
+        const pulse = (performance.now() % 900) / 900;
+        const ringScale = 1.0 + pulse * 2.8;
+        alertBeaconMesh.scale.set(ringScale, ringScale, ringScale);
+        alertBeaconMat.opacity = (1 - pulse) * 0.85;
+      } else {
+        alertBeaconMat.opacity = 0;
+      }
+
+      renderMinimap();
+
+      renderer.render(scene, camera);
+    }
+
+    // --- Responsive Resize ---
+    window.addEventListener('resize', () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+
+      renderer.setSize(w, h);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+      // Re-clamp cursor on window resize
+      STATE.virtualMouse.x = Math.max(0, Math.min(w, STATE.virtualMouse.x));
+      STATE.virtualMouse.y = Math.max(0, Math.min(h, STATE.virtualMouse.y));
+      virtualCursor.style.transform = `translate3d(${STATE.virtualMouse.x}px, ${STATE.virtualMouse.y}px, 0)`;
+    });
+
+    // Start on load
+    window.onload = function() {
+      animate();
+    };
+  </script>
+</body>
+</html>

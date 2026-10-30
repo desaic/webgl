@@ -3,6 +3,12 @@ import math
 import os
 from mathutils import Matrix, Vector
 
+#trajectory_file = "/media/desaic/WD/meshes/fruit_hand/out/traj3.txt"
+#trajectory_file = "/media/desaic/WD/meshes/fruit_hand/traj3_0719.txt"
+#trajectory_file = "F:/meshes/fruit_hand/out_hand_medium_8_14/traj2.txt"
+
+TRAJECTORY_FILE = "F:/meshes/fruit_hand/out_cavity2/traj_cavity.txt"
+
 def parse_transformation(line):
     tokens = line.split()
     if len(tokens) < 16:
@@ -187,11 +193,9 @@ def animate_instances(instances, frames_per_step=3, pause_frames=5):
     bpy.context.scene.frame_end = current_frame
 
 def main():
-    #trajectory_file = "/media/desaic/WD/meshes/fruit_hand/out/traj3.txt"
-    #trajectory_file = "/media/desaic/WD/meshes/fruit_hand/traj3_0719.txt"
-    trajectory_file = "F:/meshes/fruit_hand/out_hand_medium_8_14/traj8.txt"
 
-    instances = load_trajectories(trajectory_file)
+
+    instances = load_trajectories(TRAJECTORY_FILE)
     print(f"Loaded {len(instances)} instances")
 
     animate_instances(instances, frames_per_step=1, pause_frames=2)
