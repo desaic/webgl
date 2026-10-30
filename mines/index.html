@@ -4,14 +4,51 @@
 <head>
   <meta charset="UTF-8" />
   <link rel="stylesheet" href="./public/assets/styles.css" />
+  <link rel="stylesheet" href="./public/assets/mines.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" type="image/x-icon" href="./public/assets/favicon.ico">
   <title>Mines</title>
 </head>
 
-<body class="flex h-screen w-screen overflow-hidden">
-  
-    <canvas id="myCanvas" class="h-full w-full"></canvas>    
+<body class="mines-body">
+  <div class="mines-controls">
+    <select id="difficulty">
+      <option value="beginner">Beginner (9x9, 10 mines)</option>
+      <option value="intermediate">Intermediate (16x16, 40 mines)</option>
+      <option value="expert">Expert (30x16, 99 mines)</option>
+    </select>
+    <button id="lbBtn" type="button" class="mines-btn">Leaderboard</button>
+    <span class="mines-hint">Left click: reveal &middot; Right click: flag &middot; Click a number, middle click or both buttons: chord &middot; F2: new game</span>
+  </div>
+
+  <div id="game">
+    <div id="panel">
+      <div class="lcd" id="mineCount">010</div>
+      <button id="face" type="button" title="New game">🙂</button>
+      <div class="lcd" id="timer">000</div>
+    </div>
+    <canvas id="myCanvas"></canvas>
+  </div>
+
+  <button id="flagBtn" type="button" title="Flag mode: next click or tap plants a flag" aria-pressed="false">🚩</button>
+
+  <div id="lbModal" hidden>
+    <div id="lbWindow" role="dialog" aria-labelledby="lbTitle">
+      <div id="lbTitleBar"><span id="lbTitle">Leaderboard</span><button id="lbClose" type="button" class="mines-btn" title="Close">✕</button></div>
+      <div id="lbTabs"></div>
+      <div id="lbSubtitle"></div>
+      <div id="lbEntry" hidden>
+        <div id="lbEntryMsg"></div>
+        <input id="lbName" type="text" maxlength="16" placeholder="Anonymous" autocomplete="off" />
+        <button id="lbSave" type="button" class="mines-btn">Save</button>
+      </div>
+      <table id="lbTable">
+        <thead><tr><th>#</th><th>Name</th><th>Time</th><th>Date</th></tr></thead>
+        <tbody id="lbBody"></tbody>
+      </table>
+      <div id="lbFooter"><button id="lbClear" type="button" class="mines-btn">Clear</button></div>
+    </div>
+  </div>
 
   <script type="module" src="./src/main.ts"></script>
 </body>

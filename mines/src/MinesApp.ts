@@ -1,401 +1,414 @@
 import * as THREE from "three";
-import { OrbitControls } from "./OrbitControls.js";
 
-import World from "./World.js";
+import World from "./World";
+import { GridMesh } from "./GridMesh";
+import { LeaderboardUI } from "./LeaderboardUI";
+import { DIFFICULTIES, FLAGGED, HIDDEN, REVEALED, Minesweeper } from "./Minesweeper";
 
-import * as ImGui from "./utils/imgui/imgui";
-import * as ImGui_Impl from "./utils/imgui/imgui_impl"
+const CELL_PX = 32;
+const TILE_PX = 64;
+const ATLAS_N = 8;
 
-import {GridMesh} from "./GridMesh"
-import { Grid2D } from "./Grid2D.js";
+// tile indices in the atlas: 0..8 are revealed cells with that many neighbours
+const T_HIDDEN = 9;
+const T_FLAG = 10;
+const T_MINE = 11;
+const T_EXPLODED = 12;
+const T_WRONG_FLAG = 13;
 
-class MouseCoord {
-  public x: number;
-  public y: number;
-  constructor() {
-    this.x = 0;
-    this.y = 0;
-  }
-};
+const NUMBER_COLORS = [
+  "", "#0000ff", "#008000", "#ff0000", "#000080", "#800000", "#008080", "#000000", "#808080",
+];
 
-export async function InitImGui() {
-  if (ImGui) {
-    await ImGui.default();
-    // 2. Initialize ImGui
-    ImGui.CreateContext();
-    const io = ImGui.GetIO();
-    
-    // --- STEP 3A: Load the Font ---
-    // The path is relative to the *runtime environment* (usually the root of your web server)
-    const fontPath = "./assets/Montserrat-Regular.ttf"; 
-    const fontSize = 15.0; 
-    let fontData;
-    try {
-      const response = await fetch(fontPath);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+const FACES = { playing: "🙂", pressed: "😮", won: "😎", lost: "😵" };
 
-      // Get the font data as an ArrayBuffer
-      fontData = await response.arrayBuffer();
-    } catch (error) {
-      console.error("Failed to fetch or load Montserrat font:", error);
+function MakeAtlas(): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = TILE_PX * ATLAS_N;
+  const ctx = canvas.getContext("2d")!;
+  const T = TILE_PX;
+
+  const origin = (i: number) => ({ ox: (i % ATLAS_N) * T, oy: Math.floor(i / ATLAS_N) * T });
+
+  const drawRevealed = (i: number, bg = "#c0c0c0") => {
+    const { ox, oy } = origin(i);
+    ctx.fillStyle = "#808080";
+    ctx.fillRect(ox, oy, T, T);
+    ctx.fillStyle = bg;
+    ctx.fillRect(ox + 2, oy + 2, T - 2, T - 2);
+  };
+
+  const drawHidden = (i: number) => {
+    const { ox, oy } = origin(i);
+    const b = 6;
+    ctx.fillStyle = "#c0c0c0";
+    ctx.fillRect(ox, oy, T, T);
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.moveTo(ox, oy);
+    ctx.lineTo(ox + T, oy);
+    ctx.lineTo(ox + T - b, oy + b);
+    ctx.lineTo(ox + b, oy + b);
+    ctx.lineTo(ox + b, oy + T - b);
+    ctx.lineTo(ox, oy + T);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#808080";
+    ctx.beginPath();
+    ctx.moveTo(ox + T, oy + T);
+    ctx.lineTo(ox, oy + T);
+    ctx.lineTo(ox + b, oy + T - b);
+    ctx.lineTo(ox + T - b, oy + T - b);
+    ctx.lineTo(ox + T - b, oy + b);
+    ctx.lineTo(ox + T, oy);
+    ctx.closePath();
+    ctx.fill();
+  };
+
+  const drawMine = (i: number) => {
+    const { ox, oy } = origin(i);
+    const cx = ox + T / 2;
+    const cy = oy + T / 2;
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 4;
+    for (let k = 0; k < 4; k++) {
+      const a = (k * Math.PI) / 4;
+      ctx.beginPath();
+      ctx.moveTo(cx - Math.cos(a) * 22, cy - Math.sin(a) * 22);
+      ctx.lineTo(cx + Math.cos(a) * 22, cy + Math.sin(a) * 22);
+      ctx.stroke();
     }
-    if(fontData){
-      // AddFontFromFileTTF returns an ImFont pointer (object)
-      const myMontserratFont = io.Fonts.AddFontFromMemoryTTF(fontData, fontSize);
-      if (myMontserratFont) {
-          // Optional: Make Montserrat the new default font
-          io.FontDefault = myMontserratFont;          
-          console.log("Montserrat loaded successfully!");
-      } else {
-          console.error("Failed to load Montserrat.ttf. Check the path and file existence!");
-      }
+    ctx.fillStyle = "#000";
+    ctx.beginPath();
+    ctx.arc(cx, cy, 15, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(cx - 8, cy - 8, 6, 6);
+  };
+
+  const drawFlag = (i: number) => {
+    const { ox, oy } = origin(i);
+    ctx.fillStyle = "#ff0000";
+    ctx.beginPath();
+    ctx.moveTo(ox + 34, oy + 14);
+    ctx.lineTo(ox + 34, oy + 34);
+    ctx.lineTo(ox + 16, oy + 24);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#000";
+    ctx.fillRect(ox + 32, oy + 14, 4, 34);
+    ctx.fillRect(ox + 20, oy + 46, 28, 6);
+  };
+
+  for (let n = 0; n <= 8; n++) {
+    drawRevealed(n);
+    if (n > 0) {
+      const { ox, oy } = origin(n);
+      ctx.fillStyle = NUMBER_COLORS[n];
+      ctx.font = "bold 46px Arial, Helvetica, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(n), ox + T / 2 + 1, oy + T / 2 + 3);
     }
-    SetupUbuntuStyle();
   }
+  drawHidden(T_HIDDEN);
+  drawHidden(T_FLAG);
+  drawFlag(T_FLAG);
+  drawRevealed(T_MINE);
+  drawMine(T_MINE);
+  drawRevealed(T_EXPLODED, "#ff0000");
+  drawMine(T_EXPLODED);
+  drawRevealed(T_WRONG_FLAG);
+  drawMine(T_WRONG_FLAG);
+  {
+    const { ox, oy } = origin(T_WRONG_FLAG);
+    ctx.strokeStyle = "#ff0000";
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(ox + 8, oy + 8);
+    ctx.lineTo(ox + T - 8, oy + T - 8);
+    ctx.moveTo(ox + T - 8, oy + 8);
+    ctx.lineTo(ox + 8, oy + T - 8);
+    ctx.stroke();
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.generateMipmaps = false;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  return tex;
+}
+
+function FormatLcd(n: number): string {
+  if (n < 0) return "-" + String(Math.min(-n, 99)).padStart(2, "0");
+  return String(Math.min(n, 999)).padStart(3, "0");
+}
+
+// elapsed ms as NNN.XX (centiseconds, truncated, capped at 999.99)
+function FormatTime(ms: number): string {
+  const cs = Math.min(Math.floor(ms / 10), 99999);
+  return String(Math.floor(cs / 100)).padStart(3, "0") + "." + String(cs % 100).padStart(2, "0");
 }
 
 export class MinesApp {
-  // HTML element that will contain the renderer's canvas
-  private container: HTMLCanvasElement;
-
-  // Three.js OrbitControls for camera manipulation
-  private orbit: OrbitControls;
-
-  // quads for drawing texture image
-  private boardMesh: GridMesh;
-  private board: Grid2D;
-
-  // Three.js WebGL Renderer for rendering the 3D scene
+  private canvas: HTMLCanvasElement;
   private renderer: THREE.WebGLRenderer;
-
-  // meshes
   private world: World;
+  private material: THREE.MeshBasicMaterial;
 
-  private pixelRatio: number;
+  private game: Minesweeper;
+  private boardMesh: GridMesh | null = null;
+  private dirty = true;
 
-  public selectedList: HTMLElement;
-  public isDragging = false;
-  public startX = 0;
-  public startY = 0;
-  static DRAG_THRESHOLD = 5; // Minimum pixels moved to be considered a drag
+  // cell under the mouse while a button is held (null when nothing is pressed)
+  private pressed: { x: number; y: number } | null = null;
+  private chordMode = false;
+  private suppressLeftUp = false;
 
-  //global mouse xy coordinate
-  public mouse_global: MouseCoord;
+  // performance.now() at the first reveal, and when the game ended (0 while running)
+  private timerStart = 0;
+  private timerEnd = 0;
 
-  public context2d: CanvasRenderingContext2D;
-  public clear_color: ImGui.Vec4;
-  public mouse_in_imgui:boolean;
+  private faceEl: HTMLElement;
+  private mineEl: HTMLElement;
+  private timeEl: HTMLElement;
+  private diffEl: HTMLSelectElement;
+  private leaderboard = new LeaderboardUI();
+  // true once the player has planted any flag this game (even if later removed)
+  private flagUsed = false;
+  // set by the on-screen flag button: the next board click/tap plants a flag, then it clears
+  private flagArmed = false;
+  private flagBtn: HTMLElement;
 
-  public mines_tex : THREE.Texture;
-  public boardMaterial: THREE.MeshBasicMaterial;
-
-  private prevTime : number;
-  private lastRefreshTime:number;
   constructor(canvas: HTMLCanvasElement) {
-    if(!ImGui){
-      console.log("imgui lib not found\n");
-    }
+    this.canvas = canvas;
+    this.faceEl = document.getElementById("face")!;
+    this.mineEl = document.getElementById("mineCount")!;
+    this.timeEl = document.getElementById("timer")!;
+    this.diffEl = document.getElementById("difficulty") as HTMLSelectElement;
+    this.flagBtn = document.getElementById("flagBtn")!;
 
-    this.container = canvas;
-    ImGui_Impl.Init(canvas);
-    this.mines_tex = this.MakeBlackTex1x1();
-    this.boardMaterial = new THREE.MeshBasicMaterial({ map: this.mines_tex })
-    const loader = new THREE.TextureLoader();
-      // 2. Load the texture from your assets folder
-      // Note: The path is relative to your 'public' or server root
-      loader.load('assets/debug_tex.png', (texture) => {          
-          this.mines_tex = texture;
-          this.mines_tex.needsUpdate = true;
-          this.boardMaterial.map = this.mines_tex;
-          this.boardMaterial.needsUpdate = true;
-      });
-
-    this.clear_color = new ImGui.Vec4(0.9,0.8,0.7,1);
-    this.renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
+    this.renderer.setPixelRatio(window.devicePixelRatio || 1);
     this.world = new World();
+    this.material = new THREE.MeshBasicMaterial({ map: MakeAtlas() });
 
-    this.pixelRatio = window.devicePixelRatio ? window.devicePixelRatio : 1.0;
-
-    this.renderer.setPixelRatio(this.pixelRatio);
-    this.onWindowResize();
-    // this.container.appendChild(this.renderer.domElement);
-
-    this.orbit = new OrbitControls(this.world.camera, this.renderer.domElement);
-    this.orbit.minDistance = 0.1;
-    this.orbit.maxDistance = 30;
-    this.orbit.maxPolarAngle = 3.13;
-    this.orbit.minPolarAngle = 0.01;
-    const pos = this.world.camera.position;
-    this.orbit.target.set(pos.x, pos.y, 0);
-    this.orbit.update();
-    this.orbit.enabled = false;
-    this.bindEventListeners();
-   
-    this.mouse_global = new MouseCoord();   
-    this.SetupKbdEvents();
-    this.mouse_in_imgui = false;
-
-    this.board = new Grid2D(8,8,0);    
-    const size = this.board.getSize();
-    for(let y = 0;y<size.y;y++){
-      for(let x = 0;x<size.x;x++){
-        this.board.set(x,y, Math.floor(Math.random() * 16));
-      }
-    }
-    this.boardMesh = new GridMesh(size.x, size.y);
-
-    this.boardMesh.mesh.material = this.boardMaterial;
-    this.world.Add(this.boardMesh.mesh);
-    this.UpdateGridDisplay();
-    this.prevTime = 0;
-    this.lastRefreshTime = 0;
-  }
-
-  public ResizeBoard(size_x:number, size_y:number){
-    if(this.boardMesh){
-      this.world.scene.remove(this.boardMesh.mesh);
-      this.boardMesh.dispose();
-    }
-    this.boardMesh.resize(size_x, size_y);
-    this.boardMesh.mesh.material = this.boardMaterial;
-  }
-
-  public UpdateGridDisplay(){
-    //update uv coordinates of boardmesh based on board state.
-    const size = this.board.getSize();
-    for(let y = 0;y<size.y;y++){
-      for(let x = 0;x<size.x;x++){
-        const val = this.board.get(x,y);
-        this.board.set(x,y, (val + 1) % 16);
-        this.boardMesh.SetCellUV(x,y, this.board.get(x,y));
-      }
-    }
-    this.boardMesh.mesh.geometry.attributes.uv.needsUpdate = true;
-  }
-
-  public MakeBlackTex1x1():THREE.Texture{const width = 1;
-    const height = 1;
-    const data = new Uint8Array([255, 255, 255, 255]);
-    const texture = new THREE.DataTexture(data, width, height);
-    texture.needsUpdate = true;
-    return texture;
-  }
-
-  public SetupKbdEvents() {
-    window.addEventListener("keydown", (event) => {
-      // Ensure the key is an uppercase letter for case-insensitive check
-      const key = event.key.toUpperCase();
-      if (key == "H") {
-        
-      }
-      else if (key == " ") {
+    canvas.addEventListener("mousedown", (e) => this.onMouseDown(e));
+    canvas.addEventListener("mousemove", (e) => this.onMouseMove(e));
+    canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+    canvas.addEventListener("auxclick", (e) => e.preventDefault());
+    window.addEventListener("mouseup", (e) => this.onMouseUp(e));
+    document.getElementById("lbBtn")!.addEventListener("click", () => this.leaderboard.show(this.diffEl.value));
+    this.flagBtn.addEventListener("click", () => this.setFlagArmed(!this.flagArmed));
+    this.faceEl.addEventListener("click", () => this.newGame());
+    this.diffEl.addEventListener("change", () => this.newGame());
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "F2" && !this.leaderboard.isOpen()) {
+        e.preventDefault();
+        this.newGame();
       }
     });
+
+    this.newGame();
   }
 
-  public bindEventListeners() {
-    window.addEventListener("resize", () => this.onWindowResize());
-    this.container.addEventListener("mousemove", (e)=>this.onMouseMove(e));
-  }
+  public newGame() {
+    this.timerStart = 0;
+    this.timerEnd = 0;
+    this.flagUsed = false;
+    this.setFlagArmed(false);
+    this.pressed = null;
+    this.chordMode = false;
+    this.suppressLeftUp = false;
 
-  public onMouseMove(e) {
-    const io = ImGui.GetIO();
-    
-    // Check if ImGui is capturing the mouse. If so, exit the handler.
-    if (io.WantCaptureMouse) {
-      this.mouse_in_imgui=true;
-      this.orbit.enabled = false;
-      return; 
+    this.game = new Minesweeper(DIFFICULTIES[this.diffEl.value] ?? DIFFICULTIES.beginner);
+    const { cols, rows } = this.game;
+
+    if (this.boardMesh) {
+      this.world.Remove(this.boardMesh.mesh);
+      this.boardMesh.dispose();
     }
-    this.mouse_in_imgui = false;
-    //this.orbit.enabled = true;
+    this.boardMesh = new GridMesh(cols, rows);
+    this.boardMesh.mesh.material = this.material;
+    this.world.Add(this.boardMesh.mesh);
+    this.world.SetBoardSize(cols, rows);
 
-    this.mouse_global.x = e.clientX;
-    this.mouse_global.y = e.clientY;
+    this.canvas.style.width = cols * CELL_PX + "px";
+    this.canvas.style.height = rows * CELL_PX + "px";
+    this.renderer.setSize(cols * CELL_PX, rows * CELL_PX);
+    document.getElementById("game")!.style.width = cols * CELL_PX + 24 + "px";
 
-    // Only check if a mouse button is currently down (event.buttons is a bitmask)
-    if (e.buttons === 0) {
-      this.isDragging = false;
-    } else {
-      // Calculate distance moved
-      const movedX = Math.abs(e.clientX - this.startX);
-      const movedY = Math.abs(e.clientY - this.startY);
+    this.updateHud();
+    this.refreshBoard();
+  }
 
-      if (
-        movedX > MinesApp.DRAG_THRESHOLD ||
-        movedY > MinesApp.DRAG_THRESHOLD
-      ) {
-        this.isDragging = true;
+  // grid cell under a mouse event, or null if outside the board
+  private cellAt(e: MouseEvent): { x: number; y: number } | null {
+    const r = this.canvas.getBoundingClientRect();
+    const x = Math.floor((e.clientX - r.left) / CELL_PX);
+    const y = this.game.rows - 1 - Math.floor((e.clientY - r.top) / CELL_PX);
+    return this.game.inBounds(x, y) ? { x, y } : null;
+  }
+
+  private setFlagArmed(on: boolean) {
+    this.flagArmed = on;
+    this.flagBtn.classList.toggle("armed", on);
+    this.flagBtn.setAttribute("aria-pressed", String(on));
+  }
+
+  private onMouseDown(e: MouseEvent) {
+    e.preventDefault();
+    if (this.game.isOver()) return;
+    const cell = this.cellAt(e);
+    if (!cell) return;
+
+    const left = e.button === 0;
+
+    if (this.flagArmed && left) {
+      this.setFlagArmed(false);
+      if (this.game.toggleFlag(cell.x, cell.y)) {
+        this.flagUsed = true;
+        this.updateHud();
       }
-    }
-
-    if (this.isDragging) {
+      this.refreshBoard();
       return;
     }
+    const right = e.button === 2;
+    const middle = e.button === 1;
+    const both = (left && (e.buttons & 2) !== 0) || (right && (e.buttons & 1) !== 0);
 
-  }
+    // a plain left click on a revealed number also chords
+    const onNumber =
+      left && this.game.getState(cell.x, cell.y) === REVEALED && this.game.adjacent(cell.x, cell.y) > 0;
 
-  public render(time): void {
-    this.renderer.render(this.world.scene, this.world.camera);    
-    this.renderer.autoClear = false;
-    const elapsedMs = time - this.lastRefreshTime;
-    this.prevTime = time;
-    if(elapsedMs > 100){
-      this.UpdateGridDisplay();
-      this.lastRefreshTime = time;
-    }
-    this.renderImgui(time);
-
-  }
-
-  public renderImgui(time){
-    ImGui_Impl.NewFrame(time);
-    ImGui.NewFrame();
-    
-    if (ImGui.Begin("Menu")) {
-      ImGui.Text("Yo yo yo Imgui js");
-      
-      // An interactive element
-      if (ImGui.Button("Close Window")) {
-        console.log("close");
+    if (middle || both || onNumber) {
+      this.chordMode = true;
+      this.pressed = cell;
+    } else if (right) {
+      if (this.game.toggleFlag(cell.x, cell.y)) {
+        this.flagUsed = true;
+        this.updateHud();
       }
+    } else if (left) {
+      this.pressed = cell;
+    }
+    this.refreshBoard();
+  }
 
-      // Check if the window is fully visible (or at least its title bar)
-      // and if it's being dragged, you might want to wait until the drag is over,
-      // but for a simple snap-back, you can clamp every frame.
+  private onMouseMove(e: MouseEvent) {
+    if (!this.pressed) return;
+    const cell = this.cellAt(e);
+    if (cell?.x === this.pressed.x && cell?.y === this.pressed.y) return;
+    this.pressed = cell;
+    this.refreshBoard();
+  }
 
-      // --- Clamping Logic ---
-      const window_pos = ImGui.GetWindowPos();
-      const window_size = ImGui.GetWindowSize();
-      const viewport_size = ImGui.GetMainViewport().Size;
+  private onMouseUp(e: MouseEvent) {
+    const cell = this.pressed;
+    const wasChord = this.chordMode;
 
-      // Define the boundaries (e.g., minimum visible area on the top-left)
-      // Let's ensure at least 50 pixels are visible on the edge.
-      const padding = 5.0;
-
-      const min_pos = new ImGui.ImVec2(padding , padding );
-      const max_pos = new ImGui.ImVec2(viewport_size.x - window_size.x, viewport_size.y - window_size.y);
-
-      // Clamp the position
-      const new_pos = {...window_pos};
-      if (new_pos.x < min_pos.x) new_pos.x = min_pos.x;
-      if (new_pos.y < min_pos.y) new_pos.y = min_pos.y;
-      if (new_pos.x > max_pos.x) new_pos.x = max_pos.x;
-      if (new_pos.y > max_pos.y) new_pos.y = max_pos.y;
-
-      // Only apply the position if it changed
-      if (new_pos.x != window_pos.x || new_pos.y != window_pos.y)
-      {
-          // Use SetWindowPos to apply the clamped position
-          // ImGuiCond_Always is often used here, but you might use ImGuiCond_Once 
-          // or ImGuiCond_Appearing if you only want to set the initial position, 
-          // or no condition if you want to force it every frame.
-          ImGui.SetWindowPos(new_pos, ImGui.ImGuiCond.Always);
+    if (wasChord) {
+      // a chord fires when the first of its buttons is released
+      this.chordMode = false;
+      this.pressed = null;
+      if (cell) {
+        this.game.chord(cell.x, cell.y);
+        this.afterMove();
       }
-
-
-      // End the window call
-      ImGui.End();
+      this.suppressLeftUp = (e.buttons & 1) !== 0;
+    } else if (e.button === 0) {
+      if (this.suppressLeftUp) {
+        this.suppressLeftUp = false;
+      } else if (cell) {
+        this.pressed = null;
+        this.game.reveal(cell.x, cell.y);
+        this.afterMove();
+      }
     }
 
-    // 4. Finalize the ImGui frame and render
-    ImGui.EndFrame();
-
-    // Rendering commands
-    ImGui.SetNextWindowBgAlpha(1.0);
-    ImGui.Render();
-
-    ImGui_Impl.RenderDrawData(ImGui.GetDrawData());
+    if (this.pressed || e.button === 0) this.pressed = null;
+    this.refreshBoard();
   }
 
-  public onWindowResize(): void {
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-    const aspect = width / height;
-    if (this.world.camera instanceof THREE.PerspectiveCamera) {
-      this.world.camera.aspect = aspect;
+  private afterMove() {
+    const g = this.game;
+    if (g.status !== "ready" && !this.timerStart) this.timerStart = performance.now();
+    if (g.isOver() && !this.timerEnd) {
+      this.timerEnd = performance.now();
+      if (g.status === "won") {
+        this.leaderboard.offerRecord(this.diffEl.value, !this.flagUsed, this.timerEnd - this.timerStart);
+      }
     }
-    else {
-      const cam = this.world.camera;
-      const camSize = this.world.cameraSize;
-      cam.left = (camSize * aspect) / -2;
-      cam.right = (camSize * aspect) / 2;
-      cam.top = camSize / 2;
-      cam.bottom = camSize / -2;
-    }
-    this.world.camera.updateProjectionMatrix();
-    //@ts-ignore
-    ImGui.IO.DisplaySize = new ImGui.Vec2(width, height);
-    this.renderer.setSize(width, height);
+    this.updateHud();
   }
 
-  public GetCanvasCoord(x: number, y: number): MouseCoord {
-    const canvas = this.container;
-    if (!canvas) {
-      return { x: x, y: y };
-    }
-
-    // 3. Get the bounding rectangle of the canvas
-    // This is the most robust way, as it accounts for both the left offset
-    // (due to the side panel) and any top/margin offsets.
-    const canvasRect = canvas.getBoundingClientRect();
-    return { x: x - canvasRect.left, y: y - canvasRect.top };
+  private elapsedMs(): number {
+    if (!this.timerStart) return 0;
+    const end = this.timerEnd || performance.now();
+    return end - this.timerStart;
   }
 
-}
+  private updateHud() {
+    this.mineEl.textContent = FormatLcd(this.game.minesLeft());
+    this.timeEl.textContent = FormatTime(this.elapsedMs());
+    this.faceEl.textContent = this.faceFor();
+  }
 
-function SetupUbuntuStyle() {
-    const style = ImGui.GetStyle();
-    const colors = style.Colors;
+  private faceFor(): string {
+    const s = this.game.status;
+    if (s === "won") return FACES.won;
+    if (s === "lost") return FACES.lost;
+    return this.pressed ? FACES.pressed : FACES.playing;
+  }
 
-    // Helper function for quick color creation
-    // ImGui uses x, y, z, w for R, G, B, A
-    const color = (r: number, g: number, b: number, a: number = 1.0) => new ImGui.ImVec4(r, g, b, a);
+  private tileFor(x: number, y: number): number {
+    const g = this.game;
+    const st = g.getState(x, y);
+    const mine = g.isMine(x, y);
 
-    // --- Core Window & Title Bar Colors (Dark Charcoal) ---
-    const charcoalBg = color(0.18, 0.18, 0.18, 0.5);
-    const darkerCharcoal = color(0.15, 0.15, 0.15, 1.00);
-    const activeCharcoal = color(0.60, 0.30, 0.20, 1.00);
-    
-    colors[ImGui.Col.WindowBg]         = charcoalBg;
-    colors[ImGui.Col.ChildBg]          = darkerCharcoal;
-    colors[ImGui.Col.TitleBg]          = darkerCharcoal;
-    colors[ImGui.Col.TitleBgActive]    = activeCharcoal;
-    colors[ImGui.Col.TitleBgCollapsed] = color(0.10, 0.10, 0.10, 1.00);
-    
-    // --- Text and Frame ---
-    colors[ImGui.Col.Text]             = color(0.95, 0.95, 0.95, 1.00);
-    colors[ImGui.Col.FrameBg]          = color(0.25, 0.25, 0.25, 1.00);
-    colors[ImGui.Col.FrameBgHovered]   = color(0.30, 0.30, 0.30, 1.00);
-    colors[ImGui.Col.FrameBgActive]    = color(0.35, 0.35, 0.35, 1.00);
+    if (g.status === "lost") {
+      if (mine) {
+        if (g.idx(x, y) === g.exploded) return T_EXPLODED;
+        return st === FLAGGED ? T_FLAG : T_MINE;
+      }
+      if (st === FLAGGED) return T_WRONG_FLAG;
+    }
+    if (st === FLAGGED) return T_FLAG;
+    if (st === HIDDEN) return this.isPressed(x, y) ? 0 : T_HIDDEN;
+    return g.adjacent(x, y);
+  }
 
-    // --- Button (Orange/Red Accent) ---
-    const ubuntuOrangeHover = color(0.85, 0.27, 0.07, 1.00);
-    const ubuntuOrangeActive = color(0.65, 0.17, 0.05, 1.00);
-    
-    colors[ImGui.Col.Button]           = color(0.25, 0.25, 0.25, 1.00);
-    colors[ImGui.Col.ButtonHovered]    = ubuntuOrangeHover;
-    colors[ImGui.Col.ButtonActive]     = ubuntuOrangeActive;
+  private isPressed(x: number, y: number): boolean {
+    const p = this.pressed;
+    if (!p || this.game.isOver()) return false;
+    if (!this.chordMode) return p.x === x && p.y === y;
+    return Math.abs(p.x - x) <= 1 && Math.abs(p.y - y) <= 1;
+  }
 
-    // --- Header / Selection (Blue Accent) ---
-    const selectionBlueHover = color(0.26, 0.44, 0.53, 1.00);
-    const selectionBlueActive = color(0.20, 0.34, 0.42, 1.00);
-    
-    colors[ImGui.Col.Header]           = color(0.25, 0.25, 0.25, 1.00);
-    colors[ImGui.Col.HeaderHovered]    = selectionBlueHover;
-    colors[ImGui.Col.HeaderActive]     = selectionBlueActive;
+  private refreshBoard() {
+    const mesh = this.boardMesh!;
+    const { cols, rows } = this.game;
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        const t = this.tileFor(x, y);
+        // GridMesh uv rows count from the bottom of the texture, atlas rows from the top
+        const uvIndex = (ATLAS_N - 1 - Math.floor(t / ATLAS_N)) * ATLAS_N + (t % ATLAS_N);
+        mesh.SetCellUV(x, y, uvIndex);
+      }
+    }
+    mesh.mesh.geometry.attributes.uv.needsUpdate = true;
+    this.faceEl.textContent = this.faceFor();
+    this.dirty = true;
+  }
 
-    // --- Sliders, Checkboxes, and Popups ---
-    colors[ImGui.Col.SliderGrab]       = ubuntuOrangeHover;
-    colors[ImGui.Col.SliderGrabActive] = ubuntuOrangeActive;
-    colors[ImGui.Col.CheckMark]        = ubuntuOrangeHover;
-    colors[ImGui.Col.PopupBg]          = color(0.20, 0.20, 0.20, 1.00);
-    
-    // --- General Style Tweaks (Ubuntu-like geometry) ---
-    style.WindowRounding = 4.0; 
-    style.FrameRounding = 3.0;
-    style.GrabRounding = 3.0;
-    style.WindowTitleAlign.x = 0.5; // Center title text
+  public render(): void {
+    // clock is redrawn every animation frame while the game is running
+    if (this.timerStart && !this.timerEnd) {
+      this.timeEl.textContent = FormatTime(this.elapsedMs());
+    }
+    if (!this.dirty) return;
+    this.dirty = false;
+    this.renderer.render(this.world.scene, this.world.camera);
+  }
 }
