@@ -2,7 +2,7 @@
 <html lang="en">
 
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" type="image/x-icon" href="./assets/favicon.ico">
   <title>Mines</title>
@@ -10,10 +10,25 @@
   <link rel="stylesheet" crossorigin href="./assets/css/main.css">
 </head>
 
-<body class="flex h-screen w-screen overflow-hidden">
-  
-    <canvas id="myCanvas" class="h-full w-full"></canvas>    
-
+<body class="mines-body">
+  <div class="mines-controls">
+    <select id="difficulty">
+      <option value="beginner">Beginner (9x9, 10 mines)</option>
+      <option value="intermediate">Intermediate (16x16, 40 mines)</option>
+      <option value="expert">Expert (30x16, 99 mines)</option>
+    </select>
+    <span class="mines-hint">Left click: reveal &middot; Right click: flag &middot; Middle / both buttons: chord &middot; F2: new game</span>
+  </div>
+
+  <div id="game">
+    <div id="panel">
+      <div class="lcd" id="mineCount">010</div>
+      <button id="face" type="button" title="New game">🙂</button>
+      <div class="lcd" id="timer">000</div>
+    </div>
+    <canvas id="myCanvas"></canvas>
+  </div>
+
 </body>
 
 </html>
