@@ -495,7 +495,10 @@ export class Board3D {
     this.orbit.target.copy(center);
     this.orbit.update();
     this.camera.updateProjectionMatrix();
-    this.dirty = true;
+    // setSize clears the canvas, so draw right away: waiting for the next animation frame would
+    // show a blank (black) canvas while the window is being resized
+    this.renderer.render(this.scene, this.camera);
+    this.dirty = false;
   }
 
   private frame = (now: number) => {

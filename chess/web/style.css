@@ -55,8 +55,10 @@ label.check { flex: none; flex-direction: row; align-items: center; gap: 8px; fo
 /* narrow screens: board on top, controls below */
 @media (max-width: 760px) {
   #app { flex-direction: column; }
-  #board { flex: 1 1 60%; }
-  #side-panel { width: 100%; flex: 0 0 auto; max-height: 40%; border-left: 0; border-top: 1px solid #4a423c; padding: 10px; gap: 8px; }
+  #board { flex: 1 1 0; }
+  /* fixed share of the height, so text appearing inside (opening box, moves) never resizes the board;
+     the panel scrolls instead */
+  #side-panel { width: 100%; flex: 0 0 40%; min-height: 0; overflow-y: auto; border-left: 0; border-top: 1px solid #4a423c; padding: 10px; gap: 8px; }
   h1 { display: none; }
-  #moves { min-height: 50px; }
+  #moves { flex: 1 0 80px; }
 }
