@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Chess</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div id="app">
+    <div id="board"></div>
+    <aside id="side-panel">
+      <h1>Chess</h1>
+      <div id="status">&nbsp;</div>
+      <div id="info"></div>
+      <div class="row">
+        <label>Play as
+          <select id="side"><option value="w">White</option><option value="b">Black</option></select>
+        </label>
+        <label>Think time
+          <select id="time">
+            <option value="300">0.3 s</option>
+            <option value="1000" selected>1 s</option>
+            <option value="3000">3 s</option>
+            <option value="8000">8 s</option>
+            <option value="20000">20 s</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <button id="newGame">New game</button>
+        <button id="undo">Undo</button>
+        <button id="flip">Flip</button>
+      </div>
+      <div id="moves"></div>
+    </aside>
+    <div id="promo" class="hidden">
+      <div>Promote to</div>
+      <button data-piece="5">&#9813; Queen</button>
+      <button data-piece="4">&#9814; Rook</button>
+      <button data-piece="3">&#9815; Bishop</button>
+      <button data-piece="2">&#9816; Knight</button>
+    </div>
+  </div>
+  <script type="module" src="./src/main.ts"></script>
+</body>
+</html>

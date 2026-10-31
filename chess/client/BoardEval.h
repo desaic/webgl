@@ -10,9 +10,6 @@ public:
 
   static int Eval(const ChessBoard& b);
 
-  static const int MAX_SCORE;
-
-  static const int CASTLE_SCORE;
 };
 
 #endif

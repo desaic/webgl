@@ -1701,11 +1701,12 @@ int ChessBoard::FromFen(const std::string& fen)
     c = fen[strIdx];
     uint8_t row = c - '1';
     enPassantDst.Set(col, row);
+    // the target square was passed by the side that is NOT to move
     if (nextColor == PIECE_WHITE) {
-      activateEnPassantWhite();
+      activateEnPassantBlack();
     }
     else {
-      activateEnPassantBlack();
+      activateEnPassantWhite();
     }
   }
  
