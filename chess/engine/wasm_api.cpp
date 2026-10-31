@@ -2,6 +2,7 @@
 // web worker so the UI thread is never blocked.
 #include "ChessBoard.h"
 #include "Book.h"
+#include "BoardEval.h"
 #include "Search.h"
 
 #include <emscripten.h>
@@ -124,6 +125,16 @@ EMSCRIPTEN_KEEPALIVE const char* engine_legal_moves(const char* fen) {
   g_out.clear();
   for (const Move& m : b.GetMoves()) g_out += Uci(m) + " ";
   return g_out.c_str();
+}
+
+// static evaluation of a position in centipawns from the point of view of the side to move
+// (no search), for tests and diagnostics
+EMSCRIPTEN_KEEPALIVE int engine_eval(const char* fen) {
+  Init();
+  ChessBoard b;
+  b.FromFen(fen);
+  b.InitHash();
+  return BoardEval::Eval(b);
 }
 
 EMSCRIPTEN_KEEPALIVE double engine_perft(const char* fen, int depth) {

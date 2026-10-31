@@ -44,6 +44,13 @@ void BoardHash::Init() {
 	}
 
 	side = randomNumber();
+
+	// the en passant table has one key per file, but the loop above only filled the first 4 (it used
+	// the castling count), leaving files e-h at 0. They are drawn after everything else so that all
+	// the existing keys, and the opening book built from them, stay as they were.
+	for (uint8_t i = CASTLING_OPTIONS; i < ENPASSANT_OPTIONS; ++i) {
+		enpassantTable[i] = randomNumber();
+	}
 }
 
 // For initializing a fresh board position
@@ -65,6 +72,13 @@ void BoardHash::Set(const ChessBoard& b) {
 	if (b.nextColor == PIECE_BLACK) {
 		hash ^= side;
 	}
+}
+
+void BoardHash::NullMove(const ChessBoard& b) {
+	if (b.hasEnPassant) {
+		hash ^= enpassantTable[b.enPassantDst.Col()];
+	}
+	hash ^= side;
 }
 
 void BoardHash::Update(const ChessBoard& b, const Move& m) {

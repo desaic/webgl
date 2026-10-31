@@ -21,6 +21,8 @@ public:
   static void Init();
   void Update(const ChessBoard& b, const Move& m);
   void Set(const ChessBoard& b);
+  ///hash change of passing the move: flips the side to move and drops the en passant key
+  void NullMove(const ChessBoard& b);
 private:
   static uint64_t positionTable[NUM_SQUARES][NUM_PIECES];
   static uint64_t castlingTable[CASTLING_OPTIONS];

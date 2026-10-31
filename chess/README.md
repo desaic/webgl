@@ -5,8 +5,11 @@ Client-only chess: everything runs in the browser, nothing talks to a server.
 - `web/` - UI in TypeScript + three.js (Vite). `src/rules.ts` is the rules code the UI uses for
   legal-move highlighting, promotion, check/mate/draw detection and move notation.
 - `engine/` - the AI, C++ compiled to WebAssembly with emscripten and run in a web worker
-  (`web/src/worker.ts`). `Search.cpp` is a plain recursive negamax alpha-beta with quiescence,
-  a transposition table, killer/MVV-LVA move ordering and iterative deepening. The search polls a
+  (`web/src/worker.ts`). `Search.cpp` is a plain recursive negamax alpha-beta with quiescence
+  (delta pruning), a transposition table, null-move pruning, principal variation search, late move
+  reductions, killer/history/MVV-LVA move ordering and iterative deepening. `client/BoardEval.cpp` is a
+  tapered evaluation (PeSTO tables, pawn structure, bishop pair, rook files, king shield, mop-up,
+  insufficient-material draws). `engine/selfplay.mjs` plays it against a saved older engine. The search polls a
   deadline and unwinds, so a move always comes back within the think-time budget.
 - `client/` - the original C++ board/rules code (`ChessBoard`, `BoardHash`, `BoardEval`). The engine
   reuses it unchanged except for one fix (en passant squares in FEN input). The old websocket client

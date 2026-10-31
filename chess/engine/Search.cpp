@@ -26,6 +26,7 @@ Search::Search() : stopped_(false), timed_(false), nodes_(0) {
   size_t bits = 20;
   table_.resize(size_t(1) << bits);
   tableMask_ = (uint64_t(1) << bits) - 1;
+  for (auto& a : history_) for (auto& r : a) for (int& v : r) v = 0;
 }
 
 void Search::ClearTable() { std::fill(table_.begin(), table_.end(), Entry()); }
@@ -67,6 +68,8 @@ void Search::OrderMoves(const ChessBoard& b, std::vector<Move>& moves, uint16_t 
       s = 80000;
     } else if (ply < MaxPly && (killers_[ply][1].src == m.src && killers_[ply][1].dst == m.dst)) {
       s = 70000;
+    } else {
+      s = std::min(history_[b.nextColor][m.src.coord][m.dst.coord], 60000);
     }
     score[i] = s;
   }
@@ -100,8 +103,9 @@ int Search::Quiesce(ChessBoard& b, int ply, int alpha, int beta) {
   if (moves.empty()) return inCheck ? -(MateScore - ply) : 0;
   if (ply >= MaxPly) return BoardEval::Eval(b);
 
+  int stand = -2 * MateScore;
   if (!inCheck) {
-    int stand = BoardEval::Eval(b);
+    stand = BoardEval::Eval(b);
     if (stand >= beta) return stand;
     alpha = std::max(alpha, stand);
     // only noisy moves; being in check means every evasion has to be considered instead
@@ -111,6 +115,11 @@ int Search::Quiesce(ChessBoard& b, int ply, int alpha, int beta) {
   }
   OrderMoves(b, moves, 0, ply);
   for (const Move& m : moves) {
+    if (!inCheck && m.promo.isEmpty()) {
+      // delta pruning: even winning the victim plus a margin cannot reach alpha
+      int victim = b.board[m.dst.coord].isEmpty() ? 100 : kPieceValue[b.board[m.dst.coord].type()];
+      if (stand + victim + 200 < alpha) continue;
+    }
     UndoMove u = b.GetUndoMove(m);
     b.ApplyMove(m);
     int score = -Quiesce(b, ply + 1, -beta, -alpha);
@@ -122,7 +131,7 @@ int Search::Quiesce(ChessBoard& b, int ply, int alpha, int beta) {
   return alpha;
 }
 
-int Search::Negamax(ChessBoard& b, int depth, int ply, int alpha, int beta) {
+int Search::Negamax(ChessBoard& b, int depth, int ply, int alpha, int beta, bool allowNull) {
   if (b.halfMoves >= 100 || IsRepetition(b)) return 0;
   if (depth <= 0) return Quiesce(b, ply, alpha, beta);
   nodes_++;
@@ -145,16 +154,66 @@ int Search::Negamax(ChessBoard& b, int depth, int ply, int alpha, int beta) {
   bool inCheck = b.IsInCheck();
   if (moves.empty()) return inCheck ? -(MateScore - ply) : 0;
   if (inCheck && ply < MaxPly) depth++;
+
+  // Null move pruning: if passing the move still leaves a score >= beta, the real moves will too.
+  // Unsafe in zugzwang, where passing would be better than any move, which happens in pawn
+  // endings and with very little material. So it is off when in check, when the side to move has
+  // under about a rook of non-pawn material, and mate scores from it are not trusted.
+  bool pvNode = beta - alpha > 1;
+  if (allowNull && !pvNode && !inCheck && depth >= 3 && ply < MaxPly - 2 && beta < MateScore - MaxPly) {
+    int material = 0;
+    for (ChessCoord c : b.pieces[b.nextColor]) {
+      uint8_t t = b.board[c.coord].type();
+      if (t != PIECE_PAWN && t != PIECE_KING) material += kPieceValue[t];
+    }
+    if (material >= 400 && BoardEval::Eval(b) >= beta) {
+      int R = 2 + (depth >= 6 ? 1 : 0) + (depth >= 10 ? 1 : 0);
+      bool hadEp = b.hasEnPassant;
+      uint64_t savedHash = b.HashVal();
+      ChessCoord ep = b.enPassantDst;
+      b.hashHistory.push_back(b.HashVal());
+      b.hash.NullMove(b);
+      b.hasEnPassant = false;
+      b.halfMoves++;
+      b.ApplyNullMove();
+      int score = -Negamax(b, depth - 1 - R, ply + 1, -beta, -beta + 1, false);
+      b.UndoNullMove();
+      b.halfMoves--;
+      b.hasEnPassant = hadEp;
+      b.enPassantDst = ep;
+      b.hashHistory.pop_back();
+      b.hash.hash = savedHash;
+      if (stopped_) return 0;
+      if (score >= beta) return score >= MateScore - MaxPly ? beta : score;
+    }
+  }
   OrderMoves(b, moves, ttMove, ply);
 
   int origAlpha = alpha;
   int best = -2 * MateScore;
   uint16_t bestMove = 0;
+  int moveNo = 0;
   for (const Move& m : moves) {
     bool quiet = !IsCapture(b, m) && m.promo.isEmpty();
+    bool killer = ply < MaxPly && ((killers_[ply][0].src == m.src && killers_[ply][0].dst == m.dst) ||
+                                   (killers_[ply][1].src == m.src && killers_[ply][1].dst == m.dst));
     UndoMove u = b.GetUndoMove(m);
     b.ApplyMove(m);
-    int score = -Negamax(b, depth - 1, ply + 1, -beta, -alpha);
+    int score;
+    if (moveNo == 0) {
+      score = -Negamax(b, depth - 1, ply + 1, -beta, -alpha);
+    } else {
+      // late move reduction for quiet moves that are unlikely to matter, then a null-window
+      // (principal variation) search; re-search only if it unexpectedly beats alpha
+      int reduce = 0;
+      if (quiet && !killer && !inCheck && depth >= 3 && moveNo >= 3) {
+        reduce = 1 + (moveNo >= 8 && depth >= 6 ? 1 : 0);
+      }
+      score = -Negamax(b, depth - 1 - reduce, ply + 1, -alpha - 1, -alpha);
+      if (score > alpha && reduce) score = -Negamax(b, depth - 1, ply + 1, -alpha - 1, -alpha);
+      if (score > alpha && score < beta) score = -Negamax(b, depth - 1, ply + 1, -beta, -alpha);
+    }
+    moveNo++;
     b.Undo(u);
     if (stopped_) return 0;
     if (score > best) {
@@ -166,6 +225,8 @@ int Search::Negamax(ChessBoard& b, int depth, int ply, int alpha, int beta) {
       if (quiet && ply < MaxPly) {
         killers_[ply][1] = killers_[ply][0];
         killers_[ply][0] = m;
+        int& h = history_[b.nextColor][m.src.coord][m.dst.coord];
+        h = std::min(h + depth * depth, 60000);
       }
       break;
     }
@@ -188,6 +249,7 @@ SearchResult Search::Think(ChessBoard& board, int maxDepth, int timeMs) {
   nodes_ = 0;
   if (timed_) deadline_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeMs);
   for (auto& k : killers_) k[0] = k[1] = Move();
+  for (auto& a : history_) for (auto& r : a) for (int& v : r) v /= 4;
 
   std::vector<Move> moves = board.GetMoves();
   if (moves.empty()) {

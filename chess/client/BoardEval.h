@@ -10,6 +10,9 @@ public:
 
   static int Eval(const ChessBoard& b);
 
+  // neither side can force mate (bare kings, one minor piece, K+NN v K)
+  static bool InsufficientMaterial(const ChessBoard& b);
+
 };
 
 #endif

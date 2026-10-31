@@ -26,19 +26,19 @@ const FRAME_HALF = 4.35;
 const LABEL_EDGE = (4 + FRAME_HALF) / 2; // centre of the strip between squares and frame edge
 // the view is centred a little toward +z (white's side) instead of on the board centre;
 // mirrored when the board is flipped so the composition on screen stays the same
-const VIEW_CENTER_Z = 0.6;
-// Captured pieces stand on two trays beside the board (white ones on the viewer's left, black on
-// the right), small, sorted pawn, knight, bishop, rook, queen. They fill in rows as seen on screen:
-// a row runs outward from the board, and rows go from the viewer's end to the far end.
-const TRAY_COLS = 4; // pieces per row
-const TRAY_ROWS = 4; // 4 x 4 holds the 15 pieces a side can lose
-const TRAY_X0 = 4.5; // where a tray starts, measured from the board centre
+const VIEW_CENTER_Z = 1.2;
+// Captured pieces stand on two trays along the board's top and bottom edges (captured white pieces
+// on the tray at the top of the screen, captured black ones at the bottom), small, sorted pawn,
+// knight, bishop, rook, queen. They fill 2 rows left to right; the first row is next to the board.
+const TRAY_COLS = 8; // pieces per row
+const TRAY_ROWS = 2; // 2 x 8 holds the 15 pieces a side can lose
+const TRAY_Z0 = 4.5; // where a tray starts, measured from the board centre
 const TRAY_PAD = 0.1;
 const CAPTURED_SCALE = 0.62;
-const X_STRIDE = 0.42; // between pieces in a row (away from the board)
-const Z_STRIDE = 0.5; // between rows (along the board side)
+const X_STRIDE = 0.6; // between pieces in a row (along the board edge)
+const Z_STRIDE = 0.55; // between rows (away from the board)
 const TRAY_WIDTH = TRAY_PAD * 2 + TRAY_COLS * X_STRIDE;
-const TRAY_LENGTH = TRAY_PAD * 2 + TRAY_ROWS * Z_STRIDE;
+const TRAY_DEPTH = TRAY_PAD * 2 + TRAY_ROWS * Z_STRIDE;
 const LIFT = 0.35; // height of a piece while it is being dragged
 
 export interface Highlights {
@@ -162,7 +162,7 @@ export class Board3D {
     this.drag.transformGroup = true; // move the whole piece, not the mesh that was hit
     this.orbit = new OrbitControls(this.camera, el);
     Object.assign(this.orbit, {
-      enableZoom: false, rotateSpeed: 0.6, minPolarAngle: 0.25, maxPolarAngle: 1.05,
+      enableZoom: true, zoomSpeed: 0.6, rotateSpeed: 0.6, minPolarAngle: 0.25, maxPolarAngle: 1.05,
       enablePan: true, screenSpacePanning: false, // pan along the board, not up and down
     });
     // right drag rotates, middle drag pans; the left button is for pieces
@@ -330,8 +330,8 @@ export class Board3D {
   private buildTrays() {
     const mat = new THREE.MeshStandardMaterial({ color: 0x4a3426, roughness: 0.7 });
     for (const side of [-1, 1]) {
-      const tray = new THREE.Mesh(new THREE.BoxGeometry(TRAY_WIDTH, 0.3, TRAY_LENGTH), mat);
-      tray.position.set(side * (TRAY_X0 + TRAY_WIDTH / 2), -0.16, 0);
+      const tray = new THREE.Mesh(new THREE.BoxGeometry(TRAY_WIDTH, 0.3, TRAY_DEPTH), mat);
+      tray.position.set(0, -0.16, side * (TRAY_Z0 + TRAY_DEPTH / 2));
       tray.receiveShadow = true;
       this.scene.add(tray);
     }
@@ -344,18 +344,18 @@ export class Board3D {
     this.capturedRoot.clear();
     for (const white of [true, false]) {
       const mine = pieces.filter((p) => (colorOf(p) === WHITE) === white).sort((a, b) => typeOf(a) - typeOf(b));
-      // white pieces on the viewer's left, black on the right; screen-left is world -x unless flipped
+      // white pieces on the tray at the top of the screen (world -z unless flipped), black at the bottom
       const side = white !== this.flipped ? -1 : 1;
-      const dir = this.flipped ? -1 : 1;
+      const dir = this.flipped ? -1 : 1; // screen-left is world -x unless flipped
       mine.forEach((p, i) => {
         const row = Math.floor(i / TRAY_COLS), col = i % TRAY_COLS;
         const obj = makePiece(typeOf(p), white);
         obj.scale.setScalar(CAPTURED_SCALE);
-        // a row starts next to the board and goes outward; the first row is at the viewer's end
+        // rows go left to right on screen; the first row is next to the board
         obj.position.set(
-          side * (TRAY_X0 + TRAY_PAD + X_STRIDE / 2 + col * X_STRIDE),
+          dir * (-(TRAY_COLS - 1) * X_STRIDE / 2 + col * X_STRIDE),
           0,
-          dir * ((TRAY_ROWS - 1) * Z_STRIDE / 2 - row * Z_STRIDE),
+          side * (TRAY_Z0 + TRAY_PAD + Z_STRIDE / 2 + row * Z_STRIDE),
         );
         this.capturedRoot.add(obj);
       });
@@ -479,7 +479,7 @@ export class Board3D {
     this.dropBox.material.resolution.set(w, h);
     this.camera.aspect = w / h;
     // pull the camera back on narrow screens so the whole board stays visible
-    const dist = Math.max(12.5, 21 / this.camera.aspect);
+    const dist = Math.max(13.5, 13.5 / this.camera.aspect);
     const dir = new THREE.Vector3(0, 0.82, 0.58).normalize().multiplyScalar(dist);
     if (this.flipped) dir.z = -dir.z;
     const center = new THREE.Vector3(0, 0, this.flipped ? -VIEW_CENTER_Z : VIEW_CENTER_Z);
@@ -489,6 +489,9 @@ export class Board3D {
     const base = this.flipped ? Math.PI : 0;
     this.orbit.minAzimuthAngle = base - 0.6;
     this.orbit.maxAzimuthAngle = base + 0.6;
+    // a little zoom (wheel, or the two-finger pinch) either way from the default distance
+    this.orbit.minDistance = dist * 0.7;
+    this.orbit.maxDistance = dist * 1.2;
     this.orbit.target.copy(center);
     this.orbit.update();
     this.camera.updateProjectionMatrix();

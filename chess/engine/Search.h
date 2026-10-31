@@ -36,7 +36,7 @@ class Search {
     uint8_t bound = 0;  // 0 exact, 1 upper, 2 lower
   };
 
-  int Negamax(ChessBoard& b, int depth, int ply, int alpha, int beta);
+  int Negamax(ChessBoard& b, int depth, int ply, int alpha, int beta, bool allowNull = true);
   int Quiesce(ChessBoard& b, int ply, int alpha, int beta);
   bool OutOfTime();
   bool IsRepetition(const ChessBoard& b) const;
@@ -45,6 +45,7 @@ class Search {
   std::vector<Entry> table_;
   uint64_t tableMask_;
   Move killers_[MaxPly][2];
+  int history_[2][64][64];
   bool stopped_;
   bool timed_;
   uint64_t nodes_;
