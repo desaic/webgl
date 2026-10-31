@@ -85,6 +85,7 @@
   border: 3px solid;
   border-color: #fff #808080 #808080 #fff;
 }
+#face { touch-action: none; }
 #face:active { border-color: #808080 #fff #fff #808080; }
 
 /* Buttons */
@@ -218,4 +219,36 @@
   border-color: #808080 #fff #fff #808080;
   background: #ffe066;
   box-shadow: 0 0 0 3px #f00;
+}
+
+/* On-screen debug console (?debug=1) */
+#dbgPanel {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  width: calc(100% - 112px);
+  max-height: 38vh;
+  display: flex;
+  flex-direction: column;
+  background: rgba(0, 0, 0, 0.85);
+  color: #ddd;
+  font: 11px/1.3 monospace;
+  z-index: 100;
+}
+#dbgPanel.collapsed #dbgLog { display: none; }
+#dbgBar { display: flex; gap: 6px; align-items: center; padding: 3px 6px; background: #222; }
+#dbgBar span { flex: 1; }
+#dbgBar button { font: 11px monospace; padding: 2px 8px; }
+#dbgLog { overflow: auto; padding: 4px 6px; user-select: text; -webkit-user-select: text; }
+#dbgLog div { white-space: pre-wrap; word-break: break-all; }
+.dbg-warn { color: #fd5; }
+.dbg-error { color: #f77; }
+
+/* positioned from script via visualViewport so it stays visible when zoomed (see MinesApp) */
+#flagBtn.vv {
+  left: 0;
+  top: 0;
+  right: auto;
+  bottom: auto;
+  transform-origin: 0 0;
 }

@@ -7,7 +7,7 @@ import { DIFFICULTIES, FLAGGED, HIDDEN, REVEALED, Minesweeper } from "./Mineswee
 
 // cells are drawn at up to MAX_CELL_PX css pixels, shrunk so the board fits the screen width
 const MAX_CELL_PX = 32;
-const MIN_CELL_PX = 8;
+const MIN_CELL_PX = 24;
 // horizontal space taken by the window frame and page margins around the canvas
 const FRAME_PX = 24 + 16;
 const TILE_PX = 64;
@@ -182,6 +182,8 @@ export class MinesApp {
   private leaderboard = new LeaderboardUI();
   // true once the player has planted any flag this game (even if later removed)
   private flagUsed = false;
+  // performance.now() of the last newGame, to log how long until it is drawn
+  private newGameAt = 0;
   // set by the on-screen flag button: the next board click/tap plants a flag, then it clears
   private flagArmed = false;
   private flagBtn: HTMLElement;
@@ -193,6 +195,7 @@ export class MinesApp {
     this.timeEl = document.getElementById("timer")!;
     this.diffEl = document.getElementById("difficulty") as HTMLSelectElement;
     this.flagBtn = document.getElementById("flagBtn")!;
+    this.keepFlagButtonOnScreen();
 
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
     this.renderer.setPixelRatio(window.devicePixelRatio || 1);
@@ -205,9 +208,56 @@ export class MinesApp {
     canvas.addEventListener("auxclick", (e) => e.preventDefault());
     window.addEventListener("mouseup", (e) => this.onMouseUp(e));
     document.getElementById("lbBtn")!.addEventListener("click", () => this.leaderboard.show(this.diffEl.value));
-    window.addEventListener("resize", () => this.applyLayout());
+    window.addEventListener("resize", () => {
+      console.log("resize " + innerWidth + "x" + innerHeight);
+      this.applyLayout();
+    });
     this.flagBtn.addEventListener("click", () => this.setFlagArmed(!this.flagArmed));
-    this.faceEl.addEventListener("click", () => this.newGame());
+    // timestamps here help find out whether a slow face tap is input delay or slow redraw
+    // On touch screens a tap that drifts a few pixels, or that the browser takes for the start of
+    // a scroll, produces pointerup/pointercancel but no click. So act on pointerup, and keep click
+    // only for keyboard activation.
+    let faceDown = false;
+    let faceHandled = false;
+    const lag = (e: Event) => Math.round(performance.now() - e.timeStamp) + "ms";
+    this.faceEl.addEventListener("pointerdown", (e) => {
+      faceDown = true;
+      console.log("face pointerdown, input lag " + lag(e));
+    });
+    this.faceEl.addEventListener("pointercancel", () => {
+      faceDown = false;
+      console.log("face pointercancel");
+    });
+    this.faceEl.addEventListener("pointerup", (e) => {
+      console.log("face pointerup, input lag " + lag(e));
+      if (!faceDown) return;
+      faceDown = false;
+      // allow some slack so a slightly sliding finger still counts
+      const r = this.faceEl.getBoundingClientRect();
+      const slack = 12;
+      if (e.clientX < r.left - slack || e.clientX > r.right + slack ||
+          e.clientY < r.top - slack || e.clientY > r.bottom + slack) return;
+      faceHandled = true;
+      window.setTimeout(() => (faceHandled = false), 500);
+      this.newGame();
+    });
+    this.faceEl.addEventListener("click", (e) => {
+      console.log("face click, input lag " + lag(e) + (faceHandled ? " (already handled)" : ""));
+      if (faceHandled) {
+        faceHandled = false;
+        return;
+      }
+      this.newGame();
+    });
+    canvas.addEventListener("webglcontextlost", (e) => {
+      e.preventDefault();
+      console.error("webgl context lost");
+    });
+    canvas.addEventListener("webglcontextrestored", () => {
+      console.warn("webgl context restored");
+      this.dirty = true;
+    });
+    document.addEventListener("visibilitychange", () => console.log("visibility " + document.visibilityState));
     this.diffEl.addEventListener("change", () => this.newGame());
     window.addEventListener("keydown", (e) => {
       if (e.key === "F2" && !this.leaderboard.isOpen()) {
@@ -220,6 +270,8 @@ export class MinesApp {
   }
 
   public newGame() {
+    const t0 = performance.now();
+    this.newGameAt = t0;
     this.timerStart = 0;
     this.timerEnd = 0;
     this.flagUsed = false;
@@ -244,6 +296,7 @@ export class MinesApp {
 
     this.updateHud();
     this.refreshBoard();
+    console.log("newGame " + this.diffEl.value + " built in " + (performance.now() - t0).toFixed(1) + "ms");
   }
 
   private applyLayout() {
@@ -265,6 +318,26 @@ export class MinesApp {
     const x = Math.floor((e.clientX - r.left) / this.cellPx);
     const y = this.game.rows - 1 - Math.floor((e.clientY - r.top) / this.cellPx);
     return this.game.inBounds(x, y) ? { x, y } : null;
+  }
+
+  // position:fixed sticks to the layout viewport, so after a pinch-zoom or pan the flag button
+  // would drift off-screen. Re-place it in the visible (visual) viewport and cancel the zoom
+  // so it keeps the same size on screen.
+  private keepFlagButtonOnScreen() {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const btn = this.flagBtn;
+    const margin = 16;
+    const place = () => {
+      const s = vv.scale;
+      const x = vv.offsetLeft + vv.width - (btn.offsetWidth + margin) / s;
+      const y = vv.offsetTop + vv.height - (btn.offsetHeight + margin) / s;
+      btn.classList.add("vv");
+      btn.style.transform = "translate(" + x + "px, " + y + "px) scale(" + 1 / s + ")";
+    };
+    vv.addEventListener("resize", place);
+    vv.addEventListener("scroll", place);
+    place();
   }
 
   private setFlagArmed(on: boolean) {
@@ -426,5 +499,9 @@ export class MinesApp {
     if (!this.dirty) return;
     this.dirty = false;
     this.renderer.render(this.world.scene, this.world.camera);
+    if (this.newGameAt) {
+      console.log("new board drawn " + (performance.now() - this.newGameAt).toFixed(1) + "ms after newGame");
+      this.newGameAt = 0;
+    }
   }
 }

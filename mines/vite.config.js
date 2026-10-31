@@ -6,6 +6,8 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
   server: {
     port: 9005,
+    // listen on all interfaces so phones on the LAN can reach the dev server
+    host: true,
   },
   base: "",
   build: {
