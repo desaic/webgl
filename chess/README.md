@@ -62,9 +62,33 @@ Two small generated tables, both from data kept in the git-ignored `ignore/` fol
 
       node tools/build_openings.mjs ignore/openings
 
+**Variety.** `web/src/openingPlans.ts` holds 20 popular openings as full lines (Ruy Lopez, Italian,
+Scotch, Petrov, three Sicilians, French, Caro-Kann, Scandinavian, Pirc, QGD, QGA, Slav, King's Indian,
+Nimzo-Indian, Grünfeld, London, English, Réti). On each of its turns the engine picks one at random from
+the lines that fit the game so far and plays its side of it; if you deviate it picks another fitting line,
+and when no line fits (or the line ends) it falls back to the weighted book above, then to search. So it
+opens differently from game to game, as White or Black. The "Opening book" checkbox switches all of
+this off.
+
 The box above the move list shows the name of the latest named opening in the game and the moves that
 make up the opening (up to the last named position or last book move). With no name it shows only the moves;
 with neither it is hidden (`web/src/opening.ts`).
+
+## Saved game
+
+The game in progress is kept in `localStorage` (key `chess.game.v1`) after every move, undo, flip and
+settings change: the moves from the start position, the current FEN, which side you play, the view, the
+think time and the book setting. On page load every saved move is replayed against the rules and the game
+is restored (if the engine was to move it carries on); a missing or damaged save falls back to the default
+start position. "New game" always starts from the default position and replaces the save.
+
+## Captured pieces
+
+Captured pieces are kept on two trays beside the board in the 3D scene (white ones on the viewer's left,
+black on the right, swapping with the view when the board is flipped), at about 60% size, sorted pawn,
+knight, bishop, rook, queen, filling 4 rows of 4: a row runs outward from the board and the first row is
+at the viewer's end (`Board3D.setCaptured`).
+`Position.capturedPieces()` records captures as they happen, so promotions and undo are handled exactly.
 
 ## Tests
 
