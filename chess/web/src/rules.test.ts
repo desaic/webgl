@@ -35,6 +35,21 @@ check(new Position(START_FEN).getFen() === START_FEN, "fen round trip");
   check(names.includes("O-O") && names.includes("O-O-O") && names.includes("Rb1"), "san castling and rook moves");
 }
 
+// move kinds (they pick the move sound)
+{
+  const kind = (fen: string, uci: string) => {
+    const p = new Position(fen);
+    return p.kind(p.legalMoves().find((m) => moveToUci(m) === uci)!);
+  };
+  check(kind(START_FEN, "e2e4") === "move", "kind: plain move");
+  check(kind("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1", "e1g1") === "castle", "kind: castle short");
+  check(kind("r3k2r/8/8/8/8/8/8/R3K2R b KQkq - 0 1", "e8c8") === "castle", "kind: castle long");
+  check(kind("4k3/8/8/3p4/4P3/8/8/4K3 w - - 0 1", "e4d5") === "capture", "kind: capture");
+  check(kind("4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1", "e5d6") === "capture", "kind: en passant capture");
+  check(kind("8/P6k/8/8/8/8/8/4K3 w - - 0 1", "a7a8q") === "promotion", "kind: promotion");
+  check(kind("1n5k/P7/8/8/8/8/8/4K3 w - - 0 1", "a7b8q") === "promotion", "kind: capturing promotion");
+}
+
 // game-end detection
 check(new Position("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1").status() === "stalemate", "stalemate");
 check(new Position("6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1").legalMoves().length > 0, "not mate");

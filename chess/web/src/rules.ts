@@ -334,6 +334,15 @@ export class Position {
     return "playing";
   }
 
+  // what kind of move a legal move is (ask before making it): used to pick the move sound
+  kind(m: Move): "promotion" | "castle" | "capture" | "move" {
+    const p = this.board[m.from];
+    if (m.promo) return "promotion";
+    if (typeOf(p) === K && Math.abs(fileOf(m.to) - fileOf(m.from)) === 2) return "castle";
+    if (this.board[m.to] || (typeOf(p) === P && m.to === this.ep)) return "capture";
+    return "move";
+  }
+
   // standard algebraic notation of a legal move (call before making it)
   san(m: Move): string {
     const p = this.board[m.from];

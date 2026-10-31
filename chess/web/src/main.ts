@@ -1,5 +1,7 @@
 // Game controller: ties the rules, the three.js board and the engine worker together.
 import { Board3D } from "./Board3D.ts";
+import { loadPieces } from "./Pieces.ts";
+import { initSounds, playSound, SoundName } from "./Sounds.ts";
 import {
   Position, START_FEN, Move, WHITE, BLACK, colorOf, moveToUci, typeOf, P,
 } from "./rules.ts";
@@ -24,7 +26,13 @@ let over = false;
 let pendingPromo: Move[] | null = null;
 let viewFlipped = false;
 
-const board = new Board3D($("board"), (s) => onSquare(s));
+const board = new Board3D($("board"), {
+  onSquare: (s) => onSquare(s),
+  // only the side to move, and only on the human's turn, can pick pieces up
+  canDrag: (s) => humanTurn() && pos.board[s] !== 0 && colorOf(pos.board[s]) === pos.turn,
+  onDragStart: (s) => select(s),
+  onDrop: (from, to) => dropMove(from, to),
+});
 
 function humanTurn() {
   return pos.turn === humanColor && !thinking && !busy && !over && !pendingPromo;
@@ -88,6 +96,11 @@ function onSquare(s: number) {
     }
     return;
   }
+  select(s);
+}
+
+// select the piece on s (showing its legal targets), or clear the selection
+function select(s: number) {
   const p = pos.board[s];
   if (p && colorOf(p) === pos.turn) {
     selected = s;
@@ -97,6 +110,15 @@ function onSquare(s: number) {
     targets = [];
   }
   highlight();
+}
+
+// a piece was dropped on a square: true if that is a legal move (it is then played)
+function dropMove(from: number, to: number): boolean {
+  const moves = pos.legalMovesFrom(from).filter((m) => m.to === to);
+  if (!moves.length) return false;
+  if (moves.length > 1) askPromotion(moves);
+  else playMove(moves[0], false);
+  return true;
 }
 
 function askPromotion(moves: Move[]) {
@@ -109,25 +131,30 @@ function askPromotion(moves: Move[]) {
       const m = moves.find((x) => x.promo === piece)!;
       el.classList.add("hidden");
       pendingPromo = null;
-      playMove(m);
+      playMove(m, false);
     };
   });
 }
 
-function playMove(m: Move) {
+// animate=false when the piece was already dragged onto its target square
+function playMove(m: Move, animate = true) {
+  const sound: SoundName = pos.kind(m); // the move kinds are the sound names
   sans.push(pos.san(m));
   played.push(moveToUci(m));
   pos.make(m);
   lastMove = m;
   selected = -1;
   targets = [];
-  busy = true;
-  highlight();
-  board.animateMove(m.from, m.to, () => {
+  const done = () => {
+    playSound(sound); // when the piece lands
     busy = false;
     refresh();
     maybeEngineMove();
-  });
+  };
+  if (!animate) return done();
+  busy = true;
+  highlight();
+  board.animateMove(m.from, m.to, done);
 }
 
 function maybeEngineMove() {
@@ -208,4 +235,5 @@ $("flip").onclick = () => {
 };
 $<HTMLSelectElement>("side").onchange = newGame;
 
-newGame();
+initSounds();
+loadPieces().then(newGame);

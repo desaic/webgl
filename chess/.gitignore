@@ -1,0 +1,3 @@
+# large source assets (Blender file, recordings); the generated meshes and sounds under web/public are what is committed
+ignore/
+*.blend1
