@@ -1,10 +1,11 @@
 // Run with: npm test   (node runs this file directly; build the engine first with ../engine/build.sh)
 // 1. JS rules against published perft node counts.
 // 2. JS legal moves against the C++ move generator on random playouts.
-import { Position, START_FEN, moveToUci } from "./rules.ts";
+import { Position, START_FEN, moveToUci, P, BLACK, WHITE } from "./rules.ts";
 import createEngine from "./engine/engine.mjs";
 import { readFileSync } from "node:fs";
 import { detectOpening, type OpeningRow } from "./opening.ts";
+import { compilePlans, fittingPlans } from "./openingPlans.ts";
 
 let failed = 0;
 const check = (ok: boolean, msg: string) => {
@@ -83,6 +84,48 @@ check(new Position(START_FEN).getFen() === START_FEN, "fen round trip");
   check(!!unnamed && unnamed.name === undefined && unnamed.eco === undefined && unnamed.line === "1. e4 e5 2. Nf3", "no name: only the moves are shown: " + unnamed?.line);
   check(detectOpening(new Map(), ruy.keys, ruy.sans, 0) === null, "no name and no book moves: nothing shown");
   check(detectOpening(names, [new Position(START_FEN).keyHash()], [], 0) === null, "start position: nothing shown");
+}
+
+// SAN reader and the popular opening lines
+{
+  const p = new Position("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1");
+  let ok = 0, bad = 0;
+  for (const m of p.legalMoves()) {
+    const back = p.moveFromSan(p.san(m));
+    if (back && back.from === m.from && back.to === m.to && back.promo === m.promo) ok++; else bad++;
+  }
+  check(bad === 0 && ok > 40, `moveFromSan(san(m)) returns m for all ${ok} legal moves of kiwipete`);
+  const pr = new Position("1n5k/P7/8/8/8/8/8/4K3 w - - 0 1");
+  check(pr.moveFromSan("axb8=Q+")?.promo === 5 && pr.moveFromSan("a8=N")?.promo === 2, "moveFromSan reads promotions");
+  check(new Position(START_FEN).moveFromSan("Nf6") === null && new Position(START_FEN).moveFromSan("e5") === null, "moveFromSan rejects illegal moves");
+  const plans = compilePlans(); // throws on an illegal move
+  check(plans.length === 20 && plans.every((q) => q.moves.length >= 10), "20 opening plans compile to legal lines");
+  const first = new Set(plans.map((q) => q.moves[0]));
+  check(first.size === 4, "plans cover 1.e4, 1.d4, 1.c4 and 1.Nf3: " + [...first].join(" "));
+  check(fittingPlans(plans, []).length === 20, "all 20 plans fit the start");
+  const afterE4 = fittingPlans(plans, ["e2e4"]);
+  check(afterE4.length > 5 && afterE4.every((q) => q.moves[0] === "e2e4"), "after 1.e4 only 1.e4 plans fit: " + afterE4.length);
+  check(fittingPlans(plans, ["e2e4", "a7a5"]).length === 0, "an unexpected reply fits no plan");
+  const replies = new Set(afterE4.map((q) => q.moves[1]));
+  check(replies.size >= 5, "the engine as Black has several different replies to 1.e4: " + [...replies].join(" "));
+}
+
+// captured pieces
+{
+  const p = new Position(START_FEN);
+  const play = (u: string) => p.make(p.legalMoves().find((m) => moveToUci(m) === u)!);
+  check(p.capturedPieces().length === 0, "nothing captured at the start");
+  for (const u of ["e2e4", "d7d5", "e4d5", "d8d5"]) play(u);
+  const cap = p.capturedPieces();
+  check(cap.length === 2 && cap[0] === (P | BLACK) && cap[1] === (P | WHITE), "captured: black pawn, then white pawn");
+  p.unmake();
+  check(p.capturedPieces().length === 1, "undo takes the capture back");
+  const q = new Position("4k3/P7/8/8/8/8/8/4K3 w - - 0 1");
+  q.make(q.legalMoves().find((m) => moveToUci(m) === "a7a8q")!);
+  check(q.capturedPieces().length === 0, "a promotion is not a capture");
+  const e = new Position("4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1");
+  e.make(e.legalMoves().find((m) => moveToUci(m) === "e5d6")!);
+  check(e.capturedPieces().length === 1 && e.capturedPieces()[0] === (P | BLACK), "en passant captures the pawn");
 }
 
 // game-end detection

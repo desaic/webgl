@@ -27,6 +27,18 @@ const LABEL_EDGE = (4 + FRAME_HALF) / 2; // centre of the strip between squares 
 // the view is centred a little toward +z (white's side) instead of on the board centre;
 // mirrored when the board is flipped so the composition on screen stays the same
 const VIEW_CENTER_Z = 0.6;
+// Captured pieces stand on two trays beside the board (white ones on the viewer's left, black on
+// the right), small, sorted pawn, knight, bishop, rook, queen. They fill in rows as seen on screen:
+// a row runs outward from the board, and rows go from the viewer's end to the far end.
+const TRAY_COLS = 4; // pieces per row
+const TRAY_ROWS = 4; // 4 x 4 holds the 15 pieces a side can lose
+const TRAY_X0 = 4.5; // where a tray starts, measured from the board centre
+const TRAY_PAD = 0.1;
+const CAPTURED_SCALE = 0.62;
+const X_STRIDE = 0.42; // between pieces in a row (away from the board)
+const Z_STRIDE = 0.5; // between rows (along the board side)
+const TRAY_WIDTH = TRAY_PAD * 2 + TRAY_COLS * X_STRIDE;
+const TRAY_LENGTH = TRAY_PAD * 2 + TRAY_ROWS * Z_STRIDE;
 const LIFT = 0.35; // height of a piece while it is being dragged
 
 export interface Highlights {
@@ -57,6 +69,8 @@ export class Board3D {
   private orbit!: OrbitControls;
   private drag!: DragControls;
   private dropBox!: Line2;
+  private capturedRoot = new THREE.Object3D();
+  private captured: number[] = [];
   // letters a..h on both the near and far edge, numbers 1..8 on both the right and left edge
   // (index i is the glyph, i + 8 its copy on the opposite edge)
   private fileLabels: THREE.Mesh[] = [];
@@ -83,7 +97,7 @@ export class Board3D {
     sun.position.set(-4, 10, 6);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
-    Object.assign(sun.shadow.camera, { left: -6, right: 6, top: 6, bottom: -6, near: 1, far: 30 });
+    Object.assign(sun.shadow.camera, { left: -8, right: 8, top: 6, bottom: -6, near: 1, far: 30 });
     this.scene.add(sun);
     // a second light from the opposite (-z) side to even out the lighting; it casts no shadows so
     // pieces keep one clean shadow
@@ -93,6 +107,7 @@ export class Board3D {
 
     this.buildBoard();
     this.buildDropBox();
+    this.buildTrays();
     this.buildLabels();
     this.scene.add(this.pieceRoot);
     this.setupControls();
@@ -152,6 +167,8 @@ export class Board3D {
     });
     // right drag rotates, middle drag pans; the left button is for pieces
     this.orbit.mouseButtons = { LEFT: null as any, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE };
+    // touch: one finger never rotates the view (it drags pieces), two fingers pan
+    this.orbit.touches = { ONE: null as any, TWO: THREE.TOUCH.DOLLY_PAN };
     this.orbit.addEventListener("change", () => {
       // keep panning within a small range around the board centre (move camera and target together)
       const t = this.orbit.target;
@@ -309,6 +326,43 @@ export class Board3D {
     }
   }
 
+  // two flat wooden trays for the captured pieces, one each side of the board
+  private buildTrays() {
+    const mat = new THREE.MeshStandardMaterial({ color: 0x4a3426, roughness: 0.7 });
+    for (const side of [-1, 1]) {
+      const tray = new THREE.Mesh(new THREE.BoxGeometry(TRAY_WIDTH, 0.3, TRAY_LENGTH), mat);
+      tray.position.set(side * (TRAY_X0 + TRAY_WIDTH / 2), -0.16, 0);
+      tray.receiveShadow = true;
+      this.scene.add(tray);
+    }
+    this.scene.add(this.capturedRoot);
+  }
+
+  // the captured pieces (piece codes, any order) are drawn on the trays; call again after a flip
+  setCaptured(pieces: number[]) {
+    this.captured = pieces.slice();
+    this.capturedRoot.clear();
+    for (const white of [true, false]) {
+      const mine = pieces.filter((p) => (colorOf(p) === WHITE) === white).sort((a, b) => typeOf(a) - typeOf(b));
+      // white pieces on the viewer's left, black on the right; screen-left is world -x unless flipped
+      const side = white !== this.flipped ? -1 : 1;
+      const dir = this.flipped ? -1 : 1;
+      mine.forEach((p, i) => {
+        const row = Math.floor(i / TRAY_COLS), col = i % TRAY_COLS;
+        const obj = makePiece(typeOf(p), white);
+        obj.scale.setScalar(CAPTURED_SCALE);
+        // a row starts next to the board and goes outward; the first row is at the viewer's end
+        obj.position.set(
+          side * (TRAY_X0 + TRAY_PAD + X_STRIDE / 2 + col * X_STRIDE),
+          0,
+          dir * ((TRAY_ROWS - 1) * Z_STRIDE / 2 - row * Z_STRIDE),
+        );
+        this.capturedRoot.add(obj);
+      });
+    }
+    this.dirty = true;
+  }
+
   // a green square outline with a fixed width in screen pixels (Line2 draws it as screen-space quads)
   private buildDropBox() {
     const h = 0.47;
@@ -399,6 +453,7 @@ export class Board3D {
   setFlipped(f: boolean) {
     this.flipped = f;
     this.updateLabels();
+    this.setCaptured(this.captured);
     this.resize();
     this.dirty = true;
   }
@@ -424,7 +479,7 @@ export class Board3D {
     this.dropBox.material.resolution.set(w, h);
     this.camera.aspect = w / h;
     // pull the camera back on narrow screens so the whole board stays visible
-    const dist = Math.max(12.5, 16.5 / this.camera.aspect);
+    const dist = Math.max(12.5, 21 / this.camera.aspect);
     const dir = new THREE.Vector3(0, 0.82, 0.58).normalize().multiplyScalar(dist);
     if (this.flipped) dir.z = -dir.z;
     const center = new THREE.Vector3(0, 0, this.flipped ? -VIEW_CENTER_Z : VIEW_CENTER_Z);

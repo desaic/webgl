@@ -345,6 +345,33 @@ export class Position {
     return "playing";
   }
 
+  // the legal move a SAN string stands for ("Nf3", "exd5", "O-O", "e8=Q+"), or null if there is none
+  // (or it is ambiguous). Much cheaper than comparing against san() of every legal move.
+  moveFromSan(san: string): Move | null {
+    const token = san.replace(/[+#!?]+$/, "");
+    const legal = this.legalMoves();
+    const king = (m: Move) => typeOf(this.board[m.from]) === K;
+    if (token === "O-O" || token === "0-0") return legal.find((m) => king(m) && fileOf(m.to) - fileOf(m.from) === 2) ?? null;
+    if (token === "O-O-O" || token === "0-0-0") return legal.find((m) => king(m) && fileOf(m.from) - fileOf(m.to) === 2) ?? null;
+    const x = /^([NBRQK])?([a-h])?([1-8])?x?([a-h][1-8])(?:=?([NBRQ]))?$/.exec(token);
+    if (!x) return null;
+    const types: Record<string, number> = { N, B, R, Q, K };
+    const cands = legal.filter((m) => {
+      if (typeOf(this.board[m.from]) !== (x[1] ? types[x[1]] : P)) return false;
+      if (squareName(m.to) !== x[4]) return false;
+      if (x[2] && "abcdefgh"[fileOf(m.from)] !== x[2]) return false;
+      if (x[3] && String(rankOf(m.from) + 1) !== x[3]) return false;
+      return m.promo === (x[5] ? types[x[5]] : 0);
+    });
+    return cands.length === 1 ? cands[0] : null;
+  }
+
+  // every piece captured so far in this game, in order (en passant victims included); pieces that
+  // promoted are not captured, so this is exact where counting pieces on the board is not
+  capturedPieces(): number[] {
+    return this.undo.filter((u) => u.captured).map((u) => u.captured);
+  }
+
   // what kind of move a legal move is (ask before making it): used to pick the move sound
   kind(m: Move): "promotion" | "castle" | "capture" | "move" {
     const p = this.board[m.from];
