@@ -40,6 +40,32 @@ fade, normalised level and mono 44.1 kHz output. Edit the `SOUNDS` table (start/
 hits. Needs Python with numpy and ffmpeg. `Sounds.ts` plays them with Web Audio when a piece lands, and
 `Position.kind()` in `rules.ts` decides which one (promotion, castle, capture or plain move).
 
+## Opening book and opening names
+
+Two small generated tables, both from data kept in the git-ignored `ignore/` folder:
+
+- **Engine book** (`engine/book_data.h`, compiled into the wasm). Built from the TWIC game collections
+  in `F:\github\chess` (`twic1489.pgn`, `twic920.pgn`): games where both players are rated 2300+, the
+  first 16 half-moves, and every (position, move) pair seen at least twice. It is 3,745 entries
+  (30 KB of tables, about 44 KB added to the engine). At run time the engine looks the position up by its
+  Zobrist hash and plays a random book move, weighted by how often it was played, without searching.
+  The "Opening book" checkbox switches it off.
+
+      node tools/pgn_to_lines.mjs ignore/book_lines.txt F:/github/chess/twic1489.pgn F:/github/chess/twic920.pgn
+      sh engine/build_book.sh            # lines -> engine/book_data.h (same emscripten as the engine)
+      sh engine/build.sh                 # rebuild the wasm
+
+- **Opening names** (`web/public/openings.json`, 3,236 positions, about 55 KB gzipped, loaded after the
+  first paint). From the lichess chess-openings TSVs (https://github.com/lichess-org/chess-openings, CC0,
+  downloaded to `ignore/openings/{a,b,c,d,e}.tsv`), lines up to 14 half-moves. Positions are keyed by hash,
+  so transpositions are recognised.
+
+      node tools/build_openings.mjs ignore/openings
+
+The box above the move list shows the name of the latest named opening in the game and the moves that
+make up the opening (up to the last named position or last book move). With no name it shows only the moves;
+with neither it is hidden (`web/src/opening.ts`).
+
 ## Tests
 
     cd web && npm test

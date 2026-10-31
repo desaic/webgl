@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <title>Chess</title>
   <link rel="icon" type="image/png" href="./favicon.png" />
-  <link rel="alternate icon" href="./favicon.ico" sizes="48x48" />
-  <script type="module" crossorigin src="./assets/index-CCMbwaBE.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index--LcY-MUT.css">
+  <link rel="alternate icon" href="./favicon.ico" sizes="48x48" />
+  <script type="module" crossorigin src="./assets/index-Dz1oItVA.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-D7dFlvYA.css">
 </head>
 <body>
   <div id="app">
@@ -35,6 +35,8 @@
         <button id="undo">Undo</button>
         <button id="flip">Flip</button>
       </div>
+      <label class="check"><input type="checkbox" id="book" checked /> Opening book</label>
+      <div id="opening" class="hidden"></div>
       <div id="moves"></div>
     </aside>
     <div id="promo" class="hidden">
@@ -44,6 +46,6 @@
       <button data-piece="3">&#9815; Bishop</button>
       <button data-piece="2">&#9816; Knight</button>
     </div>
-  </div>
+  </div>
 </body>
 </html>

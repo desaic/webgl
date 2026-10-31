@@ -1,6 +1,7 @@
 // C API exported to JavaScript (see worker.ts). Everything is synchronous; the page runs it in a
 // web worker so the UI thread is never blocked.
 #include "ChessBoard.h"
+#include "Book.h"
 #include "Search.h"
 
 #include <emscripten.h>
@@ -54,9 +55,12 @@ static uint64_t Perft(ChessBoard& b, int depth) {
 extern "C" {
 
 // Position is a FEN plus the moves played since (space separated, coordinate notation) so
-// repetitions are seen. Returns "bestmove <uci|none> score <cp> depth <d> nodes <n> timeout <0|1>".
+// repetitions are seen. With useBook, a position in the opening book is answered from the book
+// (a random one of the moves strong players chose there, weighted by how often) without searching.
+// Returns "bestmove <uci|none> score <cp> depth <d> nodes <n> timeout <0|1> book <games>" where
+// games is how many source games played the chosen book move, 0 if the move was searched.
 EMSCRIPTEN_KEEPALIVE const char* engine_search(const char* fen, const char* moves, int maxDepth,
-                                               int timeMs) {
+                                               int timeMs, int useBook) {
   Init();
   ChessBoard b;
   b.FromFen(fen);
@@ -66,12 +70,44 @@ EMSCRIPTEN_KEEPALIVE const char* engine_search(const char* fen, const char* move
   while (in >> tok) {
     if (!PlayUci(b, tok)) break;
   }
-  SearchResult r = g_search.Think(b, maxDepth, timeMs);
   std::ostringstream out;
-  out << "bestmove " << (r.hasMove ? Uci(r.best) : "none") << " score " << r.score << " depth "
-      << r.depth << " nodes " << r.nodes << " timeout " << (r.timedOut ? 1 : 0);
+  BookChoice choice;
+  if (useBook && BookPick(b, b.GetMoves(), choice)) {
+    out << "bestmove " << Uci(choice.move) << " score 0 depth 0 nodes 0 timeout 0 book " << choice.games;
+  } else {
+    SearchResult r = g_search.Think(b, maxDepth, timeMs);
+    out << "bestmove " << (r.hasMove ? Uci(r.best) : "none") << " score " << r.score << " depth "
+        << r.depth << " nodes " << r.nodes << " timeout " << (r.timedOut ? 1 : 0) << " book 0";
+  }
   g_out = out.str();
   return g_out.c_str();
+}
+
+// How many of the given moves (from the FEN position) are still opening book moves: the length of
+// the game's "theory" prefix. Stops at the first move that is not in the book.
+EMSCRIPTEN_KEEPALIVE int engine_book_depth(const char* fen, const char* moves) {
+  Init();
+  ChessBoard b;
+  b.FromFen(fen);
+  b.InitHash();
+  std::istringstream in(moves ? moves : "");
+  std::string tok;
+  int depth = 0;
+  while (in >> tok) {
+    Move chosen;
+    bool found = false;
+    for (const Move& m : b.GetMoves()) {
+      if (Uci(m) == tok) {
+        chosen = m;
+        found = true;
+        break;
+      }
+    }
+    if (!found || !BookHasMove(b, PackMove(chosen))) break;
+    b.ApplyMove(chosen);
+    depth++;
+  }
+  return depth;
 }
 
 EMSCRIPTEN_KEEPALIVE void engine_new_game() {

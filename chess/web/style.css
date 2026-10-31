@@ -26,6 +26,17 @@ button:hover, select:hover { background: #5a5048; }
 button:active { background: #6a5e54; }
 .row button { flex: 1; }
 
+label.check { flex: none; flex-direction: row; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+
+/* the detected opening: name (if it has one) and the moves that make it up */
+#opening {
+  background: #2b2724; border-left: 3px solid #5fae6e; border-radius: 6px; padding: 8px 10px;
+  font-size: 13px; line-height: 1.4;
+}
+#opening .name { font-weight: 600; color: #e6e0d8; }
+#opening .eco { color: #8fc79a; margin-right: 6px; }
+#opening .line { color: #b9aea3; font-variant-numeric: tabular-nums; }
+
 #moves {
   flex: 1; min-height: 80px; overflow-y: auto; display: grid; grid-template-columns: 2.2em 1fr 1fr;
   align-content: start; gap: 2px 8px; font-size: 14px; font-variant-numeric: tabular-nums;

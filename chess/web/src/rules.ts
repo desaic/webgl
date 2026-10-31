@@ -110,6 +110,17 @@ export class Position {
     return this.getFen().split(" ").slice(0, 4).join(" ");
   }
 
+  // 32-bit hash of the position (placement, side to move, castling, en passant) for table lookups
+  keyHash(): number {
+    const k = this.key();
+    let h = 0x811c9dc5;
+    for (let i = 0; i < k.length; i++) {
+      h ^= k.charCodeAt(i);
+      h = Math.imul(h, 0x01000193);
+    }
+    return h >>> 0;
+  }
+
   // keep the en passant square only if a pawn of the side to move can really capture there
   private fixEp() {
     if (this.ep < 0) return;

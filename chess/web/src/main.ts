@@ -2,10 +2,11 @@
 import { Board3D } from "./Board3D.ts";
 import { loadPieces } from "./Pieces.ts";
 import { initSounds, playSound, SoundName } from "./Sounds.ts";
+import { detectOpening, type OpeningRow } from "./opening.ts";
 import {
   Position, START_FEN, Move, WHITE, BLACK, colorOf, moveToUci, typeOf, P,
 } from "./rules.ts";
-import type { SearchReply } from "./worker.ts";
+import type { SearchReply, BookDepthReply } from "./worker.ts";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -22,6 +23,12 @@ let targets: Move[] = [];
 let thinking = false;
 let busy = false; // a move animation is running
 let reqId = 0;
+let depthReqId = 0;
+// opening detection: hash of the position after every ply (index 0 = start), the named openings
+// loaded from openings.json, and how many of the moves played are still engine book moves
+let plyKeys: number[] = [];
+let bookDepth = 0;
+const openings = new Map<number, OpeningRow>();
 let over = false;
 let pendingPromo: Move[] | null = null;
 let viewFlipped = false;
@@ -76,6 +83,7 @@ function updateStatus() {
 }
 
 function renderMoveList() {
+  updateOpening();
   const el = $("moves");
   let html = "";
   for (let i = 0; i < sans.length; i += 2) {
@@ -142,6 +150,8 @@ function playMove(m: Move, animate = true) {
   sans.push(pos.san(m));
   played.push(moveToUci(m));
   pos.make(m);
+  plyKeys.push(pos.keyHash());
+  requestBookDepth();
   lastMove = m;
   selected = -1;
   targets = [];
@@ -162,24 +172,35 @@ function maybeEngineMove() {
   thinking = true;
   updateStatus();
   const req = {
+    type: "search" as const,
     id: ++reqId,
     fen: startFen,
     moves: played.join(" "),
     maxDepth: 30,
     timeMs: +$<HTMLSelectElement>("time").value,
+    useBook: $<HTMLInputElement>("book").checked,
   };
   $("info").textContent = "";
   worker.postMessage(req);
 }
 
-worker.onmessage = (e: MessageEvent<SearchReply>) => {
+worker.onmessage = (e: MessageEvent<SearchReply | BookDepthReply>) => {
   const r = e.data;
+  if (r.type === "bookDepth") {
+    if (r.id === depthReqId) {
+      bookDepth = r.depth;
+      updateOpening();
+    }
+    return;
+  }
   if (r.id !== reqId || !thinking) return; // stale answer (new game / undo happened meanwhile)
   thinking = false;
   const whiteScore = pos.turn === WHITE ? r.score : -r.score;
   const mate = Math.abs(r.score) > 90000;
   const scoreText = mate ? (whiteScore > 0 ? "white mates" : "black mates") : (whiteScore >= 0 ? "+" : "") + (whiteScore / 100).toFixed(2);
-  $("info").textContent = `depth ${r.depth}, eval ${scoreText}, ${(r.nodes / 1000).toFixed(0)}k nodes, ${r.ms} ms`;
+  $("info").textContent = r.book
+    ? `book move (played in ${r.book} games)`
+    : `depth ${r.depth}, eval ${scoreText}, ${(r.nodes / 1000).toFixed(0)}k nodes, ${r.ms} ms`;
   const move = pos.legalMoves().find((m) => moveToUci(m) === r.best);
   if (!move) {
     updateStatus();
@@ -187,6 +208,42 @@ worker.onmessage = (e: MessageEvent<SearchReply>) => {
   }
   playMove(move);
 };
+
+// ask the engine how many of the moves played are still book moves (it answers before any search)
+function requestBookDepth() {
+  worker.postMessage({ type: "bookDepth", id: ++depthReqId, fen: startFen, moves: played.join(" ") });
+}
+
+// The box above the move list (see detectOpening): the name if there is one, then the moves.
+function updateOpening() {
+  const found = detectOpening(openings, plyKeys, sans, bookDepth);
+  const box = $("opening");
+  box.replaceChildren();
+  box.classList.toggle("hidden", !found);
+  if (!found) return;
+  if (found.name) {
+    const title = document.createElement("div");
+    title.className = "name";
+    const code = document.createElement("span");
+    code.className = "eco";
+    code.textContent = found.eco!;
+    title.append(code, found.name);
+    box.append(title);
+  }
+  const line = document.createElement("div");
+  line.className = "line";
+  line.textContent = found.line;
+  box.append(line);
+}
+
+// the opening names are loaded after the first paint; the box updates once they are there
+fetch("openings.json")
+  .then((r) => r.json())
+  .then((rows: OpeningRow[]) => {
+    for (const row of rows) openings.set(row[0], row);
+    updateOpening();
+  })
+  .catch((e) => console.warn("cannot load openings.json", e));
 
 function newGame() {
   reqId++;
@@ -198,6 +255,8 @@ function newGame() {
   pos = new Position(startFen);
   played = [];
   sans = [];
+  plyKeys = [pos.keyHash()];
+  bookDepth = 0;
   lastMove = null;
   selected = -1;
   targets = [];
@@ -219,7 +278,9 @@ function undo() {
     pos.unmake();
     played.pop();
     sans.pop();
+    plyKeys.pop();
   }
+  requestBookDepth();
   lastMove = null;
   selected = -1;
   targets = [];

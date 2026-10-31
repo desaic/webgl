@@ -3,6 +3,8 @@
 // 2. JS legal moves against the C++ move generator on random playouts.
 import { Position, START_FEN, moveToUci } from "./rules.ts";
 import createEngine from "./engine/engine.mjs";
+import { readFileSync } from "node:fs";
+import { detectOpening, type OpeningRow } from "./opening.ts";
 
 let failed = 0;
 const check = (ok: boolean, msg: string) => {
@@ -48,6 +50,39 @@ check(new Position(START_FEN).getFen() === START_FEN, "fen round trip");
   check(kind("4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1", "e5d6") === "capture", "kind: en passant capture");
   check(kind("8/P6k/8/8/8/8/8/4K3 w - - 0 1", "a7a8q") === "promotion", "kind: promotion");
   check(kind("1n5k/P7/8/8/8/8/8/4K3 w - - 0 1", "a7b8q") === "promotion", "kind: capturing promotion");
+}
+
+// opening detection (names from the generated openings.json)
+{
+  const rows: OpeningRow[] = JSON.parse(readFileSync("public/openings.json", "utf8"));
+  const names = new Map(rows.map((r) => [r[0], r] as [number, OpeningRow]));
+  const play = (ucis: string[]) => {
+    const p = new Position(START_FEN);
+    const keys = [p.keyHash()];
+    const sans: string[] = [];
+    for (const u of ucis) {
+      const m = p.legalMoves().find((x) => moveToUci(x) === u)!;
+      sans.push(p.san(m));
+      p.make(m);
+      keys.push(p.keyHash());
+    }
+    return { keys, sans };
+  };
+  const ruy = play(["e2e4", "e7e5", "g1f3", "b8c6", "f1b5"]);
+  const d = detectOpening(names, ruy.keys, ruy.sans, 0);
+  check(!!d && /Ruy Lopez/.test(d.name ?? "") && d.line === "1. e4 e5 2. Nf3 Nc6 3. Bb5", "named opening found: " + d?.eco + " " + d?.name);
+  // the same position reached by a different move order is recognised too
+  const trans = play(["g1f3", "b8c6", "e2e4", "e7e5", "f1b5"]);
+  check(names.has(trans.keys[5]) && names.get(trans.keys[5])![2] === names.get(ruy.keys[5])![2], "transposition gives the same opening");
+  // leaving the named line keeps the name of the last named position and still lists the moves
+  const long = play(["e2e4", "e7e5", "g1f3", "b8c6", "f1b5", "a7a6", "b5a4", "g8f6", "e1g1", "f8e7", "f1e1", "b7b5", "a4b3", "d7d6", "c2c3", "e8g8"]);
+  const dl = detectOpening(names, long.keys, long.sans, 16);
+  check(!!dl && /Ruy Lopez/.test(dl.name ?? "") && dl.line.endsWith("8. c3 O-O"), "line continues past the last named position: " + dl?.line.slice(-28));
+  // no name known: just the moves of the book line
+  const unnamed = detectOpening(new Map(), ruy.keys, ruy.sans, 3);
+  check(!!unnamed && unnamed.name === undefined && unnamed.eco === undefined && unnamed.line === "1. e4 e5 2. Nf3", "no name: only the moves are shown: " + unnamed?.line);
+  check(detectOpening(new Map(), ruy.keys, ruy.sans, 0) === null, "no name and no book moves: nothing shown");
+  check(detectOpening(names, [new Position(START_FEN).keyHash()], [], 0) === null, "start position: nothing shown");
 }
 
 // game-end detection
