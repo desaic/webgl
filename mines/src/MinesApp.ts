@@ -5,7 +5,11 @@ import { GridMesh } from "./GridMesh";
 import { LeaderboardUI } from "./LeaderboardUI";
 import { DIFFICULTIES, FLAGGED, HIDDEN, REVEALED, Minesweeper } from "./Minesweeper";
 
-const CELL_PX = 32;
+// cells are drawn at up to MAX_CELL_PX css pixels, shrunk so the board fits the screen width
+const MAX_CELL_PX = 32;
+const MIN_CELL_PX = 8;
+// horizontal space taken by the window frame and page margins around the canvas
+const FRAME_PX = 24 + 16;
 const TILE_PX = 64;
 const ATLAS_N = 8;
 
@@ -153,6 +157,7 @@ function FormatTime(ms: number): string {
 
 export class MinesApp {
   private canvas: HTMLCanvasElement;
+  private cellPx = MAX_CELL_PX;
   private renderer: THREE.WebGLRenderer;
   private world: World;
   private material: THREE.MeshBasicMaterial;
@@ -200,6 +205,7 @@ export class MinesApp {
     canvas.addEventListener("auxclick", (e) => e.preventDefault());
     window.addEventListener("mouseup", (e) => this.onMouseUp(e));
     document.getElementById("lbBtn")!.addEventListener("click", () => this.leaderboard.show(this.diffEl.value));
+    window.addEventListener("resize", () => this.applyLayout());
     this.flagBtn.addEventListener("click", () => this.setFlagArmed(!this.flagArmed));
     this.faceEl.addEventListener("click", () => this.newGame());
     this.diffEl.addEventListener("change", () => this.newGame());
@@ -234,20 +240,30 @@ export class MinesApp {
     this.world.Add(this.boardMesh.mesh);
     this.world.SetBoardSize(cols, rows);
 
-    this.canvas.style.width = cols * CELL_PX + "px";
-    this.canvas.style.height = rows * CELL_PX + "px";
-    this.renderer.setSize(cols * CELL_PX, rows * CELL_PX);
-    document.getElementById("game")!.style.width = cols * CELL_PX + 24 + "px";
+    this.applyLayout();
 
     this.updateHud();
     this.refreshBoard();
   }
 
+  private applyLayout() {
+    const { cols, rows } = this.game;
+    const avail = document.documentElement.clientWidth - FRAME_PX;
+    this.cellPx = Math.max(MIN_CELL_PX, Math.min(MAX_CELL_PX, Math.floor(avail / cols)));
+    const w = cols * this.cellPx;
+    const h = rows * this.cellPx;
+    this.canvas.style.width = w + "px";
+    this.canvas.style.height = h + "px";
+    this.renderer.setSize(w, h);
+    document.getElementById("game")!.style.width = w + 24 + "px";
+    this.dirty = true;
+  }
+
   // grid cell under a mouse event, or null if outside the board
   private cellAt(e: MouseEvent): { x: number; y: number } | null {
     const r = this.canvas.getBoundingClientRect();
-    const x = Math.floor((e.clientX - r.left) / CELL_PX);
-    const y = this.game.rows - 1 - Math.floor((e.clientY - r.top) / CELL_PX);
+    const x = Math.floor((e.clientX - r.left) / this.cellPx);
+    const y = this.game.rows - 1 - Math.floor((e.clientY - r.top) / this.cellPx);
     return this.game.inBounds(x, y) ? { x, y } : null;
   }
 
