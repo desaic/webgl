@@ -100,7 +100,9 @@ function renderMoveList() {
 
 function onSquare(s: number) {
   if (!humanTurn()) return;
-  const move = targets.filter((m) => m.to === s);
+  // clicking another of your own pieces just selects it, whatever the move targets are
+  const own = pos.board[s] !== 0 && colorOf(pos.board[s]) === pos.turn;
+  const move = own ? [] : targets.filter((m) => m.to === s);
   if (selected >= 0 && move.length) {
     if (move.length > 1) {
       askPromotion(move); // four moves, one per promotion piece
@@ -393,7 +395,35 @@ function undo() {
   maybeEngineMove();
 }
 
+// PGN of the game so far, downloaded as a file
+function exportPgn() {
+  const d = new Date();
+  const p2 = (n: number) => String(n).padStart(2, "0");
+  const whiteName = humanColor === WHITE ? "Human" : "Engine";
+  const blackName = humanColor === WHITE ? "Engine" : "Human";
+  let result = "*";
+  const st = pos.status();
+  if (st === "checkmate") result = pos.turn === WHITE ? "0-1" : "1-0";
+  else if (st !== "playing") result = "1/2-1/2";
+  let body = "";
+  for (let i = 0; i < sans.length; i += 2) {
+    body += `${i / 2 + 1}. ${sans[i]}${sans[i + 1] ? " " + sans[i + 1] : ""} `;
+  }
+  const pgn =
+    `[Event "Casual game"]\n[Site "?"]\n` +
+    `[Date "${d.getFullYear()}.${p2(d.getMonth() + 1)}.${p2(d.getDate())}"]\n[Round "-"]\n` +
+    `[White "${whiteName}"]\n[Black "${blackName}"]\n` +
+    `[Result "${result}"]\n\n${body}${result}\n`;
+  const url = URL.createObjectURL(new Blob([pgn], { type: "application/x-chess-pgn" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "game.pgn";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 $("newGame").onclick = newGame;
+$("exportPgn").onclick = exportPgn;
 $("undo").onclick = undo;
 $("flip").onclick = () => {
   viewFlipped = !viewFlipped;

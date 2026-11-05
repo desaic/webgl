@@ -39,7 +39,7 @@ const X_STRIDE = 0.6; // between pieces in a row (along the board edge)
 const Z_STRIDE = 0.55; // between rows (away from the board)
 const TRAY_WIDTH = TRAY_PAD * 2 + TRAY_COLS * X_STRIDE;
 const TRAY_DEPTH = TRAY_PAD * 2 + TRAY_ROWS * Z_STRIDE;
-const LIFT = 0.35; // height of a piece while it is being dragged
+const LIFT = 0; // pieces are not raised while dragged
 
 export interface Highlights {
   selected: number; // -1 for none
@@ -77,6 +77,11 @@ export class Board3D {
   private rankLabels: THREE.Mesh[] = [];
   private dragSq = -1; // square of the piece being dragged, -1 if none
   private pointer = new THREE.Vector2();
+  // where the button went down; a piece is only selected on release (a click) or once the press has
+  // turned into a real drag, never on the press itself
+  private downAt: [number, number] | null = null;
+  private dragNotified = false;
+  private lastClient: [number, number] = [0, 0];
   private ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private ray = new THREE.Raycaster();
   private flipped = false;
@@ -114,12 +119,12 @@ export class Board3D {
     this.setFlipped(false);
 
     const el = this.renderer.domElement;
-    let downAt: [number, number] | null = null;
-    el.addEventListener("pointerdown", (e) => (downAt = [e.clientX, e.clientY]));
+    el.addEventListener("pointerdown", (e) => (this.downAt = [e.clientX, e.clientY]));
     el.addEventListener("pointerup", (e) => {
+      const downAt = this.downAt;
       if (!downAt) return;
       const moved = Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]);
-      downAt = null;
+      this.downAt = null;
       if (moved > 10) return;
       const s = this.pick(e.clientX, e.clientY);
       if (s >= 0) this.h.onSquare(s);
@@ -133,6 +138,7 @@ export class Board3D {
     const el = this.renderer.domElement;
     // registered before DragControls so the pointer is current when its drag handler runs
     const track = (e: PointerEvent) => {
+      this.lastClient = [e.clientX, e.clientY];
       const r = el.getBoundingClientRect();
       this.pointer.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     };
@@ -186,10 +192,8 @@ export class Board3D {
     this.drag.addEventListener("dragstart", (e: any) => {
       const sq = e.object.userData.sq as number;
       this.dragSq = this.h.canDrag(sq) ? sq : -1;
-      if (this.dragSq >= 0) {
-        this.orbit.enabled = false;
-        this.h.onDragStart(sq);
-      }
+      this.dragNotified = false;
+      if (this.dragSq >= 0) this.orbit.enabled = false;
     });
 
     this.drag.addEventListener("drag", (e: any) => {
@@ -197,6 +201,14 @@ export class Board3D {
       if (this.dragSq < 0) {
         // pieces that may not move stay put (and the gesture rotates the board instead)
         obj.position.copy(this.squarePos(obj.userData.sq));
+        return;
+      }
+      if (!this.dragNotified && this.downAt && Math.hypot(this.lastClient[0] - this.downAt[0], this.lastClient[1] - this.downAt[1]) > 10) {
+        this.dragNotified = true;
+        this.h.onDragStart(this.dragSq); // selects the piece so its targets show while it is carried
+      }
+      if (!this.dragNotified) {
+        obj.position.copy(this.squarePos(this.dragSq)); // still just a click: the piece stays put
         return;
       }
       this.followPointer(obj);
@@ -209,6 +221,12 @@ export class Board3D {
       this.dragSq = -1;
       if (from < 0) return;
       const obj = e.object as THREE.Object3D;
+      if (!this.dragNotified) {
+        // a click, not a drag: the piece never left its square and nothing is dropped
+        obj.position.copy(this.squarePos(from));
+        this.dirty = true;
+        return;
+      }
       this.followPointer(obj);
       this.setDropTarget(-1); // followPointer may have shown the box again
       const to = this.squareAt(obj.position);
