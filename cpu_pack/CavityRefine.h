@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PackingConfig.h"
+#include "Vec3.h"
 
 #include <string>
 #include <vector>
@@ -20,3 +21,10 @@
 /// Large fruit near the wall are never covered: only free space counts, never fruit surface.
 /// loads cfg.resumePackFile, writes pack_cavity_<pass>.txt and pack_cavity.txt to the output folder.
 bool RunCavityRefine(const PackingConfig &cfg, const std::vector<std::string> &mediumNames, bool metricOnly);
+
+/// compares sdf-sign stamping with surface voxelization + flood fill, per kind, at cfg.cavDx.
+bool RunStampCheck(const PackingConfig &cfg, const std::vector<std::string> &names);
+
+/// stamps one pose (quaternion wxyz) into the loaded pack and reports overlap, penetration and the
+/// change of the cavity objective in a window around it.
+bool RunCavityProbe(const PackingConfig &cfg, const std::string &kindName, const Vec3f &pos, const float q[4]);

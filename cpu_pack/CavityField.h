@@ -18,6 +18,7 @@ struct CavityParams {
   float R = 1.0f;          // tool ball and shaft radius (cm)
   float coneDeg = 70.0f;   // tool axis may tilt this far from the outward direction
   float minClear = 1.0f;   // an anchor needs a free ball this big (cm)
+  float sealClear = 0.5f;  // a passage needs this clearance to count as open (cm)
   float objClear = 0.3f;   // unreachable voxels count in the objective above this clearance (cm)
 };
 
@@ -63,3 +64,7 @@ std::vector<CavityComp> FindCavities(const CavityWindow &w, const Array3D8u &sol
 /// exact squared-distance transform helper: distance (cm) from every voxel to the nearest voxel
 /// where seed != 0. voxels outside the window are not seeds.
 void DistanceToSeeds(const Array3D8u &seed, float dx, Array3D<float> &dist);
+
+/// unreachable, air-connected cavity voxels (cav), clearance (D), and free voxels the tool does reach.
+void BuildCavMask(const CavityWindow &w, const Array3D8u &solid, const CavityParams &cp, Array3D<float> &D,
+                  Array3D8u &cav, Array3D8u &reachFree);

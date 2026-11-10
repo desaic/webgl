@@ -18,6 +18,34 @@ struct PackingConstraints;
 // padded grid size (see FindSpotSubgrid's cache) -- skips recomputing it.
 // Only ever pass true when the caller can guarantee that, since a stale
 // bg.fft silently produces wrong collision results, not an error.
+// contact score used instead of the sdf/position score when overlapHeuristic is on and enabled.
+// among collision-free positions it sums, over the 6 axis shifts of the eroded fruit, the overlap
+// with the items-only background (voxel faces that would touch), i.e. the contact area. a position
+// needs contact in at least minDirs of the 6 directions (each with at least minFace voxels), so
+// a fruit lying against one flat side does not win but one in a groove between two surfaces does.
+// score = contact area (cm2) + wallW * distance to the container wall (cm, capped at wallCap)
+// - posW * (x + y + z), the last as a tie breaker only.
+// one scored free position, the center position of the part (same convention as FindSpot's pos).
+struct SpotCand {
+  Vec3f pos;
+  float score;
+};
+
+struct SpotScoreParams {
+  bool enabled = false;
+  float wallW = 0.5f;
+  float wallCap = 10.0f;
+  float posW = 0.01f;
+  unsigned minDirs = 2;
+  unsigned minFace = 4;
+  // enclosure gate: fraction of a shell (shellCm thick) around the fruit occupied by fruit (items-only
+  // background, the container wall is ignored) must reach minBuried. a fruit resting on one convex surface
+  // blocks about a third of its shell or less, one in a dimple or groove blocks well over half.
+  float shellCm = 2.0f;
+  float minBuried = 0.6f;
+  float buriedW = 10.0f;   // score += buriedW * buried fraction
+};
+
 // voxelization of a rotated fruit, after thresholding and erosion and before the FFT reversal.
 // the same (kind, rotation) recurs for every cell, so FindSpot keeps these by mesh hash.
 struct FgCacheEntry {
@@ -41,7 +69,12 @@ bool FindSpot(MeshConvo &bg,
               bool overlapHeuristic = false,
               MeshConvo *itemsConv = nullptr,
               FgCache *fgCache = nullptr,
-              const std::function<MeshConvo *()> *itemsProvider = nullptr);
+              const std::function<MeshConvo *()> *itemsProvider = nullptr,
+              const SpotScoreParams *spotParams = nullptr,
+              float *outScore = nullptr,
+              std::vector<SpotCand> *outCands = nullptr,
+              float nmsCm = 0.0f,
+              unsigned maxCands = 0);
 
 // caches one cropped-background MeshConvo (voxels + FFT) across repeated
 // FindSpotSubgrid calls at the same cell, as long as the crop's own voxel
@@ -90,7 +123,12 @@ bool FindSpotSubgrid(MeshConvo &bg,
                      SubgridBgCache *cache = nullptr,
                      unsigned erodeVoxels = 0,
                      bool overlapHeuristic = false,
-                     MeshConvo *itemsBg = nullptr);
+                     MeshConvo *itemsBg = nullptr,
+                     const SpotScoreParams *spotParams = nullptr,
+                     float *outScore = nullptr,
+                     std::vector<SpotCand> *outCands = nullptr,
+                     float nmsCm = 0.0f,
+                     unsigned maxCands = 0);
 
 // part must be pre-rotated by the caller.
 bool FindSpotConstrained(MeshConvo &bg,

@@ -1,0 +1,30 @@
+Cavity refine: ideas to try (from review of the "bridge cap" suggestion)
+
+Keep
+- Cap, do not plug. Our spawn seeds the fruit at the max clearance point deep in the pocket and nudges it
+  inward, so it wedges and leaves two narrow wedges. A fruit that spans the mouth and sits on both rims hides
+  the pocket and costs one fruit.
+- Mouth extraction: mouth voxels = unreachable free voxels that touch tool-reachable free voxels. Cluster them;
+  per cluster get center m, width W (smallest PCA extent), slot direction (largest PCA extent) and outward
+  normal n (mean container sdf gradient, or mean direction from cavity into reachable air).
+- Cap kind filter: smallest extent of the fruit > ~1.25 * W (mirror of the current plug filter, which needs
+  inscribed radius <= clearance + 0.4). Try kinds from smallest to largest; stop at the first that clears the
+  objective. Fewer and smaller fruit.
+- Cap pose: long axis of the fruit along the slot direction, rolls about it; center at m + h*n.
+
+Change from the suggestion
+- No analytic h from sphere formulas (fruit are not spheres, rims are not circles). Start the fruit outside the
+  mouth along n and bisect h on the exact penetration test (Pen in CavityRefine.cpp) to the first contact.
+  Deterministic, no PBD, no gravity. Optional few steps of contact projection after.
+- No dihedral angle test. Accept by the exact objective (unreachable volume of the local window) as now.
+
+Metric gap to fix first (otherwise caps lose)
+- The objective counts every unreachable free voxel in the band, including pockets a cap seals shut. A sealed
+  void is invisible and needs no milling. Count only unreachable voxels connected to open air through free
+  voxels (flood from sd > 0 through free voxels with clearance >= ~0.1 cm). Then sealing a pocket scores as
+  a full win, which is what we want for caps.
+
+Other
+- Gap threshold 0.2 cm is below the voxel size (0.4). Use cavDx 0.2 on local windows only, or keep 0.4 and
+  count sealing as the real criterion.
+- Order: cap first (cheapest, biggest gain), then plug what remains, then relocate.

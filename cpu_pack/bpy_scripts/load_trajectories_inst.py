@@ -7,7 +7,7 @@ from mathutils import Matrix, Vector
 #trajectory_file = "/media/desaic/WD/meshes/fruit_hand/traj3_0719.txt"
 #trajectory_file = "F:/meshes/fruit_hand/out_hand_medium_8_14/traj2.txt"
 
-TRAJECTORY_FILE = "F:/meshes/fruit_hand/out_cavity2/traj_cavity.txt"
+TRAJECTORY_FILE = "F:/meshes/fruit_hand/out_x208_tool25d/traj_cavity.txt"
 
 def parse_transformation(line):
     tokens = line.split()

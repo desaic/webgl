@@ -147,15 +147,14 @@ void BuildCavityWindow(PackingScene &scene, const Box3f &box, const CavityParams
   }
 }
 
-std::vector<CavityComp> FindCavities(const CavityWindow &w, const Array3D8u &solid, const CavityParams &cp,
-                                     const Box3f *core, float *totalScore, Array3D<unsigned> *labels) {
+void BuildCavMask(const CavityWindow &w, const Array3D8u &solid, const CavityParams &cp, Array3D<float> &D,
+                  Array3D8u &cav, Array3D8u &reachFree) {
   const Vec3u s = w.size;
   const size_t n = solid.GetData().size();
   // tool model: a cylinder of radius R with a ball tip, axis within coneDeg of the outward
   // direction, comes in from the open air (everything outside the container, the wall is not a
   // thing). a free voxel is machined if it lies within R of a reachable tool center; the rest are
   // pockets and undercuts the tool cannot make.
-  Array3D<float> D;
   DistanceToSeeds(solid, w.dx, D);
   Array3D8u ok(s, 0);
   for (size_t i = 0; i < n; i++) ok.GetData()[i] = (!solid.GetData()[i] && D.GetData()[i] >= cp.R) ? 1 : 0;
@@ -219,13 +218,58 @@ std::vector<CavityComp> FindCavities(const CavityWindow &w, const Array3D8u &sol
     }
   Array3D<float> reach;
   DistanceToSeeds(centers, w.dx, reach);
-  Array3D8u cav(s, 0);
+  cav.Allocate(s, 0);
+  reachFree.Allocate(s, 0);
   for (size_t i = 0; i < n; i++) {
+    reachFree.GetData()[i] = (!solid.GetData()[i] && reach.GetData()[i] <= cp.R) ? 1 : 0;
     cav.GetData()[i] = (!solid.GetData()[i] && !w.wall.GetData()[i] && reach.GetData()[i] > cp.R &&
                         w.depth.GetData()[i] <= cp.band)
                            ? 1
                            : 0;
   }
+  // sealed voids are invisible and need no milling: keep only unreachable voxels connected to
+  // the open air through free voxels with a passage wider than sealClear.
+  Array3D8u seen(s, 0);
+  std::vector<std::array<int, 3>> stack;
+  for (unsigned k = 0; k < s[2]; k++)
+    for (unsigned j = 0; j < s[1]; j++)
+      for (unsigned i = 0; i < s[0]; i++)
+        if (w.sd(i, j, k) > 0.0f && !solid(i, j, k) && D(i, j, k) >= cp.sealClear) {
+          seen(i, j, k) = 1;
+          stack.push_back({int(i), int(j), int(k)});
+        }
+  const int nb[6][3] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+  while (!stack.empty()) {
+    const auto p = stack.back();
+    stack.pop_back();
+    for (const auto &o : nb) {
+      const int x = p[0] + o[0], y = p[1] + o[1], z = p[2] + o[2];
+      if (x < 0 || y < 0 || z < 0 || x >= int(s[0]) || y >= int(s[1]) || z >= int(s[2])) continue;
+      if (seen(x, y, z) || solid(x, y, z) || D(x, y, z) < cp.sealClear) continue;
+      seen(x, y, z) = 1;
+      stack.push_back({x, y, z});
+    }
+  }
+  for (unsigned k = 0; k < s[2]; k++)
+    for (unsigned j = 0; j < s[1]; j++)
+      for (unsigned i = 0; i < s[0]; i++) {
+        if (!cav(i, j, k)) continue;
+        bool open = seen(i, j, k);
+        for (int d = 0; d < 6 && !open; d++) {
+          const int x = int(i) + nb[d][0], y = int(j) + nb[d][1], z = int(k) + nb[d][2];
+          if (x < 0 || y < 0 || z < 0 || x >= int(s[0]) || y >= int(s[1]) || z >= int(s[2])) continue;
+          open = seen(x, y, z);
+        }
+        if (!open) cav(i, j, k) = 0;
+      }
+}
+
+std::vector<CavityComp> FindCavities(const CavityWindow &w, const Array3D8u &solid, const CavityParams &cp,
+                                     const Box3f *core, float *totalScore, Array3D<unsigned> *labels) {
+  const Vec3u s = w.size;
+  Array3D<float> D;
+  Array3D8u cav, reachFree;
+  BuildCavMask(w, solid, cp, D, cav, reachFree);
   (void)labels;
   std::vector<CavityComp> out;
   const float vox = w.dx * w.dx * w.dx;

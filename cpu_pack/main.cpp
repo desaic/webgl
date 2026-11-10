@@ -92,6 +92,18 @@ int main(int argc, char *argv[]) {
     if (argc > 2) cfg.ParseArgs(argc - 1, argv + 1);
     return RunMediumGraph(cfg, plan.groups[2], std::string(argv[1]) == "--medium-nudge") ? 0 : 1;
   }
+  if (argc > 1 && std::string(argv[1]) == "--cavity-stamp-check") {
+    SetLogLevel(LOG_INFO);
+    if (argc > 2) cfg.ParseArgs(argc - 1, argv + 1);
+    return RunStampCheck(cfg, plan.groups[cfg.oldWayGroup]) ? 0 : 1;
+  }
+  if (argc > 9 && std::string(argv[1]) == "--cavity-probe") {
+    // --cavity-probe kind x y z w qx qy qz [cfg args]
+    SetLogLevel(LOG_INFO);
+    if (argc > 10) cfg.ParseArgs(argc - 9, argv + 9);
+    const float q[4] = {float(atof(argv[6])), float(atof(argv[7])), float(atof(argv[8])), float(atof(argv[9]))};
+    return RunCavityProbe(cfg, argv[2], Vec3f(float(atof(argv[3])), float(atof(argv[4])), float(atof(argv[5]))), q) ? 0 : 1;
+  }
   if (argc > 1 && (std::string(argv[1]) == "--cavity-metric" || std::string(argv[1]) == "--cavity-refine")) {
     std::cout.setf(std::ios::unitbuf);
     SetLogLevel(LOG_INFO);
@@ -154,7 +166,7 @@ int main(int argc, char *argv[]) {
     step.erodeVoxels = cfg.oldWayErode;
     step.nudgeInward = true;
     step.useInnerContainer = cfg.oldWayInner;
-    step.overlapHeuristic = cfg.oldWayOverlap;
+    step.overlapHeuristic = cfg.oldWayOverlap || cfg.snugScore;
     plan.steps.clear();
     plan.steps.push_back(step);
     cfg.startStep = 0;

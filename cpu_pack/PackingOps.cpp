@@ -48,7 +48,9 @@ Vec3f GetDisplacement(Vec3u gridIdx, float dx, Vec3u fgSize, Vec3f fgOrigin, Vec
 bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos,
               std::shared_ptr<AdapSDF> sdf, float factor, bool bgFftReady,
               unsigned erodeVoxels, bool overlapHeuristic, MeshConvo *itemsConv,
-              FgCache *fgCache, const std::function<MeshConvo *()> *itemsProvider) {
+              FgCache *fgCache, const std::function<MeshConvo *()> *itemsProvider,
+              const SpotScoreParams *spotParams, float *outScore,
+              std::vector<SpotCand> *outCands, float nmsCm, unsigned maxCands) {
   PROFILE_SCOPE("findspot.total");
   float dx = bg.dx;
 
@@ -156,7 +158,13 @@ bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos,
   }
   const Array3Df &nbrConv = (overlapHeuristic && items) ? convItems : conv;
   const float score0 = -1e6f;
-  
+  const bool snug = spotParams != nullptr && spotParams->enabled;
+  struct Scored {
+    float score;
+    unsigned x, y, z;
+  };
+  std::vector<Scored> scored;
+
   float highScore = score0;
   Vec3u bestPos(0);
   // overlapHeuristic: best neighbor overlap count so far (voxels), -1 = none.
@@ -185,6 +193,36 @@ bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos,
           collSlice(x,y) = collision(x,y,z);
         }
         if (collision(x, y, z) > 0) {
+          continue;
+        }
+        if (overlapHeuristic && snug) {
+          static const int kShift[6][3] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+          float total = 0.0f;
+          unsigned dirs = 0;
+          for (const auto &s : kShift) {
+            const int nx = int(x) + s[0], ny = int(y) + s[1], nz = int(z) + s[2];
+            if (nx < int(fgSize[0]) - 1 || ny < int(fgSize[1]) - 1 || nz < int(fgSize[2]) - 1 ||
+                nx >= int(searchEnd[0]) || ny >= int(searchEnd[1]) || nz >= int(searchEnd[2])) {
+              continue;
+            }
+            const float c = std::max(0.0f, nbrConv(nx, ny, nz));
+            total += c;
+            if (c >= float(spotParams->minFace)) dirs++;
+          }
+          if (dirs < spotParams->minDirs) continue;
+          Vec3f disp = GetDisplacement(Vec3u(x, y, z), dx, fgSize, fg.GetOrigin(), bg.GetOrigin());
+          Vec3f coord = disp + meshCenter;
+          // the container sdf is negative inside; far from the wall scores higher.
+          float d = sdf->GetCoarseDist(coord);
+          const float wallDist = (d >= 32766.0f || d > 0.0f) ? 0.0f : std::min(-d, spotParams->wallCap);
+          const float score = total * dx * dx + spotParams->wallW * wallDist -
+                              spotParams->posW * (coord[0] + coord[1] + coord[2]);
+          if (outCands) scored.push_back({score, x, y, z});
+          if (score > highScore) {
+            highScore = score;
+            bestPos = Vec3u(x, y, z);
+            havePos = true;
+          }
           continue;
         }
         if (overlapHeuristic) {
@@ -231,9 +269,82 @@ bool FindSpot(MeshConvo &bg, const TrigMesh &part, Vec3f &pos,
 
   (void)debugSlice;
   (void)collSlice;
+  if (outCands && !scored.empty()) {
+    // enclosure of one candidate: occupied fraction of a shell around the fruit in the items-only background.
+    // fg.vox is reversed, so reversed index j sits on background voxel (x - j), see the conv above.
+    std::vector<Vec3i> shell;
+    const bool gate = snug && items != nullptr && spotParams->minBuried > 0.0f;
+    if (gate) {
+      const int iters = std::max(1, int(std::ceil(spotParams->shellCm / dx)));
+      const Vec3u fs = fg.vox.GetSize();
+      const Vec3u ps(fs[0] + 2 * iters, fs[1] + 2 * iters, fs[2] + 2 * iters);
+      Array3D8u cur(ps, 0);
+      for (unsigned z = 0; z < fs[2]; z++)
+        for (unsigned y = 0; y < fs[1]; y++)
+          for (unsigned x = 0; x < fs[0]; x++)
+            if (fg.vox(x, y, z)) cur(x + iters, y + iters, z + iters) = 1;
+      Array3D8u grown = cur;
+      for (int it = 0; it < iters; it++) {
+        Array3D8u next = grown;
+        for (unsigned z = 1; z + 1 < ps[2]; z++)
+          for (unsigned y = 1; y + 1 < ps[1]; y++)
+            for (unsigned x = 1; x + 1 < ps[0]; x++)
+              if (!grown(x, y, z) && (grown(x - 1, y, z) || grown(x + 1, y, z) || grown(x, y - 1, z) ||
+                                     grown(x, y + 1, z) || grown(x, y, z - 1) || grown(x, y, z + 1)))
+                next(x, y, z) = 1;
+        grown = next;
+      }
+      for (unsigned z = 0; z < ps[2]; z++)
+        for (unsigned y = 0; y < ps[1]; y++)
+          for (unsigned x = 0; x < ps[0]; x++)
+            if (grown(x, y, z) && !cur(x, y, z)) shell.push_back(Vec3i(int(x) - iters, int(y) - iters, int(z) - iters));
+    }
+    const Vec3u itemsSize = gate ? items->vox.GetSize() : Vec3u(0);
+    auto buried = [&](unsigned x, unsigned y, unsigned z) {
+      if (!gate || shell.empty()) return 1.0f;
+      size_t occ = 0;
+      for (const Vec3i &o : shell) {
+        const int bx = int(x) - o[0], by = int(y) - o[1], bz = int(z) - o[2];
+        if (bx < 0 || by < 0 || bz < 0 || bx >= int(itemsSize[0]) || by >= int(itemsSize[1]) ||
+            bz >= int(itemsSize[2]))
+          continue;
+        occ += items->vox(unsigned(bx), unsigned(by), unsigned(bz)) ? 1 : 0;
+      }
+      return float(occ) / float(shell.size());
+    };
+
+    // best first, keeping only local maxima: a candidate is dropped when a better one is within nmsCm.
+    std::sort(scored.begin(), scored.end(), [](const Scored &a, const Scored &b) { return a.score > b.score; });
+    const float r2 = (nmsCm / dx) * (nmsCm / dx);
+    std::vector<Scored> kept;
+    std::vector<Scored> accepted;
+    unsigned examined = 0;
+    for (const Scored &s : scored) {
+      bool near = false;
+      for (const Scored &k : kept) {
+        const float ddx = float(s.x) - float(k.x), ddy = float(s.y) - float(k.y), ddz = float(s.z) - float(k.z);
+        if (ddx * ddx + ddy * ddy + ddz * ddz < r2) {
+          near = true;
+          break;
+        }
+      }
+      if (near) continue;
+      kept.push_back(s);
+      if (maxCands > 0 && ++examined > 6 * maxCands) break;
+      const float b = buried(s.x, s.y, s.z);
+      if (gate && b < spotParams->minBuried) continue;
+      Scored a = s;
+      a.score += gate ? spotParams->buriedW * b : 0.0f;
+      accepted.push_back(a);
+      outCands->push_back({GetDisplacement(Vec3u(s.x, s.y, s.z), dx, fg.vox.GetSize(), fg.GetOrigin(), bg.GetOrigin()), a.score});
+      if (maxCands > 0 && accepted.size() >= maxCands) break;
+    }
+    return !accepted.empty();
+  }
   bool found = overlapHeuristic ? havePos : (highScore > score0);
   if (found) {
     pos = GetDisplacement(bestPos, dx, fg.vox.GetSize(), fg.GetOrigin(), bg.GetOrigin());
+    if (outScore) *outScore = highScore;
   }
   return found;
 }
@@ -401,7 +512,12 @@ bool FindSpotSubgrid(MeshConvo &bg,
                      SubgridBgCache *cache,
                      unsigned erodeVoxels,
                      bool overlapHeuristic,
-                     MeshConvo *itemsBg) {
+                     MeshConvo *itemsBg,
+                     const SpotScoreParams *spotParams,
+                     float *outScore,
+                     std::vector<SpotCand> *outCands,
+                     float nmsCm,
+                     unsigned maxCands) {
   PROFILE_SCOPE("findspot_subgrid.total");
   Box3f itemBox = ComputeBBox(part.v);
   Vec3f itemExtent = itemBox.vmax - itemBox.vmin;
@@ -549,7 +665,7 @@ bool FindSpotSubgrid(MeshConvo &bg,
   Vec3f foundPos;
   bool found = FindSpot(tempConv, *partPtr, foundPos, sdf, factor, cache != nullptr, erodeVoxels,
                          overlapHeuristic, nullptr, cache != nullptr ? &cache->fgCache : nullptr,
-                         itemsProvider ? &itemsProvider : nullptr);
+                         itemsProvider ? &itemsProvider : nullptr, spotParams, outScore, outCands, nmsCm, maxCands);
   if (!found) {
     return false;
   }

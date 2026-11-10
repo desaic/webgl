@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pack Viewer</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <aside id="panel">
+        <section>
+          <h3>Files</h3>
+          <div class="row"><input id="dir" spellcheck="false" /><button id="dirGo">Go</button></div>
+          <div class="row small">
+            <button id="dirUp">Up</button>
+            <button id="setMeshDir" title="use this folder as the fruit mesh folder for pack files">Use as fruits dir</button>
+          </div>
+          <div id="files"></div>
+          <div class="hint">txt = load pack or trajectory. obj/stl = pick a file (then use Container below)</div>
+        </section>
+        <section>
+          <h3>Container</h3>
+          <div class="row"><input id="contPath" placeholder="pick an obj/stl above, or paste a path" spellcheck="false" /></div>
+          <div class="row small">
+            <button id="contSet" title="replace all containers with this file">Set container</button>
+            <button id="contAdd" title="add this file as an extra container mesh">Add extra</button>
+          </div>
+          <div id="contList"></div>
+        </section>
+        <section>
+          <h3>Loaded</h3>
+          <div class="kv"><span>pack</span><span id="packName">-</span></div>
+          <div class="kv"><span>fruits dir</span><span id="meshDirLbl">-</span></div>
+          <div class="row small"><button id="reload">Reload</button><label><input type="checkbox" id="autoReload" /> auto</label></div>
+        </section>
+        <section id="trajSec" hidden>
+          <h3>Trajectory</h3>
+          <div class="row"><button id="play">Play</button><input type="range" id="step" min="0" max="0" value="0" /></div>
+          <div class="kv"><span>step</span><span id="stepLbl">0</span></div>
+        </section>
+        <section>
+          <h3>View</h3>
+          <label class="row">container <input type="range" id="contOpacity" min="0" max="1" step="0.02" value="0.25" /></label>
+          <label class="row">fruit <input type="range" id="fruitOpacity" min="0.05" max="1" step="0.02" value="1" /></label>
+          <label><input type="checkbox" id="wire" /> wireframe fruits</label>
+          <label><input type="checkbox" id="contWire" /> wireframe container</label>
+          <label><input type="checkbox" id="contShow" checked /> show container</label>
+          <label><input type="checkbox" id="labels" /> labels</label>
+          <label><input type="checkbox" id="cull" checked /> cull hidden cells <span id="cullInfo" class="hint"></span></label>
+          <div class="row">
+            <label><input type="checkbox" id="clip" /> clip</label>
+            <select id="clipAxis"><option>x</option><option>y</option><option selected>z</option></select>
+            <button id="clipFlip">flip</button>
+          </div>
+          <input type="range" id="clipPos" min="0" max="1" step="0.001" value="0.5" style="width:100%" />
+          <div class="row small">
+            <button id="fit">Fit</button>
+            <button id="shot">PNG</button>
+            <button id="link">Copy link</button>
+          </div>
+        </section>
+        <section>
+          <h3>Selection</h3>
+          <div id="selInfo">click an object</div>
+          <div class="row small">
+            <button id="hideSel">Hide</button>
+            <button id="isoSel">Isolate</button>
+            <button id="showAll">Show all</button>
+            <button id="focusSel">Focus</button>
+          </div>
+          <div class="row small">
+            <button id="modeMove" class="on" title="W">Move</button>
+            <button id="modeRot" title="E">Rotate</button>
+            <button id="spaceBtn" title="toggle gizmo space">local</button>
+            <button id="collSel" title="K key: list touching neighbors and penetration depth">Collisions</button>
+            <button id="copySel" title="C key: duplicate as name_N">Copy</button>
+            <button id="delSel" title="Delete key">Delete</button>
+          </div>
+          <pre id="collInfo" class="hint"></pre>
+          <div class="row small">
+            <button id="exportPack">Save new_pack.txt</button>
+            <span id="editInfo" class="hint"></span>
+          </div>
+        </section>
+        <section class="grow">
+          <div class="tabs">
+            <button id="tabInst" class="on">Instances <span id="count"></span></button>
+            <button id="tabFruit">Fruits <span id="fruitCount"></span></button>
+          </div>
+          <div id="paneInst" class="pane">
+            <input id="filter" placeholder="filter" spellcheck="false" />
+            <div id="list"></div>
+          </div>
+          <div id="paneFruit" class="pane" hidden>
+            <div class="row">
+              <input id="fruitFilter" placeholder="filter by name" spellcheck="false" />
+              <select id="fruitGroup"><option value="">all sizes</option></select>
+            </div>
+            <div id="fruitList"></div>
+            <div class="hint">click a fruit to spawn it at the view center</div>
+          </div>
+        </section>
+        <div id="status"></div>
+      </aside>
+      <main id="view">
+        <div id="floatBar">
+          <button id="floatMode" title="toggle gizmo: move / rotate (W, E)">Move/Rotate</button>
+          <button id="floatSave" title="download the current state as new_pack.txt">Save new_pack.txt</button>
+        </div>
+      </main>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

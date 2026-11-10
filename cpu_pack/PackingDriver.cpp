@@ -25,6 +25,7 @@
 #include <limits>
 #include <map>
 #include <numeric>
+#include <random>
 #include <cstdint>
 #include <unordered_map>
 #include <unordered_set>
@@ -202,6 +203,54 @@ static const Vec3f kSphereRotations[3] = {
   {0.0f, 1.5707963f, 0.0f}
 };
 
+// up to n distinct rotations of the 24 element cube group, as XYZ euler angles in multiples of
+// 90 degrees (RotationMatrixRad). picked by farthest point sampling on the rotation angle so they
+// are as different from each other as possible.
+static std::vector<Vec3f> DistinctRotations(unsigned n) {
+  const float q = 1.5707963f;
+  std::vector<Vec3f> eul;
+  std::vector<Matrix3f> mats;
+  for (int a = 0; a < 4; a++)
+    for (int b = 0; b < 4; b++)
+      for (int c = 0; c < 4; c++) {
+        const Matrix3f m = RotationMatrixRad(a * q, b * q, c * q);
+        bool dup = false;
+        for (const Matrix3f &o : mats) {
+          float diff = 0.0f;
+          for (int i = 0; i < 3; i++)
+            for (int j = 0; j < 3; j++) diff += std::fabs(m(i, j) - o(i, j));
+          if (diff < 1e-3f) dup = true;
+        }
+        if (!dup) {
+          mats.push_back(m);
+          eul.push_back(Vec3f(a * q, b * q, c * q));
+        }
+      }
+  auto angle = [&](const Matrix3f &a, const Matrix3f &b) {
+    float tr = 0.0f;
+    for (int i = 0; i < 3; i++)
+      for (int j = 0; j < 3; j++) tr += a(i, j) * b(i, j);
+    return std::acos(std::max(-1.0f, std::min(1.0f, 0.5f * (tr - 1.0f))));
+  };
+  std::vector<Vec3f> out;
+  std::vector<size_t> chosen = {0};
+  while (chosen.size() < std::min<size_t>(n, mats.size())) {
+    size_t best = 0;
+    float bestMin = -1.0f;
+    for (size_t i = 0; i < mats.size(); i++) {
+      float mn = 1e9f;
+      for (size_t j : chosen) mn = std::min(mn, angle(mats[i], mats[j]));
+      if (mn > bestMin) {
+        bestMin = mn;
+        best = i;
+      }
+    }
+    chosen.push_back(best);
+  }
+  for (size_t i : chosen) out.push_back(eul[i]);
+  return out;
+}
+
 bool BuildScene(PackingScene &scene, const PackingConfig &cfg, bool lazyItems) {
   std::string meshDir = cfg.MeshDir();
   if (!fs::exists(meshDir)) {
@@ -267,7 +316,7 @@ void PrepareBackground(PackingScene &scene, const PackingConfig &cfg) {
   scene.bg.SetMeshPtr(&scene.container.mesh);
   scene.bg.Voxelize(scene.dx);
   InvertContainer(scene.bg.vox, 1);
-  if (cfg.oldWayOverlap) {
+  if (cfg.oldWayOverlap || cfg.snugScore) {
     // second grid without the container wall, for the overlap heuristic.
     scene.itemsBg = MeshConvo();
     scene.itemsBg.box = scene.bg.box;
@@ -312,6 +361,21 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
   }
 
   float sdfFactor = step.outwards ? 1.0f : -1.0f;
+  SpotScoreParams spotParams;
+  spotParams.enabled = cfg.snugScore;
+  spotParams.wallW = cfg.snugWallW;
+  spotParams.wallCap = cfg.snugWallCap;
+  spotParams.posW = cfg.snugPosW;
+  spotParams.minDirs = cfg.snugMinDirs;
+  spotParams.minFace = cfg.snugMinFace;
+  spotParams.shellCm = cfg.snugShellCm;
+  spotParams.minBuried = cfg.snugMinBuried;
+  spotParams.buriedW = cfg.snugBuriedW;
+  std::vector<Vec3f> snugRots;
+  if (cfg.snugScore) {
+    snugRots = DistinctRotations(cfg.snugRotations);
+    LOGI("snug score on, " << snugRots.size() << " distinct rotations per cell\n");
+  }
   if (step.useInnerContainer) {
     Utils::Stopwatch innerClock;
     innerClock.Start();
@@ -386,45 +450,89 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
     lastReportMs = stepClock.ElapsedMS();
   };
 
-  for (; placedCount < step.count; round++) {
-    if (cfg.maxSecondsPerStep > 0.0 && stepClock.ElapsedMS() / 1000.0 > cfg.maxSecondsPerStep) {
-      outOfTime = true;
-      break;
+  // geometric wrap of a fruit pose (see snugMinWrap in PackingConfig.h): touching fraction * (1 - |mean outward
+  // normal|), over the surface samples within snugTouchCm of a neighbor. fruit only: the container wall does not
+  // count, and only the first wrapBase instances count so fruit placed during this step never make a spot qualify.
+  size_t wrapBase = ~size_t(0);
+  auto computeWrap = [&](unsigned itemIndex, const RigidTransform &t, size_t maxInst, unsigned skip) -> float {
+    MeshInfo &item = scene.items[itemIndex];
+    scene.EnsureItemSamples(itemIndex);
+    if (item.samples.empty()) return 0.0f;
+    const Box3f box = ComputeBBox(MakeTransformedMesh(item.mesh, t).v);
+    const std::vector<unsigned> near = scene.broadPhase.GetNearby(box, cfg.snugTouchCm + 0.5f);
+    Vec3f sum(0.0f);
+    size_t touching = 0;
+    for (const SamplePoint &sp : item.samples) {
+      const Vec3f w = t.rotation * sp.x + t.position;
+      float best = cfg.snugTouchCm;
+      Vec3f bestN(0.0f);
+      bool hit = false;
+      for (unsigned j : near) {
+        if (j >= maxInst || j == skip) continue;
+        const InstanceInfo &o = scene.instances[j];
+        const MeshInfo &oi = scene.items[o.itemId];
+        if (!oi.sdf) continue;
+        const Matrix3f inv = o.tran.rotation.transposed();
+        const Vec3f local = inv * (w - o.tran.position);
+        const float dd = oi.sdf->GetCoarseDist(local);
+        if (dd < best && dd > -0.3f) {
+          Vec3f g = oi.sdf->GetCoarseGrad(local);
+          if (g.norm() < 1e-6f) continue;
+          g.normalize();
+          best = dd;
+          bestN = o.tran.rotation * g;
+          hit = true;
+        }
+      }
+      if (hit) {
+        sum += bestN;
+        touching++;
+      }
     }
-    bool packSuccess = false;
-    for (unsigned i = startItem; i < numItems; i++) {
-      if (placedCount >= step.count) {
-        break;
+    const float frac = float(touching) / float(item.samples.size());
+    const float R = touching > 0 ? sum.norm() / float(touching) : 1.0f;
+    return frac * (1.0f - R);
+  };
+  // deepest sample inside any neighbor (fruit and exclusion mesh, except skip) or outside the container, in cm.
+  auto worstPenetration = [&](unsigned itemIndex, const RigidTransform &t, unsigned skip) -> float {
+    MeshInfo &item = scene.items[itemIndex];
+    const Box3f box = ComputeBBox(MakeTransformedMesh(item.mesh, t).v);
+    const std::vector<unsigned> near = scene.broadPhase.GetNearby(box, 0.5f);
+    float worst = 0.0f;
+    for (const SamplePoint &sp : item.samples) {
+      const Vec3f w = t.rotation * sp.x + t.position;
+      worst = std::max(worst, scene.sdf->GetCoarseDist(w));
+      for (unsigned j : near) {
+        if (j == skip) continue;
+        const InstanceInfo &o = scene.instances[j];
+        const MeshInfo &oi = scene.items[o.itemId];
+        if (!oi.sdf) continue;
+        const float dd = oi.sdf->GetCoarseDist(o.tran.rotation.transposed() * (w - o.tran.position));
+        if (dd < 0.0f) worst = std::max(worst, -dd);
       }
-      // checked per kind, not just once per round -- a single kind can walk
-      // its entire subgrid (up to numCells*maxTrialCount searches) before
-      // giving up, which on its own can take far longer than the round-level
-      // check above allows for.
-      if (cfg.maxSecondsPerStep > 0.0 && stepClock.ElapsedMS() / 1000.0 > cfg.maxSecondsPerStep) {
-        outOfTime = true;
-        break;
-      }
-      unsigned nameIndex = (i + startNameIndex) % numItems;
-      std::string name = step.names[nameIndex];
-      unsigned itemIndex = scene.GetItemIndex(name);
+    }
+    return worst;
+  };
+  bool packSuccess = false;
+  auto placeAt = [&](unsigned itemIndex, const Vec3f &p, const Vec3f &r) -> bool {
       MeshInfo &item = scene.items[itemIndex];
-      if (item.noMoreFit) {
-        continue;
-      }
-      Vec3f itemExtent = item.box.vmax - item.box.vmin;
-      float itemMaxExtent = std::max({itemExtent[0], itemExtent[1], itemExtent[2]});
-      unsigned totalCells = scene.numSubgridCells[0] * scene.numSubgridCells[1]
-                            * scene.numSubgridCells[2];
-      bool useSubgrid = (totalCells > 0 && itemMaxExtent < scene.subgridCellSize);
-
-      auto placeItem = [&](const Vec3f &p, const Vec3f &r) -> bool {
         RigidTransform tran;
         tran.position = p;
         tran.rotation = RotationMatrixRad(r[0], r[1], r[2]);
         double settleStartMs = stepClock.ElapsedMS();
         std::vector<RigidTransform> trajectory;
         RigidTransform newTran;
-        if (!surfacePoints.empty()) {
+        if (cfg.snugScore) {
+          // the spot search already picked a snug pocket: no inward drift, only a short contact settle
+          // (attraction toward touching neighbors, no push direction) to close the voxel gap and turn into the groove.
+          newTran = cfg.snugNudgeSteps > 0
+                        ? scene.Nudge(itemIndex, tran, Vec3f(0, 0, 0), 0.0f, trajectory, nullptr, cfg.snugNudgeSteps)
+                        : tran;
+          if (cfg.snugPlan && computeWrap(itemIndex, newTran, wrapBase, ~0u) < cfg.snugMinWrap) {
+            // the settle left the pocket: keep the planned pose
+            newTran = tran;
+          }
+        } else if (!surfacePoints.empty()) {
           Vec3f target = NearestKCenter(surfacePoints, p, 5);
           newTran = scene.NudgeToTarget(itemIndex, tran, target, trajectory);
         } else {
@@ -467,8 +575,8 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
               SignedOverlapFraction(scene, item.box, item.samples, newTran.rotation, newTran.position);
           float engulfFrac =
               ExistingInsideCandidateFraction(scene, item.box, newTran.rotation, newTran.position, item.sdf);
-          if (outsideFracAfter > kContainerOutsideThresh || occFracAfter > kOccupiedThresh ||
-              engulfFrac > kOccupiedThresh) {
+          const float occLimit = cfg.snugPlan ? cfg.snugPostOverlap : kOccupiedThresh;
+          if (outsideFracAfter > kContainerOutsideThresh || occFracAfter > occLimit || engulfFrac > occLimit) {
             LOGI("  rejected " << item.name << " settle at (" << newTran.position[0] << " "
                                << newTran.position[1] << " " << newTran.position[2]
                                << "): outside=" << outsideFracAfter << " occ=" << occFracAfter
@@ -503,7 +611,278 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
           scene.SaveInstances(packFile);
         }
         return true;
+        };
+
+  // ---- snug plan: score the untouched starting pack once, then place best first ----
+  bool planDone = false;
+  if (cfg.snugScore && cfg.snugPlan && !snugRots.empty() && !scene.itemsBg.vox.GetData().empty()) {
+    struct PlanCand {
+      float score;
+      Vec3f pos;
+      Vec3f rot;
+      unsigned item;
+      float wrap = 0.0f;
+    };
+    std::vector<PlanCand> plan;
+    wrapBase = scene.instances.size();
+    const unsigned planCells = scene.numSubgridCells[0] * scene.numSubgridCells[1] * scene.numSubgridCells[2];
+    // the background does not change while planning, so one empty count pass serves every kind
+    UpdateCellEmptyCounts(subgridCache, scene.bg, scene.subgridCellSize, scene.numSubgridCells);
+    for (unsigned n = 0; n < numItems; n++) {
+      const unsigned itemIndex = scene.GetItemIndex(step.names[n]);
+      MeshInfo &item = scene.items[itemIndex];
+      const unsigned eroded = step.erodeVoxels;
+      const unsigned itemVox = CountItemVoxels(item, scene.dx, eroded);
+      const size_t before = plan.size();
+      for (unsigned cell = 0; cell < planCells; cell++) {
+        if (cfg.oldWayMedium) {
+          const float cellMinX = scene.bg.box.vmin[0] +
+                                 float(cell % scene.numSubgridCells[0]) * scene.subgridCellSize;
+          if (cellMinX >= cfg.sphereMaxX) continue;
+        }
+        if (cell < subgridCache.cellEmptyCounts.size() && subgridCache.cellEmptyCounts[cell] < itemVox) continue;
+        for (const Vec3f &rot : snugRots) {
+          searches++;
+          TrigMesh rotatedMesh = item.mesh;
+          TransformVerts(item.mesh.v, rotatedMesh.v, RotationMatrixRad(rot[0], rot[1], rot[2]));
+          Vec3f pos;
+          std::vector<SpotCand> cands;
+          if (FindSpotSubgrid(scene.bg, rotatedMesh, pos, scene.sdf, sdfFactor, scene.subgridCellSize, cell,
+                              scene.numSubgridCells, &subgridCache, eroded, true, &scene.itemsBg, &spotParams,
+                              nullptr, &cands, cfg.snugPlanNms, cfg.snugPlanMax)) {
+            for (const SpotCand &c : cands) {
+              if (c.pos[0] >= cfg.sphereMaxX) continue;
+              plan.push_back({c.score, c.pos, rot, itemIndex});
+            }
+          }
+        }
+      }
+      LOGI("  planned " << item.name << ": " << plan.size() - before << " candidates\n");
+    }
+    // best first. neighboring cells see the same pocket, so drop repeats of the same kind and rotation.
+    std::sort(plan.begin(), plan.end(), [](const PlanCand &a, const PlanCand &b) { return a.score > b.score; });
+    std::vector<PlanCand> uniq;
+    std::unordered_map<uint64_t, std::vector<size_t>> hash;
+    auto cellKey = [](int x, int y, int z) {
+      return (uint64_t(uint32_t(x + 4096)) << 42) ^ (uint64_t(uint32_t(y + 4096)) << 21) ^ uint64_t(uint32_t(z + 4096));
+    };
+    for (const PlanCand &c : plan) {
+      const int cx = int(std::floor(c.pos[0] / 2.0f)), cy = int(std::floor(c.pos[1] / 2.0f)),
+                cz = int(std::floor(c.pos[2] / 2.0f));
+      bool dup = false;
+      for (int dx = -1; dx <= 1 && !dup; dx++)
+        for (int dy = -1; dy <= 1 && !dup; dy++)
+          for (int dz = -1; dz <= 1 && !dup; dz++) {
+            auto it = hash.find(cellKey(cx + dx, cy + dy, cz + dz));
+            if (it == hash.end()) continue;
+            for (size_t k : it->second) {
+              const PlanCand &o = uniq[k];
+              if (o.item == c.item && o.rot == c.rot && (o.pos - c.pos).norm() < 1.0f) {
+                dup = true;
+                break;
+              }
+            }
+          }
+      if (dup) continue;
+      hash[cellKey(cx, cy, cz)].push_back(uniq.size());
+      uniq.push_back(c);
+    }
+    LOGI("snug plan: " << plan.size() << " candidates, " << uniq.size() << " after merging repeats\n");
+    // geometric wrap of each candidate on the untouched starting pack, fruit only: every surface sample that
+    // lies within snugTouchCm of a neighbor's surface contributes that neighbor's outward normal. wrap =
+    // touching fraction * (1 - |mean normal|), high when the touched surfaces push from many sides.
+    {
+      std::vector<PlanCand> kept;
+      for (PlanCand &c : uniq) {
+        RigidTransform t;
+        t.position = c.pos;
+        t.rotation = RotationMatrixRad(c.rot[0], c.rot[1], c.rot[2]);
+        c.wrap = computeWrap(c.item, t, wrapBase, ~0u);
+        if (c.wrap < cfg.snugMinWrap) continue;
+        c.score += cfg.snugWrapW * c.wrap;
+        kept.push_back(c);
+      }
+      LOGI("snug plan: " << kept.size() << " of " << uniq.size() << " candidates have wrap >= " << cfg.snugMinWrap
+                         << "\n");
+      uniq = kept;
+      std::sort(uniq.begin(), uniq.end(), [](const PlanCand &a, const PlanCand &b) { return a.score > b.score; });
+    }
+    // debug output: one vertex per candidate, grouped by kind, and a text list with score and rotation
+    {
+      std::ofstream obj(scene.outputFolder + "/snug_candidates.obj");
+      std::ofstream txt(scene.outputFolder + "/snug_candidates.txt");
+      txt << "kind score x y z rotx roty rotz wrap\n";
+      for (unsigned n = 0; n < numItems; n++) {
+        const unsigned itemIndex = scene.GetItemIndex(step.names[n]);
+        obj << "o " << step.names[n] << "\n";
+        for (const PlanCand &c : uniq) {
+          if (c.item != itemIndex) continue;
+          obj << "v " << c.pos[0] << " " << c.pos[1] << " " << c.pos[2] << "\n";
+          txt << step.names[n] << " " << c.score << " " << c.pos[0] << " " << c.pos[1] << " " << c.pos[2] << " "
+              << c.rot[0] << " " << c.rot[1] << " " << c.rot[2] << " " << c.wrap << "\n";
+        }
+      }
+    }
+    // commit best first. a candidate is skipped when something placed earlier already covers it.
+    unsigned skipped = 0;
+    for (const PlanCand &c : uniq) {
+      if (placedCount >= step.count) break;
+      if (cfg.maxSecondsPerStep > 0.0 && stepClock.ElapsedMS() / 1000.0 > cfg.maxSecondsPerStep) {
+        outOfTime = true;
+        break;
+      }
+      MeshInfo &item = scene.items[c.item];
+      scene.EnsureItemSamples(c.item);
+      const bool dbg = cfg.snugDebugRadius > 0.0f && (c.pos - Vec3f(cfg.snugDebugX, cfg.snugDebugY, cfg.snugDebugZ)).norm() < cfg.snugDebugRadius;
+      if (!item.samples.empty()) {
+        const Matrix3f rotM = RotationMatrixRad(c.rot[0], c.rot[1], c.rot[2]);
+        // covered means a fruit placed earlier in this step already sits there. overlap with the starting pack is
+        // expected for a snug pocket (the spot search erodes the fruit by a voxel) and is left to the settle and
+        // the post checks, so only the new instances count here.
+        const float occ = [&]() {
+          RigidTransform t;
+          t.position = c.pos;
+          t.rotation = rotM;
+          const Box3f box = ComputeBBox(MakeTransformedMesh(item.mesh, t).v);
+          size_t inside = 0;
+          const std::vector<unsigned> near = scene.broadPhase.GetNearby(box, 0.1f);
+          for (const SamplePoint &sp : item.samples) {
+            const Vec3f w = t.rotation * sp.x + t.position;
+            for (unsigned j : near) {
+              if (j < wrapBase) continue;
+              const InstanceInfo &o = scene.instances[j];
+              const MeshInfo &oi = scene.items[o.itemId];
+              if (!oi.sdf) continue;
+              if (oi.sdf->GetCoarseDist(o.tran.rotation.transposed() * (w - o.tran.position)) < -0.1f) {
+                inside++;
+                break;
+              }
+            }
+          }
+          return float(inside) / float(item.samples.size());
+        }();
+        if (dbg) {
+          LOGI("snugdbg " << item.name << " score " << c.score << " wrap " << c.wrap << " at " << c.pos[0] << " "
+                          << c.pos[1] << " " << c.pos[2] << " overlap with new fruit " << occ << " (limit "
+                          << cfg.snugPlanOverlap << ")\n");
+        }
+        if (occ > cfg.snugPlanOverlap) {
+          skipped++;
+          continue;
+        }
+      }
+      const unsigned before = placedCount;
+      placeAt(c.item, c.pos, c.rot);
+      if (dbg) LOGI("snugdbg   -> " << (placedCount > before ? "placed" : "placement rejected") << "\n");
+    }
+    LOGI("snug plan committed " << placedCount << " fruit, skipped " << skipped << " covered candidates\n");
+    // ---- review phase: nudge every new fruit toward its neighbors, new ones included ----
+    if (cfg.snugRefine) {
+      const size_t firstNew = wrapBase;
+      const size_t allInst = ~size_t(0);
+      const float touch = 0.5f * cfg.snugTouchCm;
+      float sumBefore = 0.0f, sumAfter = 0.0f;
+      unsigned improved = 0;
+      struct Nb {
+        const MeshInfo *mi;
+        Matrix3f rot, inv;
+        Vec3f pos;
       };
+      for (unsigned pass = 0; pass < cfg.snugRefinePasses; pass++) {
+        for (size_t id = firstNew; id < scene.instances.size(); id++) {
+          InstanceInfo &inst = scene.instances[id];
+          const unsigned itemIndex = inst.itemId;
+          scene.EnsureItemSamples(itemIndex);
+          const RigidTransform start = inst.tran;
+          const float startWrap = computeWrap(itemIndex, start, allInst, unsigned(id));
+          const float startPen = worstPenetration(itemIndex, start, unsigned(id));
+          if (pass == 0) sumBefore += startWrap;
+          const Box3f startBox = ComputeBBox(MakeTransformedMesh(scene.items[itemIndex].mesh, start).v);
+          // neighbors that attract: fruit near this one, not the exclusion mesh
+          std::vector<Nb> nbs;
+          for (unsigned j : scene.broadPhase.GetNearby(startBox, cfg.snugRefineReach + 1.0f)) {
+            if (j == id || scene.instances[j].isExclusion) continue;
+            const InstanceInfo &o = scene.instances[j];
+            const MeshInfo &oi = scene.items[o.itemId];
+            if (!oi.sdf) continue;
+            nbs.push_back({&oi, o.tran.rotation, o.tran.rotation.transposed(), o.tran.position});
+          }
+          // contact seeking field: a sample in the gap (more than `touch`, less than reach from the nearest
+          // neighbor surface) is pulled toward that surface, samples already touching add nothing.
+          const std::function<Vec3f(const Vec3f &)> field = [&](const Vec3f &p) {
+            float bestD = cfg.snugRefineReach;
+            Vec3f bestG(0.0f);
+            bool hit = false;
+            for (const Nb &nb : nbs) {
+              const Vec3f local = nb.inv * (p - nb.pos);
+              const float dd = nb.mi->sdf->GetCoarseDist(local);
+              if (dd > touch && dd < bestD) {
+                Vec3f g = nb.mi->sdf->GetCoarseGrad(local);
+                if (g.norm() < 1e-6f) continue;
+                g.normalize();
+                bestD = dd;
+                bestG = nb.rot * g;
+                hit = true;
+              }
+            }
+            return hit ? Vec3f(-bestG[0], -bestG[1], -bestG[2]) : Vec3f(0.0f);
+          };
+          scene.broadPhase.Remove(startBox, unsigned(id));
+          std::vector<RigidTransform> traj;
+          const RigidTransform end =
+              scene.Nudge(itemIndex, start, Vec3f(0, 0, 0), 0.0f, traj, &field, cfg.snugRefineSteps);
+          const float endWrap = computeWrap(itemIndex, end, allInst, unsigned(id));
+          const float endPen = worstPenetration(itemIndex, end, unsigned(id));
+          const bool ok = endWrap > startWrap + 1e-4f && endPen <= std::max(cfg.snugRefineMaxPen, startPen) &&
+                          computeWrap(itemIndex, end, wrapBase, unsigned(id)) >= cfg.snugMinWrap;
+          const RigidTransform &keep = ok ? end : start;
+          if (ok) {
+            inst.tran = end;
+            improved++;
+          }
+          scene.broadPhase.Add(ComputeBBox(MakeTransformedMesh(scene.items[itemIndex].mesh, keep).v), unsigned(id));
+          if (pass + 1 == cfg.snugRefinePasses) sumAfter += ok ? endWrap : startWrap;
+        }
+      }
+      const unsigned nNew = unsigned(scene.instances.size() - firstNew);
+      LOGI("snug refine: " << improved << " fruit moved, mean wrap " << (nNew ? sumBefore / float(nNew) : 0.0f)
+                           << " -> " << (nNew ? sumAfter / float(nNew) : 0.0f) << " over " << nNew << " fruit\n");
+    }
+    planDone = true;
+  }
+
+  for (; !planDone && placedCount < step.count; round++) {
+    if (cfg.maxSecondsPerStep > 0.0 && stepClock.ElapsedMS() / 1000.0 > cfg.maxSecondsPerStep) {
+      outOfTime = true;
+      break;
+    }
+    packSuccess = false;
+    for (unsigned i = startItem; i < numItems; i++) {
+      if (placedCount >= step.count) {
+        break;
+      }
+      // checked per kind, not just once per round -- a single kind can walk
+      // its entire subgrid (up to numCells*maxTrialCount searches) before
+      // giving up, which on its own can take far longer than the round-level
+      // check above allows for.
+      if (cfg.maxSecondsPerStep > 0.0 && stepClock.ElapsedMS() / 1000.0 > cfg.maxSecondsPerStep) {
+        outOfTime = true;
+        break;
+      }
+      unsigned nameIndex = (i + startNameIndex) % numItems;
+      std::string name = step.names[nameIndex];
+      unsigned itemIndex = scene.GetItemIndex(name);
+      MeshInfo &item = scene.items[itemIndex];
+      if (item.noMoreFit) {
+        continue;
+      }
+      Vec3f itemExtent = item.box.vmax - item.box.vmin;
+      float itemMaxExtent = std::max({itemExtent[0], itemExtent[1], itemExtent[2]});
+      unsigned totalCells = scene.numSubgridCells[0] * scene.numSubgridCells[1]
+                            * scene.numSubgridCells[2];
+      bool useSubgrid = (totalCells > 0 && itemMaxExtent < scene.subgridCellSize);
+
+      auto placeItem = [&](const Vec3f &p, const Vec3f &r) -> bool { return placeAt(itemIndex, p, r); };
 
       bool itemPlaced = false;
       double itemSearchStart = stepClock.ElapsedMS();
@@ -595,6 +974,42 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
             continue;
           }
           bool cellSuccess = false;
+          if (cfg.snugScore) {
+            // every distinct rotation gets a search, the best scoring spot is tried first.
+            struct Cand {
+              float score;
+              Vec3f pos;
+              Vec3f rot;
+            };
+            std::vector<Cand> cands;
+            for (const Vec3f &rot : snugRots) {
+              searches++;
+              TrigMesh rotatedMesh = item.mesh;
+              TransformVerts(item.mesh.v, rotatedMesh.v, RotationMatrixRad(rot[0], rot[1], rot[2]));
+              MeshConvo &subBg = isLargeMedLarge ? coarseBg : scene.bg;
+              SubgridBgCache *subCache = isLargeMedLarge ? &coarseSubgridCache : &subgridCache;
+              Vec3f pos;
+              float score = 0.0f;
+              if (FindSpotSubgrid(subBg, rotatedMesh, pos, scene.sdf, sdfFactor, scene.subgridCellSize,
+                                  cellIdx, scene.numSubgridCells, subCache, erode, step.overlapHeuristic,
+                                  (!isLargeMedLarge && !scene.itemsBg.vox.GetData().empty()) ? &scene.itemsBg
+                                                                                              : nullptr,
+                                  &spotParams, &score)) {
+                cands.push_back({score, pos, rot});
+              }
+            }
+            std::sort(cands.begin(), cands.end(),
+                      [](const Cand &a, const Cand &b) { return a.score > b.score; });
+            for (const Cand &c : cands) {
+              if (placeItem(c.pos, c.rot)) {
+                LOGI("  snug " << item.name << " score " << c.score << " from " << cands.size()
+                               << " rotations\n");
+                itemPlaced = true;
+                cellSuccess = true;
+                break;
+              }
+            }
+          } else
           for (unsigned trial = 0; trial < trialLimit; trial++) {
             Vec3f pos;
             Vec3f rot;

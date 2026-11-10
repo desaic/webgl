@@ -162,6 +162,47 @@ struct PackingConfig {
     bool oldWayInner = false;     // also treat the inner container (innerContainerFile) as an exclusion zone
     bool clearanceGate = false;   // skip subgrid cells without free space for the fruit's inscribed sphere (ClearanceGate.h)
     unsigned oldWayGroup = 2;     // size group of the old way step: 2 is 8 to 14 cm, 3 is 4 to 8 cm
+    // contact score for the old way step (see SpotScoreParams in PackingOps.h): needs the items-only
+    // background, so it implies the overlap heuristic. replaces the sdf/position score, skips the
+    // inward nudge, and tries snugRotations distinct orthogonal-ish rotations per cell, keeping the best.
+    bool snugScore = false;
+    unsigned snugNudgeSteps = 80; // short contact-only settle after the spot search (0 = place as found)
+    // plan then commit: score every spot on the untouched starting pack first (local maxima only), save them
+    // as snug_candidates.obj / .txt, then place best first. gaps made by the new fruit never become candidates.
+    bool snugPlan = false;
+    float snugPlanNms = 1.5f;     // candidates closer than this (cm) to a better one of the same kind and rotation are dropped
+    unsigned snugPlanMax = 24;    // local maxima kept per cell and rotation
+    float snugPlanOverlap = 0.03f; // a candidate is skipped when this fraction of the fruit samples is already occupied
+    // geometric wrap score, fruit only (the container wall does not count): wrap = touching fraction * (1 - R).
+    // touching fraction: share of the fruit's surface samples within snugTouchCm of another fruit's surface.
+    // R: length of the mean outward normal of the touched surfaces, 0 when they push from all sides, 1 when
+    // they all push from one side (a fruit lying on one convex surface). hand placed fruit score 0.04 to 0.14,
+    // fruit resting on one fruit score 0.011 or less.
+    float snugMinWrap = 0.03f;    // a spot needs at least this wrap score
+    float snugWrapW = 100.0f;     // score += this * wrap
+    float snugTouchCm = 0.4f;
+    // review phase after the commit: every newly placed fruit is run through the rigid body Nudge with a contact
+    // seeking field (each surface sample is pulled toward the nearest neighbor surface within snugRefineReach, new
+    // neighbors included), so it slides and turns until it is wedged. the result is kept only when its wrap rose, its
+    // wrap against the starting pack alone stays at snugMinWrap or more, and its overlap stays within the cap.
+    bool snugRefine = true;
+    unsigned snugRefineSteps = 150;  // Nudge steps per fruit and pass
+    unsigned snugRefinePasses = 2;
+    float snugRefineReach = 2.5f;    // cm, samples this far from a neighbor surface are pulled toward it
+    float snugRefineMaxPen = 0.25f;  // cm, cap on the deepest sample inside a neighbor or outside the container
+    // debug: log the commit decision of every candidate within snugDebugRadius cm of snugDebugSpot
+    float snugDebugX = 0.0f, snugDebugY = 0.0f, snugDebugZ = 0.0f;
+    float snugDebugRadius = 0.0f;
+    float snugPostOverlap = 0.4f; // post-placement occupied and engulfed limit in plan mode (the spot search erodes the fruit by a voxel, so a snug fit overlaps its neighbors a little)
+    unsigned snugRotations = 12;  // distinct rotations tried per cell (at most 24)
+    float snugWallW = 0.5f;       // weight of the distance to the container wall (cm), positive = prefer far
+    float snugWallCap = 10.0f;    // wall distance beyond this does not score more (cm)
+    float snugPosW = 0.01f;       // weight of -(x+y+z), tie breaker
+    unsigned snugMinDirs = 2;     // contact needed in at least this many of the 6 axis directions
+    unsigned snugMinFace = 4;
+    float snugShellCm = 2.0f;     // enclosure shell thickness around the fruit (cm)
+    float snugMinBuried = 0.6f;   // occupied fraction of that shell (fruit only, container ignored) needed for a spot
+    float snugBuriedW = 10.0f;    // score weight of the occupied fraction     // voxels of contact for a direction to count
     unsigned oldWayErode = 1;     // voxels eroded from the candidate fruit before the FFT search
     std::string forceKind = "LightGreen";  // inner force field: kind whose leftmost instance is saved
     float forceGridDx = 0.5f;      // inner force field: local grid voxel size (cm)
@@ -186,6 +227,20 @@ struct PackingConfig {
     float cavCone = 70.0f;     // tool axis tilt limit from the outward direction (degrees)
     float cavObjClear = 0.3f;  // unreachable voxels count in the objective above this clearance (cm)
     float cavMinClear = 1.0f;  // anchors need a free ball this big, narrower pockets are left to small fruit (cm)
+    float cavWallTol = 1.0f;   // cap fruit may stick out of the container surface by this much (cm)
+    unsigned cavCap = 0;       // 1: also run the mouth cap pass (off: it found no gain on the left region)
+    unsigned cavCapOnly = 0;   // 1: run only the cap pass
+    unsigned cavDimple = 0;    // 1: also run the dimple fill pass (fill-fraction scored, no tool model)
+    unsigned cavSnug = 0;      // 1: dimple pass uses the snug-fit rule instead of the tool gate
+    unsigned cavContacts = 2;  // snug fruit must touch at least this many placed fruit
+    float cavSnugFill = 0.9f;  // and fill this fraction of its volume with free space
+    float cavReach = 6.0f;     // fruit only go where the free path from outside is at most this long (cm)
+    unsigned cavRelocate = 1;  // 0: skip the relocate pass (placed fruit stay put)
+    unsigned cavDimpleOnly = 0; // 1: run only the dimple pass
+    float cavFillMin = 0.6f;   // dimple fruit must fill this fraction of its volume with free space inside the container
+    float cavFillVol = 6.0f;   // and at least this much free volume (cm3)
+    float cavProtrude = 0.5f;  // dimple fruit may stick out of the container surface by this much (cm)
+    float cavDimpleClear = 0.8f; // dimple seeds need a free ball this big (cm)
     unsigned cavPasses = 2;
     unsigned cavTrials = 16;   // candidate poses per cavity
     float cavMinGain = 4.0f;   // min cavity volume removed (cm3) to accept a pose

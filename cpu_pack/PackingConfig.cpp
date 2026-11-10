@@ -82,6 +82,135 @@ bool PackingConfig::LoadFromFile(const std::string &path) {
     size_t last = value.find_last_not_of(" \t\r");
     value = (first == std::string::npos) ? "" : value.substr(first, last - first + 1);
 
+    if (key == "snugScore") {
+      snugScore = ParseBool(value);
+      continue;
+    }
+    if (key == "snugNudgeSteps") {
+      snugNudgeSteps = unsigned(std::atoi(value.c_str()));
+      continue;
+    }
+    if (key == "snugPlan") {
+      snugPlan = ParseBool(value);
+      continue;
+    }
+    if (key == "snugPlanNms") {
+      snugPlanNms = float(std::atof(value.c_str()));
+      continue;
+    }
+    if (key == "snugPlanMax") {
+      snugPlanMax = unsigned(std::atoi(value.c_str()));
+      continue;
+    }
+    if (key == "snugPlanOverlap") {
+      snugPlanOverlap = float(std::atof(value.c_str()));
+      continue;
+    }
+    if (key == "snugShellCm") {
+      snugShellCm = float(std::atof(value.c_str()));
+      continue;
+    }
+    if (key == "snugMinBuried") {
+      snugMinBuried = float(std::atof(value.c_str()));
+      continue;
+    }
+    if (key == "snugBuriedW") {
+      snugBuriedW = float(std::atof(value.c_str()));
+      continue;
+    }
+    if (key == "snugMinWrap") {
+      snugMinWrap = float(std::atof(value.c_str()));
+      continue;
+    }
+    if (key == "snugWrapW") {
+      snugWrapW = float(std::atof(value.c_str()));
+      continue;
+    }
+    if (key == "snugTouchCm") {
+      snugTouchCm = float(std::atof(value.c_str()));
+      continue;
+    }
+    if (key == "snugRefine") {
+      snugRefine = ParseBool(value);
+      continue;
+    }
+    if (key == "snugRefineSteps") {
+      snugRefineSteps = unsigned(std::atoi(value.c_str()));
+      continue;
+    }
+    if (key == "snugRefinePasses") {
+      snugRefinePasses = unsigned(std::atoi(value.c_str()));
+      continue;
+    }
+    if (key == "snugRefineReach") {
+      snugRefineReach = float(std::atof(value.c_str()));
+      continue;
+    }
+    if (key == "snugRefineMaxPen") {
+      snugRefineMaxPen = float(std::atof(value.c_str()));
+      continue;
+    }
+    if (key == "snugDebugRadius") {
+      snugDebugRadius = float(std::atof(value.c_str()));
+      continue;
+    }
+    if (key == "snugDebugSpot") {
+      std::istringstream vs(value);
+      float sx = 0.0f, sy = 0.0f, sz = 0.0f;
+      vs >> sx >> sy >> sz;
+      snugDebugX = sx;
+      snugDebugY = sy;
+      snugDebugZ = sz;
+      continue;
+    }
+    if (key == "snugPostOverlap") {
+      snugPostOverlap = float(std::atof(value.c_str()));
+      continue;
+    }
+    if (key == "snugRotations") {
+      snugRotations = unsigned(std::atoi(value.c_str()));
+      continue;
+    }
+    if (key == "snugWallW") {
+      snugWallW = float(std::atof(value.c_str()));
+      continue;
+    }
+    if (key == "snugWallCap") {
+      snugWallCap = float(std::atof(value.c_str()));
+      continue;
+    }
+    if (key == "snugPosW") {
+      snugPosW = float(std::atof(value.c_str()));
+      continue;
+    }
+    if (key == "snugMinDirs") {
+      snugMinDirs = unsigned(std::atoi(value.c_str()));
+      continue;
+    }
+    if (key == "snugMinFace") {
+      snugMinFace = unsigned(std::atoi(value.c_str()));
+      continue;
+    }
+    if (key == "cavSnug") {
+      cavSnug = unsigned(std::atoi(value.c_str()));
+      continue;
+    }
+    if (key == "cavContacts") {
+      cavContacts = unsigned(std::atoi(value.c_str()));
+      continue;
+    }
+    if (key == "cavSnugFill") {
+      cavSnugFill = float(std::atof(value.c_str()));
+      continue;
+    }
+    if (key == "cavReach") {
+      cavReach = float(std::atof(value.c_str()));
+      continue;
+    }
+    if (key == "cavRelocate") {
+      cavRelocate = unsigned(std::atoi(value.c_str()));
+      continue;
+    }
     if (key == "dataDir") {
       dataDir = value;
     } else if (key == "fruitSubdir") {
@@ -267,6 +396,24 @@ bool PackingConfig::LoadFromFile(const std::string &path) {
       cavCone = float(std::atof(value.c_str()));
     } else if (key == "cavObjClear") {
       cavObjClear = float(std::atof(value.c_str()));
+    } else if (key == "cavWallTol") {
+      cavWallTol = float(std::atof(value.c_str()));
+    } else if (key == "cavCap") {
+      cavCap = unsigned(std::atoi(value.c_str()));
+    } else if (key == "cavCapOnly") {
+      cavCapOnly = unsigned(std::atoi(value.c_str()));
+    } else if (key == "cavDimple") {
+      cavDimple = unsigned(std::atoi(value.c_str()));
+    } else if (key == "cavDimpleOnly") {
+      cavDimpleOnly = unsigned(std::atoi(value.c_str()));
+    } else if (key == "cavFillMin") {
+      cavFillMin = float(std::atof(value.c_str()));
+    } else if (key == "cavFillVol") {
+      cavFillVol = float(std::atof(value.c_str()));
+    } else if (key == "cavProtrude") {
+      cavProtrude = float(std::atof(value.c_str()));
+    } else if (key == "cavDimpleClear") {
+      cavDimpleClear = float(std::atof(value.c_str()));
     } else if (key == "forcePasses") {
       forcePasses = unsigned(std::atoi(value.c_str()));
     } else if (key == "oldWayKinds") {
