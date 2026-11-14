@@ -55,7 +55,7 @@ export class Viewer {
   tc: TransformControls;
   forceTc: TransformControls;
   sim = new RigidBodySim();
-  forceMode: "none" | "point" | "dir" = "none";
+  forceMode: "none" | "attach" | "target" = "none";
   private forceArrow: THREE.ArrowHelper | null = null;
   private forceAnchor = new THREE.Object3D();
 
@@ -118,7 +118,7 @@ export class Viewer {
     });
     this.scene.add(this.tc.getHelper());
     this.forceTc = new TransformControls(this.camera, this.renderer.domElement);
-    this.forceTc.setMode("rotate");
+    this.forceTc.setMode("translate");
     this.forceTc.addEventListener("dragging-changed", (e) => {
       this.controls.enabled = !(e as any).value;
       this.dirty = true;
@@ -126,7 +126,7 @@ export class Viewer {
     this.forceTc.addEventListener("change", () => (this.dirty = true));
     this.forceTc.addEventListener("objectChange", () => {
       if (this.sim.force) {
-        this.sim.force.dir.set(0, 1, 0).applyQuaternion(this.forceAnchor.quaternion).normalize();
+        this.sim.force.target.copy(this.forceAnchor.position);
         this.updateForceArrow();
         this.onForceChange(this.sim.force);
       }
@@ -603,14 +603,12 @@ export class Viewer {
     this.dirty = true;
   }
 
-  setForceMode(mode: "none" | "point" | "dir"): "none" | "point" | "dir" {
-    if (mode === "dir" && !this.sim.force) mode = "none";
+  setForceMode(mode: "none" | "attach" | "target"): "none" | "attach" | "target" {
+    if (mode === "target" && !this.sim.force) mode = "none";
     this.forceMode = mode;
-    if (mode === "dir" && this.sim.force) {
-      const f = this.sim.force;
-      f.item.mesh.updateMatrixWorld(true);
-      this.forceAnchor.position.copy(f.localPoint).applyMatrix4(f.item.mesh.matrixWorld);
-      this.forceAnchor.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), f.dir);
+    if (mode === "target" && this.sim.force) {
+      this.forceAnchor.position.copy(this.sim.force.target);
+      this.forceAnchor.quaternion.identity();
       this.forceTc.attach(this.forceAnchor);
     } else {
       this.forceTc.detach();
@@ -620,10 +618,11 @@ export class Viewer {
     return this.forceMode;
   }
 
-  setForce(it: Item, worldPoint: THREE.Vector3, dir: THREE.Vector3, magnitude = 80) {
+  setAttachPoint(it: Item, worldPoint: THREE.Vector3, magnitude = 80) {
     it.mesh.updateMatrixWorld(true);
     const localPoint = it.mesh.worldToLocal(worldPoint.clone());
-    this.sim.force = { item: it, localPoint, dir: dir.clone().normalize(), magnitude };
+    this.sim.force = { item: it, localPoint, target: worldPoint.clone(), magnitude };
+    this.setForceMode("target");
     this.updateForceArrow();
     this.onForceChange(this.sim.force);
     this.dirty = true;
@@ -640,16 +639,18 @@ export class Viewer {
     const f = this.sim.force;
     f.item.mesh.updateMatrixWorld(true);
     const wp = f.localPoint.clone().applyMatrix4(f.item.mesh.matrixWorld);
-    const len = 10 + f.magnitude * 0.1;
+    const delta = f.target.clone().sub(wp);
+    const len = delta.length();
+    const dir = len > 1e-4 ? delta.divideScalar(len) : new THREE.Vector3(0, 0, 1);
     if (!this.forceArrow) {
-      this.forceArrow = new THREE.ArrowHelper(f.dir, wp, len, 0xff4422, 3, 2);
+      this.forceArrow = new THREE.ArrowHelper(dir, wp, Math.max(0.1, len), 0xff4422, 2, 1.5);
       this.scene.add(this.forceArrow);
     } else {
       this.forceArrow.position.copy(wp);
-      this.forceArrow.setDirection(f.dir);
-      this.forceArrow.setLength(len, 3, 2);
+      this.forceArrow.setDirection(dir);
+      this.forceArrow.setLength(Math.max(0.1, len), Math.min(2, len * 0.4), 1.5);
     }
-    if (this.forceMode === "dir") this.forceAnchor.position.copy(wp);
+    this.forceArrow.visible = len > 0.05;
   }
 
   stopSim() {
@@ -671,7 +672,7 @@ export class Viewer {
     if (!target || !target.visible) return false;
     if (this.forceMode !== "none") this.setForceMode("none");
     if (this.sim.force) this.sim.force.magnitude = magnitude;
-    this.sim.init(target, this.items, this.containers.children as THREE.Mesh[]);
+    this.sim.init(target, this.items);
     this.sim.stepsLeft = steps;
     this.sim.running = true;
     this.dirty = true;
@@ -698,17 +699,12 @@ export class Viewer {
       if (!down) return;
       const moved = Math.hypot(e.clientX - down[0], e.clientY - down[1]);
       down = null;
-      if (this.forceMode === "point") {
+      if (this.forceMode === "attach") {
         if (moved > 4 || !this.selected || !this.selected.visible) return;
         const h = hitAt(e.clientX, e.clientY, [this.selected.mesh]);
         if (!h) return;
-        const normal = h.face
-          ? h.face.normal.clone().transformDirection(h.object.matrixWorld).normalize()
-          : h.point.clone().sub(this.selected.mesh.position).normalize();
         const mag = this.sim.force ? this.sim.force.magnitude : 80;
-        const dir = this.sim.force && this.sim.force.item === this.selected ? this.sim.force.dir : normal;
-        this.setForce(this.selected, h.point, dir, mag);
-        this.setForceMode("none");
+        this.setAttachPoint(this.selected, h.point, mag);
         return;
       }
       if (this.forceMode !== "none" || onGizmo || moved > 4) return;

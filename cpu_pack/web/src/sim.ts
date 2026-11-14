@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { MeshBVH } from "three-mesh-bvh";
 import { Item } from "./scene";
 
-const N_SAMPLES = 80;
+const N_SAMPLES = 48;
 const MAX_NUDGE_CM = 5;
 const bvhs = new WeakMap<THREE.BufferGeometry, MeshBVH>();
 const sampleCache = new WeakMap<THREE.BufferGeometry, THREE.Vector3[]>();
@@ -105,7 +105,7 @@ interface StaticObstacle {
 export interface ForceSpec {
   item: Item;
   localPoint: THREE.Vector3;
-  dir: THREE.Vector3; // world unit vector
+  target: THREE.Vector3; // world target position to pull the attach point toward
   magnitude: number;
 }
 
@@ -133,19 +133,28 @@ export class RigidBodySim {
   active: Body | null = null;
   obstacles: StaticObstacle[] = [];
   potentialContacts: StaticObstacle[] = [];
-  containers: THREE.Mesh[] = [];
   force: ForceSpec | null = null;
   running = false;
   stepsLeft = 0;
+  prof = {
+    steps: 0,
+    initMs: 0,
+    stepMs: 0,
+    broadMs: 0,
+    obsMs: 0,
+    broadCount: 0,
+    narrowPairs: 0,
+  };
 
   private broadphasePos = new THREE.Vector3();
   private broadphaseMargin = 0;
 
-  init(selected: Item | null, items: Item[], containers: THREE.Mesh[]) {
-    this.containers = containers;
+  init(selected: Item | null, items: Item[]) {
+    const t0 = performance.now();
     this.obstacles = [];
     this.potentialContacts = [];
     this.active = null;
+    this.prof = { steps: 0, initMs: 0, stepMs: 0, broadMs: 0, obsMs: 0, broadCount: 0, narrowPairs: 0 };
     if (!selected || !selected.visible) return;
 
     const s = selected.mesh.scale.x;
@@ -181,6 +190,7 @@ export class RigidBodySim {
 
     this.updateBox(this.active);
     this.updateBroadphase();
+    this.prof.initMs = performance.now() - t0;
   }
 
   private updateBox(b: Body) {
@@ -208,8 +218,9 @@ export class RigidBodySim {
     // 1. active samples inside static obstacle
     for (const lp of samplesOf(a.item.full)) {
       _wp.copy(lp).applyMatrix4(_mat);
+      if (!obs.box.containsPoint(_wp)) continue;
       _p.copy(_wp).applyMatrix4(obs.inv);
-      const hit = bvhObs.closestPointToPoint(_p, _hit, 0, (a.radius + obs.radius) / obs.scale);
+      const hit = bvhObs.closestPointToPoint(_p, _hit, 0, a.radius / obs.scale);
       if (!hit || !insideByRays(bvhObs, _p)) continue;
       const d = hit.distance * obs.scale;
       if (d > bestDepth) {
@@ -226,8 +237,9 @@ export class RigidBodySim {
     // 2. static obstacle samples inside active
     for (const lp of samplesOf(obs.item.full)) {
       _wp.copy(lp).applyMatrix4(obs.mat);
+      if (!a.box.containsPoint(_wp)) continue;
       _p.copy(_wp).applyMatrix4(_inv);
-      const hit = bvhA.closestPointToPoint(_p, _hit, 0, (a.radius + obs.radius) / a.scale);
+      const hit = bvhA.closestPointToPoint(_p, _hit, 0, obs.radius / a.scale);
       if (!hit || !insideByRays(bvhA, _p)) continue;
       const d = hit.distance * a.scale;
       if (d > bestDepth) {
@@ -253,45 +265,11 @@ export class RigidBodySim {
     applyRotDelta(a.quat, _c1.crossVectors(_ra, _dp).multiplyScalar(a.invI));
   }
 
-  private resolveContainer(a: Body, cont: THREE.Mesh) {
-    cont.updateMatrixWorld(true);
-    const sc = cont.scale.x;
-    _inv.copy(cont.matrixWorld).invert();
-    const bvh = bvhOf(cont.geometry);
-    _mat.compose(a.pos, a.quat, _c2.set(a.scale, a.scale, a.scale));
-
-    let bestDepth = 0;
-    const bestWp = new THREE.Vector3();
-    const bestWn = new THREE.Vector3();
-
-    for (const lp of samplesOf(a.item.full)) {
-      _wp.copy(lp).applyMatrix4(_mat);
-      _p.copy(_wp).applyMatrix4(_inv);
-      const hit = bvh.closestPointToPoint(_p, _hit, 0, (a.radius * 2) / sc);
-      if (!hit || insideByRays(bvh, _p)) continue;
-      const d = hit.distance * sc;
-      if (d > bestDepth) {
-        bestDepth = d;
-        bestWp.copy(_wp);
-        bestWn.copy(hit.point).sub(_p).transformDirection(cont.matrixWorld).normalize();
-      }
-    }
-
-    if (bestDepth <= 1e-4) return;
-    _ra.copy(bestWp).sub(a.pos);
-    _c1.crossVectors(_ra, bestWn);
-    const wA = a.invMass + a.invI * _c1.lengthSq();
-    if (wA < 1e-10) return;
-
-    const lambda = bestDepth / wA;
-    _dp.copy(bestWn).multiplyScalar(lambda);
-    a.pos.addScaledVector(_dp, a.invMass);
-    applyRotDelta(a.quat, _c1.crossVectors(_ra, _dp).multiplyScalar(a.invI));
-  }
-
-  step(dt = 1 / 60, substeps = 4) {
+  step(dt = 1 / 60, substeps = 2) {
     const a = this.active;
     if (!a) return;
+    const tStep = performance.now();
+    this.prof.steps++;
     const sdt = dt / substeps;
 
     for (let s = 0; s < substeps; s++) {
@@ -301,7 +279,7 @@ export class RigidBodySim {
       if (this.force && this.force.item === a.item) {
         _wp.copy(this.force.localPoint).multiplyScalar(a.scale).applyQuaternion(a.quat).add(a.pos);
         _ra.copy(_wp).sub(a.pos);
-        _wn.copy(this.force.dir).multiplyScalar(this.force.magnitude);
+        _wn.copy(this.force.target).sub(_wp).multiplyScalar(this.force.magnitude * 0.5);
         a.vel.addScaledVector(_wn, a.invMass * sdt);
         a.angVel.addScaledVector(_c1.crossVectors(_ra, _wn), a.invI * sdt);
       }
@@ -313,13 +291,20 @@ export class RigidBodySim {
       this.updateBox(a);
 
       if (a.pos.distanceToSquared(this.broadphasePos) > this.broadphaseMargin * this.broadphaseMargin * 0.25) {
+        const tb = performance.now();
         this.updateBroadphase();
+        this.prof.broadMs += performance.now() - tb;
+        this.prof.broadCount++;
       }
 
-      for (const cont of this.containers) this.resolveContainer(a, cont);
+      const to = performance.now();
       for (const obs of this.potentialContacts) {
-        if (a.box.intersectsBox(obs.box)) this.resolveObstacle(a, obs);
+        if (a.box.intersectsBox(obs.box)) {
+          this.prof.narrowPairs++;
+          this.resolveObstacle(a, obs);
+        }
       }
+      this.prof.obsMs += performance.now() - to;
 
       // Clamp total displacement to MAX_NUDGE_CM (5 cm)
       _dp.copy(a.pos).sub(a.startPos);
@@ -343,5 +328,18 @@ export class RigidBodySim {
 
     a.item.mesh.position.copy(a.pos);
     a.item.mesh.quaternion.copy(a.quat);
+    this.prof.stepMs += performance.now() - tStep;
+  }
+
+  profSummary(): string {
+    const p = this.prof;
+    const n = Math.max(1, p.steps);
+    const other = Math.max(0, p.stepMs - p.broadMs - p.obsMs);
+    return (
+      `prof (${p.steps} steps, ${this.potentialContacts.length}/${this.obstacles.length} broad): ` +
+      `init=${p.initMs.toFixed(1)}ms, avgStep=${(p.stepMs / n).toFixed(2)}ms ` +
+      `[obs=${(p.obsMs / n).toFixed(2)}ms (${(p.narrowPairs / n).toFixed(1)} pairs), ` +
+      `broad=${p.broadMs.toFixed(2)}ms(${p.broadCount}x), other=${(other / n).toFixed(2)}ms]`
+    );
   }
 }

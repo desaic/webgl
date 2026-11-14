@@ -610,37 +610,35 @@ $("showAll").onclick = () => {
 
 // ---- rigid body sim ----
 function syncForceBtns() {
-  $("forcePoint").classList.toggle("on", viewer.forceMode === "point");
-  $("forceDir").classList.toggle("on", viewer.forceMode === "dir");
+  $("attachPoint").classList.toggle("on", viewer.forceMode === "attach");
+  $("moveTarget").classList.toggle("on", viewer.forceMode === "target");
 }
-$("forcePoint").onclick = () => {
-  if (viewer.forceMode !== "point" && !viewer.selected) {
+$("attachPoint").onclick = () => {
+  if (viewer.forceMode !== "attach" && !viewer.selected) {
     status("select a fruit first");
     return;
   }
-  const m = viewer.setForceMode(viewer.forceMode === "point" ? "none" : "point");
+  const m = viewer.setForceMode(viewer.forceMode === "attach" ? "none" : "attach");
   syncForceBtns();
-  if (m === "point") status("click on the selected fruit to set force point");
+  if (m === "attach") status("click on the selected fruit to set attach point");
 };
-$("forceDir").onclick = () => {
-  if (viewer.forceMode !== "dir" && !viewer.sim.force) {
-    status("set force point first");
+$("moveTarget").onclick = () => {
+  if (viewer.forceMode !== "target" && !viewer.sim.force) {
+    status("set attach point first");
     return;
   }
-  const m = viewer.setForceMode(viewer.forceMode === "dir" ? "none" : "dir");
+  const m = viewer.setForceMode(viewer.forceMode === "target" ? "none" : "target");
   syncForceBtns();
-  if (m === "dir") status("drag the rotation gizmo to aim force direction");
+  if (m === "target") status("drag the gizmo to move target point");
 };
 viewer.onForceChange = (f) => {
   syncForceBtns();
   if (!f) {
-    $("forceInfo").textContent = "select a fruit, then click Force point";
+    $("forceInfo").textContent = "select a fruit, then click Attach point";
     return;
   }
-  const d = f.dir;
-  const info = `${labelOf(f.item.inst)} dir (${d.x.toFixed(2)}, ${d.y.toFixed(2)}, ${d.z.toFixed(2)})`;
-  $("forceInfo").textContent = info;
-  if (viewer.forceMode !== "dir") logStatus(`force set on ${info}`);
+  const t = f.target;
+  $("forceInfo").textContent = `${labelOf(f.item.inst)} target (${t.x.toFixed(1)}, ${t.y.toFixed(1)}, ${t.z.toFixed(1)})`;
 };
 $("forceMag").oninput = (e) => {
   const mag = parseFloat((e.target as HTMLInputElement).value);
@@ -652,7 +650,9 @@ $("forceMag").oninput = (e) => {
 viewer.onSimDone = () => {
   $("runSim").textContent = "Run";
   $("runSim").classList.remove("on");
-  logStatus("sim: finished");
+  const summary = viewer.sim.profSummary();
+  console.log("[sim]", summary);
+  logStatus(summary);
 };
 $("runSim").onclick = () => {
   const mag = parseFloat($<HTMLInputElement>("forceMag").value);
