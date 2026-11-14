@@ -102,10 +102,6 @@ bool PackingConfig::LoadFromFile(const std::string &path) {
       snugPlanMax = unsigned(std::atoi(value.c_str()));
       continue;
     }
-    if (key == "snugPlanOverlap") {
-      snugPlanOverlap = float(std::atof(value.c_str()));
-      continue;
-    }
     if (key == "snugShellCm") {
       snugShellCm = float(std::atof(value.c_str()));
       continue;
@@ -163,8 +159,12 @@ bool PackingConfig::LoadFromFile(const std::string &path) {
       snugDebugZ = sz;
       continue;
     }
-    if (key == "snugPostOverlap") {
-      snugPostOverlap = float(std::atof(value.c_str()));
+    if (key == "snugShrinkCm") {
+      snugShrinkCm = float(std::atof(value.c_str()));
+      continue;
+    }
+    if (key == "snugVoxTol") {
+      snugVoxTol = unsigned(std::atoi(value.c_str()));
       continue;
     }
     if (key == "snugRotations") {

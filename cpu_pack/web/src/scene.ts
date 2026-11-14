@@ -4,9 +4,10 @@ import { TransformControls } from "three/examples/jsm/controls/TransformControls
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { fetchBuffer } from "./api";
-import { Inst } from "./parse";
+import { Inst, Pose } from "./parse";
 import { Contact, collisions } from "./collide";
 import { Culler, decimate } from "./cull";
+import { ForceSpec, RigidBodySim } from "./sim";
 
 export interface Item {
   inst: Inst;
@@ -49,7 +50,14 @@ export class Viewer {
   onPick: (it: Item | null) => void = () => {};
   onCamera: () => void = () => {};
   onEdit: (it: Item) => void = () => {};
+  onForceChange: (f: ForceSpec | null) => void = () => {};
+  onSimDone: () => void = () => {};
   tc: TransformControls;
+  forceTc: TransformControls;
+  sim = new RigidBodySim();
+  forceMode: "none" | "point" | "dir" = "none";
+  private forceArrow: THREE.ArrowHelper | null = null;
+  private forceAnchor = new THREE.Object3D();
 
   private poseMat = new THREE.Matrix4();
   private geoCache = new Map<string, Promise<THREE.BufferGeometry>>();
@@ -65,6 +73,10 @@ export class Viewer {
   lodPx = 70; // fruit whose bounding sphere is smaller than this on screen use a coarse mesh
   lodCells = 16;
   private lowGeo = new Map<THREE.BufferGeometry, THREE.BufferGeometry>();
+  private cullBoxes = new THREE.Group();
+  private boxEdges = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
+  private boxMatCenter = new THREE.LineBasicMaterial({ color: 0xffff00 });
+  private boxMatNeighbor = new THREE.LineBasicMaterial({ color: 0x00ffff });
 
   constructor(host: HTMLElement) {
     this.host = host;
@@ -105,21 +117,44 @@ export class Viewer {
       }
     });
     this.scene.add(this.tc.getHelper());
+    this.forceTc = new TransformControls(this.camera, this.renderer.domElement);
+    this.forceTc.setMode("rotate");
+    this.forceTc.addEventListener("dragging-changed", (e) => {
+      this.controls.enabled = !(e as any).value;
+      this.dirty = true;
+    });
+    this.forceTc.addEventListener("change", () => (this.dirty = true));
+    this.forceTc.addEventListener("objectChange", () => {
+      if (this.sim.force) {
+        this.sim.force.dir.set(0, 1, 0).applyQuaternion(this.forceAnchor.quaternion).normalize();
+        this.updateForceArrow();
+        this.onForceChange(this.sim.force);
+      }
+    });
+    this.scene.add(this.forceAnchor, this.forceTc.getHelper());
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x404050, 1.1));
     const dl = new THREE.DirectionalLight(0xffffff, 1.6);
     this.camera.add(dl);
     dl.position.set(0.4, 0.6, 1);
     this.scene.add(this.camera);
-    this.scene.add(this.containers, this.fruits);
+    this.scene.add(this.containers, this.fruits, this.cullBoxes);
     window.addEventListener("resize", () => this.resize());
     new ResizeObserver(() => this.resize()).observe(host);
     this.resize();
     this.bindPick();
     const loop = () => {
       requestAnimationFrame(loop);
+      if (this.sim.running) {
+        this.sim.step();
+        this.sim.stepsLeft--;
+        this.updateForceArrow();
+        this.syncGizmo();
+        this.dirty = true;
+        if (this.sim.stepsLeft <= 0) this.stopSim();
+      }
       if (this.dirty) {
         this.dirty = false;
-        this.cull();
+        this.maybeCull();
         this.renderer.render(this.scene, this.camera);
         this.updateLabels();
       }
@@ -127,8 +162,33 @@ export class Viewer {
     loop();
   }
 
+  // culling is not needed every frame: camera motion re-culls at most every cullMs and once more when the
+  // camera stops, anything else that can change what is drawn (items, poses, visibility, selection) re-culls now.
+  cullMs = 250;
+  private cullForce = true;
+  private cullLast = 0;
+  private cullTimer = 0;
+
+  private maybeCull() {
+    const now = performance.now();
+    if (this.cullForce || now - this.cullLast >= this.cullMs) {
+      this.cullForce = false;
+      this.cullLast = now;
+      clearTimeout(this.cullTimer);
+      this.cullTimer = 0;
+      this.cull();
+    } else if (!this.cullTimer) {
+      this.cullTimer = window.setTimeout(() => {
+        this.cullTimer = 0;
+        this.cullForce = true;
+        this.dirty = true;
+      }, this.cullMs - (now - this.cullLast) + 10);
+    }
+  }
+
   // hide fruit outside the view or behind occupied cells. the user hide flag stays in Item.visible.
   private cull() {
+    this.cullBoxes.clear();
     const items = this.items;
     if (!items.length) return;
     if (!this.cullOn) {
@@ -137,6 +197,8 @@ export class Viewer {
         if (it.mesh.geometry !== it.full) it.mesh.geometry = it.full;
       }
       this.cullInfo = "";
+      const dbg = document.getElementById("cullDebug");
+      if (dbg) dbg.textContent = "";
       return;
     }
     // sections cut through fruit and see-through fruit show what is behind, so only frustum culling is valid
@@ -150,6 +212,13 @@ export class Viewer {
       this.camera,
       occ
     );
+    const cs = this.culler.cellSize;
+    for (const c of this.culler.drawnCells) {
+      const box = new THREE.LineSegments(this.boxEdges, c.center ? this.boxMatCenter : this.boxMatNeighbor);
+      box.scale.setScalar(cs);
+      box.position.set((c.gx + 0.5) * cs, (c.gy + 0.5) * cs, (c.gz + 0.5) * cs);
+      this.cullBoxes.add(box);
+    }
     const camPos = this.camera.position;
     const pxPerUnit = this.renderer.domElement.clientHeight / (2 * Math.tan((this.camera.fov * Math.PI) / 360));
     let low = 0;
@@ -174,9 +243,16 @@ export class Viewer {
     this.cullInfo = "drawn " + s.items + " / " + s.total + ", coarse " + low;
     const el = document.getElementById("cullInfo");
     if (el) el.textContent = this.cullInfo;
+    const dbg = document.getElementById("cullDebug");
+    if (dbg) {
+      const f3 = (v: THREE.Vector3) => `${v.x.toFixed(1)},${v.y.toFixed(1)},${v.z.toFixed(1)}`;
+      const dir = this.camera.getWorldDirection(new THREE.Vector3());
+      dbg.textContent = `cam (${f3(camPos)}) dir (${f3(dir)})\n${this.culler.debug}`;
+    }
   }
 
   redraw() {
+    this.cullForce = true;
     this.dirty = true;
   }
 
@@ -187,7 +263,9 @@ export class Viewer {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
-    this.dirty = true;
+    this.dirty = false;
+    this.renderer.render(this.scene, this.camera);
+    this.updateLabels();
   }
 
   // ---- geometry loading ----
@@ -297,6 +375,7 @@ export class Viewer {
       if (failed.includes(p)) continue;
       this.makeItem(inst, await this.loadGeometry(p));
     }
+    this.cullForce = true;
     this.maxStep = Math.max(0, ...insts.map((i) => i.poses.length - 1));
     this.setStep(Math.min(this.step, this.maxStep));
     this.setClipRange();
@@ -313,6 +392,7 @@ export class Viewer {
     mesh.userData.item = item;
     this.applyPose(item);
     this.items.push(item);
+    this.cullForce = true;
     this.fruits.add(mesh);
     return item;
   }
@@ -341,8 +421,19 @@ export class Viewer {
     it.edited = true;
   }
 
+  // shows one item at a pose that is not part of its stored poses (nudge playback)
+  showPose(it: Item, p: Pose) {
+    const r = p.rot;
+    this.poseMat.set(r[0], r[1], r[2], p.pos[0], r[3], r[4], r[5], p.pos[1], r[6], r[7], r[8], p.pos[2], 0, 0, 0, 1);
+    this.poseMat.decompose(it.mesh.position, it.mesh.quaternion, it.mesh.scale);
+    it.mesh.scale.setScalar(p.scale);
+    this.syncGizmo();
+    this.dirty = true;
+  }
+
   setStep(s: number) {
     this.step = s;
+    this.cullForce = true;
     for (const it of this.items) this.applyPose(it);
     this.dirty = true;
   }
@@ -429,6 +520,7 @@ export class Viewer {
 
   // ---- appearance ----
   applyMaterials() {
+    this.cullForce = true;
     for (const it of this.items) {
       const old = it.mesh.material as THREE.Material;
       old.dispose();
@@ -476,6 +568,7 @@ export class Viewer {
   // ---- visibility / selection ----
   setVisible(it: Item, vis: boolean) {
     it.visible = vis;
+    this.cullForce = true;
     it.mesh.visible = vis;
     if (this.selected === it) this.syncGizmo();
     this.dirty = true;
@@ -491,13 +584,14 @@ export class Viewer {
 
   select(it: Item | null) {
     this.selected = it;
+    this.cullForce = true;
     this.syncGizmo();
     this.refreshHighlight();
     this.onPick(it);
   }
 
   private syncGizmo() {
-    if (this.selected && this.selected.visible) this.tc.attach(this.selected.mesh);
+    if (this.forceMode === "none" && this.selected && this.selected.visible) this.tc.attach(this.selected.mesh);
     else this.tc.detach();
   }
 
@@ -509,31 +603,118 @@ export class Viewer {
     this.dirty = true;
   }
 
+  setForceMode(mode: "none" | "point" | "dir"): "none" | "point" | "dir" {
+    if (mode === "dir" && !this.sim.force) mode = "none";
+    this.forceMode = mode;
+    if (mode === "dir" && this.sim.force) {
+      const f = this.sim.force;
+      f.item.mesh.updateMatrixWorld(true);
+      this.forceAnchor.position.copy(f.localPoint).applyMatrix4(f.item.mesh.matrixWorld);
+      this.forceAnchor.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), f.dir);
+      this.forceTc.attach(this.forceAnchor);
+    } else {
+      this.forceTc.detach();
+    }
+    this.syncGizmo();
+    this.dirty = true;
+    return this.forceMode;
+  }
+
+  setForce(it: Item, worldPoint: THREE.Vector3, dir: THREE.Vector3, magnitude = 80) {
+    it.mesh.updateMatrixWorld(true);
+    const localPoint = it.mesh.worldToLocal(worldPoint.clone());
+    this.sim.force = { item: it, localPoint, dir: dir.clone().normalize(), magnitude };
+    this.updateForceArrow();
+    this.onForceChange(this.sim.force);
+    this.dirty = true;
+  }
+
+  updateForceArrow() {
+    if (!this.sim.force) {
+      if (this.forceArrow) {
+        this.scene.remove(this.forceArrow);
+        this.forceArrow = null;
+      }
+      return;
+    }
+    const f = this.sim.force;
+    f.item.mesh.updateMatrixWorld(true);
+    const wp = f.localPoint.clone().applyMatrix4(f.item.mesh.matrixWorld);
+    const len = 10 + f.magnitude * 0.1;
+    if (!this.forceArrow) {
+      this.forceArrow = new THREE.ArrowHelper(f.dir, wp, len, 0xff4422, 3, 2);
+      this.scene.add(this.forceArrow);
+    } else {
+      this.forceArrow.position.copy(wp);
+      this.forceArrow.setDirection(f.dir);
+      this.forceArrow.setLength(len, 3, 2);
+    }
+    if (this.forceMode === "dir") this.forceAnchor.position.copy(wp);
+  }
+
+  stopSim() {
+    if (!this.sim.running) return;
+    this.sim.running = false;
+    this.sim.stepsLeft = 0;
+    if (this.sim.active) this.writePose(this.sim.active.item);
+    this.cullForce = true;
+    this.dirty = true;
+    this.onSimDone();
+  }
+
+  toggleSim(magnitude = 80, steps = 30): boolean {
+    if (this.sim.running) {
+      this.stopSim();
+      return false;
+    }
+    const target = this.sim.force?.item || this.selected;
+    if (!target || !target.visible) return false;
+    if (this.forceMode !== "none") this.setForceMode("none");
+    if (this.sim.force) this.sim.force.magnitude = magnitude;
+    this.sim.init(target, this.items, this.containers.children as THREE.Mesh[]);
+    this.sim.stepsLeft = steps;
+    this.sim.running = true;
+    this.dirty = true;
+    return true;
+  }
+
   private bindPick() {
     const el = this.renderer.domElement;
     let down: [number, number] | null = null;
     let onGizmo = false;
+    const hitAt = (cx: number, cy: number, meshes: THREE.Mesh[]) => {
+      const r = el.getBoundingClientRect();
+      const ndc = new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
+      const ray = new THREE.Raycaster();
+      ray.setFromCamera(ndc, this.camera);
+      return ray.intersectObjects(meshes, false).filter((h) => !this.clippedOut(h.point))[0] || null;
+    };
     // capture phase: TransformControls clears its hovered axis on its own pointerup
     el.addEventListener("pointerdown", (e) => {
       down = [e.clientX, e.clientY];
-      onGizmo = this.tc.axis !== null;
+      onGizmo = this.tc.axis !== null || this.forceTc.axis !== null;
     }, true);
     el.addEventListener("pointerup", (e) => {
       if (!down) return;
-      if (onGizmo) {
-        down = null;
-        return;
-      }
       const moved = Math.hypot(e.clientX - down[0], e.clientY - down[1]);
       down = null;
-      if (moved > 4) return;
-      const r = el.getBoundingClientRect();
-      const ndc = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-      const ray = new THREE.Raycaster();
-      ray.setFromCamera(ndc, this.camera);
+      if (this.forceMode === "point") {
+        if (moved > 4 || !this.selected || !this.selected.visible) return;
+        const h = hitAt(e.clientX, e.clientY, [this.selected.mesh]);
+        if (!h) return;
+        const normal = h.face
+          ? h.face.normal.clone().transformDirection(h.object.matrixWorld).normalize()
+          : h.point.clone().sub(this.selected.mesh.position).normalize();
+        const mag = this.sim.force ? this.sim.force.magnitude : 80;
+        const dir = this.sim.force && this.sim.force.item === this.selected ? this.sim.force.dir : normal;
+        this.setForce(this.selected, h.point, dir, mag);
+        this.setForceMode("none");
+        return;
+      }
+      if (this.forceMode !== "none" || onGizmo || moved > 4) return;
       const meshes = this.items.filter((i) => i.mesh.visible).map((i) => i.mesh);
-      const hits = ray.intersectObjects(meshes, false).filter((h) => !this.clippedOut(h.point));
-      this.select(hits.length ? (hits[0].object.userData.item as Item) : null);
+      const hit = hitAt(e.clientX, e.clientY, meshes);
+      this.select(hit ? (hit.object.userData.item as Item) : null);
     });
   }
 
@@ -581,6 +762,7 @@ export class Viewer {
   }
 
   updateClip() {
+    this.cullForce = true;
     const b = this.bounds();
     if (b.isEmpty()) return;
     const ax = ["x", "y", "z"][this.clipAxis] as "x" | "y" | "z";

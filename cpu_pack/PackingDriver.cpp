@@ -370,6 +370,7 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
   spotParams.minFace = cfg.snugMinFace;
   spotParams.shellCm = cfg.snugShellCm;
   spotParams.minBuried = cfg.snugMinBuried;
+  spotParams.shrinkCm = cfg.snugShrinkCm;
   spotParams.buriedW = cfg.snugBuriedW;
   std::vector<Vec3f> snugRots;
   if (cfg.snugScore) {
@@ -513,6 +514,63 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
     }
     return worst;
   };
+  // validity grid: the spot search scores against the starting pack only, but a candidate is valid only if its
+  // voxels (same voxelization, shrink and erosion as the FFT search) hit no occupied voxel of scene.bg as it is NOW,
+  // which every Put updates. the offset mapping is the inverse of GetDisplacement: fg voxel i sits on bg voxel
+  // round((pos + fgOrigin - bgOrigin) / dx) + i.
+  struct FgVox {
+    Array3D8u vox;
+    Vec3f origin;
+  };
+  std::map<std::string, FgVox> fgVoxCache;
+  auto voxelOverlap = [&](unsigned itemIndex, const Vec3f &rot, const Vec3f &pos, unsigned erode) -> unsigned {
+    char keyBuf[160];
+    std::snprintf(keyBuf, sizeof(keyBuf), "%u %.5f %.5f %.5f %u", itemIndex, rot[0], rot[1], rot[2], erode);
+    auto it = fgVoxCache.find(keyBuf);
+    if (it == fgVoxCache.end()) {
+      TrigMesh rotated = scene.items[itemIndex].mesh;
+      TransformVerts(scene.items[itemIndex].mesh.v, rotated.v, RotationMatrixRad(rot[0], rot[1], rot[2]));
+      {
+        // the spot search shrinks small fruit (see SpotScoreParams::shrinkCm); the test must use the same mesh
+        const Box3f rb = ComputeBBox(rotated.v);
+        const Vec3f ext = rb.vmax - rb.vmin;
+        const float maxExt = std::max({ext[0], ext[1], ext[2]});
+        if (maxExt < 5.0f && maxExt > cfg.snugShrinkCm && cfg.snugShrinkCm > 0.0f) {
+          const float k = (maxExt - cfg.snugShrinkCm) / maxExt;
+          const Vec3f ctr = 0.5f * (rb.vmin + rb.vmax);
+          for (size_t i = 0; i < rotated.v.size(); i += 3) {
+            for (int a3 = 0; a3 < 3; a3++) rotated.v[i + a3] = ctr[a3] + (rotated.v[i + a3] - ctr[a3]) * k;
+          }
+        }
+      }
+      MeshConvo fg;
+      fg.SetMeshPtr(&rotated);
+      fg.Voxelize(scene.dx);
+      ThreshInPlace(fg.vox, 1);
+      if (erode > 0) ErodeVox(fg.vox, erode);
+      it = fgVoxCache.emplace(keyBuf, FgVox{fg.vox, fg.GetOrigin()}).first;
+    }
+    const FgVox &f = it->second;
+    const Vec3u fs = f.vox.GetSize();
+    const Vec3u bs = scene.bg.vox.GetSize();
+    const Vec3f o = (1.0f / scene.dx) * (pos + f.origin - scene.bg.GetOrigin());
+    const int ox = int(std::lround(o[0])), oy = int(std::lround(o[1])), oz = int(std::lround(o[2]));
+    unsigned hits = 0;
+    for (unsigned z = 0; z < fs[2]; z++) {
+      const int bz = oz + int(z);
+      if (bz < 0 || bz >= int(bs[2])) continue;
+      for (unsigned y = 0; y < fs[1]; y++) {
+        const int by = oy + int(y);
+        if (by < 0 || by >= int(bs[1])) continue;
+        for (unsigned x = 0; x < fs[0]; x++) {
+          const int bx = ox + int(x);
+          if (bx < 0 || bx >= int(bs[0])) continue;
+          if (f.vox(x, y, z) && scene.bg.vox(unsigned(bx), unsigned(by), unsigned(bz))) hits++;
+        }
+      }
+    }
+    return hits;
+  };
   bool packSuccess = false;
   auto placeAt = [&](unsigned itemIndex, const Vec3f &p, const Vec3f &r) -> bool {
       MeshInfo &item = scene.items[itemIndex];
@@ -528,10 +586,6 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
           newTran = cfg.snugNudgeSteps > 0
                         ? scene.Nudge(itemIndex, tran, Vec3f(0, 0, 0), 0.0f, trajectory, nullptr, cfg.snugNudgeSteps)
                         : tran;
-          if (cfg.snugPlan && computeWrap(itemIndex, newTran, wrapBase, ~0u) < cfg.snugMinWrap) {
-            // the settle left the pocket: keep the planned pose
-            newTran = tran;
-          }
         } else if (!surfacePoints.empty()) {
           Vec3f target = NearestKCenter(surfacePoints, p, 5);
           newTran = scene.NudgeToTarget(itemIndex, tran, target, trajectory);
@@ -575,7 +629,7 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
               SignedOverlapFraction(scene, item.box, item.samples, newTran.rotation, newTran.position);
           float engulfFrac =
               ExistingInsideCandidateFraction(scene, item.box, newTran.rotation, newTran.position, item.sdf);
-          const float occLimit = cfg.snugPlan ? cfg.snugPostOverlap : kOccupiedThresh;
+          const float occLimit = kOccupiedThresh;
           if (outsideFracAfter > kContainerOutsideThresh || occFracAfter > occLimit || engulfFrac > occLimit) {
             LOGI("  rejected " << item.name << " settle at (" << newTran.position[0] << " "
                                << newTran.position[1] << " " << newTran.position[2]
@@ -724,7 +778,7 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
       }
     }
     // commit best first. a candidate is skipped when something placed earlier already covers it.
-    unsigned skipped = 0;
+    unsigned voxelRejected = 0;
     for (const PlanCand &c : uniq) {
       if (placedCount >= step.count) break;
       if (cfg.maxSecondsPerStep > 0.0 && stepClock.ElapsedMS() / 1000.0 > cfg.maxSecondsPerStep) {
@@ -734,48 +788,24 @@ void PackStep(PackingScene &scene, const PackingStep &step, const PackingConfig 
       MeshInfo &item = scene.items[c.item];
       scene.EnsureItemSamples(c.item);
       const bool dbg = cfg.snugDebugRadius > 0.0f && (c.pos - Vec3f(cfg.snugDebugX, cfg.snugDebugY, cfg.snugDebugZ)).norm() < cfg.snugDebugRadius;
-      if (!item.samples.empty()) {
-        const Matrix3f rotM = RotationMatrixRad(c.rot[0], c.rot[1], c.rot[2]);
-        // covered means a fruit placed earlier in this step already sits there. overlap with the starting pack is
-        // expected for a snug pocket (the spot search erodes the fruit by a voxel) and is left to the settle and
-        // the post checks, so only the new instances count here.
-        const float occ = [&]() {
-          RigidTransform t;
-          t.position = c.pos;
-          t.rotation = rotM;
-          const Box3f box = ComputeBBox(MakeTransformedMesh(item.mesh, t).v);
-          size_t inside = 0;
-          const std::vector<unsigned> near = scene.broadPhase.GetNearby(box, 0.1f);
-          for (const SamplePoint &sp : item.samples) {
-            const Vec3f w = t.rotation * sp.x + t.position;
-            for (unsigned j : near) {
-              if (j < wrapBase) continue;
-              const InstanceInfo &o = scene.instances[j];
-              const MeshInfo &oi = scene.items[o.itemId];
-              if (!oi.sdf) continue;
-              if (oi.sdf->GetCoarseDist(o.tran.rotation.transposed() * (w - o.tran.position)) < -0.1f) {
-                inside++;
-                break;
-              }
-            }
-          }
-          return float(inside) / float(item.samples.size());
-        }();
-        if (dbg) {
-          LOGI("snugdbg " << item.name << " score " << c.score << " wrap " << c.wrap << " at " << c.pos[0] << " "
-                          << c.pos[1] << " " << c.pos[2] << " overlap with new fruit " << occ << " (limit "
-                          << cfg.snugPlanOverlap << ")\n");
-        }
-        if (occ > cfg.snugPlanOverlap) {
-          skipped++;
-          continue;
-        }
+      // the validity grid is the only gate: scene.bg holds the starting pack and every fruit committed so far, and
+      // a pose whose voxels miss it is free. a pose that passes is placed as planned, with no settle and no re-check.
+      const unsigned hits = voxelOverlap(c.item, c.rot, c.pos, step.erodeVoxels);
+      if (dbg) LOGI("snugdbg " << item.name << " score " << c.score << " wrap " << c.wrap << " at " << c.pos[0] << " " << c.pos[1] << " " << c.pos[2] << ", " << hits << " voxels hit the background\n");
+      if (hits > cfg.snugVoxTol) {
+        voxelRejected++;
+        continue;
       }
-      const unsigned before = placedCount;
-      placeAt(c.item, c.pos, c.rot);
-      if (dbg) LOGI("snugdbg   -> " << (placedCount > before ? "placed" : "placement rejected") << "\n");
+      RigidTransform t;
+      t.position = c.pos;
+      t.rotation = RotationMatrixRad(c.rot[0], c.rot[1], c.rot[2]);
+      const unsigned instanceId = scene.Put(c.item, t);
+      MarkDirtyCells(subgridCache, scene, ComputeBBox(MakeTransformedMesh(item.mesh, t).v));
+      placedCount++;
+      LOGI("  placed " << item.name << " instance " << instanceId << " at " << c.pos[0] << " " << c.pos[1] << " "
+                       << c.pos[2] << ", " << placedCount << " this step\n");
     }
-    LOGI("snug plan committed " << placedCount << " fruit, skipped " << skipped << " covered candidates\n");
+    LOGI("snug plan committed " << placedCount << " fruit, " << voxelRejected << " hit the updated background\n");
     // ---- review phase: nudge every new fruit toward its neighbors, new ones included ----
     if (cfg.snugRefine) {
       const size_t firstNew = wrapBase;

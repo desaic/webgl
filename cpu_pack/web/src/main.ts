@@ -1,5 +1,5 @@
 import * as api from "./api";
-import { Inst, isTraj, parsePack, parseTraj } from "./parse";
+import { Inst, Pose, isTraj, parseNudge, parsePack, parseTraj } from "./parse";
 import { Item, Viewer, labelOf } from "./scene";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -16,8 +16,22 @@ const state = {
   insts: [] as Inst[],
 };
 
+const statusHistory: string[] = [];
+function logStatus(msg: string) {
+  if (!msg) return;
+  const t = new Date().toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  statusHistory.push(`[${t}] ${msg}`);
+  if (statusHistory.length > 20) statusHistory.shift();
+  const box = document.getElementById("statusLog");
+  if (box) {
+    box.textContent = statusHistory.join("\n");
+    box.scrollTop = box.scrollHeight;
+  }
+}
+
 function status(msg: string) {
   $("status").textContent = msg;
+  logStatus(msg);
 }
 
 const baseName = (p: string) => p.split("/").pop() || p;
@@ -131,6 +145,15 @@ async function loadPackFile(path: string, keepCamera = false) {
     state.pack = path;
     state.packMtime = await api.mtime(path);
     state.insts = insts;
+    nudgeTrails = new Map();
+    if (!traj) {
+      try {
+        nudgeTrails = parseNudge(await api.fetchText(path + ".traj"));
+        logStatus(`nudge: loaded ${nudgeTrails.size} trails from ${baseName(path)}.traj`);
+      } catch {
+        logStatus(`nudge: no ${baseName(path)}.traj`);
+      }
+    }
     $("packName").textContent = baseName(path) + (traj ? " (traj)" : "");
     const pathFor = (i: Inst) => i.meshPath || state.meshDir + "/" + i.name + ".obj";
     const failed = await viewer.setInstances(insts, pathFor, (n, t) => status("meshes " + n + "/" + t));
@@ -173,6 +196,7 @@ function buildList() {
     eye.onclick = (ev) => {
       ev.stopPropagation();
       viewer.setVisible(it, !it.visible);
+      syncHideBtn();
       buildList();
     };
     d.append(n, eye);
@@ -182,7 +206,70 @@ function buildList() {
   }
 }
 
+// ---- nudge playback of the selected fruit ----
+let nudgeTrails = new Map<number, Pose[]>();
+let nudgeTimer = 0;
+let nudgeItem: Item | null = null;
+function nudgePoses(): Pose[] | null {
+  const it = viewer.selected;
+  return it ? nudgeTrails.get(viewer.items.indexOf(it)) || null : null;
+}
+function stopNudge(reason?: string) {
+  if (nudgeTimer && reason) logStatus(`nudge: stopped (${reason})`);
+  clearInterval(nudgeTimer);
+  nudgeTimer = 0;
+  $("nudgePlay").textContent = "Play nudge";
+}
+function setNudgeStep(s: number) {
+  const poses = nudgePoses();
+  if (!poses || !viewer.selected) return;
+  s = Math.max(0, Math.min(poses.length - 1, s));
+  viewer.showPose(viewer.selected, poses[s]);
+  $<HTMLInputElement>("nudgeStep").value = String(s);
+  $("nudgeLbl").textContent = s + " / " + (poses.length - 1);
+}
+function syncNudgeUi() {
+  stopNudge();
+  const poses = nudgePoses();
+  $("nudgeRow").hidden = !poses;
+  if (!poses) return;
+  $<HTMLInputElement>("nudgeStep").max = String(poses.length - 1);
+  // idle: show the final pose
+  $<HTMLInputElement>("nudgeStep").value = String(poses.length - 1);
+  $("nudgeLbl").textContent = poses.length - 1 + " / " + (poses.length - 1);
+}
+$("nudgePlay").onclick = () => {
+  if (nudgeTimer) return stopNudge("paused");
+  if (!viewer.selected) return logStatus("nudge: no item selected");
+  const idx = viewer.items.indexOf(viewer.selected);
+  const poses = nudgePoses();
+  const lbl = labelOf(viewer.selected.inst);
+  if (!poses) return logStatus(`nudge: no trail for ${lbl} (idx=${idx})`);
+  if (poses.length < 2) return logStatus(`nudge: ${lbl} has only ${poses.length} pose(s), nothing to play`);
+  const p0 = poses[0].pos;
+  const p1 = poses[poses.length - 1].pos;
+  const dp = Math.hypot(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]);
+  nudgeItem = viewer.selected;
+  $("nudgePlay").textContent = "Pause";
+  let s = parseInt($<HTMLInputElement>("nudgeStep").value);
+  if (s >= poses.length - 1) s = 0;
+  logStatus(`nudge: playing ${lbl} (${poses.length} poses, start=${s}, Δpos=${dp.toFixed(3)})`);
+  setNudgeStep(s);
+  nudgeTimer = window.setInterval(() => {
+    if (viewer.selected !== nudgeItem) return stopNudge("selection changed");
+    s++;
+    setNudgeStep(s);
+    if (s >= poses.length - 1) stopNudge("finished");
+  }, 40);
+};
+$("nudgeStep").oninput = (e) => {
+  stopNudge();
+  setNudgeStep(parseInt((e.target as HTMLInputElement).value));
+};
+
 viewer.onPick = (it: Item | null) => {
+  syncNudgeUi();
+  syncHideBtn();
   const el = $("selInfo");
   if (!it) {
     el.textContent = "click an object";
@@ -315,12 +402,6 @@ function setMode(m: "translate" | "rotate") {
 $("floatMode").onclick = () => setMode(viewer.tc.mode === "translate" ? "rotate" : "translate");
 $("modeMove").onclick = () => setMode("translate");
 $("modeRot").onclick = () => setMode("rotate");
-$("spaceBtn").onclick = () => {
-  const b = $("spaceBtn");
-  const next = b.textContent === "local" ? "world" : "local";
-  b.textContent = next;
-  viewer.setGizmoSpace(next);
-};
 function deleteSelected() {
   if (!viewer.selected) return;
   viewer.removeItem(viewer.selected);
@@ -507,27 +588,86 @@ $("link").onclick = async () => {
   await navigator.clipboard.writeText(location.href);
   status("link copied");
 };
+function syncHideBtn() {
+  $("hideSel").textContent = viewer.selected && !viewer.selected.visible ? "Unhide" : "Hide";
+}
 $("filter").oninput = buildList;
 $("hideSel").onclick = () => {
-  if (viewer.selected) viewer.setVisible(viewer.selected, false);
+  if (viewer.selected) viewer.setVisible(viewer.selected, !viewer.selected.visible);
+  syncHideBtn();
   buildList();
 };
 $("isoSel").onclick = () => {
   if (viewer.selected) viewer.isolate(viewer.selected);
+  syncHideBtn();
   buildList();
 };
 $("showAll").onclick = () => {
   viewer.showAll();
+  syncHideBtn();
   buildList();
 };
-$("focusSel").onclick = () => viewer.selected && viewer.focus(viewer.selected);
+
+// ---- rigid body sim ----
+function syncForceBtns() {
+  $("forcePoint").classList.toggle("on", viewer.forceMode === "point");
+  $("forceDir").classList.toggle("on", viewer.forceMode === "dir");
+}
+$("forcePoint").onclick = () => {
+  if (viewer.forceMode !== "point" && !viewer.selected) {
+    status("select a fruit first");
+    return;
+  }
+  const m = viewer.setForceMode(viewer.forceMode === "point" ? "none" : "point");
+  syncForceBtns();
+  if (m === "point") status("click on the selected fruit to set force point");
+};
+$("forceDir").onclick = () => {
+  if (viewer.forceMode !== "dir" && !viewer.sim.force) {
+    status("set force point first");
+    return;
+  }
+  const m = viewer.setForceMode(viewer.forceMode === "dir" ? "none" : "dir");
+  syncForceBtns();
+  if (m === "dir") status("drag the rotation gizmo to aim force direction");
+};
+viewer.onForceChange = (f) => {
+  syncForceBtns();
+  if (!f) {
+    $("forceInfo").textContent = "select a fruit, then click Force point";
+    return;
+  }
+  const d = f.dir;
+  const info = `${labelOf(f.item.inst)} dir (${d.x.toFixed(2)}, ${d.y.toFixed(2)}, ${d.z.toFixed(2)})`;
+  $("forceInfo").textContent = info;
+  if (viewer.forceMode !== "dir") logStatus(`force set on ${info}`);
+};
+$("forceMag").oninput = (e) => {
+  const mag = parseFloat((e.target as HTMLInputElement).value);
+  if (viewer.sim.force) {
+    viewer.sim.force.magnitude = mag;
+    viewer.updateForceArrow();
+  }
+};
+viewer.onSimDone = () => {
+  $("runSim").textContent = "Run";
+  $("runSim").classList.remove("on");
+  logStatus("sim: finished");
+};
+$("runSim").onclick = () => {
+  const mag = parseFloat($<HTMLInputElement>("forceMag").value);
+  const running = viewer.toggleSim(mag, 30);
+  syncForceBtns();
+  $("runSim").textContent = running ? "Stop" : "Run";
+  $("runSim").classList.toggle("on", running);
+  if (running) logStatus(`sim: running 30 steps (force=${mag})`);
+};
 
 window.addEventListener("keydown", (e) => {
   if ((e.target as HTMLElement).tagName === "INPUT") return;
   if (e.key === "h") $("hideSel").click();
   else if (e.key === "i") $("isoSel").click();
   else if (e.key === "a") $("showAll").click();
-  else if (e.key === "f") $("focusSel").click();
   else if (e.key === "k") showCollisions();
   else if (e.key === "w") setMode("translate");
   else if (e.key === "e") setMode("rotate");
@@ -536,5 +676,27 @@ window.addEventListener("keydown", (e) => {
   else if (e.key === "ArrowRight" && viewer.maxStep) setStep(Math.min(viewer.maxStep, viewer.step + 1));
   else if (e.key === "ArrowLeft" && viewer.maxStep) setStep(Math.max(0, viewer.step - 1));
 });
+
+// ---- collapsible sidebar sections & horizontal resize ----
+document.querySelectorAll<HTMLElement>("#panel section > h3").forEach((h) => {
+  h.onclick = () => h.parentElement?.classList.toggle("collapsed");
+});
+
+const resizer = $("panelResizer");
+const panel = $("panel");
+resizer.onpointerdown = (e) => {
+  e.preventDefault();
+  resizer.setPointerCapture(e.pointerId);
+  resizer.classList.add("dragging");
+};
+resizer.onpointermove = (e) => {
+  if (!resizer.hasPointerCapture(e.pointerId)) return;
+  const w = Math.max(180, Math.min(window.innerWidth - 200, e.clientX));
+  panel.style.width = w + "px";
+};
+resizer.onpointerup = resizer.onpointercancel = (e) => {
+  if (resizer.hasPointerCapture(e.pointerId)) resizer.releasePointerCapture(e.pointerId);
+  resizer.classList.remove("dragging");
+};
 
 restoreFromHash();

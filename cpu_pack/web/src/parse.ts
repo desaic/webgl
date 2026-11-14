@@ -44,6 +44,23 @@ export function parsePack(text: string): Inst[] {
   return out;
 }
 
+// nudge trails written by the packer next to a pack: "row N count", then count pose lines
+export function parseNudge(text: string): Map<number, Pose[]> {
+  const out = new Map<number, Pose[]>();
+  let cur: Pose[] | null = null;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line.startsWith("row")) {
+      cur = [];
+      out.set(parseInt(line.split(/\s+/)[1]), cur);
+    } else if (cur && line.startsWith("pos")) {
+      const pose = parsePose(line.split(/\s+/));
+      if (pose) cur.push(pose);
+    }
+  }
+  return out;
+}
+
 // trajectory file: "Instance N Mesh path" then Step/Final lines
 export function parseTraj(text: string): Inst[] {
   const out: Inst[] = [];

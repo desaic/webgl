@@ -44,6 +44,9 @@ struct SpotScoreParams {
   float shellCm = 2.0f;
   float minBuried = 0.6f;
   float buriedW = 10.0f;   // score += buriedW * buried fraction
+  // the subgrid search shrinks a fruit under 5 cm by this much (cm, whole extent) before the FFT so it fits
+  // tight pockets; 0 keeps the true size, so a spot the search calls free is free for the real fruit.
+  float shrinkCm = 0.5f;
 };
 
 // voxelization of a rotated fruit, after thresholding and erosion and before the FFT reversal.
@@ -54,6 +57,9 @@ struct FgCacheEntry {
   Box3f meshBox;
 };
 using FgCache = std::unordered_map<uint64_t, FgCacheEntry>;
+
+// shrinks the occupied voxels by n (6-neighborhood), the same erosion the spot search applies to the fruit.
+void ErodeVox(Array3D8u &vox, unsigned n);
 
 // fgCache (optional): voxelization cache, see FgCacheEntry.
 // itemsProvider (optional, heuristic only): returns the items-only background when first

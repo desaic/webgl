@@ -10,7 +10,7 @@ import os
 import sys
 from mathutils import Matrix, Vector
 
-PACK_FILE = "F:/meshes/fruit_hand/out_x208_tool25d/pack_cavity.txt"
+PACK_FILE = "F:/meshes/fruit_hand/out_snug_small2/pack_final.txt"
 #PACK_FILE = "F:/meshes/fruit_hand/out_medium_graph/pack_nudged.txt"
 MESH_DIR = "F:/meshes/fruit_hand/fruits_1/"
 

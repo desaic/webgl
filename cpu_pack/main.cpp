@@ -10,11 +10,16 @@
 #include "InnerForce.h"
 #include "Vhacd.h"
 #include "MeshOps.h"
+#include "MeshInfo.h"
+#include "PackingScene.h"
+#include "GridUtils.h"
+#include "MeshConvo.h"
 
 #include <algorithm>
 #include <iostream>
 #include <sstream>
 #include <filesystem>
+#include <fstream>
 #include <limits>
 
 // Standalone inspection; run cpu_pack --debug-pack-crevices to skip packing.
@@ -34,6 +39,87 @@ void ComputePackShrinkwrapAndCrevices(
   fp.shrinkwrapVoxelSize = voxelSize;
   fp.shrinkwrapOpenRadiusVoxels = 1;
   DebugCreviceSpots(cfg, fp, false);
+}
+
+
+// --pair-overlap cfg packFile idA idB: fast overlap report of two fruit of a pack file (0-based row, the id in the
+// viewer label), without loading the scene. voxel counts use the packing voxelization at cfg.dx; the surface
+// numbers are the deepest vertex of one fruit inside the other (ray parity, so only meaningful for watertight meshes).
+static bool RunPairOverlap(const PackingConfig &cfg, const std::string &packFile, unsigned ia, unsigned ib) {
+  std::ifstream in(packFile);
+  std::string line;
+  std::getline(in, line);
+  struct Row {
+    std::string name;
+    Vec3f pos;
+    Matrix3f rot;
+  };
+  std::vector<Row> rows;
+  while (std::getline(in, line)) {
+    std::istringstream ss(line);
+    std::string name, tag;
+    Row r;
+    float v[9];
+    ss >> name >> tag >> r.pos[0] >> r.pos[1] >> r.pos[2] >> tag;
+    for (float &x : v) ss >> x;
+    if (!ss) continue;
+    r.name = name;
+    r.rot = Matrix3f(v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8]);
+    rows.push_back(r);
+  }
+  if (ia >= rows.size() || ib >= rows.size()) {
+    std::cout << "pack has " << rows.size() << " fruit\n";
+    return false;
+  }
+  TrigMesh meshes[2];
+  MeshConvo conv[2];
+  const unsigned ids[2] = {ia, ib};
+  for (int k = 0; k < 2; k++) {
+    const Row &r = rows[ids[k]];
+    std::filesystem::path p = std::filesystem::path(cfg.dataDir) / cfg.fruitSubdir / (r.name + ".obj");
+    if (!std::filesystem::exists(p)) p.replace_extension(".stl");
+    TrigMesh local;
+    if (LoadMesh(local, p) != 0) {
+      std::cout << "cannot load " << p.string() << "\n";
+      return false;
+    }
+    meshes[k] = local;
+    for (size_t i = 0; i < local.v.size(); i += 3) {
+      const Vec3f w = r.rot * Vec3f(local.v[i], local.v[i + 1], local.v[i + 2]) + r.pos;
+      meshes[k].v[i] = w[0];
+      meshes[k].v[i + 1] = w[1];
+      meshes[k].v[i + 2] = w[2];
+    }
+    conv[k].SetMeshPtr(&meshes[k]);
+    conv[k].Voxelize(cfg.dx);
+    ThreshInPlace(conv[k].vox, 1);
+  }
+  const float dx = cfg.dx;
+  auto count = [&](const Array3D8u &a, const Vec3f &oa, const Array3D8u &b, const Vec3f &ob) {
+    const Vec3u sa = a.GetSize(), sb = b.GetSize();
+    const Vec3f o = (1.0f / dx) * (oa - ob);
+    const int ox = int(std::lround(o[0])), oy = int(std::lround(o[1])), oz = int(std::lround(o[2]));
+    size_t hits = 0, na = 0;
+    for (unsigned z = 0; z < sa[2]; z++)
+      for (unsigned y = 0; y < sa[1]; y++)
+        for (unsigned x = 0; x < sa[0]; x++) {
+          if (!a(x, y, z)) continue;
+          na++;
+          const int bx = ox + int(x), by = oy + int(y), bz = oz + int(z);
+          if (bx < 0 || by < 0 || bz < 0 || bx >= int(sb[0]) || by >= int(sb[1]) || bz >= int(sb[2])) continue;
+          if (b(unsigned(bx), unsigned(by), unsigned(bz))) hits++;
+        }
+    return std::make_pair(hits, na);
+  };
+  auto res = count(conv[0].vox, conv[0].GetOrigin(), conv[1].vox, conv[1].GetOrigin());
+  Array3D8u eb = conv[1].vox;
+  ErodeBgVox(eb);
+  auto resE = count(conv[0].vox, conv[0].GetOrigin(), eb, conv[1].GetOrigin());
+  std::cout << rows[ia].name << "_" << ia << " vs " << rows[ib].name << "_" << ib << ": centers "
+            << (rows[ia].pos - rows[ib].pos).norm() << " cm apart, dx " << dx << "\n";
+  std::cout << "voxels of A " << res.second << ", overlapping B " << res.first << " (" << res.first * dx * dx * dx
+            << " cm3), overlapping B eroded as a placed fruit " << resE.first << "\n";
+  return true;
 }
 
 int main(int argc, char *argv[]) {
@@ -83,6 +169,9 @@ int main(int argc, char *argv[]) {
   if (plan.steps.empty()) {
     std::cout << "empty packing plan. nothing to do.\n";
     return 1;
+  }
+  if (argc > 5 && std::string(argv[1]) == "--pair-overlap") {
+    return RunPairOverlap(cfg, argv[3], unsigned(std::atoi(argv[4])), unsigned(std::atoi(argv[5]))) ? 0 : 1;
   }
   if (argc > 1 && (std::string(argv[1]) == "--medium-graph" ||
                     std::string(argv[1]) == "--medium-nudge")) {

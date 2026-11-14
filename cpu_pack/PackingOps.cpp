@@ -13,7 +13,7 @@
 #include <cmath>
 #include <iostream>
 
-static void ErodeVox(Array3D8u &vox, unsigned n) {
+void ErodeVox(Array3D8u &vox, unsigned n) {
   Vec3u size = vox.GetSize();
   for (unsigned iter = 0; iter < n; iter++) {
     Array3D8u out;
@@ -525,8 +525,9 @@ bool FindSpotSubgrid(MeshConvo &bg,
 
   TrigMesh const *partPtr = &part;
   TrigMesh shrunk;
-  if (maxExtent < 5.0f && maxExtent > 0.5f) {
-    float shrinkScale = (maxExtent - 0.5f) / maxExtent;
+  const float shrinkCm = spotParams != nullptr ? spotParams->shrinkCm : 0.5f;
+  if (maxExtent < 5.0f && maxExtent > shrinkCm && shrinkCm > 0.0f) {
+    float shrinkScale = (maxExtent - shrinkCm) / maxExtent;
     Vec3f center = 0.5f * (itemBox.vmin + itemBox.vmax);
     shrunk = part;
     for (size_t i = 0; i < shrunk.v.size(); i += 3) {

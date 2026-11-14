@@ -17,10 +17,7 @@
             <button id="setMeshDir" title="use this folder as the fruit mesh folder for pack files">Use as fruits dir</button>
           </div>
           <div id="files"></div>
-          <div class="hint">txt = load pack or trajectory. obj/stl = pick a file (then use Container below)</div>
-        </section>
-        <section>
-          <h3>Container</h3>
+          <div class="hint">txt = load pack or trajectory. obj/stl = pick a file (then set container below)</div>
           <div class="row"><input id="contPath" placeholder="pick an obj/stl above, or paste a path" spellcheck="false" /></div>
           <div class="row small">
             <button id="contSet" title="replace all containers with this file">Set container</button>
@@ -28,18 +25,18 @@
           </div>
           <div id="contList"></div>
         </section>
-        <section>
+        <section class="collapsed">
           <h3>Loaded</h3>
           <div class="kv"><span>pack</span><span id="packName">-</span></div>
           <div class="kv"><span>fruits dir</span><span id="meshDirLbl">-</span></div>
           <div class="row small"><button id="reload">Reload</button><label><input type="checkbox" id="autoReload" /> auto</label></div>
         </section>
-        <section id="trajSec" hidden>
+        <section id="trajSec" class="collapsed" hidden>
           <h3>Trajectory</h3>
           <div class="row"><button id="play">Play</button><input type="range" id="step" min="0" max="0" value="0" /></div>
           <div class="kv"><span>step</span><span id="stepLbl">0</span></div>
         </section>
-        <section>
+        <section class="collapsed">
           <h3>View</h3>
           <label class="row">container <input type="range" id="contOpacity" min="0" max="1" step="0.02" value="0.25" /></label>
           <label class="row">fruit <input type="range" id="fruitOpacity" min="0.05" max="1" step="0.02" value="1" /></label>
@@ -60,22 +57,27 @@
             <button id="link">Copy link</button>
           </div>
         </section>
-        <section>
+        <section class="collapsed">
           <h3>Selection</h3>
           <div id="selInfo">click an object</div>
           <div class="row small">
             <button id="hideSel">Hide</button>
             <button id="isoSel">Isolate</button>
             <button id="showAll">Show all</button>
-            <button id="focusSel">Focus</button>
           </div>
           <div class="row small">
             <button id="modeMove" class="on" title="W">Move</button>
             <button id="modeRot" title="E">Rotate</button>
-            <button id="spaceBtn" title="toggle gizmo space">local</button>
-            <button id="collSel" title="K key: list touching neighbors and penetration depth">Collisions</button>
+          </div>
+          <div class="row small">
             <button id="copySel" title="C key: duplicate as name_N">Copy</button>
             <button id="delSel" title="Delete key">Delete</button>
+            <button id="collSel" title="K key: list touching neighbors and penetration depth">Collisions</button>
+          </div>
+          <div class="row small" id="nudgeRow" hidden>
+            <button id="nudgePlay" title="play the nudge of the selected fruit, starting at the fft placement">Play nudge</button>
+            <input type="range" id="nudgeStep" min="0" max="0" value="0" />
+            <span id="nudgeLbl" class="hint"></span>
           </div>
           <pre id="collInfo" class="hint"></pre>
           <div class="row small">
@@ -83,7 +85,18 @@
             <span id="editInfo" class="hint"></span>
           </div>
         </section>
-        <section class="grow">
+        <section class="collapsed">
+          <h3>Rigid body sim</h3>
+          <div class="row small">
+            <button id="forcePoint">Force point</button>
+            <button id="forceDir">Force direction</button>
+            <button id="runSim">Run</button>
+          </div>
+          <label class="row">force <input type="range" id="forceMag" min="5" max="300" step="5" value="80" /></label>
+          <div id="forceInfo" class="hint">select a fruit, then click Force point</div>
+        </section>
+        <section class="grow collapsed">
+          <h3>Items</h3>
           <div class="tabs">
             <button id="tabInst" class="on">Instances <span id="count"></span></button>
             <button id="tabFruit">Fruits <span id="fruitCount"></span></button>
@@ -102,7 +115,13 @@
           </div>
         </section>
         <div id="status"></div>
+        <section class="collapsed">
+          <h3>Status</h3>
+          <div id="statusLog"></div>
+        </section>
+        <pre id="cullDebug" class="hint" style="white-space:pre-wrap;word-break:break-all;margin:0"></pre>
       </aside>
+      <div id="panelResizer" title="Drag to resize sidebar"></div>
       <main id="view">
         <div id="floatBar">
           <button id="floatMode" title="toggle gizmo: move / rotate (W, E)">Move/Rotate</button>

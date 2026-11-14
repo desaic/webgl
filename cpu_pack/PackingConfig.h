@@ -172,7 +172,6 @@ struct PackingConfig {
     bool snugPlan = false;
     float snugPlanNms = 1.5f;     // candidates closer than this (cm) to a better one of the same kind and rotation are dropped
     unsigned snugPlanMax = 24;    // local maxima kept per cell and rotation
-    float snugPlanOverlap = 0.03f; // a candidate is skipped when this fraction of the fruit samples is already occupied
     // geometric wrap score, fruit only (the container wall does not count): wrap = touching fraction * (1 - R).
     // touching fraction: share of the fruit's surface samples within snugTouchCm of another fruit's surface.
     // R: length of the mean outward normal of the touched surfaces, 0 when they push from all sides, 1 when
@@ -193,7 +192,8 @@ struct PackingConfig {
     // debug: log the commit decision of every candidate within snugDebugRadius cm of snugDebugSpot
     float snugDebugX = 0.0f, snugDebugY = 0.0f, snugDebugZ = 0.0f;
     float snugDebugRadius = 0.0f;
-    float snugPostOverlap = 0.4f; // post-placement occupied and engulfed limit in plan mode (the spot search erodes the fruit by a voxel, so a snug fit overlaps its neighbors a little)
+    float snugShrinkCm = 0.5f;    // cm, the spot search shrinks fruit under 5 cm by this much before the FFT (0 = true size)
+    unsigned snugVoxTol = 0;      // voxels a planned pose may hit in the updated background (the voxel mapping has about one voxel of slack)
     unsigned snugRotations = 12;  // distinct rotations tried per cell (at most 24)
     float snugWallW = 0.5f;       // weight of the distance to the container wall (cm), positive = prefer far
     float snugWallCap = 10.0f;    // wall distance beyond this does not score more (cm)
