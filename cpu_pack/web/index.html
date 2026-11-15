@@ -88,12 +88,17 @@
         <section class="collapsed">
           <h3>Rigid body sim</h3>
           <div class="row small">
-            <button id="attachPoint">Attach point</button>
-            <button id="moveTarget">Move target</button>
+            <button id="attach1">Attach 1</button>
+            <button id="target1">Target 1</button>
+            <button id="attach2">Attach 2</button>
+            <button id="target2">Target 2</button>
+          </div>
+          <div class="row small">
             <button id="runSim">Run</button>
+            <button id="clearForces">Clear</button>
           </div>
           <label class="row">strength <input type="range" id="forceMag" min="5" max="300" step="5" value="80" /></label>
-          <div id="forceInfo" class="hint">select a fruit, then click Attach point</div>
+          <div id="forceInfo" class="hint">select a fruit, then click Attach 1 or Attach 2</div>
         </section>
         <section class="grow collapsed">
           <h3>Items</h3>

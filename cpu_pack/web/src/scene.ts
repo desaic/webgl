@@ -50,13 +50,14 @@ export class Viewer {
   onPick: (it: Item | null) => void = () => {};
   onCamera: () => void = () => {};
   onEdit: (it: Item) => void = () => {};
-  onForceChange: (f: ForceSpec | null) => void = () => {};
+  onForceChange: (forces: (ForceSpec | null)[]) => void = () => {};
   onSimDone: () => void = () => {};
   tc: TransformControls;
   forceTc: TransformControls;
   sim = new RigidBodySim();
-  forceMode: "none" | "attach" | "target" = "none";
-  private forceArrow: THREE.ArrowHelper | null = null;
+  forceMode: "none" | "attach0" | "attach1" | "target0" | "target1" = "none";
+  private forceGroup = new THREE.Group();
+  private forceSphereGeo = new THREE.SphereGeometry(1, 16, 12);
   private forceAnchor = new THREE.Object3D();
 
   private poseMat = new THREE.Matrix4();
@@ -125,13 +126,15 @@ export class Viewer {
     });
     this.forceTc.addEventListener("change", () => (this.dirty = true));
     this.forceTc.addEventListener("objectChange", () => {
-      if (this.sim.force) {
-        this.sim.force.target.copy(this.forceAnchor.position);
-        this.updateForceArrow();
-        this.onForceChange(this.sim.force);
+      const idx = this.forceMode === "target0" ? 0 : this.forceMode === "target1" ? 1 : -1;
+      const f = idx >= 0 ? this.sim.forces[idx] : null;
+      if (f) {
+        f.target.copy(this.forceAnchor.position);
+        this.updateForceVisuals();
+        this.onForceChange(this.sim.forces);
       }
     });
-    this.scene.add(this.forceAnchor, this.forceTc.getHelper());
+    this.scene.add(this.forceAnchor, this.forceGroup, this.forceTc.getHelper());
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x404050, 1.1));
     const dl = new THREE.DirectionalLight(0xffffff, 1.6);
     this.camera.add(dl);
@@ -147,7 +150,7 @@ export class Viewer {
       if (this.sim.running) {
         this.sim.step();
         this.sim.stepsLeft--;
-        this.updateForceArrow();
+        this.updateForceVisuals();
         this.syncGizmo();
         this.dirty = true;
         if (this.sim.stepsLeft <= 0) this.stopSim();
@@ -603,11 +606,13 @@ export class Viewer {
     this.dirty = true;
   }
 
-  setForceMode(mode: "none" | "attach" | "target"): "none" | "attach" | "target" {
-    if (mode === "target" && !this.sim.force) mode = "none";
+  setForceMode(mode: "none" | "attach0" | "attach1" | "target0" | "target1"): "none" | "attach0" | "attach1" | "target0" | "target1" {
+    const idx = mode === "target0" ? 0 : mode === "target1" ? 1 : -1;
+    const f = idx >= 0 ? this.sim.forces[idx] : null;
+    if (idx >= 0 && !f) mode = "none";
     this.forceMode = mode;
-    if (mode === "target" && this.sim.force) {
-      this.forceAnchor.position.copy(this.sim.force.target);
+    if (idx >= 0 && f) {
+      this.forceAnchor.position.copy(f.target);
       this.forceAnchor.quaternion.identity();
       this.forceTc.attach(this.forceAnchor);
     } else {
@@ -618,39 +623,49 @@ export class Viewer {
     return this.forceMode;
   }
 
-  setAttachPoint(it: Item, worldPoint: THREE.Vector3, magnitude = 80) {
+  setAttachPoint(slot: 0 | 1, it: Item, worldPoint: THREE.Vector3, magnitude = 80) {
+    // keep both slots on the same fruit
+    const other = slot === 0 ? 1 : 0;
+    if (this.sim.forces[other] && this.sim.forces[other]!.item !== it) this.sim.forces[other] = null;
     it.mesh.updateMatrixWorld(true);
     const localPoint = it.mesh.worldToLocal(worldPoint.clone());
-    this.sim.force = { item: it, localPoint, target: worldPoint.clone(), magnitude };
-    this.setForceMode("target");
-    this.updateForceArrow();
-    this.onForceChange(this.sim.force);
+    this.sim.forces[slot] = { item: it, localPoint, target: worldPoint.clone(), magnitude };
+    this.setForceMode(slot === 0 ? "target0" : "target1");
+    this.updateForceVisuals();
+    this.onForceChange(this.sim.forces);
     this.dirty = true;
   }
 
-  updateForceArrow() {
-    if (!this.sim.force) {
-      if (this.forceArrow) {
-        this.scene.remove(this.forceArrow);
-        this.forceArrow = null;
-      }
-      return;
-    }
-    const f = this.sim.force;
-    f.item.mesh.updateMatrixWorld(true);
-    const wp = f.localPoint.clone().applyMatrix4(f.item.mesh.matrixWorld);
-    const delta = f.target.clone().sub(wp);
-    const len = delta.length();
-    const dir = len > 1e-4 ? delta.divideScalar(len) : new THREE.Vector3(0, 0, 1);
-    if (!this.forceArrow) {
-      this.forceArrow = new THREE.ArrowHelper(dir, wp, Math.max(0.1, len), 0xff4422, 2, 1.5);
-      this.scene.add(this.forceArrow);
-    } else {
-      this.forceArrow.position.copy(wp);
-      this.forceArrow.setDirection(dir);
-      this.forceArrow.setLength(Math.max(0.1, len), Math.min(2, len * 0.4), 1.5);
-    }
-    this.forceArrow.visible = len > 0.05;
+  clearForces() {
+    this.sim.forces = [null, null];
+    this.setForceMode("none");
+    this.updateForceVisuals();
+    this.onForceChange(this.sim.forces);
+    this.dirty = true;
+  }
+
+  updateForceVisuals() {
+    this.forceGroup.clear();
+    const attachColors = [0xff4422, 0x2299ff];
+    const targetColors = [0xffaa44, 0x66ddff];
+    this.sim.forces.forEach((f, idx) => {
+      if (!f) return;
+      f.item.mesh.updateMatrixWorld(true);
+      const wp = f.localPoint.clone().applyMatrix4(f.item.mesh.matrixWorld);
+      const r = Math.max(0.05, 0.05 * f.item.radius * f.item.mesh.scale.x);
+
+      const aSphere = new THREE.Mesh(this.forceSphereGeo, new THREE.MeshBasicMaterial({ color: attachColors[idx] }));
+      aSphere.scale.setScalar(r);
+      aSphere.position.copy(wp);
+
+      const tSphere = new THREE.Mesh(this.forceSphereGeo, new THREE.MeshBasicMaterial({ color: targetColors[idx] }));
+      tSphere.scale.setScalar(r);
+      tSphere.position.copy(f.target);
+
+      const lineGeo = new THREE.BufferGeometry().setFromPoints([wp, f.target]);
+      const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: targetColors[idx] }));
+      this.forceGroup.add(aSphere, tSphere, line);
+    });
   }
 
   stopSim() {
@@ -668,10 +683,10 @@ export class Viewer {
       this.stopSim();
       return false;
     }
-    const target = this.sim.force?.item || this.selected;
+    const target = this.sim.forces.find(Boolean)?.item || this.selected;
     if (!target || !target.visible) return false;
     if (this.forceMode !== "none") this.setForceMode("none");
-    if (this.sim.force) this.sim.force.magnitude = magnitude;
+    for (const f of this.sim.forces) if (f) f.magnitude = magnitude;
     this.sim.init(target, this.items);
     this.sim.stepsLeft = steps;
     this.sim.running = true;
@@ -699,12 +714,13 @@ export class Viewer {
       if (!down) return;
       const moved = Math.hypot(e.clientX - down[0], e.clientY - down[1]);
       down = null;
-      if (this.forceMode === "attach") {
+      if (this.forceMode === "attach0" || this.forceMode === "attach1") {
         if (moved > 4 || !this.selected || !this.selected.visible) return;
         const h = hitAt(e.clientX, e.clientY, [this.selected.mesh]);
         if (!h) return;
-        const mag = this.sim.force ? this.sim.force.magnitude : 80;
-        this.setAttachPoint(this.selected, h.point, mag);
+        const slot = this.forceMode === "attach0" ? 0 : 1;
+        const mag = this.sim.forces[slot]?.magnitude ?? 80;
+        this.setAttachPoint(slot, this.selected, h.point, mag);
         return;
       }
       if (this.forceMode !== "none" || onGizmo || moved > 4) return;

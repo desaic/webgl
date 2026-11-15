@@ -1,11 +1,24 @@
 import * as THREE from "three";
 import { MeshBVH } from "three-mesh-bvh";
+import { decimate } from "./cull";
 import { Item } from "./scene";
 
-const N_SAMPLES = 48;
+const N_RIDGE_VERTS = 160;
+const N_AREA_SAMPLES = 80;
 const MAX_NUDGE_CM = 5;
+const SIM_DECIMATE_CELLS = 16;
+const simGeos = new WeakMap<THREE.BufferGeometry, THREE.BufferGeometry>();
 const bvhs = new WeakMap<THREE.BufferGeometry, MeshBVH>();
 const sampleCache = new WeakMap<THREE.BufferGeometry, THREE.Vector3[]>();
+
+function simGeoOf(g: THREE.BufferGeometry): THREE.BufferGeometry {
+  let sg = simGeos.get(g);
+  if (!sg) {
+    sg = decimate(g, SIM_DECIMATE_CELLS);
+    simGeos.set(g, sg);
+  }
+  return sg;
+}
 
 function bvhOf(g: THREE.BufferGeometry): MeshBVH {
   let b = bvhs.get(g);
@@ -20,25 +33,51 @@ function samplesOf(g: THREE.BufferGeometry): THREE.Vector3[] {
   let s = sampleCache.get(g);
   if (s) return s;
   const pos = g.attributes.position;
+  if (!g.attributes.normal) g.computeVertexNormals();
+  const norm = g.attributes.normal;
   const idx = g.index;
   const nt = (idx ? idx.count : pos.count) / 3;
   const vi = (t: number, k: number) => (idx ? idx.getX(t * 3 + k) : t * 3 + k);
   const a = new THREE.Vector3();
   const b = new THREE.Vector3();
   const c = new THREE.Vector3();
+  const fn = new THREE.Vector3();
+  const vn = new THREE.Vector3();
+  const sharpness = new Float32Array(pos.count);
   const cum = new Float64Array(nt);
   let total = 0;
   for (let t = 0; t < nt; t++) {
-    a.fromBufferAttribute(pos, vi(t, 0));
-    b.fromBufferAttribute(pos, vi(t, 1)).sub(a);
-    c.fromBufferAttribute(pos, vi(t, 2)).sub(a);
-    total += b.cross(c).length() * 0.5;
+    const i0 = vi(t, 0), i1 = vi(t, 1), i2 = vi(t, 2);
+    a.fromBufferAttribute(pos, i0);
+    b.fromBufferAttribute(pos, i1).sub(a);
+    c.fromBufferAttribute(pos, i2).sub(a);
+    fn.crossVectors(b, c);
+    const area2 = fn.length();
+    total += area2 * 0.5;
     cum[t] = total;
+    if (area2 > 1e-10) {
+      fn.divideScalar(area2);
+      for (const vi0 of [i0, i1, i2]) {
+        vn.fromBufferAttribute(norm, vi0);
+        const curv = 1 - Math.abs(fn.dot(vn));
+        if (curv > sharpness[vi0]) sharpness[vi0] = curv;
+      }
+    }
   }
+
+  // 1. Prioritize sharpest ridge/fin vertices so thin fins are never missed
+  const order = Array.from({ length: pos.count }, (_, i) => i);
+  order.sort((i, j) => sharpness[j] - sharpness[i]);
+  s = [];
+  const nRidge = Math.min(pos.count, N_RIDGE_VERTS);
+  for (let i = 0; i < nRidge; i++) {
+    s.push(new THREE.Vector3().fromBufferAttribute(pos, order[i]));
+  }
+
+  // 2. Add area-weighted samples to cover flat regions
   let seed = 13374242;
   const rnd = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
-  s = [];
-  for (let i = 0; i < N_SAMPLES; i++) {
+  for (let i = 0; i < N_AREA_SAMPLES && total > 0; i++) {
     const target = rnd() * total;
     let lo = 0;
     let hi = nt - 1;
@@ -133,7 +172,7 @@ export class RigidBodySim {
   active: Body | null = null;
   obstacles: StaticObstacle[] = [];
   potentialContacts: StaticObstacle[] = [];
-  force: ForceSpec | null = null;
+  forces: (ForceSpec | null)[] = [null, null];
   running = false;
   stepsLeft = 0;
   prof = {
@@ -206,8 +245,10 @@ export class RigidBodySim {
   }
 
   private resolveObstacle(a: Body, obs: StaticObstacle) {
-    const bvhObs = bvhOf(obs.item.full);
-    const bvhA = bvhOf(a.item.full);
+    const geoObs = simGeoOf(obs.item.full);
+    const geoA = simGeoOf(a.item.full);
+    const bvhObs = bvhOf(geoObs);
+    const bvhA = bvhOf(geoA);
     _mat.compose(a.pos, a.quat, _c2.set(a.scale, a.scale, a.scale));
     _inv.copy(_mat).invert();
 
@@ -216,7 +257,7 @@ export class RigidBodySim {
     const bestWn = new THREE.Vector3();
 
     // 1. active samples inside static obstacle
-    for (const lp of samplesOf(a.item.full)) {
+    for (const lp of samplesOf(geoA)) {
       _wp.copy(lp).applyMatrix4(_mat);
       if (!obs.box.containsPoint(_wp)) continue;
       _p.copy(_wp).applyMatrix4(obs.inv);
@@ -235,7 +276,7 @@ export class RigidBodySim {
     }
 
     // 2. static obstacle samples inside active
-    for (const lp of samplesOf(obs.item.full)) {
+    for (const lp of samplesOf(geoObs)) {
       _wp.copy(lp).applyMatrix4(obs.mat);
       if (!a.box.containsPoint(_wp)) continue;
       _p.copy(_wp).applyMatrix4(_inv);
@@ -265,7 +306,7 @@ export class RigidBodySim {
     applyRotDelta(a.quat, _c1.crossVectors(_ra, _dp).multiplyScalar(a.invI));
   }
 
-  step(dt = 1 / 60, substeps = 2) {
+  step(dt = 1 / 60, substeps = 3, iters = 2) {
     const a = this.active;
     if (!a) return;
     const tStep = performance.now();
@@ -276,10 +317,11 @@ export class RigidBodySim {
       a.prevPos.copy(a.pos);
       a.prevQuat.copy(a.quat);
 
-      if (this.force && this.force.item === a.item) {
-        _wp.copy(this.force.localPoint).multiplyScalar(a.scale).applyQuaternion(a.quat).add(a.pos);
+      for (const f of this.forces) {
+        if (!f || f.item !== a.item) continue;
+        _wp.copy(f.localPoint).multiplyScalar(a.scale).applyQuaternion(a.quat).add(a.pos);
         _ra.copy(_wp).sub(a.pos);
-        _wn.copy(this.force.target).sub(_wp).multiplyScalar(this.force.magnitude * 0.5);
+        _wn.copy(f.target).sub(_wp).multiplyScalar(f.magnitude * 0.5);
         a.vel.addScaledVector(_wn, a.invMass * sdt);
         a.angVel.addScaledVector(_c1.crossVectors(_ra, _wn), a.invI * sdt);
       }
@@ -298,11 +340,14 @@ export class RigidBodySim {
       }
 
       const to = performance.now();
-      for (const obs of this.potentialContacts) {
-        if (a.box.intersectsBox(obs.box)) {
-          this.prof.narrowPairs++;
-          this.resolveObstacle(a, obs);
+      for (let it = 0; it < iters; it++) {
+        for (const obs of this.potentialContacts) {
+          if (a.box.intersectsBox(obs.box)) {
+            this.prof.narrowPairs++;
+            this.resolveObstacle(a, obs);
+          }
         }
+        this.updateBox(a);
       }
       this.prof.obsMs += performance.now() - to;
 

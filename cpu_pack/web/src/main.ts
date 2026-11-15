@@ -610,42 +610,51 @@ $("showAll").onclick = () => {
 
 // ---- rigid body sim ----
 function syncForceBtns() {
-  $("attachPoint").classList.toggle("on", viewer.forceMode === "attach");
-  $("moveTarget").classList.toggle("on", viewer.forceMode === "target");
+  $("attach1").classList.toggle("on", viewer.forceMode === "attach0");
+  $("target1").classList.toggle("on", viewer.forceMode === "target0");
+  $("attach2").classList.toggle("on", viewer.forceMode === "attach1");
+  $("target2").classList.toggle("on", viewer.forceMode === "target1");
 }
-$("attachPoint").onclick = () => {
-  if (viewer.forceMode !== "attach" && !viewer.selected) {
-    status("select a fruit first");
+for (const [id, slot] of [["attach1", 0], ["attach2", 1]] as const) {
+  $(id).onclick = () => {
+    const mode = slot === 0 ? "attach0" : "attach1";
+    if (viewer.forceMode !== mode && !viewer.selected) {
+      status("select a fruit first");
+      return;
+    }
+    const m = viewer.setForceMode(viewer.forceMode === mode ? "none" : mode);
+    syncForceBtns();
+    if (m === mode) status(`click on the selected fruit to set attach ${slot + 1}`);
+  };
+}
+for (const [id, slot] of [["target1", 0], ["target2", 1]] as const) {
+  $(id).onclick = () => {
+    const mode = slot === 0 ? "target0" : "target1";
+    if (viewer.forceMode !== mode && !viewer.sim.forces[slot]) {
+      status(`set attach ${slot + 1} first`);
+      return;
+    }
+    const m = viewer.setForceMode(viewer.forceMode === mode ? "none" : mode);
+    syncForceBtns();
+    if (m === mode) status(`drag gizmo to move target ${slot + 1}`);
+  };
+}
+$("clearForces").onclick = () => viewer.clearForces();
+viewer.onForceChange = (forces) => {
+  syncForceBtns();
+  const active = forces.filter((f): f is NonNullable<typeof f> => f !== null);
+  if (!active.length) {
+    $("forceInfo").textContent = "select a fruit, then click Attach 1 or Attach 2";
     return;
   }
-  const m = viewer.setForceMode(viewer.forceMode === "attach" ? "none" : "attach");
-  syncForceBtns();
-  if (m === "attach") status("click on the selected fruit to set attach point");
-};
-$("moveTarget").onclick = () => {
-  if (viewer.forceMode !== "target" && !viewer.sim.force) {
-    status("set attach point first");
-    return;
-  }
-  const m = viewer.setForceMode(viewer.forceMode === "target" ? "none" : "target");
-  syncForceBtns();
-  if (m === "target") status("drag the gizmo to move target point");
-};
-viewer.onForceChange = (f) => {
-  syncForceBtns();
-  if (!f) {
-    $("forceInfo").textContent = "select a fruit, then click Attach point";
-    return;
-  }
-  const t = f.target;
-  $("forceInfo").textContent = `${labelOf(f.item.inst)} target (${t.x.toFixed(1)}, ${t.y.toFixed(1)}, ${t.z.toFixed(1)})`;
+  $("forceInfo").textContent = forces
+    .map((f, i) => (f ? `#${i + 1} -> (${f.target.x.toFixed(1)}, ${f.target.y.toFixed(1)}, ${f.target.z.toFixed(1)})` : ""))
+    .filter(Boolean)
+    .join(" | ");
 };
 $("forceMag").oninput = (e) => {
   const mag = parseFloat((e.target as HTMLInputElement).value);
-  if (viewer.sim.force) {
-    viewer.sim.force.magnitude = mag;
-    viewer.updateForceArrow();
-  }
+  for (const f of viewer.sim.forces) if (f) f.magnitude = mag;
 };
 viewer.onSimDone = () => {
   $("runSim").textContent = "Run";
